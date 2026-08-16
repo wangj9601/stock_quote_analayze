@@ -93,7 +93,8 @@
                                 输入股票代码或名称后，一次分析即可得到：
                                 <strong>RPE / SBBR / GMS / URT</strong> 策略命中与得分、
                                 <strong>阻力支撑位</strong>（与技术工具同口径）、
-                                <strong>形态识别</strong>（与技术工具同口径）。
+                                <strong>形态识别</strong>（与技术工具同口径）、
+                                <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
                             </p>
                         </div>
@@ -120,7 +121,7 @@
                                             data-perm="channel.analyze.tab.stock_ai.btn.analyze">分析</button>
                                         <button type="button" class="btn btn-secondary" id="ssaExportPdfBtn"
                                             data-perm="channel.analyze.tab.stock_ai.btn.analyze"
-                                            title="将当前策略、阻力支撑与形态识别结果导出为 PDF"
+                                            title="将当前策略、阻力支撑、形态识别与波段趋势导出为 PDF"
                                             disabled>导出 PDF</button>
                                     </div>
                                 </div>
@@ -147,6 +148,12 @@
                             <h4 class="ssa-block-title">形态识别</h4>
                             <div class="ssa-block-status" id="ssaPatternStatus"></div>
                             <div class="ssa-pattern-host" id="ssaPatternHost"></div>
+                        </section>
+
+                        <section class="ssa-block" id="ssaSwingBlock" hidden>
+                            <h4 class="ssa-block-title">波段与趋势</h4>
+                            <div class="ssa-block-status" id="ssaSwingStatus"></div>
+                            <div class="ssa-swing-host" id="ssaSwingHost"></div>
                         </section>
 
                         <div class="ssa-empty" id="ssaEmpty">
@@ -357,6 +364,30 @@
                         </div>
                         <div class="kde-levels-result" id="kdeLevelsResult" hidden>
                             <div class="kde-levels-summary" id="kdeLevelsSummary"></div>
+                            <div class="kde-conf-hero" id="kdeConfHero">
+                                <h4 class="kde-levels-subtitle kde-conf-hero-heading">多算法强共振（主视图）</h4>
+                                <div class="kde-conf-hero-grid">
+                                    <div class="kde-conf-hero-item" id="kdeConfHeroSupport">
+                                        <div class="kde-conf-hero-title"><span class="kde-conf-tier-badge" id="kdeConfHeroSupportBadge">共振支撑</span></div>
+                                        <div class="kde-conf-hero-price"><strong id="kdeConfHeroSupportPrice">--</strong></div>
+                                        <div class="kde-conf-hero-meta" id="kdeConfHeroSupportMeta">--</div>
+                                    </div>
+                                    <div class="kde-conf-hero-item" id="kdeConfHeroResist">
+                                        <div class="kde-conf-hero-title"><span class="kde-conf-tier-badge" id="kdeConfHeroResistBadge">共振压力</span></div>
+                                        <div class="kde-conf-hero-price"><strong id="kdeConfHeroResistPrice">--</strong></div>
+                                        <div class="kde-conf-hero-meta" id="kdeConfHeroResistMeta">--</div>
+                                    </div>
+                                </div>
+                                <div class="kde-conf-hero-near muted">最近支撑带 <strong id="kdeConfNearestSupport">--</strong> · 最近压力带 <strong id="kdeConfNearestResistance">--</strong></div>
+                                <details class="kde-conf-list-details">
+                                    <summary>共振带完整列表</summary>
+                                    <ul id="kdeConfList"></ul>
+                                </details>
+                            </div>
+                            <div class="kde-levels-details-toolbar">
+                                <button type="button" class="btn btn-secondary btn-sm" id="kdeLevelsExpandAllBtn">展开全部算法明细</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="kdeLevelsCollapseAllBtn">全部收起</button>
+                            </div>
                             <h4 class="kde-levels-subtitle">KDE 结构位</h4>
                             <div class="kde-levels-grid">
                                 <div class="kde-levels-card support">
@@ -447,7 +478,7 @@
                                     </p>
                                 </div>
                             </div>
-                            <h4 class="kde-levels-subtitle">黄金分割（ZigZag）/ Pivot 波动率修正 / 共振带（参考）
+                            <h4 class="kde-levels-subtitle">黄金分割（ZigZag）/ Pivot / Camarilla（明细）
                                 <span class="kde-levels-adjust-tag" id="kdeClassicAdjustTag"></span>
                             </h4>
                             <div class="kde-levels-grid kde-levels-grid--classic">
@@ -474,7 +505,7 @@
                                     </div>
                                     <ul id="kdePivotList"></ul>
                                 </div>
-                                <div class="kde-levels-card pivot cam">
+                                <div class="kde-levels-card cam">
                                     <h4>Camarilla <span class="kde-levels-badge">波动率修正</span></h4>
                                     <div class="kde-levels-near">
                                         <div>最近支撑：<strong id="kdeCamNearestSupport">--</strong></div>
@@ -482,14 +513,6 @@
                                     </div>
                                     <ul id="kdeCamList"></ul>
                                     <p class="kde-levels-atr-tip" id="kdeAtrPivotTip"></p>
-                                </div>
-                                <div class="kde-levels-card confluence">
-                                    <h4>共振带</h4>
-                                    <div class="kde-levels-near">
-                                        <div>最近支撑带：<strong id="kdeConfNearestSupport">--</strong></div>
-                                        <div>最近压力带：<strong id="kdeConfNearestResistance">--</strong></div>
-                                    </div>
-                                    <ul id="kdeConfList"></ul>
                                 </div>
                             </div>
                             <p class="kde-levels-meta" id="kdeLevelsMeta"></p>
@@ -839,6 +862,7 @@
     <script src="js/leader_mid_analysis.js"></script>
     <script src="js/kde_levels_tool.js"></script>
     <script src="js/pattern_tool.js"></script>
+    <script src="js/market_structure_tool.js"></script>
     <script src="js/stock_analysis_pdf.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/analysis.js"></script>

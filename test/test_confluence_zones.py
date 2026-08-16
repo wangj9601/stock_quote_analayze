@@ -535,3 +535,66 @@ def test_build_confluence_annotates_hvz_and_keeps_void_side_split():
     z0 = hvz[0]
     assert z0["strength_adjusted"] > z0["strength"]
     assert z0["hvz_source"] in ("poc", "vah", "val")
+
+
+def test_zone_tier_strong_by_strength_or_sources():
+    from backend_core.analysis.confluence_zones import annotate_zone_tier
+
+    strong = annotate_zone_tier(
+        {"center": 10.0, "low": 9.9, "high": 10.1, "strength": 12.0, "sources": ["kde", "vp"]},
+        side="support",
+    )
+    assert strong["tier"] == "strong"
+    assert strong["label_zh"] == "强共振支撑"
+
+    by_src = annotate_zone_tier(
+        {
+            "center": 12.0,
+            "low": 11.9,
+            "high": 12.1,
+            "strength": 4.0,
+            "sources": ["kde", "vp", "fib"],
+        },
+        side="resistance",
+    )
+    assert by_src["tier"] == "strong"
+    assert by_src["label_zh"] == "强共振压力"
+
+    normal = annotate_zone_tier(
+        {"center": 11.0, "low": 10.9, "high": 11.1, "strength": 3.0, "sources": ["kde"]},
+        side="support",
+    )
+    assert normal["tier"] == "normal"
+    assert normal["label_zh"] == "共振支撑"
+
+
+def test_build_confluence_zones_include_tier():
+    pts = collect_candidate_points(
+        kde_support=10.0,
+        kde_resistance=12.0,
+        kde_supports=[9.95, 9.9],
+        fibonacci={
+            "retracements": [
+                {"ratio": 0.618, "price": 10.05},
+                {"ratio": 0.5, "price": 10.5},
+            ]
+        },
+        camarilla={"S1": 9.98, "R1": 12.05, "R2": 12.4},
+        pivot={"S1": 10.02, "R1": 11.9, "P": 11.0},
+        volume_profile={
+            "ok": True,
+            "poc": 11.0,
+            "val": 10.1,
+            "vah": 11.8,
+            "nearest_support": 10.08,
+            "nearest_resistance": 11.85,
+        },
+    )
+    zones = build_confluence_zones(pts, last_close=11.0, atr=0.4)
+    assert zones["ok"] is True
+    for z in (zones.get("supports") or []) + (zones.get("resistances") or []):
+        assert z.get("tier") in ("strong", "normal")
+        assert z.get("label_zh")
+    ns = zones.get("nearest_support_zone")
+    if ns:
+        assert ns.get("tier") in ("strong", "normal")

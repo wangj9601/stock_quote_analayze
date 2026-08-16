@@ -1,6 +1,6 @@
 /**
  * 个股分析 · 数据驱动 PDF 导出（复用 BoardAnalysisPdf 的 jsPDF / 中文字体封装）
- * 覆盖：策略分析 + 阻力支撑位 + 形态识别
+ * 覆盖：策略分析 + 阻力支撑位 + 形态识别 + 波段与趋势
  */
 (function (global) {
   function cell(v) {
@@ -118,6 +118,72 @@
     const classic = d.classic_levels || {};
     const fib = classic.fibonacci || null;
     const pivot = classic.pivot || null;
+
+    const conf = classic.confluence_zones || d.confluence_zones || null;
+    if (conf && conf.ok) {
+      const zoneTxt = (z) => {
+        if (!z) return '--';
+        return `${fmtPrice(z.center)} [${fmtPrice(z.low)}–${fmtPrice(z.high)}]`;
+      };
+      const pickStrongOrNearest = (zones, nearest) => {
+        const strong = (zones || []).filter((z) => z && z.tier === 'strong');
+        if (strong.length) {
+          const sorted = strong.slice().sort((a, b) => {
+            const sa = Number(a.strength_adjusted != null ? a.strength_adjusted : a.strength) || 0;
+            const sb = Number(b.strength_adjusted != null ? b.strength_adjusted : b.strength) || 0;
+            return sb - sa;
+          });
+          return { zone: sorted[0], isStrong: true };
+        }
+        if (nearest) return { zone: nearest, isStrong: nearest.tier === 'strong' };
+        if ((zones || []).length) return { zone: zones[0], isStrong: false };
+        return { zone: null, isStrong: false };
+      };
+      const heroS = pickStrongOrNearest(conf.supports, conf.nearest_support_zone);
+      const heroR = pickStrongOrNearest(conf.resistances, conf.nearest_resistance_zone);
+      const heroLine = (picked, side) => {
+        const z = picked && picked.zone;
+        if (!z) return [`强共振${side}`, '--'];
+        const lab = z.label_zh || (picked.isStrong ? `强共振${side}` : `共振${side}`);
+        const note = picked.isStrong ? '' : '（非强）';
+        const src = (z.sources || []).join('+') || '--';
+        return [
+          `${lab}${note}`,
+          `${zoneTxt(z)} · 强度${fmtConfluenceStrength(z)} · ${src}`,
+        ];
+      };
+      const confBody = [
+        heroLine(heroS, '支撑'),
+        heroLine(heroR, '压力'),
+        ['最近支撑带', zoneTxt(conf.nearest_support_zone)],
+        ['最近压力带', zoneTxt(conf.nearest_resistance_zone)],
+      ];
+      // 支撑：center 降序（近现价=支撑1）；压力：center 升序（近现价=压力1）
+      const pushZones = (arr, tag, desc) => {
+        const sorted = (arr || []).slice().sort((a, b) => {
+          const ca = Number(a && a.center);
+          const cb = Number(b && b.center);
+          if (!Number.isFinite(ca) || !Number.isFinite(cb)) return 0;
+          return desc ? cb - ca : ca - cb;
+        });
+        sorted.forEach((z, i) => {
+          const src = (z.sources || []).join('+') || '--';
+          const strength = fmtConfluenceStrength(z);
+          const tierBit = z.tier === 'strong' ? '强·' : '';
+          const lab = z.label_zh || tag;
+          confBody.push([`${tierBit}${lab}${i + 1}·强度${strength}·${src}`, fmtPrice(z.center)]);
+        });
+      };
+      pushZones(conf.supports, '支撑', true);
+      pushZones(conf.resistances, '压力', false);
+      sections.push({
+        title: '多算法强共振（主结论）',
+        head: [['项目', '价格/区间']],
+        body: confBody,
+      });
+    } else if (conf && conf.reason) {
+      sections.push({ note: `共振带：${conf.reason}` });
+    }
 
     const supportRows = (d.support_levels || []).map((p, i) => [`支撑 ${i + 1}`, fmtPrice(p)]);
     const resistRows = (d.resistance_levels || []).map((p, i) => [`压力 ${i + 1}`, fmtPrice(p)]);
@@ -253,41 +319,6 @@
       });
     }
 
-    const conf = classic.confluence_zones || d.confluence_zones || null;
-    if (conf && conf.ok) {
-      const zoneTxt = (z) => {
-        if (!z) return '--';
-        return `${fmtPrice(z.center)} [${fmtPrice(z.low)}–${fmtPrice(z.high)}]`;
-      };
-      const confBody = [
-        ['最近支撑带', zoneTxt(conf.nearest_support_zone)],
-        ['最近压力带', zoneTxt(conf.nearest_resistance_zone)],
-      ];
-      // 支撑：center 降序（近现价=支撑1）；压力：center 升序（近现价=压力1）
-      const pushZones = (arr, tag, desc) => {
-        const sorted = (arr || []).slice().sort((a, b) => {
-          const ca = Number(a && a.center);
-          const cb = Number(b && b.center);
-          if (!Number.isFinite(ca) || !Number.isFinite(cb)) return 0;
-          return desc ? cb - ca : ca - cb;
-        });
-        sorted.forEach((z, i) => {
-          const src = (z.sources || []).join('+') || '--';
-          const strength = fmtConfluenceStrength(z);
-          confBody.push([`${tag}${i + 1}·强度${strength}·${src}`, fmtPrice(z.center)]);
-        });
-      };
-      pushZones(conf.supports, '支撑', true);
-      pushZones(conf.resistances, '压力', false);
-      sections.push({
-        title: '共振带',
-        head: [['项目', '价格/区间']],
-        body: confBody,
-      });
-    } else if (conf && conf.reason) {
-      sections.push({ note: `共振带：${conf.reason}` });
-    }
-
     if (pack.error) {
       sections.push({ note: `提示：${pack.error}` });
     }
@@ -373,6 +404,48 @@
       expert = plainFromEl(document.querySelector('#ssaPatternHost .pattern-expert-analysis'));
     }
     return { error: pack.error || null, rows, expert, empty: !rows.length };
+  }
+
+  function swingBody(host) {
+    const pack = host.lastSwing;
+    if (!pack) return { error: null, text: '', rows: null };
+    if (pack.error && !pack.data) {
+      return { error: pack.error, text: '', rows: null };
+    }
+    const data = pack.data || {};
+    const ms = data.market_structure || data;
+    const MST = global.MarketStructureTool;
+    let text = '';
+    if (MST && typeof MST.formatPlainText === 'function') {
+      text = MST.formatPlainText(ms, {
+        code: pack.code || data.code,
+        name: pack.name || data.name,
+        weekly: data.weekly || null,
+        counter_trend_note: data.counter_trend_note || (ms && ms.counter_trend_note) || null,
+      });
+    }
+    if (!text) {
+      text = plainFromEl(document.querySelector('#ssaSwingHost .ms-result-wrap'));
+    }
+    const ta = ms && ms.trend_analysis;
+    if (ta && ta.text && text && text.indexOf('趋势分析说明') < 0) {
+      text += `\n【趋势分析说明】\n${ta.text}`;
+    }
+    const pts = (ms && ms.points) || [];
+    const rows = pts.map((p) => [
+      cell(p.date),
+      p.kind === 'high' ? '高点' : p.kind === 'low' ? '低点' : cell(p.kind),
+      p.price != null ? Number(p.price).toFixed(2) : '--',
+      cell(p.structure || '—'),
+    ]);
+    return {
+      error: pack.error || null,
+      text,
+      rows: rows.length ? rows : null,
+      trend: (ms && (ms.trend_label || ms.trend)) || '--',
+      bos: ms && ms.last_bos_like,
+      contrast: ms && ms.pattern_contrast,
+    };
   }
 
   /**
@@ -536,6 +609,43 @@
       if (pt.error) {
         y += 2;
         drawWrapped(`提示：${pt.error}`, 8.5, 4);
+      }
+    }
+
+    // —— 波段与趋势 ——
+    drawTitle('四、波段与趋势', 12, [30, 64, 175]);
+    const sw = swingBody(host);
+    if (!host.lastSwing) {
+      drawWrapped('本报告未包含波段趋势结果', 9, 4.2);
+    } else if (sw.error && !sw.rows && !sw.text) {
+      drawWrapped(`波段趋势分析失败：${sw.error}`, 9, 4.2);
+    } else {
+      drawWrapped(`趋势：${sw.trend || '--'}`, 9, 4.2);
+      if (sw.contrast) {
+        drawWrapped(sw.contrast, 8.5, 4);
+      }
+      if (sw.bos) {
+        drawWrapped(
+          `关键事件：${sw.bos.label || sw.bos.type || ''} @ ${sw.bos.level != null ? sw.bos.level : '--'}`,
+          8.5,
+          4
+        );
+      }
+      if (sw.text) {
+        y += 1;
+        drawWrapped(sw.text, 8.5, 4);
+      }
+      if (sw.rows) {
+        drawTitle('摆动点', 10, [71, 85, 105]);
+        drawTable(
+          [['日期', '类型', '价格', '标注']],
+          sw.rows,
+          { 0: { cellWidth: 28 }, 1: { cellWidth: 18 }, 2: { cellWidth: 22 }, 3: { cellWidth: 18 } }
+        );
+      }
+      if (sw.error) {
+        y += 2;
+        drawWrapped(`提示：${sw.error}`, 8.5, 4);
       }
     }
 

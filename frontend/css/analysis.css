@@ -1448,7 +1448,8 @@
     color: #64748b;
 }
 .ssa-levels-host .kde-levels-result,
-.ssa-pattern-host .pattern-result-wrap {
+.ssa-pattern-host .pattern-result-wrap,
+.ssa-swing-host .ms-result-wrap {
     margin-top: 0.25rem;
 }
 .ssa-pattern-host .pattern-meta {
@@ -1457,6 +1458,136 @@
 .ssa-pattern-host .pattern-expert-analysis {
     margin-top: 1rem;
 }
+
+/* 波段与趋势 */
+.ms-result-wrap { font-size: 13px; color: #334155; }
+.ms-meta { color: #64748b; font-size: 12px; margin-bottom: 8px; }
+.ms-trend-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 8px 12px;
+    margin-bottom: 8px;
+}
+.ms-trend-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.ms-trend--up { background: #dcfce7; color: #166534; }
+.ms-trend--down { background: #fee2e2; color: #991b1b; }
+.ms-trend--trans { background: #ffedd5; color: #c2410c; }
+.ms-trend--range { background: #e2e8f0; color: #475569; }
+.ms-trend--na { background: #f1f5f9; color: #94a3b8; }
+.ms-dual-trend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    margin-bottom: 8px;
+}
+.ms-period-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    margin-left: 4px;
+}
+.ms-period-tag:first-child {
+    margin-left: 0;
+}
+.ms-caution {
+    margin: 6px 0;
+    padding: 8px 10px;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    color: #991b1b;
+    font-size: 12px;
+    line-height: 1.45;
+    font-weight: 600;
+}
+.ms-weekly-details {
+    margin: 8px 0;
+    padding: 6px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #fff;
+}
+.ms-weekly-details > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #334155;
+    font-size: 13px;
+}
+.ms-summary { flex: 1; min-width: 12rem; line-height: 1.45; }
+.ms-contrast {
+    margin: 6px 0;
+    padding: 8px 10px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    color: #1e3a8a;
+    font-size: 12px;
+    line-height: 1.45;
+}
+.ms-bos { margin: 6px 0; font-size: 12px; }
+.ms-muted { color: #94a3b8; }
+.ms-subtitle {
+    margin: 10px 0 6px;
+    font-weight: 600;
+    color: #334155;
+    font-size: 13px;
+}
+.ms-points-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.ms-points-table th,
+.ms-points-table td {
+    border: 1px solid #e2e8f0;
+    padding: 4px 8px;
+    text-align: left;
+}
+.ms-points-table th { background: #f8fafc; }
+.ms-st--bull { color: #16a34a; font-weight: 600; }
+.ms-st--bear { color: #dc2626; font-weight: 600; }
+.ms-zigzag-wrap {
+    margin: 8px 0 4px;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+.ms-zigzag-svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.ms-chart-hint { margin: 4px 0 0; font-size: 11px; }
+.ms-analysis {
+    margin: 10px 0 8px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+.ms-analysis .ms-subtitle { margin-top: 0; }
+.ms-analysis-list {
+    margin: 6px 0 0;
+    padding-left: 1.15rem;
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.55;
+}
+.ms-analysis-list li { margin: 4px 0; }
+.ms-disclaimer {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #94a3b8;
+}
+.ms-empty { color: #94a3b8; }
+
 .ssa-results {
     margin-top: 1.25rem;
     display: grid;
@@ -1728,6 +1859,135 @@
 
 .kde-levels-card.confluence {
     border-top: 3px solid #0369a1;
+}
+
+.kde-conf-hero {
+    margin: 0.75rem 0 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px solid #bae6fd;
+    border-radius: 8px;
+    background: linear-gradient(180deg, #f0f9ff 0%, #fff 100%);
+}
+
+.kde-conf-hero.is-empty {
+    background: #f8fafc;
+    border-color: #e2e8f0;
+}
+
+.kde-conf-hero-heading {
+    margin: 0 0 0.65rem;
+}
+
+.kde-conf-hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.kde-conf-hero-item {
+    padding: 0.65rem 0.75rem;
+    border-radius: 6px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+}
+
+.kde-conf-hero-item.is-strong {
+    border-color: #0384c7;
+    box-shadow: inset 3px 0 0 #0369a1;
+}
+
+.kde-conf-hero-item.is-empty {
+    color: #64748b;
+}
+
+.kde-conf-tier-badge {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #334155;
+    background: #e2e8f0;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+}
+
+.kde-conf-tier-badge.is-strong {
+    color: #fff;
+    background: #0369a1;
+}
+
+.kde-conf-hero-note {
+    margin-left: 0.35rem;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.kde-conf-hero-price {
+    margin-top: 0.35rem;
+    font-size: 1.05rem;
+}
+
+.kde-conf-hero-meta {
+    margin-top: 0.25rem;
+    font-size: 0.8rem;
+    color: #475569;
+}
+
+.kde-conf-hero-near {
+    margin-top: 0.55rem;
+    font-size: 0.8rem;
+}
+
+.kde-conf-list-details,
+.kde-algo-details {
+    margin: 0.55rem 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.35rem 0.75rem 0.65rem;
+    background: #fff;
+}
+
+.kde-algo-details > summary,
+.kde-conf-list-details > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #0f172a;
+    padding: 0.35rem 0;
+    list-style: none;
+}
+
+.kde-algo-details > summary::-webkit-details-marker,
+.kde-conf-list-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.kde-algo-details > summary::before,
+.kde-conf-list-details > summary::before {
+    content: '▸ ';
+    color: #64748b;
+}
+
+.kde-algo-details[open] > summary::before,
+.kde-conf-list-details[open] > summary::before {
+    content: '▾ ';
+}
+
+.kde-levels-details-toolbar {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin: 0.35rem 0 0.65rem;
+}
+
+.kde-levels-card--inline {
+    border-top: none;
+    box-shadow: none;
+    padding: 0.25rem 0;
+}
+
+@media (max-width: 720px) {
+    .kde-conf-hero-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 .kde-levels-badge {
@@ -2188,6 +2448,36 @@
     border-radius: 3px;
     font-weight: 600;
     font-size: 0.85rem;
+}
+
+.pattern-tactical-bq,
+.pattern-tactical-caution {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.pattern-bq-strong {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.pattern-bq-weak {
+    background: #ffedd5;
+    color: #c2410c;
+}
+
+.pattern-bq-hold {
+    background: #fef9c3;
+    color: #a16207;
+}
+
+.pattern-tactical-caution {
+    background: #fee2e2;
+    color: #b91c1c;
 }
 
 .pattern-tactical-bull {

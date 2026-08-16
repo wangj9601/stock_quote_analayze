@@ -344,8 +344,10 @@ const KdeLevelsTool = {
                 return desc ? cb - ca : ca - cb;
             });
             sorted.forEach((z, i) => {
+                const tierBit = z.tier === 'strong' ? '强·' : '';
+                const lab = z.label_zh || `${tag}`;
                 confRows.push({
-                    label: `${tag}${i + 1}·强度${this._fmtConfluenceStrength(z)}·${(z.sources || []).join('+')}`,
+                    label: `${tierBit}${lab}${i + 1}·强度${this._fmtConfluenceStrength(z)}·${(z.sources || []).join('+')}`,
                     price: z.center,
                 });
             });
@@ -358,6 +360,55 @@ const KdeLevelsTool = {
         const nzR = conf && conf.nearest_resistance_zone;
         const confNearS = nzS ? `${fmt(nzS.center)} [${fmt(nzS.low)}–${fmt(nzS.high)}]` : '--';
         const confNearR = nzR ? `${fmt(nzR.center)} [${fmt(nzR.low)}–${fmt(nzR.high)}]` : '--';
+        const pickStrongOrNearest = (zones, nearest) => {
+            const strong = (zones || []).filter((z) => z && z.tier === 'strong');
+            if (strong.length) {
+                const sorted = strong.slice().sort((a, b) => {
+                    const sa = Number(a.strength_adjusted != null ? a.strength_adjusted : a.strength) || 0;
+                    const sb = Number(b.strength_adjusted != null ? b.strength_adjusted : b.strength) || 0;
+                    return sb - sa;
+                });
+                return { zone: sorted[0], isStrong: true };
+            }
+            if (nearest) return { zone: nearest, isStrong: nearest.tier === 'strong' };
+            if ((zones || []).length) return { zone: zones[0], isStrong: false };
+            return { zone: null, isStrong: false };
+        };
+        const heroS = conf && conf.ok ? pickStrongOrNearest(conf.supports, nzS) : { zone: null, isStrong: false };
+        const heroR = conf && conf.ok ? pickStrongOrNearest(conf.resistances, nzR) : { zone: null, isStrong: false };
+        const heroZoneHtml = (picked, sideLabel) => {
+            const z = picked && picked.zone;
+            if (!z) {
+                return `<div class="kde-conf-hero-item is-empty"><span class="kde-conf-hero-side">${this._esc(sideLabel)}</span><span class="muted">暂无</span></div>`;
+            }
+            const isStrong = !!(picked && picked.isStrong);
+            const label = z.label_zh || (isStrong ? `强共振${sideLabel}` : `共振${sideLabel}`);
+            const src = (z.sources || []).join('+') || '--';
+            const band = `${fmt(z.center)} [${fmt(z.low)}–${fmt(z.high)}]`;
+            const note = isStrong ? '' : '<span class="kde-conf-hero-note">（非强共振，取最近带）</span>';
+            return `<div class="kde-conf-hero-item${isStrong ? ' is-strong' : ''}">` +
+                `<div class="kde-conf-hero-title"><span class="kde-conf-tier-badge${isStrong ? ' is-strong' : ''}">${this._esc(label)}</span>${note}</div>` +
+                `<div class="kde-conf-hero-price"><strong>${this._esc(band)}</strong></div>` +
+                `<div class="kde-conf-hero-meta">强度 ${this._esc(this._fmtConfluenceStrength(z))} · 来源 ${this._esc(src)}</div>` +
+                `</div>`;
+        };
+        const confHeroHtml = (conf && conf.ok)
+            ? `<div class="kde-conf-hero">
+                    <h4 class="kde-levels-subtitle kde-conf-hero-heading">多算法强共振（主视图）</h4>
+                    <div class="kde-conf-hero-grid">
+                        ${heroZoneHtml(heroS, '支撑')}
+                        ${heroZoneHtml(heroR, '压力')}
+                    </div>
+                    <div class="kde-conf-hero-near muted">最近支撑带 ${this._esc(confNearS)} · 最近压力带 ${this._esc(confNearR)}</div>
+                    <details class="kde-conf-list-details">
+                        <summary>共振带完整列表</summary>
+                        <ul>${this._labeledListHtml(confRows)}</ul>
+                    </details>
+               </div>`
+            : `<div class="kde-conf-hero is-empty">
+                    <h4 class="kde-levels-subtitle">多算法强共振（主视图）</h4>
+                    <p class="muted">${this._esc((conf && conf.reason) ? `共振带：${conf.reason}` : '暂无共振带')}</p>
+               </div>`;
 
         const fibDir = fib && fib.direction;
         const fibDirTxt = fibDir === 'up' ? '上升段回撤' : fibDir === 'down' ? '下降段反弹' : '--';
@@ -424,146 +475,176 @@ const KdeLevelsTool = {
         container.innerHTML = `
             <div class="kde-levels-result ssa-embedded-levels">
                 <div class="kde-levels-summary">${this._esc(summary)}</div>
-                <h4 class="kde-levels-subtitle">KDE 结构位</h4>
-                <div class="kde-levels-grid">
-                    <div class="kde-levels-card support">
-                        <h4>支撑位</h4>
-                        <ul>${this._listHtml(d.support_levels)}</ul>
-                    </div>
-                    <div class="kde-levels-card current">
-                        <h4>现价</h4>
+                ${confHeroHtml}
+                <div class="kde-levels-details-toolbar">
+                    <button type="button" class="btn btn-secondary btn-sm kde-levels-expand-all">展开全部算法明细</button>
+                    <button type="button" class="btn btn-secondary btn-sm kde-levels-collapse-all">全部收起</button>
+                </div>
+                <details class="kde-algo-details" open>
+                    <summary>现价速览</summary>
+                    <div class="kde-levels-card current kde-levels-card--inline">
                         <div class="kde-levels-price">${fmt(d.current_price)}</div>
                         <div class="kde-levels-near">
-                            <div>最近支撑：<strong>${fmt(d.nearest_support)}</strong></div>
-                            <div>最近压力：<strong>${fmt(d.nearest_resistance)}</strong></div>
-                            <div class="kde-levels-dir kde-vp-lookback-ctrl">
-                                <span>回看</span>
-                                <input type="number" class="kde-vp-lookback-days ssa-kde-lookback-days"
-                                    min="20" max="750" step="1" value="${this._esc(kdeLookbackInputVal)}"
-                                    title="KDE 初始回看交易日数">
-                                <span>日 · 起始</span>
-                                <input type="date" class="kde-vp-from-date ssa-kde-from-date"
-                                    value="${this._esc(kdeFromInputVal)}"
-                                    title="KDE 回看起始日期（优先于天数；可调初始回看，无支撑仍扩窗）">
-                                <button type="button" class="btn btn-secondary btn-sm ssa-kde-lookback-apply">应用</button>
-                                <span class="kde-vp-lookback-meta">
-                                    （初始 <strong>${initLb != null ? String(initLb) : '--'}</strong>
-                                    / 实际 <strong>${used != null ? String(used) : '--'}</strong> 日${kdeExpandText}
-                                    · 上限 <strong>${maxLb != null ? String(maxLb) : '750'}</strong>）
-                                </span>
+                            <div>KDE 最近支撑：<strong>${fmt(d.nearest_support)}</strong></div>
+                            <div>KDE 最近压力：<strong>${fmt(d.nearest_resistance)}</strong></div>
+                        </div>
+                    </div>
+                </details>
+                <details class="kde-algo-details">
+                    <summary>KDE 结构位 <span class="${tagCls(d.price_adjust === 'qfq' ? 'qfq' : 'none')}">${tagTxt(d.price_adjust === 'qfq' ? 'qfq' : 'none')}</span></summary>
+                    <div class="kde-levels-grid">
+                        <div class="kde-levels-card support">
+                            <h4>支撑位</h4>
+                            <ul>${this._listHtml(d.support_levels)}</ul>
+                        </div>
+                        <div class="kde-levels-card current">
+                            <h4>现价 / 回看</h4>
+                            <div class="kde-levels-price">${fmt(d.current_price)}</div>
+                            <div class="kde-levels-near">
+                                <div>最近支撑：<strong>${fmt(d.nearest_support)}</strong></div>
+                                <div>最近压力：<strong>${fmt(d.nearest_resistance)}</strong></div>
+                                <div class="kde-levels-dir kde-vp-lookback-ctrl">
+                                    <span>回看</span>
+                                    <input type="number" class="kde-vp-lookback-days ssa-kde-lookback-days"
+                                        min="20" max="750" step="1" value="${this._esc(kdeLookbackInputVal)}"
+                                        title="KDE 初始回看交易日数">
+                                    <span>日 · 起始</span>
+                                    <input type="date" class="kde-vp-from-date ssa-kde-from-date"
+                                        value="${this._esc(kdeFromInputVal)}"
+                                        title="KDE 回看起始日期（优先于天数；可调初始回看，无支撑仍扩窗）">
+                                    <button type="button" class="btn btn-secondary btn-sm ssa-kde-lookback-apply">应用</button>
+                                    <span class="kde-vp-lookback-meta">
+                                        （初始 <strong>${initLb != null ? String(initLb) : '--'}</strong>
+                                        / 实际 <strong>${used != null ? String(used) : '--'}</strong> 日${kdeExpandText}
+                                        · 上限 <strong>${maxLb != null ? String(maxLb) : '750'}</strong>）
+                                    </span>
+                                </div>
                             </div>
                         </div>
+                        <div class="kde-levels-card resistance">
+                            <h4>压力位</h4>
+                            <ul>${this._listHtml(d.resistance_levels)}</ul>
+                        </div>
                     </div>
-                    <div class="kde-levels-card resistance">
-                        <h4>压力位</h4>
-                        <ul>${this._listHtml(d.resistance_levels)}</ul>
-                    </div>
-                </div>
-                <h4 class="kde-levels-subtitle">Volume Profile（参考）
-                    <span class="${tagCls(vpAdjust)}">${tagTxt(vpAdjust)}</span>
-                </h4>
-                <div class="kde-levels-grid kde-levels-grid--vp">
-                    <div class="kde-levels-card vp">
-                        <h4>日线 VP（可调回看）</h4>
-                        <div class="kde-levels-near">
-                            <div>POC：<strong>${fmt(vp.poc)}</strong></div>
-                            <div>VAL：<strong>${fmt(vp.val)}</strong></div>
-                            <div>VAH：<strong>${fmt(vp.vah)}</strong></div>
-                            <div>最近支撑：<strong>${this._fmtPriceOrNote(vp.nearest_support, vp.support_note)}</strong></div>
-                            <div>最近压力：<strong>${this._fmtPriceOrNote(vp.nearest_resistance, vp.resistance_note)}</strong></div>
-                            <div class="kde-levels-dir kde-vp-lookback-ctrl">
-                                <span>回看</span>
-                                <input type="number" class="kde-vp-lookback-days ssa-vp-lookback-days"
-                                    min="5" max="750" step="1" value="${this._esc(lookbackInputVal)}"
-                                    title="回看交易日数">
-                                <span>日 · 起始</span>
-                                <input type="date" class="kde-vp-from-date ssa-vp-from-date"
-                                    value="${this._esc(fromInputVal)}"
-                                    title="回看起始日期（优先于天数）">
-                                <button type="button" class="btn btn-secondary btn-sm ssa-vp-lookback-apply">应用</button>
-                                <span class="kde-vp-lookback-meta">
-                                    （实际 <strong>${usedLb != null ? String(usedLb) : '--'}</strong> 日${winText}）
-                                    · 价值区 <strong>${vaPct}</strong>
-                                </span>
+                </details>
+                <details class="kde-algo-details">
+                    <summary>Volume Profile（参考）
+                        <span class="${tagCls(vpAdjust)}">${tagTxt(vpAdjust)}</span>
+                    </summary>
+                    <div class="kde-levels-grid kde-levels-grid--vp">
+                        <div class="kde-levels-card vp">
+                            <h4>日线 VP（可调回看）</h4>
+                            <div class="kde-levels-near">
+                                <div>POC：<strong>${fmt(vp.poc)}</strong></div>
+                                <div>VAL：<strong>${fmt(vp.val)}</strong></div>
+                                <div>VAH：<strong>${fmt(vp.vah)}</strong></div>
+                                <div>最近支撑：<strong>${this._fmtPriceOrNote(vp.nearest_support, vp.support_note)}</strong></div>
+                                <div>最近压力：<strong>${this._fmtPriceOrNote(vp.nearest_resistance, vp.resistance_note)}</strong></div>
+                                <div class="kde-levels-dir kde-vp-lookback-ctrl">
+                                    <span>回看</span>
+                                    <input type="number" class="kde-vp-lookback-days ssa-vp-lookback-days"
+                                        min="5" max="750" step="1" value="${this._esc(lookbackInputVal)}"
+                                        title="回看交易日数">
+                                    <span>日 · 起始</span>
+                                    <input type="date" class="kde-vp-from-date ssa-vp-from-date"
+                                        value="${this._esc(fromInputVal)}"
+                                        title="回看起始日期（优先于天数）">
+                                    <button type="button" class="btn btn-secondary btn-sm ssa-vp-lookback-apply">应用</button>
+                                    <span class="kde-vp-lookback-meta">
+                                        （实际 <strong>${usedLb != null ? String(usedLb) : '--'}</strong> 日${winText}）
+                                        · 价值区 <strong>${vaPct}</strong>
+                                    </span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <div class="kde-levels-card vp-compare">
-                        <h4>KDE ↔ VP</h4>
-                        <table class="kde-vp-compare-table">
-                            <thead><tr><th></th><th>KDE</th><th>VP</th><th>差</th><th>共振</th></tr></thead>
-                            <tbody>
-                                <tr>
-                                    <td>支撑</td>
-                                    <td>${cmpCell(vpCmp.support, 'kde')}</td>
-                                    <td>${cmpCell(vpCmp.support, 'vp')}</td>
-                                    <td>${cmpCell(vpCmp.support, 'diff')}</td>
-                                    <td>${cmpCell(vpCmp.support, 'align')}</td>
-                                </tr>
-                                <tr>
-                                    <td>压力</td>
-                                    <td>${cmpCell(vpCmp.resistance, 'kde')}</td>
-                                    <td>${cmpCell(vpCmp.resistance, 'vp')}</td>
-                                    <td>${cmpCell(vpCmp.resistance, 'diff')}</td>
-                                    <td>${cmpCell(vpCmp.resistance, 'align')}</td>
-                                </tr>
-                            </tbody>
-                        </table>
-                        <p class="kde-vp-compare-note">${this._esc(alignedNote)}</p>
-                    </div>
-                </div>
-                <h4 class="kde-levels-subtitle">黄金分割（ZigZag）/ Pivot 波动率修正 / 共振带（参考）
-                    <span class="${tagCls(classicAdjust)}">${tagTxt(classicAdjust)}</span>
-                </h4>
-                <div class="kde-levels-grid kde-levels-grid--classic">
-                    <div class="kde-levels-card fib">
-                        <h4>黄金分割</h4>
-                        <div class="kde-levels-near">
-                            <div class="kde-levels-meta-line">锚定：<strong>${this._esc(fibAnchor)}</strong>${this._esc(fibDepth)}${this._esc(fibExceedNote)}</div>
-                            <div>高点：<strong>${fmt(fib && fib.swing_high)}</strong>
-                                <span class="kde-levels-date">${fib && fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}</span></div>
-                            <div>低点：<strong>${fmt(fib && fib.swing_low)}</strong>
-                                <span class="kde-levels-date">${fib && fib.swing_low_date ? `（${fib.swing_low_date}）` : ''}</span></div>
-                            <div>最近支撑：<strong>${this._fmtPriceOrNote(classic.nearest_fib_support, classic.fib_support_note || (fib && fib.support_note))}</strong></div>
-                            <div>最近压力：<strong>${this._fmtPriceOrNote(classic.nearest_fib_resistance, classic.fib_resistance_note || (fib && fib.resistance_note))}</strong></div>
-                            <div class="kde-levels-dir">方向：<strong>${fibDirTxt}</strong></div>
+                        <div class="kde-levels-card vp-compare">
+                            <h4>KDE ↔ VP</h4>
+                            <table class="kde-vp-compare-table">
+                                <thead><tr><th></th><th>KDE</th><th>VP</th><th>差</th><th>共振</th></tr></thead>
+                                <tbody>
+                                    <tr>
+                                        <td>支撑</td>
+                                        <td>${cmpCell(vpCmp.support, 'kde')}</td>
+                                        <td>${cmpCell(vpCmp.support, 'vp')}</td>
+                                        <td>${cmpCell(vpCmp.support, 'diff')}</td>
+                                        <td>${cmpCell(vpCmp.support, 'align')}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>压力</td>
+                                        <td>${cmpCell(vpCmp.resistance, 'kde')}</td>
+                                        <td>${cmpCell(vpCmp.resistance, 'vp')}</td>
+                                        <td>${cmpCell(vpCmp.resistance, 'diff')}</td>
+                                        <td>${cmpCell(vpCmp.resistance, 'align')}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p class="kde-vp-compare-note">${this._esc(alignedNote)}</p>
                         </div>
-                        <ul>${this._labeledListHtml(fibRows)}</ul>
                     </div>
-                    <div class="kde-levels-card pivot">
-                        <h4>经典 Pivot</h4>
-                        <div class="kde-levels-near">
-                            <div>最近支撑：<strong>${this._fmtPriceOrNote(classic.nearest_pivot_support, classic.pivot_support_note)}</strong></div>
-                            <div>最近压力：<strong>${this._fmtPriceOrNote(classic.nearest_pivot_resistance, classic.pivot_resistance_note)}</strong></div>
+                </details>
+                <details class="kde-algo-details">
+                    <summary>黄金分割 / Pivot / Camarilla
+                        <span class="${tagCls(classicAdjust)}">${tagTxt(classicAdjust)}</span>
+                    </summary>
+                    <div class="kde-levels-grid kde-levels-grid--classic">
+                        <div class="kde-levels-card fib">
+                            <h4>黄金分割</h4>
+                            <div class="kde-levels-near">
+                                <div class="kde-levels-meta-line">锚定：<strong>${this._esc(fibAnchor)}</strong>${this._esc(fibDepth)}${this._esc(fibExceedNote)}</div>
+                                <div>高点：<strong>${fmt(fib && fib.swing_high)}</strong>
+                                    <span class="kde-levels-date">${fib && fib.swing_high_date ? `（${fib.swing_high_date}）` : ''}</span></div>
+                                <div>低点：<strong>${fmt(fib && fib.swing_low)}</strong>
+                                    <span class="kde-levels-date">${fib && fib.swing_low_date ? `（${fib.swing_low_date}）` : ''}</span></div>
+                                <div>最近支撑：<strong>${this._fmtPriceOrNote(classic.nearest_fib_support, classic.fib_support_note || (fib && fib.support_note))}</strong></div>
+                                <div>最近压力：<strong>${this._fmtPriceOrNote(classic.nearest_fib_resistance, classic.fib_resistance_note || (fib && fib.resistance_note))}</strong></div>
+                                <div class="kde-levels-dir">方向：<strong>${fibDirTxt}</strong></div>
+                            </div>
+                            <ul>${this._labeledListHtml(fibRows)}</ul>
                         </div>
-                        <ul>${this._labeledListHtml(pivRows)}</ul>
-                    </div>
-                    <div class="kde-levels-card cam">
-                        <h4>Camarilla <span class="kde-levels-badge">波动率修正</span></h4>
-                        <div class="kde-levels-near">
-                            <div>最近支撑：<strong>${this._fmtPriceOrNote(
-                                classic.nearest_cam_support ?? (cam && cam.nearest_support),
-                                classic.cam_support_note ?? (cam && cam.support_note)
-                            )}</strong></div>
-                            <div>最近压力：<strong>${this._fmtPriceOrNote(
-                                classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance),
-                                classic.cam_resistance_note ?? (cam && cam.resistance_note)
-                            )}</strong></div>
+                        <div class="kde-levels-card pivot">
+                            <h4>经典 Pivot</h4>
+                            <div class="kde-levels-near">
+                                <div>最近支撑：<strong>${this._fmtPriceOrNote(classic.nearest_pivot_support, classic.pivot_support_note)}</strong></div>
+                                <div>最近压力：<strong>${this._fmtPriceOrNote(classic.nearest_pivot_resistance, classic.pivot_resistance_note)}</strong></div>
+                            </div>
+                            <ul>${this._labeledListHtml(pivRows)}</ul>
                         </div>
-                        <ul>${this._labeledListHtml(camRows)}</ul>
-                        <p class="kde-levels-atr-tip">${this._esc(atrTip)}</p>
-                    </div>
-                    <div class="kde-levels-card confluence">
-                        <h4>共振带</h4>
-                        <div class="kde-levels-near">
-                            <div>最近支撑带：<strong>${this._esc(confNearS)}</strong></div>
-                            <div>最近压力带：<strong>${this._esc(confNearR)}</strong></div>
+                        <div class="kde-levels-card cam">
+                            <h4>Camarilla <span class="kde-levels-badge">波动率修正</span></h4>
+                            <div class="kde-levels-near">
+                                <div>最近支撑：<strong>${this._fmtPriceOrNote(
+                                    classic.nearest_cam_support ?? (cam && cam.nearest_support),
+                                    classic.cam_support_note ?? (cam && cam.support_note)
+                                )}</strong></div>
+                                <div>最近压力：<strong>${this._fmtPriceOrNote(
+                                    classic.nearest_cam_resistance ?? (cam && cam.nearest_resistance),
+                                    classic.cam_resistance_note ?? (cam && cam.resistance_note)
+                                )}</strong></div>
+                            </div>
+                            <ul>${this._labeledListHtml(camRows)}</ul>
+                            <p class="kde-levels-atr-tip">${this._esc(atrTip)}</p>
                         </div>
-                        <ul>${this._labeledListHtml(confRows)}</ul>
                     </div>
-                </div>
+                </details>
                 <p class="kde-levels-meta">${this._esc(metaParts.join(' · '))}</p>
             </div>`;
+
+        const expandAllBtn = container.querySelector('.kde-levels-expand-all');
+        const collapseAllBtn = container.querySelector('.kde-levels-collapse-all');
+        if (expandAllBtn) {
+            expandAllBtn.addEventListener('click', () => {
+                container.querySelectorAll('details.kde-algo-details, details.kde-conf-list-details').forEach((el) => {
+                    el.open = true;
+                });
+            });
+        }
+        if (collapseAllBtn) {
+            collapseAllBtn.addEventListener('click', () => {
+                container.querySelectorAll('details.kde-algo-details').forEach((el) => {
+                    el.open = false;
+                });
+            });
+        }
 
         this._bindEmbeddedVpControls(container, {
             code,
@@ -1277,6 +1358,54 @@ const KdeLevelsTool = {
                 ? `${fmt(nzR.center)} [${fmt(nzR.low)}–${fmt(nzR.high)}]`
                 : '--';
         }
+        const pickStrongOrNearest = (zones, nearest) => {
+            const strong = (zones || []).filter((z) => z && z.tier === 'strong');
+            if (strong.length) {
+                const sorted = strong.slice().sort((a, b) => {
+                    const sa = Number(a.strength_adjusted != null ? a.strength_adjusted : a.strength) || 0;
+                    const sb = Number(b.strength_adjusted != null ? b.strength_adjusted : b.strength) || 0;
+                    return sb - sa;
+                });
+                return { zone: sorted[0], isStrong: true };
+            }
+            if (nearest) return { zone: nearest, isStrong: nearest.tier === 'strong' };
+            if ((zones || []).length) return { zone: zones[0], isStrong: false };
+            return { zone: null, isStrong: false };
+        };
+        const fillHero = (side, picked) => {
+            const badge = document.getElementById(side === 's' ? 'kdeConfHeroSupportBadge' : 'kdeConfHeroResistBadge');
+            const price = document.getElementById(side === 's' ? 'kdeConfHeroSupportPrice' : 'kdeConfHeroResistPrice');
+            const meta = document.getElementById(side === 's' ? 'kdeConfHeroSupportMeta' : 'kdeConfHeroResistMeta');
+            const item = document.getElementById(side === 's' ? 'kdeConfHeroSupport' : 'kdeConfHeroResist');
+            const z = picked && picked.zone;
+            const sideLab = side === 's' ? '支撑' : '压力';
+            if (!z) {
+                if (badge) badge.textContent = `共振${sideLab}`;
+                if (price) price.textContent = '--';
+                if (meta) meta.textContent = '暂无';
+                if (item) item.classList.remove('is-strong');
+                return;
+            }
+            const isStrong = !!(picked && picked.isStrong);
+            if (badge) {
+                badge.textContent = z.label_zh || (isStrong ? `强共振${sideLab}` : `共振${sideLab}`);
+                badge.classList.toggle('is-strong', isStrong);
+            }
+            if (price) price.textContent = `${fmt(z.center)} [${fmt(z.low)}–${fmt(z.high)}]`;
+            if (meta) {
+                meta.textContent = `强度 ${this._fmtConfluenceStrength(z)} · 来源 ${(z.sources || []).join('+') || '--'}${
+                    isStrong ? '' : '（非强共振，取最近带）'
+                }`;
+            }
+            if (item) item.classList.toggle('is-strong', isStrong);
+        };
+        if (conf && conf.ok) {
+            fillHero('s', pickStrongOrNearest(conf.supports, nzS));
+            fillHero('r', pickStrongOrNearest(conf.resistances, nzR));
+        } else {
+            fillHero('s', { zone: null, isStrong: false });
+            fillHero('r', { zone: null, isStrong: false });
+        }
         const confRows = [];
         // 支撑：center 降序（近现价=支撑1）；压力：center 升序（近现价=压力1）
         const pushZones = (arr, tag, desc) => {
@@ -1287,8 +1416,10 @@ const KdeLevelsTool = {
                 return desc ? cb - ca : ca - cb;
             });
             sorted.forEach((z, i) => {
+                const tierBit = z.tier === 'strong' ? '强·' : '';
+                const lab = z.label_zh || tag;
                 confRows.push({
-                    label: `${tag}${i + 1}·强度${this._fmtConfluenceStrength(z)}·${(z.sources || []).join('+')}`,
+                    label: `${tierBit}${lab}${i + 1}·强度${this._fmtConfluenceStrength(z)}·${(z.sources || []).join('+')}`,
                     price: z.center,
                 });
             });
@@ -1298,6 +1429,26 @@ const KdeLevelsTool = {
             pushZones(conf.resistances, '压力', false);
         }
         fillLabeledList(confList, confRows);
+
+        const expandAllBtn = document.getElementById('kdeLevelsExpandAllBtn');
+        const collapseAllBtn = document.getElementById('kdeLevelsCollapseAllBtn');
+        const resultRoot = document.getElementById('kdeLevelsResult');
+        if (expandAllBtn && resultRoot && !expandAllBtn._kdeBound) {
+            expandAllBtn._kdeBound = true;
+            expandAllBtn.addEventListener('click', () => {
+                resultRoot.querySelectorAll('details.kde-algo-details, details.kde-conf-list-details').forEach((el) => {
+                    el.open = true;
+                });
+            });
+        }
+        if (collapseAllBtn && resultRoot && !collapseAllBtn._kdeBound) {
+            collapseAllBtn._kdeBound = true;
+            collapseAllBtn.addEventListener('click', () => {
+                resultRoot.querySelectorAll('details.kde-algo-details').forEach((el) => {
+                    el.open = false;
+                });
+            });
+        }
 
         const used = data.kde_lookback_used;
         const expanded = data.kde_lookback_expanded;

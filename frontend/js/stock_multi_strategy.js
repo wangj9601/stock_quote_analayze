@@ -1,5 +1,5 @@
 /**
- * 分析频道 · 个股综合分析（RPE / SBBR / GMS / URT + 阻力支撑 + 形态识别）
+ * 分析频道 · 个股综合分析（RPE / SBBR / GMS / URT + 阻力支撑 + 形态 + 波段趋势）
  */
 const StockMultiStrategy = {
     API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
@@ -10,6 +10,7 @@ const StockMultiStrategy = {
     lastStock: null,
     lastLevels: null,
     lastPattern: null,
+    lastSwing: null,
 
     init() {
         const btn = document.getElementById('ssaAnalyzeBtn');
@@ -174,11 +175,12 @@ const StockMultiStrategy = {
         this.lastStock = null;
         this.lastLevels = null;
         this.lastPattern = null;
+        this.lastSwing = null;
         this.updateExportBtn();
     },
 
     hasExportableResult() {
-        return !!(this.lastStrategy || this.lastLevels || this.lastPattern || this.lastStrategyError);
+        return !!(this.lastStrategy || this.lastLevels || this.lastPattern || this.lastSwing || this.lastStrategyError);
     },
 
     updateExportBtn() {
@@ -191,26 +193,26 @@ const StockMultiStrategy = {
     },
 
     hideResultBlocks() {
-        ['ssaStrategyBlock', 'ssaLevelsBlock', 'ssaPatternBlock'].forEach((id) => {
+        ['ssaStrategyBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
         const levelsHost = document.getElementById('ssaLevelsHost');
         const patternHost = document.getElementById('ssaPatternHost');
+        const swingHost = document.getElementById('ssaSwingHost');
         if (levelsHost) levelsHost.innerHTML = '';
         if (patternHost) patternHost.innerHTML = '';
+        if (swingHost) swingHost.innerHTML = '';
         const levelsStatus = document.getElementById('ssaLevelsStatus');
         const patternStatus = document.getElementById('ssaPatternStatus');
-        if (levelsStatus) {
-            levelsStatus.textContent = '';
-            levelsStatus.hidden = false;
-            levelsStatus.className = 'ssa-block-status';
-        }
-        if (patternStatus) {
-            patternStatus.textContent = '';
-            patternStatus.hidden = false;
-            patternStatus.className = 'ssa-block-status';
-        }
+        const swingStatus = document.getElementById('ssaSwingStatus');
+        [levelsStatus, patternStatus, swingStatus].forEach((status) => {
+            if (status) {
+                status.textContent = '';
+                status.hidden = false;
+                status.className = 'ssa-block-status';
+            }
+        });
         this.clearExportState();
     },
 
@@ -331,12 +333,13 @@ const StockMultiStrategy = {
             this.renderStrategyResult(data);
             if (empty) empty.hidden = true;
 
-            // 策略成功后并行拉取阻力支撑、形态（失败互不影响）
+            // 策略成功后并行拉取阻力支撑、形态、波段趋势（失败互不影响）
             const resolvedCode = stock.code || query;
             const tradeDate = data.trade_date || asof || '';
             await Promise.all([
                 this.loadLevelsSection(resolvedCode),
                 this.loadPatternSection(resolvedCode, tradeDate),
+                this.loadSwingSection(resolvedCode, tradeDate),
             ]);
             this.updateExportBtn();
 
@@ -366,9 +369,10 @@ const StockMultiStrategy = {
                 await Promise.all([
                     this.loadLevelsSection(firstToken),
                     this.loadPatternSection(firstToken, asofFallback),
+                    this.loadSwingSection(firstToken, asofFallback),
                 ]);
                 this.updateExportBtn();
-                CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑与形态', 'warning');
+                CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑、形态与波段趋势', 'warning');
             } else {
                 if (empty) {
                     empty.hidden = false;
@@ -497,6 +501,91 @@ const StockMultiStrategy = {
             this.setBlockError('ssaPatternStatus', e.message || '形态识别失败，可稍后在「技术工具」重试');
         }
         this.updateExportBtn();
+        // 形态就绪后补一次波段对照（若波段已出）
+        if (this.lastSwing && this.lastSwing.ok && this.lastSwing.data) {
+            this._refreshSwingContrast();
+        }
+    },
+
+    _patternShortBias() {
+        const t = this.lastPattern && this.lastPattern.tactical;
+        if (!t) return null;
+        return t.short_bias || t.bias || null;
+    },
+
+    _refreshSwingContrast() {
+        const host = document.getElementById('ssaSwingHost');
+        if (!host || !this.lastSwing || !this.lastSwing.data) return;
+        if (typeof MarketStructureTool === 'undefined') return;
+        const bias = this._patternShortBias();
+        const ms = this.lastSwing.data.market_structure || this.lastSwing.data;
+        if (!ms) return;
+        // 后端未带对照时，用已加载形态 bias 再请求一次（轻量）会慢；此处仅前端提示占位已由 API pattern_contrast
+        if (bias && !ms.pattern_contrast && this.lastSwing.code) {
+            // 异步静默补对照
+            void MarketStructureTool.fetchStructure(this.lastSwing.code, {
+                adjust: 'qfq',
+                asof: this.lastSwing.asof || undefined,
+                pattern_short_bias: bias,
+            })
+                .then((data) => {
+                    this.lastSwing = {
+                        ok: true,
+                        data,
+                        code: data.code,
+                        name: data.name || '',
+                        asof: data.asof || '',
+                        error: null,
+                    };
+                    MarketStructureTool.renderEmbedded(host, data);
+                })
+                .catch(() => {});
+        }
+    },
+
+    async loadSwingSection(code, asof) {
+        const block = document.getElementById('ssaSwingBlock');
+        const host = document.getElementById('ssaSwingHost');
+        if (!block || !host) return;
+        this.setBlockLoading('ssaSwingBlock', 'ssaSwingStatus', '正在分析波段与趋势…');
+        try {
+            if (typeof MarketStructureTool === 'undefined' || typeof MarketStructureTool.fetchStructure !== 'function') {
+                throw new Error('波段趋势模块未加载');
+            }
+            // 稍候形态可能未完成；先拉结构，有 bias 再带上
+            const bias = this._patternShortBias();
+            const fetched = await MarketStructureTool.fetchStructure(code, {
+                adjust: 'qfq',
+                asof: asof || undefined,
+                pattern_short_bias: bias || undefined,
+            });
+            MarketStructureTool.renderEmbedded(host, fetched);
+            this.lastSwing = {
+                ok: !!(fetched.market_structure && fetched.market_structure.ok !== false),
+                data: fetched,
+                code: fetched.code || code,
+                name: fetched.name || '',
+                asof: fetched.asof || asof || '',
+                error: null,
+            };
+            this.setBlockOk('ssaSwingStatus', '');
+            const st = document.getElementById('ssaSwingStatus');
+            if (st) st.hidden = true;
+            // 若并行时形态尚无 bias，形态回调会 _refreshSwingContrast
+        } catch (e) {
+            console.warn('个股分析·波段趋势失败', e);
+            host.innerHTML = '';
+            this.lastSwing = {
+                ok: false,
+                data: null,
+                code,
+                name: '',
+                asof: asof || '',
+                error: e.message || '波段趋势分析失败',
+            };
+            this.setBlockError('ssaSwingStatus', e.message || '波段趋势分析失败，可稍后重试');
+        }
+        this.updateExportBtn();
     },
 
     renderStrategyResult(data) {
@@ -609,6 +698,8 @@ const StockMultiStrategy = {
         const levelsStatus = document.getElementById('ssaLevelsStatus');
         const patternHost = document.getElementById('ssaPatternHost');
         const patternStatus = document.getElementById('ssaPatternStatus');
+        const swingHost = document.getElementById('ssaSwingHost');
+        const swingStatus = document.getElementById('ssaSwingStatus');
 
         const cloneClean = (el) => {
             if (!el) return '';
@@ -662,6 +753,20 @@ const StockMultiStrategy = {
             patternHtml = '<p class="ssa-pdf-empty">暂无形态识别结果</p>';
         }
 
+        let swingHtml = '';
+        if (this.lastSwing && this.lastSwing.error && !this.lastSwing.data) {
+            swingHtml = `<p class="ssa-pdf-err">${this.esc(this.lastSwing.error)}</p>`;
+        } else if (swingHost && swingHost.innerHTML.trim()) {
+            swingHtml = cloneClean(swingHost);
+            if (swingStatus && swingStatus.classList.contains('is-error') && swingStatus.textContent) {
+                swingHtml += `<p class="ssa-pdf-err">${this.esc(swingStatus.textContent)}</p>`;
+            }
+        } else if (this.lastSwing && this.lastSwing.error) {
+            swingHtml = `<p class="ssa-pdf-err">${this.esc(this.lastSwing.error)}</p>`;
+        } else {
+            swingHtml = '<p class="ssa-pdf-empty">暂无波段趋势结果</p>';
+        }
+
         const metaHtml = meta && !meta.hidden && meta.innerHTML.trim()
             ? meta.innerHTML
             : `<div>${this.esc(stock.code || '')} ${this.esc(stock.name || '')}</div>`;
@@ -704,6 +809,7 @@ const StockMultiStrategy = {
   .kde-levels-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; page-break-inside: avoid; }
   .kde-levels-subtitle { margin: 12px 0 6px; font-size: 13px; color: #334155; }
   .pattern-expert-analysis { margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; }
+  .ms-zigzag-svg { max-width: 100%; }
   @media print {
     body { padding: 0; }
     .print-hint { display: none !important; }
@@ -718,6 +824,8 @@ const StockMultiStrategy = {
   ${levelsHtml}
   <h2>形态识别</h2>
   ${patternHtml}
+  <h2>波段与趋势</h2>
+  ${swingHtml}
 </body></html>`;
     },
 

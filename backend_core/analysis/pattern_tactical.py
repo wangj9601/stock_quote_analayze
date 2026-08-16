@@ -2059,6 +2059,175 @@ def market_snapshot_from_bars(bars: Optional[Sequence[Dict[str, Any]]]) -> Dict[
     return out
 
 
+def assess_breakout_quality(
+    bars: Optional[Sequence[Dict[str, Any]]],
+    break_level: Optional[float],
+    *,
+    vol_mult: float = WEDGE_BREAKOUT_VOL_MULT,
+    hold_mult: float = BREAKOUT_UP_MULT,
+    hold_days: int = 2,
+) -> Optional[Dict[str, Any]]:
+    """右侧软确认：突破日量≥1.5×MA20 且连续≥2 日收盘站稳突破位×hold_mult。
+
+    不改引擎 lifecycle；仅产出 quality / evidence 标记。
+    """
+    level = _f(break_level)
+    if level is None or level <= 0:
+        return None
+    seq = [b for b in (bars or []) if isinstance(b, dict)]
+    if len(seq) < 3:
+        return None
+    gate = float(level) * float(hold_mult)
+    # 找最近一次「上破」起点：从后往前找仍站在 gate 上的连续段，再取其首日
+    hold_idx: List[int] = []
+    for i in range(len(seq) - 1, -1, -1):
+        c = _f(seq[i].get("close"))
+        if c is not None and c >= gate:
+            hold_idx.append(i)
+        else:
+            if hold_idx:
+                break
+            continue
+    if not hold_idx:
+        return None
+    hold_idx.reverse()
+    break_i = hold_idx[0]
+    # 量能：突破日相对此前 20 日均量（不含突破日）
+    vols: List[float] = []
+    for b in seq[max(0, break_i - 20) : break_i]:
+        v = _f(b.get("volume"))
+        if v is not None and v > 0:
+            vols.append(float(v))
+    v_break = _f(seq[break_i].get("volume"))
+    vol_ratio: Optional[float] = None
+    vol_ok = False
+    if v_break is not None and vols:
+        avg = sum(vols) / len(vols)
+        if avg > 0:
+            vol_ratio = round(float(v_break) / avg, 4)
+            vol_ok = vol_ratio >= float(vol_mult)
+    hold_ok = len(hold_idx) >= int(hold_days)
+    # 当前仍须站稳（含突破日在内连续段覆盖到最新）
+    if hold_idx[-1] != len(seq) - 1:
+        hold_ok = False
+
+    if vol_ok and hold_ok:
+        quality = "strong"
+    elif not vol_ok:
+        quality = "weak"
+    else:
+        quality = "unconfirmed_hold"
+
+    break_date = str(seq[break_i].get("date") or seq[break_i].get("trade_date") or "")[:10]
+    evidence_codes: List[str] = []
+    evidence_codes.append("breakout_vol_ok" if vol_ok else "breakout_vol_missing")
+    if hold_ok:
+        evidence_codes.append("breakout_hold_2d")
+    else:
+        evidence_codes.append("breakout_hold_missing")
+
+    return {
+        "quality": quality,
+        "break_level": round(float(level), 4),
+        "gate": round(float(gate), 4),
+        "break_date": break_date or None,
+        "hold_days": len(hold_idx) if hold_idx[-1] == len(seq) - 1 else 0,
+        "volume_ratio": vol_ratio,
+        "vol_ok": vol_ok,
+        "hold_ok": hold_ok,
+        "evidence_codes": evidence_codes,
+        "note": (
+            "量价配合且已连续站稳"
+            if quality == "strong"
+            else (
+                "缺量，防假突破"
+                if quality == "weak"
+                else "量能尚可但未连续2日站稳"
+            )
+        ),
+    }
+
+
+def _demote_hints_for_weak_breakout(
+    hints: List[Dict[str, Any]],
+    quality: Optional[str],
+    *,
+    note: Optional[str] = None,
+) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    """weak / unconfirmed_hold 时降低突破类买点 priority，或改 watch。"""
+    if quality not in ("weak", "unconfirmed_hold"):
+        return hints, None
+    tip = note or (
+        "缺量/未站稳，防假突破"
+        if quality == "weak"
+        else "未连续站稳，防假突破"
+    )
+    out: List[Dict[str, Any]] = []
+    for h in hints or []:
+        if not isinstance(h, dict):
+            continue
+        nh = dict(h)
+        htype = str(nh.get("type") or "")
+        ez = nh.get("entry_zone") if isinstance(nh.get("entry_zone"), dict) else {}
+        anchor = str(ez.get("anchor") or "")
+        is_breakish = htype in (
+            "breakout_buy",
+            "momentum_breakout",
+            "breakout_follow",
+            "right_breakout",
+        ) or "break_upper" in anchor or anchor in (
+            "wedge_hold_level",
+            "gms_volume_breakout",
+        )
+        if is_breakish:
+            try:
+                pri = int(nh.get("priority") or 3)
+            except (TypeError, ValueError):
+                pri = 3
+            nh["priority"] = max(pri, 3)
+            if htype in ("breakout_buy", "momentum_breakout", "breakout_follow"):
+                nh["type"] = "watch"
+            nh["breakout_quality"] = quality
+            prev = str(nh.get("trigger") or "").strip()
+            warn = f"（{tip}）"
+            if warn not in prev:
+                nh["trigger"] = f"{prev}{warn}" if prev else tip
+        out.append(nh)
+    return out, tip
+
+
+def _resolve_breakout_level_for_quality(
+    primary: Optional[Dict[str, Any]],
+    hints: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Optional[float]:
+    """优先形态上沿/颈线；否则取突破类买点入场中位。"""
+    if isinstance(primary, dict):
+        upper, _ = _hit_bounds(primary)
+        if upper is not None and upper > 0:
+            return float(upper)
+        neck = _hit_neck(primary)
+        if neck is not None and neck > 0:
+            st = str(primary.get("status") or "")
+            t = str(primary.get("pattern_type") or "")
+            if st == "confirmed" and t in BULLISH_REVERSAL:
+                return float(neck)
+    for h in hints or []:
+        if not isinstance(h, dict):
+            continue
+        htype = str(h.get("type") or "")
+        ez = h.get("entry_zone") if isinstance(h.get("entry_zone"), dict) else {}
+        if htype in ("breakout_buy", "momentum_breakout", "breakout_follow") or str(
+            ez.get("anchor") or ""
+        ).find("break") >= 0:
+            lo, hi = _f(ez.get("low")), _f(ez.get("high"))
+            if lo is not None and hi is not None:
+                return (float(lo) + float(hi)) / 2.0
+            c = _f(ez.get("center"))
+            if c is not None:
+                return float(c)
+    return None
+
+
 def _inactive_bypass(
     hits: Optional[Sequence[Dict[str, Any]]],
     *,
@@ -3569,10 +3738,14 @@ def build_pattern_tactical(
     super_support_min_strength: float = SUPER_SUPPORT_STRENGTH,
     atr: Optional[float] = None,
     wedge_gms_min: float = WEDGE_BREAKOUT_GMS_MIN,
+    bars: Optional[Sequence[Dict[str, Any]]] = None,
+    weekly_trend: Optional[str] = None,
 ) -> Dict[str, Any]:
     """统一出口：short_bias + grade + buy_hints + disclaimer。
 
     gms 可选：提供 score 时，下降楔形微幅上破可升为「楔形蓄势突破预警」。
+    bars 可选：用于突破量价/两日站稳软确认（不改 lifecycle）。
+    weekly_trend 可选：周线 downtrend 时对看多写逆势谨慎 evidence（不改 short_bias）。
     """
     classified = classify_short_bias(
         hits,
@@ -3899,6 +4072,74 @@ def build_pattern_tactical(
         )
 
     gms_score_out = _gms_score_total(gms)
+
+    # P1：突破软质量（仅看多/已确认上破或突破类买点）
+    breakout_quality_payload: Optional[Dict[str, Any]] = None
+    if short_bias == "看多" or any(
+        isinstance(h, dict)
+        and str(h.get("type") or "")
+        in ("breakout_buy", "momentum_breakout", "breakout_follow", "right_breakout")
+        for h in (hints or [])
+    ):
+        level = _resolve_breakout_level_for_quality(classified.get("primary"), hints)
+        # 试探突破也可用 probe upper
+        if level is None and isinstance(probe, dict) and probe.get("ok"):
+            level = _f(probe.get("upper"))
+        bq = assess_breakout_quality(bars, level)
+        if bq:
+            breakout_quality_payload = bq
+            for code in bq.get("evidence_codes") or []:
+                evidence.append(
+                    {
+                        "code": code,
+                        "ok": code in ("breakout_vol_ok", "breakout_hold_2d"),
+                        "quality": bq.get("quality"),
+                        "volume_ratio": bq.get("volume_ratio"),
+                        "hold_days": bq.get("hold_days"),
+                        "break_level": bq.get("break_level"),
+                    }
+                )
+            evidence.append(
+                {
+                    "code": "breakout_quality",
+                    "ok": bq.get("quality") == "strong",
+                    "quality": bq.get("quality"),
+                    "note": bq.get("note"),
+                }
+            )
+            hints, soft_tip = _demote_hints_for_weak_breakout(
+                hints, str(bq.get("quality") or ""), note=str(bq.get("note") or "")
+            )
+            if soft_tip:
+                if risk_note:
+                    if soft_tip not in str(risk_note):
+                        risk_note = f"{risk_note}；{soft_tip}"
+                else:
+                    risk_note = soft_tip
+                bit = f"突破质量={bq.get('quality')}（{soft_tip}）"
+                rationale = f"{rationale}；{bit}" if rationale else bit
+
+    # P2：周线逆势谨慎（软层，不改 short_bias）
+    counter_trend_caution = False
+    weekly_trend_n = str(weekly_trend or "").strip().lower()
+    if weekly_trend_n == "downtrend" and short_bias == "看多":
+        counter_trend_caution = True
+        evidence.append(
+            {
+                "code": "weekly_downtrend",
+                "ok": True,
+                "weekly_trend": "downtrend",
+                "caution": "逆势谨慎",
+            }
+        )
+        caution_txt = "周线下降趋势，逆势谨慎"
+        if risk_note:
+            if "逆势谨慎" not in str(risk_note):
+                risk_note = f"{risk_note}；{caution_txt}"
+        else:
+            risk_note = caution_txt
+        rationale = f"{rationale}；{caution_txt}" if rationale else caution_txt
+
     out: Dict[str, Any] = {
         "short_bias": short_bias,
         "bias_label": bias_label,
@@ -3922,6 +4163,12 @@ def build_pattern_tactical(
         "display_status": display_status,
         "gms_score": round(float(gms_score_out), 1) if gms_score_out is not None else None,
         "atr": round(float(atr_v), 4) if atr_v is not None else None,
+        "breakout_quality": (
+            breakout_quality_payload.get("quality") if breakout_quality_payload else None
+        ),
+        "breakout_quality_detail": breakout_quality_payload,
+        "counter_trend_caution": counter_trend_caution,
+        "weekly_trend": weekly_trend_n or None,
     }
     return out
 

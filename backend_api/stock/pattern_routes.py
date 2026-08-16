@@ -301,11 +301,31 @@ async def patterns_for_stock(
     hits = [h for h in hits_all if str(h.get("status") or "") != "invalidated"]
 
     vp, confluence, rpe, gms, classic = _tactical_enrichment(db, bars, stock_code, asof_s)
+    from backend_core.analysis.market_structure import (
+        aggregate_daily_to_weekly,
+        analyze_market_structure,
+    )
     from backend_core.analysis.pattern_tactical import (
         annotate_hits_breakout_probe,
         build_pattern_tactical,
         market_snapshot_from_bars,
     )
+    from backend_core.analysis.swing_zigzag import (
+        DEFAULT_FRACTAL,
+        DEFAULT_MIN_SWING_BARS,
+    )
+
+    weekly_bars = aggregate_daily_to_weekly(bars)
+    weekly_ms = analyze_market_structure(
+        weekly_bars,
+        max_bars=max(40, min(120, len(weekly_bars))),
+        fractal_left=DEFAULT_FRACTAL,
+        fractal_right=DEFAULT_FRACTAL,
+        min_swing_bars=max(1, DEFAULT_MIN_SWING_BARS // 2 or 1),
+        max_points=12,
+        period="weekly",
+    )
+    weekly_trend = str(weekly_ms.get("trend") or "") if weekly_ms.get("ok") else None
 
     tactical = build_pattern_tactical(
         hits_all,
@@ -317,6 +337,8 @@ async def patterns_for_stock(
         asof=asof_s,
         market=market_snapshot_from_bars(bars),
         classic=classic,
+        bars=bars,
+        weekly_trend=weekly_trend,
     )
     hits = annotate_hits_breakout_probe(hits, tactical)
 

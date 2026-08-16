@@ -22,6 +22,9 @@ CHIPS_VOID_ATR_PCT_HIGH = 0.04  # ATR/close ≥4% 时 void_note 强调高 ATR �
 # 阻力与 VP 关键水平（POC/VAH/VAL）重叠时：保留原始 strength，另输出增益强度（与真空折减对称、分边）
 CHIPS_HVZ_GAIN = 1.25
 CHIPS_HVZ_OVERLAP_PCT = 0.01  # 落入带内，或相对距离 ≤1%
+# 展示分档：与战术贴压强度门槛对齐（≥10 或来源≥3 → 强共振）
+STRONG_TIER_STRENGTH = 10.0
+STRONG_TIER_MIN_SOURCES = 3
 # 多源等距时的来源优先级（数值越小优先）
 _HVZ_SOURCE_PRIORITY = {"poc": 0, "vah": 1, "val": 2}
 
@@ -222,6 +225,47 @@ def _zone_dict_from_members(members: Sequence[Dict[str, Any]]) -> Dict[str, Any]
         "labels": labels_u,
         "n_points": len(members),
     }
+
+
+def annotate_zone_tier(
+    zone: Optional[Dict[str, Any]],
+    *,
+    side: str,
+    strong_strength: float = STRONG_TIER_STRENGTH,
+    strong_min_sources: int = STRONG_TIER_MIN_SOURCES,
+) -> Optional[Dict[str, Any]]:
+    """为共振带补充展示字段 tier / label_zh（不改 strength 公式）。"""
+    if not isinstance(zone, dict):
+        return zone
+    z = dict(zone)
+    strength = _f(z.get("strength"))
+    if strength is None:
+        strength = _f(z.get("strength_adjusted"))
+    n_src = len(z.get("sources") or [])
+    is_strong = (strength is not None and float(strength) >= float(strong_strength)) or (
+        n_src >= int(strong_min_sources)
+    )
+    side_n = str(side or "").strip().lower()
+    is_support = side_n in ("support", "s", "支撑")
+    z["tier"] = "strong" if is_strong else "normal"
+    if is_support:
+        z["label_zh"] = "强共振支撑" if is_strong else "共振支撑"
+    else:
+        z["label_zh"] = "强共振压力" if is_strong else "共振压力"
+    return z
+
+
+def _annotate_zones_tier(
+    zones: Sequence[Dict[str, Any]],
+    *,
+    side: str,
+) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for z in zones or []:
+        az = annotate_zone_tier(z if isinstance(z, dict) else None, side=side)
+        if az is not None:
+            out.append(az)
+    return out
 
 
 def _split_members_by_max_gap(
@@ -834,6 +878,16 @@ def build_confluence_zones(
         gain=float(chips_hvz_gain),
         overlap_pct=float(chips_hvz_overlap_pct),
     )
+
+    supports = _annotate_zones_tier(supports, side="support")
+    resistances = _annotate_zones_tier(resistances, side="resistance")
+    nearest_s = annotate_zone_tier(nearest_s, side="support")
+    nearest_r = annotate_zone_tier(nearest_r, side="resistance")
+    params = {
+        **params,
+        "strong_tier_strength": float(STRONG_TIER_STRENGTH),
+        "strong_tier_min_sources": int(STRONG_TIER_MIN_SOURCES),
+    }
 
     return {
         "ok": True,

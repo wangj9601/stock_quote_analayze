@@ -313,6 +313,23 @@ const PatternTool = {
       labelShow === '箱体震荡' || labelShow.indexOf('箱体震荡') >= 0
         ? `${bias} · ${labelShow}`
         : `${bias}${labelShow ? ` · ${labelShow}` : ''}`;
+    const bq = t.breakout_quality ? String(t.breakout_quality) : '';
+    const bqLabel =
+      bq === 'strong' ? '突破质量·强' : bq === 'weak' ? '突破质量·弱（缺量）' : bq === 'unconfirmed_hold' ? '突破质量·未站稳' : '';
+    const bqClass =
+      bq === 'strong'
+        ? 'pattern-bq-strong'
+        : bq === 'weak'
+          ? 'pattern-bq-weak'
+          : bq === 'unconfirmed_hold'
+            ? 'pattern-bq-hold'
+            : '';
+    const bqBadge = bqLabel
+      ? `<span class="pattern-tactical-bq ${bqClass}">${this.esc(bqLabel)}</span>`
+      : '';
+    const cautionBadge = t.counter_trend_caution
+      ? '<span class="pattern-tactical-caution">逆势谨慎</span>'
+      : '';
     const rationale = t.rationale ? String(t.rationale) : '';
     const statusNote = t.status_note ? String(t.status_note).trim() : '';
     const displayStatus = t.display_status ? String(t.display_status).trim() : '';
@@ -424,6 +441,8 @@ const PatternTool = {
       <p>
         <span class="pattern-expert-label">短期判断：</span>
         <span class="pattern-tactical-badge ${badgeClass}">${this.esc(badgeText)}</span>
+        ${bqBadge}
+        ${cautionBadge}
         <span class="pattern-tactical-grade">grade=${this.esc(grade)}</span>
         <span class="pattern-tactical-conf">置信 ${this.esc(conf)}</span>
       </p>
@@ -453,6 +472,15 @@ const PatternTool = {
         t.confidence != null ? ` · 置信 ${Number(t.confidence).toFixed(2)}` : ''
       }`
     );
+    if (t.breakout_quality) {
+      const q = String(t.breakout_quality);
+      const qLab =
+        q === 'strong' ? '强' : q === 'weak' ? '弱（缺量）' : q === 'unconfirmed_hold' ? '未站稳' : q;
+      parts.push(`突破质量：${qLab}`);
+    }
+    if (t.counter_trend_caution) {
+      parts.push('逆势谨慎：周线下降趋势，日线/形态偏多仅作反弹观察');
+    }
     if (t.rationale) parts.push(String(t.rationale));
     if (t.display_status || t.status_note) {
       parts.push(
