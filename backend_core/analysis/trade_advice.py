@@ -8,7 +8,10 @@ from typing import Any, Dict, List, Optional
 ALIGN_TOL_PCT = 0.015
 # URT 买点建议：承接区最小相对宽度；止损相对支撑缓冲
 URT_ENTRY_MIN_WIDTH_PCT = 0.03  # 至少约 3%，避免 7.71–7.74 这类不可执行窄带
-URT_STOP_BUFFER_PCT = 0.02  # 止损参考 = 支撑 × (1 - 2%)，含噪声缓冲
+URT_STOP_BUFFER_PCT = 0.02  # 止损参考 = 锚点 × (1 - 2%)，含噪声缓冲
+# 与个股分析形态买点一致：止损/失效须严格低于可执行买入下沿
+URT_ENTRY_ABOVE_STOP_PCT = 0.005  # 买入下沿至少高于止损约 0.5%
+URT_NEAR_SUPPORT_BAND_PCT = 0.01  # 短线可执行区：支撑下方约 1%～支撑（仍须高于止损）
 
 
 def _f(v: Any) -> Optional[float]:
@@ -241,7 +244,7 @@ def _urt_stop_with_buffer(
     basis: str,
     ref_label: str,
 ) -> Dict[str, Any]:
-    """止损参考下移缓冲，避免与承接区下限重合被噪声扫损。"""
+    """止损参考下移缓冲，避免与可执行承接区下限重合被噪声扫损。"""
     ref = float(ref_price)
     buf = max(0.0, float(buffer_pct))
     stop_px = round(ref * (1.0 - buf), 4)
@@ -259,6 +262,196 @@ def _urt_stop_with_buffer(
     return z
 
 
+def _urt_reconcile_entry_stop(
+    *,
+    entry_low: Optional[float],
+    entry_high: Optional[float],
+    support: Optional[float],
+    ma20: Optional[float],
+    close: Optional[float],
+    prefer_pullback: bool,
+) -> Dict[str, Any]:
+    """短线可执行区与止损联动；MA20 过低时降为中线更深回撤关注。
+
+    口径对齐个股分析：
+    - 短线：近端结构支撑一带买入，失效/止损须严格低于买入下沿；
+    - 中线：MA20 等更远均线作回撤观察，不写入同一止损下的买入下沿。
+    """
+    stop_anchor = support if support is not None else (
+        ma20 if ma20 is not None else entry_low
+    )
+    if stop_anchor is None:
+        return {
+            "entry_low": entry_low,
+            "entry_high": entry_high,
+            "stop_zone": None,
+            "deeper_watch": None,
+            "horizon_notes": [],
+        }
+
+    stop_label = "最近结构支撑" if support is not None else "MA20"
+    stop_basis = "kde" if support is not None else "ma20"
+    stop_zone = _urt_stop_with_buffer(
+        float(stop_anchor), basis=stop_basis, ref_label=stop_label
+    )
+    stop_px = float(stop_zone["price"])
+    min_entry = stop_px * (1.0 + float(URT_ENTRY_ABOVE_STOP_PCT))
+
+    lo = float(entry_low) if entry_low is not None else None
+    hi = float(entry_high) if entry_high is not None else lo
+    deeper_watch: Optional[Dict[str, Any]] = None
+    horizon_notes: List[str] = []
+
+    demoted = False
+    if lo is not None and lo + 1e-12 < min_entry:
+        # 下沿已落入止损之下（常见：MA20 << 结构支撑）→ 降为中线关注
+        deeper_watch = {
+            "price": round(lo, 4),
+            "label": (
+                f"中线更深回撤关注≈{_fmt_px(lo)}"
+                + ("（MA20）" if ma20 is not None and abs(float(ma20) - lo) < 1e-6 else "")
+                + "：跌破短线止损后再看，不宜与上方承接共用同一止损"
+            ),
+            "basis": "ma20_demoted" if ma20 is not None and abs(float(ma20) - lo) < 1e-6 else "deep_pullback",
+        }
+        demoted = True
+        horizon_notes.append(
+            f"短线可执行承接钉近端结构支撑；MA20/更深位{_fmt_px(lo)}仅作中线回撤观察，"
+            f"不写入买入下沿（避免低于止损{_fmt_px(stop_px)}）"
+        )
+        if support is not None:
+            near_lo = float(support) * (1.0 - float(URT_NEAR_SUPPORT_BAND_PCT))
+            lo = max(min_entry, near_lo)
+            hi = float(support)
+            if close is not None:
+                hi = min(hi, float(close))
+            if hi < lo:
+                hi = lo
+        else:
+            lo = min_entry
+            if hi is None or hi < lo:
+                hi = lo if close is None else min(float(close), lo * (1.0 + URT_ENTRY_MIN_WIDTH_PCT))
+
+    # 兜底：任何情况下买入下沿不得 ≤ 止损
+    if lo is not None and lo + 1e-12 < min_entry:
+        lo = min_entry
+        if hi is None or hi < lo:
+            hi = lo
+        horizon_notes.append(
+            f"买入下沿已抬至止损上方（≥{_fmt_px(min_entry)}），与个股分析失效位钳制同口径"
+        )
+
+    if prefer_pullback and not demoted:
+        horizon_notes.append(
+            "短线：回踩近端结构支撑～MA20 一带分批；中线：沿 MA20 趋势回撤观察"
+        )
+    elif prefer_pullback and demoted:
+        horizon_notes.append(
+            "短线：仅在近端结构支撑上方分批承接；中线：等待更深回撤至关注位再评估"
+        )
+
+    return {
+        "entry_low": round(lo, 4) if lo is not None else None,
+        "entry_high": round(hi, 4) if hi is not None else None,
+        "stop_zone": stop_zone,
+        "deeper_watch": deeper_watch,
+        "horizon_notes": horizon_notes,
+        "demoted_deep_low": demoted,
+    }
+
+
+def _soft_merge_pattern_tactical(
+    *,
+    buy_zone: Optional[Dict[str, Any]],
+    stop_zone: Optional[Dict[str, Any]],
+    summary_bits: List[str],
+    confidence: str,
+    tactical: Optional[Dict[str, Any]],
+) -> tuple:
+    """若行上已有个股形态短期三态/buy_hints，软融合进摘要与展示（不强算形态）。"""
+    if not isinstance(tactical, dict):
+        return buy_zone, stop_zone, confidence
+
+    bias = tactical.get("bias") or tactical.get("bias_label")
+    grade = tactical.get("grade")
+    if bias or grade:
+        summary_bits.append(
+            "形态短线旁证："
+            + (f"{bias}" if bias else "")
+            + (f"·grade={grade}" if grade else "")
+        )
+
+    hints = tactical.get("buy_hints") if isinstance(tactical.get("buy_hints"), list) else []
+    primary = hints[0] if hints and isinstance(hints[0], dict) else None
+    if not primary:
+        # 部分路径把分析文案挂在 analysis
+        analysis = tactical.get("analysis") if isinstance(tactical.get("analysis"), dict) else {}
+        st = analysis.get("shortTerm") or tactical.get("shortTerm")
+        mt = analysis.get("mediumTerm") or tactical.get("mediumTerm")
+        if st:
+            summary_bits.append(f"个股短线：{str(st)[:120]}")
+        if mt:
+            summary_bits.append(f"个股中线：{str(mt)[:120]}")
+        return buy_zone, stop_zone, confidence
+
+    ez = primary.get("entry_zone") if isinstance(primary.get("entry_zone"), dict) else {}
+    inv = _f(primary.get("invalidation"))
+    ez_lo = _f(ez.get("low"))
+    ez_hi = _f(ez.get("high"))
+    ez_c = _f(ez.get("center") or ez.get("price"))
+    anchor = ez.get("anchor") or ""
+    if ez_lo is not None or ez_c is not None:
+        band = (
+            f"{_fmt_px(ez_lo)}–{_fmt_px(ez_hi)}"
+            if ez_lo is not None and ez_hi is not None
+            else _fmt_px(ez_c if ez_c is not None else ez_lo)
+        )
+        summary_bits.append(
+            f"形态短线买点旁证≈{band}"
+            + (f"（{anchor}）" if anchor else "")
+            + (f"，失效≈{_fmt_px(inv)}" if inv is not None else "")
+        )
+
+    # 与 URT 止损同向贴近时标注（不覆盖 KDE 主止损）
+    stop_px = _f((stop_zone or {}).get("price") or (stop_zone or {}).get("low"))
+    if inv is not None and stop_px is not None and stop_px > 0 and _within_tol(stop_px, inv):
+        summary_bits.append(f"形态失效位≈{_fmt_px(inv)}与 URT 止损同向贴近")
+        if confidence == "medium":
+            confidence = "high"
+        if stop_zone:
+            stop_zone = dict(stop_zone)
+            stop_zone["pattern_invalidation"] = round(float(inv), 4)
+            stop_zone["basis"] = (stop_zone.get("basis") or "kde") + "+pattern"
+
+    # 买区中心贴近时软标注
+    buy_mid = None
+    if buy_zone:
+        bl, bh = _f(buy_zone.get("low")), _f(buy_zone.get("high"))
+        if bl is not None and bh is not None:
+            buy_mid = (bl + bh) / 2.0
+        else:
+            buy_mid = _f(buy_zone.get("price"))
+    ref_mid = ez_c if ez_c is not None else (
+        (ez_lo + ez_hi) / 2.0 if ez_lo is not None and ez_hi is not None else ez_lo
+    )
+    if buy_mid is not None and ref_mid is not None and _within_tol(buy_mid, ref_mid):
+        summary_bits.append("形态短线入场区与 URT 承接区同向贴近")
+        if buy_zone:
+            buy_zone = dict(buy_zone)
+            buy_zone["basis"] = (buy_zone.get("basis") or "urt") + "+pattern"
+            buy_zone["pattern_anchor"] = str(anchor) if anchor else None
+
+    analysis = tactical.get("analysis") if isinstance(tactical.get("analysis"), dict) else {}
+    st = analysis.get("shortTerm") or tactical.get("shortTerm")
+    mt = analysis.get("mediumTerm") or tactical.get("mediumTerm")
+    if st:
+        summary_bits.append(f"个股短线：{str(st)[:120]}")
+    if mt:
+        summary_bits.append(f"个股中线：{str(mt)[:120]}")
+
+    return buy_zone, stop_zone, confidence
+
+
 def build_trade_advice(
     strategy: str,
     row: Dict[str, Any],
@@ -272,6 +465,8 @@ def build_trade_advice(
     stop_zone: Optional[Dict[str, Any]] = None
     take_profit: Optional[Dict[str, Any]] = None
     sell_triggers: List[Dict[str, Any]] = []
+    deeper_watch: Optional[Dict[str, Any]] = None
+    horizon: Optional[Dict[str, Any]] = None
     action = "watch"
     confidence = "medium"
     summary_bits: List[str] = []
@@ -383,26 +578,47 @@ def build_trade_advice(
                     support=kde_s,
                     ma20=ma20,
                 )
+            elif entry_low is not None:
+                # 贴近跟进时也给可执行带宽：支撑/MA20～现价
+                entry_low, entry_high = _urt_widen_entry_band(
+                    low=entry_low,
+                    high=close if close is not None else entry_high,
+                    close=close,
+                    support=kde_s,
+                    ma20=ma20,
+                )
+
+            reconciled = _urt_reconcile_entry_stop(
+                entry_low=entry_low,
+                entry_high=entry_high,
+                support=kde_s,
+                ma20=ma20,
+                close=close,
+                prefer_pullback=prefer_pullback,
+            )
+            entry_low = reconciled["entry_low"]
+            entry_high = reconciled["entry_high"]
+            stop_zone = reconciled["stop_zone"]
+            deeper_watch = reconciled.get("deeper_watch")
+            for note in reconciled.get("horizon_notes") or []:
+                summary_bits.append(note)
+
+            if prefer_pullback:
                 buy_zone = _zone(
                     low=entry_low,
                     high=entry_high,
                     price=kde_s or entry_low,
-                    label="回踩承接：优先在结构支撑～MA20 一带分批，不宜追高",
+                    label=(
+                        "回踩承接（短线）：优先在近端结构支撑一带分批，不宜追高"
+                        if reconciled.get("demoted_deep_low")
+                        else "回踩承接：优先在结构支撑～MA20 一带分批，不宜追高"
+                    ),
                     basis="urt_buy+pullback+kde" if kde_s else "urt_buy+pullback",
                 )
                 summary_bits.append(
-                    "URT买点成立：价离支撑偏远或存在过热软提示，建议回踩支撑/MA20 承接，不追涨"
+                    "URT买点成立：价离支撑偏远或存在过热软提示，建议回踩支撑承接，不追涨"
                 )
             else:
-                # 贴近跟进时也给可执行带宽：支撑/MA20～现价
-                if entry_low is not None:
-                    entry_low, entry_high = _urt_widen_entry_band(
-                        low=entry_low,
-                        high=close if close is not None else entry_high,
-                        close=close,
-                        support=kde_s,
-                        ma20=ma20,
-                    )
                 buy_zone = _zone(
                     low=entry_low,
                     high=entry_high if entry_high is not None else close,
@@ -412,6 +628,23 @@ def build_trade_advice(
                 )
                 summary_bits.append("URT买点成立：现价附近可跟，回踩支撑/MA20 不破可持有或加仓")
 
+            horizon = {
+                "short_term": {
+                    "buy_zone": buy_zone,
+                    "stop_zone": stop_zone,
+                    "note": "近端结构支撑一带可执行；止损须低于买入下沿",
+                },
+                "medium_term": {
+                    "watch": deeper_watch,
+                    "ma20": round(float(ma20), 4) if ma20 is not None else None,
+                    "note": (
+                        "更深回撤/均线关注，不与短线同一止损捆绑"
+                        if deeper_watch
+                        else "沿 MA20 趋势回撤观察，与短线承接区可重叠"
+                    ),
+                },
+            }
+
             if overheat_soft and not overheat_hard:
                 confidence = "medium"
                 summary_bits.append("过热软提示：控制仓位、分批，优先等回踩")
@@ -420,15 +653,16 @@ def build_trade_advice(
             summary_bits.append("未达正式买点：仅观察，不以现价追入")
             if kde_s is not None:
                 summary_bits.append(f"关注回踩结构支撑{_fmt_px(kde_s)}附近是否企稳")
+            # 观察态仍给止损锚，便于对照
+            if kde_s is not None:
+                stop_zone = _urt_stop_with_buffer(
+                    kde_s, basis="kde", ref_label="最近结构支撑"
+                )
+            elif ma20 is not None:
+                stop_zone = _urt_stop_with_buffer(
+                    ma20, basis="ma20", ref_label="MA20"
+                )
 
-        if kde_s is not None:
-            stop_zone = _urt_stop_with_buffer(
-                kde_s, basis="kde", ref_label="最近结构支撑"
-            )
-        elif ma20 is not None:
-            stop_zone = _urt_stop_with_buffer(
-                ma20, basis="ma20", ref_label="MA20"
-            )
         if kde_r is not None:
             take_profit = {
                 "label": "靠近结构压力减仓/止盈",
@@ -440,6 +674,18 @@ def build_trade_advice(
             if action == "buy":
                 action = "watch"
             summary_bits.append("结构盈亏比偏弱，降级为观察")
+
+        # 个股分析形态短/中线旁证（有则软融合，选股默认不强算）
+        tactical = row.get("pattern_tactical") or row.get("tactical")
+        if tactical is None and isinstance(row.get("score_detail"), dict):
+            tactical = row.get("score_detail").get("tactical")
+        buy_zone, stop_zone, confidence = _soft_merge_pattern_tactical(
+            buy_zone=buy_zone,
+            stop_zone=stop_zone,
+            summary_bits=summary_bits,
+            confidence=confidence,
+            tactical=tactical if isinstance(tactical, dict) else None,
+        )
 
     elif kind == "sbbr":
         entry = bool(row.get("entry_signal"))
@@ -564,6 +810,29 @@ def build_trade_advice(
     if take_profit and "prices" not in take_profit and take_profit.get("price") is not None:
         take_profit["prices"] = [take_profit["price"]]
 
+    # 共振对齐后再次保证：止损仍低于买入下沿（confluence 可能抬高展示止损）
+    if kind == "urt" and buy_zone and stop_zone:
+        b_lo = _f(buy_zone.get("low"))
+        s_px = _f(stop_zone.get("price") or stop_zone.get("high"))
+        if b_lo is not None and s_px is not None and s_px + 1e-12 >= b_lo:
+            # 展示止损被抬到买区上：改回缓冲锚，或抬高买入下沿
+            ref_px = _f(stop_zone.get("ref_price")) or (kde_s if kde_s is not None else b_lo)
+            stop_zone = _urt_stop_with_buffer(
+                float(ref_px),
+                basis="kde",
+                ref_label="最近结构支撑",
+            )
+            s_px = float(stop_zone["price"])
+            min_entry = s_px * (1.0 + float(URT_ENTRY_ABOVE_STOP_PCT))
+            if b_lo < min_entry:
+                buy_zone = dict(buy_zone)
+                buy_zone["low"] = round(min_entry, 4)
+                if _f(buy_zone.get("high")) is not None and float(buy_zone["high"]) < min_entry:
+                    buy_zone["high"] = round(min_entry, 4)
+                summary_bits.append(
+                    f"共振对齐后已重钳：买入下沿≥{_fmt_px(min_entry)}，止损{_fmt_px(s_px)}"
+                )
+
     structure_rr = _f(row.get("structure_rr"))
     if structure_rr is None:
         st0 = row.get("structure") if isinstance(row.get("structure"), dict) else {}
@@ -583,6 +852,8 @@ def build_trade_advice(
         "stop_zone": stop_zone,
         "take_profit": take_profit,
         "sell_triggers": sell_triggers,
+        "deeper_watch": deeper_watch,
+        "horizon": horizon,
         "summary": "；".join(summary_bits),
         "confidence": confidence,
         "kde_support": round(float(kde_s), 2) if kde_s is not None else None,

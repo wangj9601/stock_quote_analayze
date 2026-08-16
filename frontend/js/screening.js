@@ -5612,7 +5612,11 @@ const ScreeningPage = {
                 const urtCode = String(stock.code || '');
                 const urtMarket = 'CN';
                 const urtAlreadyObserve = this._isUrtInTradeObserve(stock, urtMarket, urtCode);
-                const urtDetailHref = `stock.html?code=${encodeURIComponent(urtCode)}&name=${encodeURIComponent(stock.name || '')}`;
+                // 代码列 → 智能分析「个股分析」页（与龙头/中军芯片同口径）
+                const urtAnalysisQ = new URLSearchParams({ tab: 'stock-ai' });
+                if (urtCode) urtAnalysisQ.set('code', urtCode);
+                if (stock.name) urtAnalysisQ.set('name', String(stock.name));
+                const urtDetailHref = `analysis.html?${urtAnalysisQ.toString()}`;
                 const urtTraceHref = `stock_urt_trace.html?code=${encodeURIComponent(urtCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 let urtScoreDetailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
                 if (window.UrtScoreDetail && typeof window.UrtScoreDetail.buildHtml === 'function') {
@@ -5660,7 +5664,7 @@ const ScreeningPage = {
                 ].filter(Boolean).join('') || '—';
                 html += `
                     <tr data-urt-row="${index}">
-                        <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${urtDetailHref}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${urtCode}</a></td>
+                        <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${urtDetailHref}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${urtCode}</a></td>
                         <td class="gms-col-name"><span class="stock-name" title="${urtTitleAttr}">${urtName}</span></td>
                         <td class="gms-col-narrow">${stock.signal_date || '--'}</td>
                         <td class="gms-col-price">${stock.close != null ? Number(stock.close).toFixed(2) : '--'}</td>

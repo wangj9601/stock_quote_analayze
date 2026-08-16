@@ -272,8 +272,14 @@ const UrtScoreDetail = {
             }
             html += '</div>';
             html += '<table class="gms-weight-table"><thead><tr><th>项目</th><th>价位/区间</th><th>说明</th></tr></thead><tbody>';
-            html += `<tr><td>买入/承接区</td><td>${zoneTxt(buyZ)}</td><td>${buyZ.label || '--'}</td></tr>`;
+            html += `<tr><td>买入/承接区（短线）</td><td>${zoneTxt(buyZ)}</td><td>${buyZ.label || '--'}</td></tr>`;
             html += `<tr><td>止损参考</td><td>${zoneTxt(stopZ)}</td><td>${stopZ.label || '--'}</td></tr>`;
+            const deepW = advice.deeper_watch && typeof advice.deeper_watch === 'object'
+                ? advice.deeper_watch
+                : (advice.horizon && advice.horizon.medium_term && advice.horizon.medium_term.watch);
+            if (deepW && (deepW.price != null || deepW.low != null)) {
+                html += `<tr><td>中线更深回撤关注</td><td>${zoneTxt(deepW)}</td><td>${deepW.label || (advice.horizon && advice.horizon.medium_term && advice.horizon.medium_term.note) || '--'}</td></tr>`;
+            }
             html += `<tr><td>止盈参考</td><td>${tpPrices.length ? tpPrices.map((x) => this._fmt(x, 2)).join('、') : '--'}</td><td>${tp.label || '--'}</td></tr>`;
             html += '</tbody></table>';
             if (advice.summary) {

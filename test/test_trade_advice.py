@@ -47,7 +47,11 @@ def test_reference_levels_appended():
 
 
 def test_urt_buy_pullback_when_extended_and_overheat_soft():
-    """买点成立但现价远离支撑且过热软标 → 建议回踩承接区，不宜追高。"""
+    """买点成立但现价远离支撑且过热软标 → 建议回踩承接区，不宜追高。
+
+    MA20 远低于结构支撑时：短线可执行区钉近端支撑，MA20 降为中线更深回撤关注；
+    止损须严格低于买入下沿（与个股分析失效位钳制同口径）。
+    """
     adv = build_trade_advice(
         "urt",
         {
@@ -66,18 +70,81 @@ def test_urt_buy_pullback_when_extended_and_overheat_soft():
     assert adv["action"] == "buy"
     assert adv["buy_zone"] is not None
     assert "pullback" in (adv["buy_zone"].get("basis") or "")
-    assert adv["buy_zone"].get("low") == 9.51
-    assert adv["buy_zone"].get("high") == 10.75
-    # 止损含 2% 缓冲，不与承接区下限重合
-    assert abs(float(adv["stop_zone"]["price"]) - 10.75 * 0.98) < 1e-6
+    stop_px = float(adv["stop_zone"]["price"])
+    assert abs(stop_px - 10.75 * 0.98) < 1e-6
     assert adv["stop_zone"].get("buffer_pct") == 0.02
     assert "缓冲" in (adv["stop_zone"].get("label") or "")
+    lo = float(adv["buy_zone"]["low"])
+    hi = float(adv["buy_zone"]["high"])
+    assert lo > stop_px
+    assert hi == 10.75
+    assert adv.get("deeper_watch") is not None
+    assert abs(float(adv["deeper_watch"]["price"]) - 9.51) < 1e-6
     assert adv["take_profit"]["prices"][0] == 12.44
-    assert "回踩" in adv["summary"]
+    assert "回踩" in adv["summary"] or "短线" in adv["summary"]
     assert adv.get("structure_rr") == 2.76
     assert adv["key_levels"]["support"] == 10.75
     assert adv["key_levels"]["close"] == 11.2
     assert adv["key_levels"]["resistance"] == 12.44
+    assert adv.get("horizon", {}).get("short_term") is not None
+
+
+def test_urt_entry_stop_no_deadlock_like_screenshot():
+    """复现明细矛盾：承接 15.24–16.63 vs 止损 16.30 → 钳制后下沿高于止损。"""
+    adv = build_trade_advice(
+        "urt",
+        {
+            "buy_signal": True,
+            "close": 17.35,
+            "ma20": 15.24,
+            "nearest_support": 16.63,
+            "nearest_resistance": 17.97,
+            "structure_rr": 0.86,
+            "risk_tags": [
+                {"id": "recent_overheat", "level": "warn", "label": "近期涨幅偏大"},
+            ],
+        },
+    )
+    stop_px = float(adv["stop_zone"]["price"])
+    lo = float(adv["buy_zone"]["low"])
+    hi = float(adv["buy_zone"]["high"])
+    assert abs(stop_px - 16.63 * 0.98) < 1e-6
+    assert lo > stop_px
+    assert hi == 16.63
+    assert abs(float(adv["deeper_watch"]["price"]) - 15.24) < 1e-6
+
+
+def test_urt_soft_merge_pattern_tactical():
+    adv = build_trade_advice(
+        "urt",
+        {
+            "buy_signal": True,
+            "close": 10.5,
+            "ma20": 10.2,
+            "nearest_support": 10.0,
+            "nearest_resistance": 11.5,
+            "structure_rr": 3.0,
+            "tactical": {
+                "bias": "震荡",
+                "grade": "base",
+                "buy_hints": [
+                    {
+                        "entry_zone": {
+                            "low": 9.95,
+                            "high": 10.05,
+                            "center": 10.0,
+                            "anchor": "near_support_pref",
+                        },
+                        "invalidation": 9.85,
+                    }
+                ],
+                "shortTerm": "短线关注近端支撑回踩。",
+                "mediumTerm": "中线宜按箱体观察。",
+            },
+        },
+    )
+    assert "形态短线" in adv["summary"] or "个股短线" in adv["summary"]
+    assert "个股中线" in adv["summary"] or "中线" in adv["summary"]
 
 
 def test_urt_entry_band_widens_when_ma20_near_support():
