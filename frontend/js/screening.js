@@ -3667,18 +3667,41 @@ const ScreeningPage = {
         this.syncUrtFilterParamsForScope();
     },
 
-    /** 单只股票：禁用量能/最低得分等筛选控件（后端亦不应用筛选） */
+    /** 仅「全部A股/全部港股」应用页面量能/最低得分；其它数据来源列表不过滤（对齐 GMS） */
     syncUrtFilterParamsForScope() {
         const checked = document.querySelector('input[name="urtScope"]:checked');
-        const isSingle = checked && checked.value === 'single';
+        const scope = checked ? checked.value : 'cn';
+        const applyOverride = scope === 'cn' || scope === 'hk';
+        const isSingle = scope === 'single';
         ['urtVolumeMultiple', 'urtMinScore'].forEach((id) => {
             const el = document.getElementById(id);
             if (!el) return;
-            el.disabled = !!isSingle;
-            el.title = isSingle ? '单只股票模式不应用筛选条件，仅直接计算策略信号' : '';
+            el.disabled = !applyOverride;
+            if (isSingle) {
+                el.title = '单只股票模式不应用筛选条件，仅直接计算策略信号';
+            } else if (!applyOverride) {
+                el.title = '仅「全部A股 / 全部港股」可覆盖；当前数据来源列表不过滤，得分原样返回';
+            } else {
+                el.title = '';
+            }
         });
+        const limEl = document.getElementById('urtLimit');
+        if (limEl) {
+            limEl.disabled = !applyOverride;
+            limEl.title = applyOverride ? '' : 'limit 仅「全部A股 / 全部港股」可用';
+        }
         const hint = document.getElementById('urtSingleSkipFilterHint');
-        if (hint) hint.style.display = isSingle ? 'block' : 'none';
+        if (hint) {
+            if (isSingle) {
+                hint.style.display = 'block';
+                hint.textContent = '单只股票模式：不按硬筛/最低得分过滤，直接计算并展示策略信号（含未通过买点）；得分原样显示。';
+            } else if (!applyOverride) {
+                hint.style.display = 'block';
+                hint.textContent = '当前数据来源（自选/行业/概念）：对齐 GMS，不按硬筛与最低得分（含默认 70）过滤列表，得分多少显示多少；是否正式买点见结果「买点」列。页面量能/最低得分不生效。';
+            } else {
+                hint.style.display = 'none';
+            }
+        }
     },
 
     /** 显示/隐藏「行业板块」选择行 */
@@ -4415,8 +4438,8 @@ const ScreeningPage = {
         const cid = configEl && configEl.value ? parseInt(configEl.value, 10) : NaN;
         if (!isNaN(cid) && cid > 0) params.set('config_id', String(cid));
 
-        // 单只股票：不传筛选参数，后端跳过硬筛/最低得分，直接计算信号
-        if (scope !== 'single') {
+        // 量能/最低得分覆盖：仅全部A股、全部港股；自选/板块/单股用参数版本默认（单股另跳过硬筛）
+        if (scope === 'cn' || scope === 'hk') {
             const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
             if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
             const ms = parseFloat(document.getElementById('urtMinScore')?.value);
@@ -5680,7 +5703,7 @@ const ScreeningPage = {
                         <td class="gms-col-narrow">${stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '--'}</td>
                         <td class="gms-col-price support" title="${urtSupportTitle || ''}">${urtSupport != null && Number.isFinite(Number(urtSupport)) ? Number(urtSupport).toFixed(2) : '--'}</td>
                         <td class="gms-col-price resistance" title="${urtResistTitle || ''}">${urtResist != null && Number.isFinite(Number(urtResist)) ? Number(urtResist).toFixed(2) : '--'}</td>
-                        <td class="gms-col-narrow gms-col-risk"><span class="gms-risk-tags-inline">${urtRiskHtml}</span></td>
+                        <td class="gms-col-risk"><span class="gms-risk-tags-inline">${urtRiskHtml}</span></td>
                         <td class="gms-col-narrow"><span class="${scoreClass}">${scoreVal != null ? scoreVal.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-actions">
                             <div class="action-links">
@@ -5964,7 +5987,7 @@ const ScreeningPage = {
                         <td style="display:none;"><span class="gms-score-total">${stock.score_total != null ? stock.score_total.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-narrow"><span class="${strengthClass}">${(signalStrength * 100).toFixed(1)}%</span></td>
                         <td class="gms-col-narrow"><span class="${buyTypeClass}">${buyType}</span></td>
-                        <td class="gms-col-narrow gms-col-risk"><span class="gms-risk-tags-inline">${riskHtml}</span></td>
+                        <td class="gms-col-risk"><span class="gms-risk-tags-inline">${riskHtml}</span></td>
                         <td class="gms-col-price">${stock.current_price != null ? stock.current_price.toFixed(2) : '--'}</td>
                         <td class="gms-col-price support" title="${gmsSupportTitle || ''}">${gmsSupport != null && Number.isFinite(Number(gmsSupport)) ? Number(gmsSupport).toFixed(2) : '--'}</td>
                         <td class="gms-col-price resistance" title="${gmsResistTitle || ''}">${gmsResist != null && Number.isFinite(Number(gmsResist)) ? Number(gmsResist).toFixed(2) : '--'}</td>

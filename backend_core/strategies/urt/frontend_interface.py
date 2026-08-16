@@ -57,8 +57,9 @@ class URTFrontendInterface:
         market: str = "CN",
     ) -> Dict[str, Any]:
         """
-        skip_screening_filters=True（单只股票）：不按硬筛/最低得分过滤结果，
-        实时计算信号明细（含未通过买点），便于查看个股当日策略状态。
+        skip_screening_filters=True（单股 / 自选 / 行业 / 概念）：不按硬筛/最低得分过滤结果列表，
+        实时计算信号明细（含未通过买点），得分原样返回；正式买点仍由 buy_signal 标识。
+        全部A股/港股全量选股仍 require_pass（硬筛 + min_score）。
         """
         cm = URTConfigManager()
         try:
@@ -66,7 +67,7 @@ class URTFrontendInterface:
         except Exception:
             pass
 
-        # 单股：忽略选股筛选 Query 覆盖，仅用策略版本默认参数计算信号
+        # 非全量列表模式：忽略选股筛选 Query 覆盖，仅用策略版本参数计算信号（列表不过滤）
         if skip_screening_filters:
             volume_multiple = None
             min_score = None
@@ -104,8 +105,11 @@ class URTFrontendInterface:
             else:
                 hint = f"当前自然日 {today_s} 无行情数据，已改用表内最新交易日 {effective}。"
         if skip_screening_filters:
-            single_hint = "单只股票模式：已跳过选股筛选条件，直接计算策略信号。"
-            hint = f"{hint} {single_hint}" if hint else single_hint
+            list_hint = (
+                "当前数据来源：不按硬筛/最低得分过滤列表（对齐 GMS），"
+                "得分原样返回；是否正式买点见「买点」列。"
+            )
+            hint = f"{hint} {list_hint}" if hint else list_hint
 
         board_keys = normalize_urt_board_keys(boards)
         overrides_active = any(

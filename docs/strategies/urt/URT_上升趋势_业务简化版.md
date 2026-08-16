@@ -116,8 +116,8 @@
 
 **得分门槛**：默认 `min_score=70`。
 
-选股全市场/板块/自选扫描：`require_pass=True`，**只返回正式买点**。  
-`scope=single`：`skip_screening_filters=True`，返回可算明细（含未过筛），**不等于**给出买点。
+选股全部A股/全部港股：`require_pass=True`，**只返回正式买点**。  
+`scope=watchlist|industry_board|concept_board|single`：对齐 GMS，`skip_screening_filters=True`，返回可算明细（含未过筛/未达分），得分原样展示；**不等于**给出买点（看 `buy_signal`）。
 
 ### 6.2 得分分项（封顶 100）
 
@@ -190,7 +190,7 @@
 | 代码内置默认 | `URTConfigManager.get_default_config()` |
 | JSON 文件 | `backend_core/strategies/urt/urt_config.json`（与内置 deep merge） |
 | 数据库 | 表 `urt_strategy_configs`；有启用默认版本时**优先 DB**；管理端可多版本 / `precompute_enabled` |
-| 选股 Query 覆盖 | `volume_multiple`、`min_score`、换手/量比相关；**有覆盖时不走预计算缓存**；单股模式忽略这些覆盖 |
+| 选股 Query 覆盖 | `volume_multiple`、`min_score`：仅 **全部A股 / 全部港股** 覆盖并过滤买点；**自选/行业/概念/单股** 对齐 GMS：不按硬筛与最低得分过滤列表、得分原样返回（正式买点仍看 `buy_signal`）；有覆盖时全市场不走预计算缓存 |
 
 ### 8.1 常用默认（文件 + 代码一致部分）
 

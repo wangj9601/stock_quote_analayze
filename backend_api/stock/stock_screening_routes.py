@@ -3128,7 +3128,8 @@ async def get_urt_strategy(
     """
     上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
     支持 A 股与港股全市场；数据来源对齐 GMS：全部A股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
-    scope=single 时跳过硬筛与最低得分过滤，直接计算该股策略信号明细（含未通过买点）。
+    全部A股/全部港股：应用硬筛 + min_score（可被 Query 覆盖）。
+    自选/行业/概念/单股：对齐 GMS，不按硬筛与最低得分过滤列表，返回可算明细（含未买点），得分原样展示。
     """
     if not URT_AVAILABLE or URTFrontendInterface is None:
         return JSONResponse(
@@ -3308,8 +3309,8 @@ async def get_urt_strategy(
 
     screen_scope = "watchlist" if stock_codes is not None else "all"
     screen_boards = None if stock_codes is not None else boards_out
-    # 单只股票：不按量能/得分等筛选条件过滤，直接计算策略信号明细
-    skip_filters = scope_raw == "single"
+    # 对齐 GMS：非全市场（自选/行业/概念/单股）不按硬筛+最低得分过滤列表，得分原样返回；正式买点仍看 buy_signal
+    skip_filters = scope_raw in ("single", "watchlist", "industry_board", "concept_board")
 
     loop = asyncio.get_event_loop()
 

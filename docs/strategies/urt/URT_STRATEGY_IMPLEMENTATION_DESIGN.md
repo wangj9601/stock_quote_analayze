@@ -364,13 +364,13 @@ admin/  # /urt-management 参数配置页
 | `limit` | 扫描股票数上限 | ≥1（可选） | 先截断候选池再算信号；全市场建议带 limit |
 | `date` | 筛选基准日 | `YYYY-MM-DD` | 无数据时回退表内最新交易日 |
 | `config_id` | 参数版本 ID | ≥1 | 不传则用默认版本 / JSON |
-| `volume_multiple` | 临时覆盖量能阈值 | **1.0～30.0** | 覆盖配置中同名项；**单股模式忽略** |
-| `min_score` | 临时覆盖最低分 | **0～100** | 同上；**单股模式忽略** |
+| `volume_multiple` | 临时覆盖量能阈值 | **1.0～30.0** | 仅全部A股/港股前端会传并过滤；自选/板块/单股不传且列表不过滤 |
+| `min_score` | 临时覆盖最低分 | **0～100** | 同上 |
 | `use_turnover` / `use_volume_ratio` | 临时开关 | bool | 同上 |
 | `min_turnover` / `min_volume_ratio` | 临时阈值 | ≥0 | 同上 |
 | `boards` | 板块过滤（可多选） | `CYB` / `KCB` / `SH_MAIN` / `SZ_MAIN` / `SZ_SME` / `BJ` | 按代码前缀过滤 `stock_basic_info`；不传=不限板块 |
 
-**`scope=single`（单只股票）**：不应用硬筛与最低得分过滤，实时计算并返回该股策略信号明细（含 `buy_signal=false`）；前端禁用量能/最低得分控件。实现：`URTFrontendInterface.screen(skip_screening_filters=True)` → `evaluate_buy_signal(..., require_pass=False)`。
+**`scope=single` / `watchlist` / `industry_board` / `concept_board`**：不按硬筛与最低得分过滤结果列表，实时计算并返回策略信号明细（含 `buy_signal=false`）；前端禁用量能/最低得分覆盖。实现：`URTFrontendInterface.screen(skip_screening_filters=True)` → `evaluate_buy_signal(..., require_pass=False)`。正式买点仍由行内 `buy_signal` 标识。
 
 板块前缀（`URT_BOARD_PREFIX_GROUPS`）：创业板 `300*`、科创 `688*`、沪主板 `600/601/602/603/605*`、深主板 `000/001*`、中小 `002*`、北证 `43/83/87/88/92*`。
 

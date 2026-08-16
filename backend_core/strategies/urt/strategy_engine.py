@@ -25,8 +25,8 @@ class URTStrategyEngine:
         require_pass: bool = True,
     ) -> List[Dict[str, Any]]:
         """
-        require_pass=True：仅返回硬筛+得分通过的买点（全市场/板块选股）。
-        require_pass=False：始终返回可计算的信号明细（单股查询，不按筛选条件过滤）。
+        require_pass=True：仅返回硬筛+得分通过的买点（全部A股/港股全量选股）。
+        require_pass=False：始终返回可计算的信号明细（自选/板块/单股，对齐 GMS 列表不过滤）。
         """
         cal_days = history_calendar_days_for_fetch(self.config)
         start_s, end_s = URTDataLoader.default_date_window(cal_days, as_of_end_date)
