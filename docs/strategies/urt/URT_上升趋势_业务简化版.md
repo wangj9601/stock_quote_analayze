@@ -82,9 +82,9 @@
 | 连阳硬筛 | **A 或 B 任一通过** | — |
 | 量能倍数 | 当日成交量 ÷ 近 N 日均量（**均量不含当日**） | N=`volume_lookback=20`；阈值 **3.0** |
 | 量比 | 当日量 ÷ 前一日量（近似） | 默认**不**硬筛、不参与加分 |
-| 换手率 | 取当日 K 线 `turnover_rate` | 默认硬筛 ≥ **3.0%**，并参与加分 |
+| 换手率 | 取当日 K 线 `turnover_rate`；另算近 **20** 日中位（不含当日） | 默认硬筛 ≥ **3.0%**；积分用**相对中位甜区加分 / 极端减分**（绝对 ≥25% 熔断），区间约 **[-8,+8]** |
 | 中期阳线 | 默认 10 日≥6 / 15≥8 / 20≥10（须**全部**满足才算 ok） | 默认 `use_yang_medium=true` **硬筛** |
-| 均线多头 | 默认 `MA5 > MA10 > MA20` | 默认 `require_ma_bull=true` **硬筛** |
+| 均线多头 | 硬筛默认 `MA5 > MA10 > MA20`；积分可看至 250 | 默认 `require_ma_bull=true` **硬筛仍仅短中期**；加长均线只抬排序分 |
 | 均线空头 | `MA5 < MA10 < MA20` → `ma_bear_ok` | 不硬筛；减分 + 风险标签 |
 
 频率：**日线、按交易日**；选股可指定基准日，指标一律相对该日及之前的历史。
@@ -127,10 +127,11 @@
 |------|------------|----------|
 | 站上 MA20 | 10 | 成立固定 10，否则 0 |
 | 连阳强度 | 40 | 5 日≥5→40；≥4→36；4 日≥4→34；≥3→30；否则约 `4日阳×8` |
-| 量能倍数 | 34 | 达硬筛阈值起分；`volume_score_full_multiple`（默认 **4.0**）拉满；内部先按 40 分档再 ×34/40 |
+| 量能倍数 | 31 | 达硬筛阈值起分；`volume_score_full_multiple`（默认 **4.0**）拉满；内部先按 40 分档再 ×31/40 |
 | 中期阳线 | 6 | 各窗口相对阈值完成度等权平均 ×6 |
-| 均线多头/空头 | +6 / −8 | 多头 +6；空头 −8；中性 0；总分再夹到 [0,100] |
-| 换手 / 量比 | 各最多 5 | 仅对应开关开启时加分 |
+| 均线多头/空头 | **+0～10 / −8** | 硬筛仍 `MA5>MA10>MA20`；积分按 `5…250` **前缀链深度**分档（基线短多约 +4，全链 +10）；空头仍只看 5/10/20 → −8 |
+| **换手率** | **+8 / −8** | `turnover_score_enabled`：相对自身近 20 日中位约 1～2× 满分；过高倍数或绝对 ≥25%/40% **减分**（如日换手 50% → −8）；中位不足时绝对 3%～7% 甜区回退 |
+| 量比 | 最多 5 | 仅 `use_volume_ratio` 开启时加分 |
 
 ### 6.3 排序
 
@@ -196,7 +197,12 @@
 | `volume_lookback` / `volume_multiple` | 20 / **3.0** |
 | `volume_score_full_multiple` | **4.0** |
 | `min_score` | 70 |
-| `use_turnover` / `min_turnover` | **true / 3.0** |
+| `use_turnover` / `min_turnover` | **true / 3.0**（总开关；细项见下） |
+| `turnover_hard_filter` / `turnover_score_enabled` | **true / true**（与 `use_turnover` 解耦；未写时回退总开关） |
+| `turnover_score_max` / `min` | **+8 / −8** |
+| `turnover_lookback` | **20**（相对中位） |
+| `turnover_rel_sweet_*` / `soft_cap` / `penalty_full` | **1.0 / 2.0 / 3.5 / 5.0** |
+| `turnover_abs_penalty_above` / `full` | **25 / 40**（绝对熔断减分；≥40% → −8） |
 | `use_volume_ratio` | false |
 | `use_yang_medium` / `require_ma_bull` | **true / true** |
 | `history_calendar_days` | 120 |

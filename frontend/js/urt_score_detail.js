@@ -142,20 +142,45 @@ const UrtScoreDetail = {
             {
                 name: '均线多头',
                 score: maBull.score,
-                max: maBull.max != null ? maBull.max : 4,
-                note: `MA5 ${this._fmt(maBull.ma5 != null ? maBull.ma5 : ma5, 2)} · MA10 ${this._fmt(maBull.ma10 != null ? maBull.ma10 : ma10, 2)} · ${(maBull.ok === true || maBullOk === true) ? '多头' : ((maBull.ok === false || maBullOk === false) ? '非多头' : '--')}`,
+                max: maBull.max != null ? maBull.max : 10,
+                note: (() => {
+                    const depth = maBull.depth != null ? maBull.depth : null;
+                    const maxD = maBull.max_depth != null ? maBull.max_depth : 6;
+                    const tip = maBull.tip_period != null ? maBull.tip_period : null;
+                    const bear = maBull.bear_ok === true;
+                    let stance = '--';
+                    if (bear) stance = '空头−8';
+                    else if (maBull.ok === true || maBullOk === true) stance = '多头';
+                    else if (maBull.ok === false || maBullOk === false) stance = '非多头';
+                    const depthTxt = depth != null
+                        ? `深度 ${depth}/${maxD}${tip != null ? `（至MA${tip}）` : ''}`
+                        : '';
+                    const pairs = Array.isArray(maBull.pairs_ok) && maBull.pairs_ok.length
+                        ? maBull.pairs_ok.slice(0, 4).join(' ')
+                        : '';
+                    return `MA5 ${this._fmt(maBull.ma5 != null ? maBull.ma5 : ma5, 2)} · MA10 ${this._fmt(maBull.ma10 != null ? maBull.ma10 : ma10, 2)} · ${stance}${depthTxt ? ' · ' + depthTxt : ''}${pairs ? ' · ' + pairs : ''}`;
+                })(),
             },
             {
                 name: '量能倍数',
                 score: vol.score,
-                max: vol.max != null ? vol.max : 34,
+                max: vol.max != null ? vol.max : 31,
                 note: `倍数 ${this._fmt(vol.volume_multiple != null ? vol.volume_multiple : vm, 2)} / 阈值 ${this._fmt(vol.threshold, 2)}`,
             },
             {
                 name: '换手率',
                 score: turnover.score,
                 max: turnover.max != null ? turnover.max : 0,
-                note: turnover.enabled === false ? '未启用' : `换手 ${this._fmt(turnover.turnover_rate != null ? turnover.turnover_rate : to, 2)}%`,
+                note: (() => {
+                    if (turnover.enabled === false) return '未启用积分';
+                    const abs = this._fmt(turnover.turnover_rate != null ? turnover.turnover_rate : to, 2);
+                    const med = turnover.median != null ? this._fmt(turnover.median, 2) : '--';
+                    const rel = turnover.relative != null ? Number(turnover.relative).toFixed(2) : '--';
+                    const mode = turnover.mode === 'relative' ? '相对中位' : (turnover.mode === 'absolute_fallback' ? '绝对回退' : '');
+                    const pen = turnover.abs_penalty ? '；绝对熔断减分' : '';
+                    const mn = turnover.min != null ? ` / 下限${this._fmt(turnover.min, 1)}` : '';
+                    return `换手 ${abs}%（中位 ${med}% · 相对 ${rel}×${mode ? ' · ' + mode : ''}${pen}）${mn}`;
+                })(),
             },
             {
                 name: '量比',
@@ -180,6 +205,12 @@ const UrtScoreDetail = {
         html += `<span>量能倍数 ${this._fmt(vm, 2)}</span>`;
         html += `<span>量比 ${this._fmt(vr, 2)}</span>`;
         html += `<span>换手 ${this._fmt(to, 2)}%</span>`;
+        const toMed = (turnover && turnover.median != null)
+            ? turnover.median
+            : (src.turnover_median_n != null ? src.turnover_median_n : fields.turnover_median_n);
+        if (toMed != null) {
+            html += `<span>换手中位 ${this._fmt(toMed, 2)}%</span>`;
+        }
         html += '</div></div>';
 
         // 【支撑 / 阻力】成交量加权 KDE（与 RPE / 个股关键价位同口径）

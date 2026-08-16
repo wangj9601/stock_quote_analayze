@@ -12,12 +12,17 @@ from .scoring import compute_score_breakdown
 def history_calendar_days_for_fetch(cfg: Dict[str, Any]) -> int:
     """
     拉历史 K 线用日历跨度：至少覆盖策略 history_calendar_days，
-    并保证足以支撑 KDE 最大回看（交易日 ×1.6 近似换算）。
+    并保证足以支撑 KDE 最大回看（交易日 ×1.6 近似换算）；
+    同时尽量覆盖均线积分最长周期（约 250 根）。
     """
+    from .indicators import recommended_bars_for_ma_score
+
     hist = int(cfg.get("history_calendar_days") or 120)
     kde_max = int(cfg.get("kde_lookback_max") or 750)
     kde_cal = int(kde_max * 1.6) + 40
-    return max(hist, kde_cal)
+    ma_score_bars = int(recommended_bars_for_ma_score(cfg))
+    ma_score_cal = int(ma_score_bars * 1.6) + 20
+    return max(hist, kde_cal, ma_score_cal)
 
 
 def _compute_structure_levels(
@@ -151,6 +156,9 @@ def hydrate_detail_from_score_detail(detail: Dict[str, Any]) -> Dict[str, Any]:
     _fill("ma_bear_ok", ma_bull.get("bear_ok"), inputs.get("ma_bear_ok"))
     _fill("ma_bull_periods", ma_bull.get("periods"))
     _fill("ma_bull_values", ma_bull.get("values"))
+    _fill("ma_bull_score_periods", ma_bull.get("score_periods"))
+    _fill("ma_bull_score_values", ma_bull.get("score_values"))
+    _fill("ma_bull_depth", ma_bull.get("depth"))
     _fill("ret_from_low_n", sd.get("ret_from_low_n"))
     _fill("ma20_bias", sd.get("ma20_bias"))
     _fill("overheat_lookback_days", sd.get("overheat_lookback_days"))
@@ -178,7 +186,10 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
     ma_period = int(cfg.get("ma_period") or 20)
     vol_need = float(cfg.get("volume_multiple") or 3.0)
     min_score = float(cfg.get("min_score") or 70)
-    use_turnover = bool(cfg.get("use_turnover"))
+    from .scoring import resolve_turnover_flags
+
+    to_flags = resolve_turnover_flags(cfg)
+    use_turnover = to_flags["hard_filter"]
     use_volume_ratio = bool(cfg.get("use_volume_ratio"))
     use_yang_medium = bool(cfg.get("use_yang_medium"))
     require_ma_bull = bool(cfg.get("require_ma_bull"))
@@ -488,6 +499,7 @@ def evaluate_buy_signal(
     from .risk_tags import (
         build_overheat_risk_tags,
         build_trend_risk_tags,
+        build_turnover_risk_tags,
         enrich_structure_with_rr,
         evaluate_overheat_hard_gate,
     )
@@ -497,6 +509,8 @@ def evaluate_buy_signal(
     risk_tags = list(enriched.get("risk_tags") or [])
     risk_tags.extend(build_trend_risk_tags(ind))
     risk_tags.extend(build_overheat_risk_tags(ind, cfg))
+    to_part = (score_detail.get("parts") or {}).get("turnover") if isinstance(score_detail, dict) else None
+    risk_tags.extend(build_turnover_risk_tags(ind, cfg, turnover_part=to_part))
     hard_gate = enriched.get("structure_hard_gate") or {}
     structure_gate_ok = not bool(hard_gate.get("blocked"))
     overheat_gate = evaluate_overheat_hard_gate(ind, cfg)
@@ -565,6 +579,9 @@ def evaluate_buy_signal(
         "ma_bear_ok": ind.get("ma_bear_ok"),
         "ma_bull_periods": ind.get("ma_bull_periods"),
         "ma_bull_values": ind.get("ma_bull_values"),
+        "ma_bull_score_periods": ind.get("ma_bull_score_periods"),
+        "ma_bull_score_values": ind.get("ma_bull_score_values"),
+        "ma_bull_depth": ind.get("ma_bull_depth"),
         "yang_count_4": ind.get("yang_count_4"),
         "yang_count_5": ind.get("yang_count_5"),
         "yang_count_10": ind.get("yang_count_10"),
@@ -580,6 +597,8 @@ def evaluate_buy_signal(
         "volume_multiple": ind.get("volume_multiple"),
         "volume_ratio": ind.get("volume_ratio"),
         "turnover_rate": ind.get("turnover_rate"),
+        "turnover_median_n": ind.get("turnover_median_n"),
+        "turnover_lookback": ind.get("turnover_lookback"),
         "score": score,
         "signal_strength": score,
         "score_detail": score_detail,

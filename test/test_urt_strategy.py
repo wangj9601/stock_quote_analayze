@@ -342,8 +342,8 @@ def test_score_includes_yang_medium_and_ma_bull_parts():
     assert "yang_medium" in parts
     assert parts["yang_medium"]["max"] == 6
     assert "ma_bull" in parts
-    assert parts["ma_bull"]["max"] == 6
-    assert parts["volume"]["max"] == 34
+    assert parts["ma_bull"]["max"] == 10
+    assert parts["volume"]["max"] == 31
     assert total <= 100
 
 
@@ -369,6 +369,6 @@ def test_volume_score_full_multiple_and_ma_bear_penalty():
         "volume_ratio": None,
     }
     total, detail = compute_score_breakdown(ind, cfg)
-    assert detail["parts"]["volume"]["score"] == 34.0
+    assert detail["parts"]["volume"]["score"] == 31.0
     assert detail["parts"]["ma_bull"]["score"] == -8.0
     assert total >= 0

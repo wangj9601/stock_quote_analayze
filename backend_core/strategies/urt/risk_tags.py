@@ -437,3 +437,76 @@ def build_overheat_risk_tags(
             )
 
     return tags
+
+
+def build_turnover_risk_tags(
+    ind: Optional[Dict[str, Any]] = None,
+    cfg: Optional[Dict[str, Any]] = None,
+    *,
+    turnover_part: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, str]]:
+    """换手过高软标签（减分时提示；默认不否决买点）。"""
+    cfg = cfg or {}
+    ind = ind or {}
+    part = turnover_part if isinstance(turnover_part, dict) else {}
+    if part.get("enabled") is False:
+        return []
+    tags: List[Dict[str, str]] = []
+    try:
+        score = float(part.get("score") or 0)
+    except (TypeError, ValueError):
+        score = 0.0
+    t = ind.get("turnover_rate")
+    if t is None:
+        t = part.get("turnover_rate")
+    try:
+        t_f = float(t) if t is not None else None
+    except (TypeError, ValueError):
+        t_f = None
+    med = ind.get("turnover_median_n")
+    if med is None:
+        med = part.get("median")
+    rel = part.get("relative")
+    abs_pen = bool(part.get("abs_penalty"))
+    reason_code = str(part.get("reason") or "")
+
+    if score >= 0 and not abs_pen and reason_code not in ("abs_penalty", "abs_penalty_full"):
+        return tags
+
+    if t_f is None and score >= 0:
+        return tags
+
+    abs_full = _cfg_float(cfg, "turnover_abs_penalty_full", 40.0)
+    abs_above = _cfg_float(cfg, "turnover_abs_penalty_above", 25.0)
+    level = (
+        "danger"
+        if (t_f is not None and t_f >= abs_full)
+        or reason_code == "abs_penalty_full"
+        or score <= -6
+        else "warn"
+    )
+    bits = []
+    if t_f is not None:
+        bits.append(f"当日换手 {t_f:.1f}%")
+    if med is not None:
+        try:
+            bits.append(f"近窗中位 {float(med):.1f}%")
+        except (TypeError, ValueError):
+            pass
+    if rel is not None:
+        try:
+            bits.append(f"相对约 {float(rel):.1f}×")
+        except (TypeError, ValueError):
+            pass
+    bits.append(f"换手分项 {score:+.1f}")
+    if abs_pen or (t_f is not None and t_f >= abs_above):
+        bits.append(f"触发绝对熔断（≥{abs_above:.0f}%）")
+    tags.append(
+        {
+            "id": "turnover_extreme",
+            "label": "换手过高",
+            "level": level,
+            "reason": "；".join(bits) if bits else "换手分项为负",
+        }
+    )
+    return tags

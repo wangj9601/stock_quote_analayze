@@ -83,8 +83,73 @@ def normalize_ma_bull_periods(cfg: Dict[str, Any]) -> List[int]:
     return periods if len(periods) >= 2 else [5, 10, 20]
 
 
+def normalize_ma_bull_score_periods(cfg: Dict[str, Any]) -> List[int]:
+    """积分用均线链；默认 5…250。无效则回退硬筛链。"""
+    raw = cfg.get("ma_bull_score_periods")
+    if not isinstance(raw, (list, tuple)) or len(raw) < 2:
+        return normalize_ma_bull_periods(cfg)
+    periods: List[int] = []
+    for p in raw:
+        try:
+            n = int(p)
+        except (TypeError, ValueError):
+            continue
+        if n > 0 and n not in periods:
+            periods.append(n)
+    return periods if len(periods) >= 2 else normalize_ma_bull_periods(cfg)
+
+
+def ma_bull_prefix_depth(values: List[Optional[float]]) -> int:
+    """从短端起连续满足 MA[i] > MA[i+1] 的相邻对数；遇缺值或非严格递减即停。"""
+    depth = 0
+    for i in range(len(values) - 1):
+        a, b = values[i], values[i + 1]
+        if a is None or b is None:
+            break
+        try:
+            fa, fb = float(a), float(b)
+        except (TypeError, ValueError):
+            break
+        if fa <= 0 or fb <= 0:
+            break
+        if fa > fb:
+            depth += 1
+        else:
+            break
+    return depth
+
+
+def median_prev_turnover(turnovers: List[Optional[float]], lookback: int) -> Optional[float]:
+    """过去 lookback 个交易日换手中位数（不含当日 turnovers[0]）。"""
+    if lookback <= 0 or len(turnovers) < 2:
+        return None
+    window = turnovers[1 : lookback + 1]
+    vals: List[float] = []
+    for v in window:
+        try:
+            if v is None:
+                continue
+            fv = float(v)
+        except (TypeError, ValueError):
+            continue
+        if fv >= 0:
+            vals.append(fv)
+    if len(vals) < max(5, lookback // 4):
+        return None
+    vals.sort()
+    n = len(vals)
+    mid = n // 2
+    if n % 2 == 1:
+        return vals[mid]
+    return (vals[mid - 1] + vals[mid]) / 2.0
+
+
 def min_bars_needed(cfg: Dict[str, Any]) -> int:
-    """计算 URT 指标所需最少 K 线根数（含当日）。"""
+    """计算 URT 指标所需最少 K 线根数（含当日）。
+
+    硬筛/连阳/量能决定能否出信号；积分用长均线不足时深度自然截断，
+    不把 250 强加为整段指标失败门槛。
+    """
     ma_period = int(cfg.get("ma_period") or 20)
     vol_lb = int(cfg.get("volume_lookback") or 20)
     rule_a = cfg.get("yang_rule_a") or {"window": 4, "min_up_days": 3}
@@ -95,15 +160,26 @@ def min_bars_needed(cfg: Dict[str, Any]) -> int:
         overheat_lb = int(cfg.get("overheat_lookback_days") or 10)
     except (TypeError, ValueError):
         overheat_lb = 10
+    try:
+        to_lb = int(cfg.get("turnover_lookback") or 20)
+    except (TypeError, ValueError):
+        to_lb = 20
     return max(
         ma_period,
         vol_lb + 1,
+        to_lb + 1,
         int(rule_a.get("window", 4)),
         int(rule_b.get("window", 5)),
         max(mid_windows) if mid_windows else 20,
         max(bull_periods) if bull_periods else 20,
         max(1, overheat_lb),
     )
+
+
+def recommended_bars_for_ma_score(cfg: Dict[str, Any]) -> int:
+    """建议拉取根数：覆盖积分最长均线（便于算满深度）。"""
+    score_ps = normalize_ma_bull_score_periods(cfg)
+    return max(min_bars_needed(cfg), max(score_ps) if score_ps else 20)
 
 
 def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -117,6 +193,7 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
     rule_b = cfg.get("yang_rule_b") or {"window": 5, "min_up_days": 4}
     mid_rules = normalize_yang_medium_rules(cfg)
     bull_periods = normalize_ma_bull_periods(cfg)
+    score_periods = normalize_ma_bull_score_periods(cfg)
     need = min_bars_needed(cfg)
     if len(bars_desc) < need:
         return None
@@ -124,7 +201,19 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
     opens = [float(b.get("open") or 0) for b in bars_desc]
     closes = [float(b.get("close") or 0) for b in bars_desc]
     volumes = [float(b.get("volume") or 0) for b in bars_desc]
-    turnover = bars_desc[0].get("turnover_rate")
+    turnovers: List[Optional[float]] = []
+    for b in bars_desc:
+        raw = b.get("turnover_rate")
+        try:
+            turnovers.append(float(raw) if raw is not None else None)
+        except (TypeError, ValueError):
+            turnovers.append(None)
+    turnover = turnovers[0] if turnovers else None
+    try:
+        to_lb = max(1, int(cfg.get("turnover_lookback") or 20))
+    except (TypeError, ValueError):
+        to_lb = 20
+    turnover_median = median_prev_turnover(turnovers, to_lb)
 
     ma20 = sma(closes, ma_period)
     if ma20 is None or ma20 <= 0:
@@ -149,7 +238,7 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
         mid_oks.append(cnt >= int(rule["min_up_days"]))
     yang_medium_ok = all(mid_oks) if mid_oks else True
 
-    # 多头排列：默认 MA5 > MA10 > MA20；空头对称 MA5 < MA10 < MA20
+    # 硬筛多头：默认 MA5 > MA10 > MA20；空头对称（仅硬筛链）
     ma_values: List[Optional[float]] = [sma(closes, p) for p in bull_periods]
     ma_bull_ok = False
     ma_bear_ok = False
@@ -162,6 +251,10 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
             float(ma_values[i]) < float(ma_values[i + 1])  # type: ignore[arg-type]
             for i in range(len(ma_values) - 1)
         )
+
+    # 积分用加长链；不足根数时对应 SMA 为 None，深度自然截断
+    ma_score_values: List[Optional[float]] = [sma(closes, p) for p in score_periods]
+    ma_bull_depth = ma_bull_prefix_depth(ma_score_values)
 
     # 常用三根均线字段（便于展示；与 ma_period 主线并存）
     ma5 = sma(closes, 5)
@@ -211,12 +304,19 @@ def build_indicators(bars_desc: List[Dict[str, Any]], cfg: Dict[str, Any]) -> Op
         "ma_bull_values": [
             round(float(v), 4) if v is not None else None for v in ma_values
         ],
+        "ma_bull_score_periods": score_periods,
+        "ma_bull_score_values": [
+            round(float(v), 4) if v is not None else None for v in ma_score_values
+        ],
+        "ma_bull_depth": int(ma_bull_depth),
         "ma_bull_ok": ma_bull_ok,
         "ma_bear_ok": ma_bear_ok,
         "avg_volume_20": round(avg_vol, 2),
         "volume_multiple": round(vol_mult, 4),
         "volume_ratio": round(vratio, 4) if vratio is not None else None,
         "turnover_rate": float(turnover) if turnover is not None else None,
+        "turnover_median_n": round(float(turnover_median), 4) if turnover_median is not None else None,
+        "turnover_lookback": to_lb,
         "rule_a_ok": yang_a >= int(rule_a.get("min_up_days", 3)),
         "rule_b_ok": yang_b >= int(rule_b.get("min_up_days", 4)),
         "overheat_lookback_days": overheat_lb,
@@ -235,7 +335,10 @@ def hard_filter_pass(ind: Dict[str, Any], cfg: Dict[str, Any]) -> Tuple[bool, st
     need_mult = float(cfg.get("volume_multiple") or 3.0)
     if float(ind.get("volume_multiple") or 0) < need_mult:
         return False, "量能倍数不足"
-    if cfg.get("use_turnover"):
+    from .scoring import resolve_turnover_flags
+
+    to_flags = resolve_turnover_flags(cfg)
+    if to_flags["hard_filter"]:
         min_to = float(cfg.get("min_turnover") or 0)
         to = ind.get("turnover_rate")
         if to is None or float(to) < min_to:
