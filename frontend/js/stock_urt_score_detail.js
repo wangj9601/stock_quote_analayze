@@ -6,6 +6,58 @@
         ? (Config.getApiBaseUrl() || '')
         : '';
 
+    let lastDetail = null;
+    let exporting = false;
+
+    function toast(msg, type) {
+        if (window.CommonUtils && typeof CommonUtils.showToast === 'function') {
+            CommonUtils.showToast(msg, type || 'info');
+            return;
+        }
+        // 轻量兜底
+        const el = document.getElementById('metaLine');
+        if (el && type === 'error') el.textContent = msg;
+        else if (type !== 'success') console.warn(msg);
+    }
+
+    function setExportEnabled(ok) {
+        const btn = document.getElementById('urtExportPdfBtn');
+        if (!btn) return;
+        btn.disabled = !ok || exporting;
+    }
+
+    async function exportPdf() {
+        if (!lastDetail) {
+            toast('请先加载信号明细再导出', 'warning');
+            return;
+        }
+        if (exporting) return;
+        const btn = document.getElementById('urtExportPdfBtn');
+        exporting = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '导出中…';
+        }
+        try {
+            if (!window.UrtScoreDetailPdf || typeof UrtScoreDetailPdf.exportFromDetail !== 'function') {
+                throw new Error('PDF 导出模块未加载');
+            }
+            const code = lastDetail.code || '';
+            const date = lastDetail.date || '';
+            const filename = await UrtScoreDetailPdf.exportFromDetail(lastDetail, {
+                filename: `URT信号明细_${code || 'stock'}_${date || 'latest'}.pdf`,
+            });
+            toast(`已导出 ${filename}`, 'success');
+        } catch (e) {
+            console.warn('URT 明细 PDF 导出失败', e);
+            toast(`导出失败：${(e && e.message) || e}`, 'error');
+        } finally {
+            exporting = false;
+            if (btn) btn.textContent = '导出 PDF';
+            setExportEnabled(!!lastDetail);
+        }
+    }
+
     async function main() {
         const params = new URLSearchParams(window.location.search);
         const code = (params.get('code') || '').trim();
@@ -16,9 +68,14 @@
         const content = document.getElementById('content');
         const stockDisplay = document.getElementById('stockDisplay');
         const traceLink = document.getElementById('traceLink');
+        const exportBtn = document.getElementById('urtExportPdfBtn');
 
         stockDisplay.textContent = code ? `${code} ${name}` : '--';
         traceLink.href = `stock_urt_trace.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}&config_id=${encodeURIComponent(configId)}`;
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => exportPdf());
+            setExportEnabled(false);
+        }
 
         if (!code) {
             meta.textContent = '缺少股票代码';
@@ -32,16 +89,24 @@
             const json = await res.json();
             if (!json.success) {
                 meta.textContent = json.detail || json.message || '加载失败';
+                lastDetail = null;
+                setExportEnabled(false);
                 return;
             }
+            if (!json.code) json.code = code;
+            if (!json.name) json.name = name;
+            lastDetail = json;
             meta.textContent = `日期 ${json.date || '--'} · 来源 ${json.source || '--'}`;
             if (window.UrtScoreDetail) {
                 content.innerHTML = window.UrtScoreDetail.buildHtml(json);
             } else {
                 content.textContent = '得分明细组件未加载';
             }
+            setExportEnabled(true);
         } catch (e) {
             meta.textContent = '加载失败: ' + (e.message || e);
+            lastDetail = null;
+            setExportEnabled(false);
         }
     }
 

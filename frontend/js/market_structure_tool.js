@@ -51,15 +51,17 @@ const MarketStructureTool = {
     },
 
     /** 简单 ZigZag 折线 SVG（价-时间示意，非蜡烛图） */
-    buildZigzagSvg(points) {
+    buildZigzagSvg(points, opts) {
+        const o = opts || {};
+        const showPrice = o.showPrice !== false;
         const pts = (Array.isArray(points) ? points : []).filter(
             (p) => p && p.price != null && Number.isFinite(Number(p.price))
         );
         if (pts.length < 2) return '';
         const w = 520;
-        const h = 140;
+        const h = showPrice ? 168 : 140;
         const padX = 28;
-        const padY = 18;
+        const padY = showPrice ? 28 : 18;
         const prices = pts.map((p) => Number(p.price));
         const minP = Math.min(...prices);
         const maxP = Math.max(...prices);
@@ -80,11 +82,29 @@ const MarketStructureTool = {
                         : st === 'LH' || st === 'LL'
                           ? '#dc2626'
                           : '#64748b';
-                const label = this.esc(st);
+                const kind = String(c.p.kind || '');
+                // 高点标签在点上方，低点在下方，减少与折线重叠
+                const above = kind !== 'low';
+                const px = Number(c.p.price);
+                const pxTxt = Number.isFinite(px) ? px.toFixed(2) : '';
+                const labelMain = this.esc(st);
+                const labelPrice = showPrice && pxTxt ? this.esc(pxTxt) : '';
+                if (!labelPrice) {
+                    const ty = above ? c.y - 7 : c.y + 12;
+                    return (
+                        `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.5" fill="${fill}"/>` +
+                        `<text x="${c.x.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" ` +
+                        `font-size="9" fill="#334155">${labelMain}</text>`
+                    );
+                }
+                const y1 = above ? c.y - 18 : c.y + 12;
+                const y2 = above ? c.y - 7 : c.y + 23;
                 return (
                     `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.5" fill="${fill}"/>` +
-                    `<text x="${c.x.toFixed(1)}" y="${(c.y - 7).toFixed(1)}" text-anchor="middle" ` +
-                    `font-size="9" fill="#334155">${label}</text>`
+                    `<text x="${c.x.toFixed(1)}" y="${y1.toFixed(1)}" text-anchor="middle" ` +
+                    `font-size="9" font-weight="600" fill="${fill}">${labelMain}</text>` +
+                    `<text x="${c.x.toFixed(1)}" y="${y2.toFixed(1)}" text-anchor="middle" ` +
+                    `font-size="8" fill="#475569">${labelPrice}</text>`
                 );
             })
             .join('');
@@ -198,7 +218,7 @@ const MarketStructureTool = {
                     ? `<div class="ms-contrast">${this.esc(weekly.pattern_contrast)}</div>`
                     : '') +
                 (wSvg
-                    ? `<div class="ms-zigzag-wrap">${wSvg}<p class="ms-muted ms-chart-hint">周线示意折线</p></div>`
+                    ? `<div class="ms-zigzag-wrap">${wSvg}<p class="ms-muted ms-chart-hint">周线示意折线（结构标注旁为对应价格）</p></div>`
                     : '') +
                 `</details>`;
         }
@@ -214,7 +234,7 @@ const MarketStructureTool = {
             `</div>` +
             contrastHtml +
             bosHtml +
-            (svg ? `<div class="ms-zigzag-wrap">${svg}<p class="ms-muted ms-chart-hint">示意折线（摆动点连线），非完整 K 线叠加</p></div>` : '') +
+            (svg ? `<div class="ms-zigzag-wrap">${svg}<p class="ms-muted ms-chart-hint">示意折线（摆动点连线，标注旁为对应价格），非完整 K 线叠加</p></div>` : '') +
             analysisHtml +
             weeklyBlock +
             `<div class="ms-subtitle">近端摆动点（HH/HL/LH/LL）·日线</div>` +
