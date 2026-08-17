@@ -78,9 +78,9 @@ def test_yang_days_scaled_to_20():
         "turnover_rate": None,
     }
     _, detail = compute_score_breakdown(ind, cfg)
-    # raw 36 → 36*20/40 = 18
-    assert detail["parts"]["yang"]["max"] == 20
-    assert detail["parts"]["yang"]["score"] == 18.0
+    # raw 36 → 36*16/40 = 14.4
+    assert detail["parts"]["yang"]["max"] == 16
+    assert detail["parts"]["yang"]["score"] == 14.4
     assert detail["parts"]["yang_quality"]["max"] == 10
 
 
@@ -95,9 +95,9 @@ def test_structure_position_near_support_and_rr():
         },
         cfg,
     )
-    assert meta["proximity_score"] == 8.0
-    assert meta["rr_score"] == 7.0
-    assert near == 15.0
+    assert meta["proximity_score"] == 10.0
+    assert meta["rr_score"] == 9.0
+    assert near == 19.0
 
     hang, meta_h = _structure_position_score(
         {
@@ -125,22 +125,28 @@ def test_overheat_penalty_ladder():
     cfg = _cfg()
     none, _ = _overheat_penalty_score({"ret_from_low_n": 0.05, "ma20_bias": 0.05}, cfg)
     assert none == 0.0
-    soft, meta_s = _overheat_penalty_score({"ret_from_low_n": 0.15, "ma20_bias": 0.0}, cfg)
-    assert soft == 0.0 or soft > -10  # 恰在软阈起点 ≈0
+    soft, meta_s = _overheat_penalty_score({"ret_from_low_n": 0.12, "ma20_bias": 0.0}, cfg)
+    assert soft == 0.0 or soft > -12  # 恰在软阈起点 ≈0
     mid, _ = _overheat_penalty_score({"ret_from_low_n": 0.20, "ma20_bias": 0.0}, cfg)
     hard, meta_h = _overheat_penalty_score({"ret_from_low_n": 0.25, "ma20_bias": 0.20}, cfg)
     assert mid < soft
-    assert hard == -10.0
-    assert meta_h["min"] == -10.0
+    assert hard == -12.0
+    assert meta_h["min"] == -12.0
 
 
 def test_default_weight_caps():
     cfg = URTConfigManager().get_default_config()
-    assert cfg.get("volume_score_max") == 25.0
-    assert cfg.get("yang_score_max") == 20.0
+    assert cfg.get("volume_score_max") == 20.0
+    assert cfg.get("yang_score_max") == 16.0
     assert cfg.get("yang_quality_score_max") == 10.0
     assert cfg.get("yang_medium_score_max") == 5.0
     assert cfg.get("ma_bull_score_max") == 8.0
     assert cfg.get("ma20_score_mode") == "slope_bias"
-    assert cfg.get("overheat_penalty_max") == 10.0
+    assert cfg.get("structure_proximity_score_max") == 10.0
+    assert cfg.get("structure_rr_score_max") == 9.0
+    assert cfg.get("overheat_penalty_max") == 12.0
+    assert cfg.get("structure_exit_min_upside_pct") == 0.05
+    assert cfg.get("structure_protect_arm_pct") == 0.065
+    assert cfg.get("structure_partial_exit_enabled") is True
+    assert cfg.get("structure_pct_target_trail_enabled") is True
     assert cfg.get("min_score") == 70

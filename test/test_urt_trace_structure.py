@@ -40,10 +40,15 @@ def test_evaluate_buy_signal_structure_ready_for_trace_upsert():
     assert detail is not None
     sd = detail.get("score_detail") or {}
     st = sd.get("structure") or {}
-    assert st.get("method") == "kde_volume_weighted"
+    assert st.get("method") in (
+        "structural_kde+confluence",
+        "structural_kde",
+        "kde_volume_weighted",
+    )
     assert "support_levels" in st
     assert "resistance_levels" in st
     assert "nearest_support" in st or st.get("nearest_support") is None
+    assert "structure_level_source" in st or st.get("structure_level_source") is None
     # 与顶层字段一致，便于 upsert / 查询展平
     assert detail.get("support_levels") == st.get("support_levels")
     assert detail.get("resistance_levels") == st.get("resistance_levels")

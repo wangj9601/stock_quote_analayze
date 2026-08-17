@@ -26,6 +26,7 @@
           <el-descriptions-item label="观察期">{{ task.config.horizon_days ?? 20 }} 个交易日</el-descriptions-item>
           <el-descriptions-item label="最低得分">{{ task.config.min_score ?? task.summary?.min_score ?? '-' }}</el-descriptions-item>
           <el-descriptions-item label="优先读缓存">{{ task.config.use_trace ? '是' : '否' }}</el-descriptions-item>
+          <el-descriptions-item label="出场模式">{{ exitModeLabel }}</el-descriptions-item>
           <el-descriptions-item v-if="poolSizeLabel" label="股票池规模">{{ poolSizeLabel }}</el-descriptions-item>
         </template>
       </el-descriptions>
@@ -64,7 +65,7 @@
         type="info"
         :closable="false"
         show-icon
-        title="当前回测为「命中率/不止损」模式：以下风控参数仅作策略配置快照，不参与出场模拟。"
+        :title="riskParamsAlertTitle"
       />
       <el-descriptions v-if="hasRiskParams" :column="2" border size="small">
         <el-descriptions-item label="价格止损阈值">
@@ -80,6 +81,12 @@
         <el-descriptions-item label="高点回撤止盈">
           ≥ {{ num(riskParams.trailing_drawdown_pct) }}%
         </el-descriptions-item>
+        <el-descriptions-item v-if="riskParams.structure_stop_buffer_pct != null" label="结构止损缓冲">
+          {{ (Number(riskParams.structure_stop_buffer_pct) * 100).toFixed(0) }}%
+        </el-descriptions-item>
+        <el-descriptions-item v-if="riskParams.exit_mode" label="出场模式(快照)">
+          {{ exitModeLabel }}
+        </el-descriptions-item>
       </el-descriptions>
       <div v-else class="text-gray-400 text-sm">暂无风控参数快照</div>
 
@@ -93,14 +100,30 @@
           <el-descriptions-item label="均盈亏(期末)">{{ task.summary.avg_pnl_pct ?? '-' }}%</el-descriptions-item>
           <el-descriptions-item label="均最大涨幅">{{ task.summary.avg_max_gain_pct ?? '-' }}%</el-descriptions-item>
           <el-descriptions-item label="目标涨幅">{{ ((task.summary.target_pct || 0) * 100).toFixed(1) }}%</el-descriptions-item>
-          <el-descriptions-item label="回测模式">
-            {{
-              (task.summary.exit_mode === 'risk_exit' || task.summary.backtest_mode === 'risk_exit' || task.summary.apply_stop_loss === true)
-                ? '纪律出场(止损/连跌/回撤)'
-                : '命中率(不止损)'
-            }}
+          <el-descriptions-item label="出场模式">{{ exitModeLabel }}</el-descriptions-item>
+          <el-descriptions-item v-if="task.summary.avg_bars_held != null" label="均持有天数">
+            {{ task.summary.avg_bars_held }}
           </el-descriptions-item>
         </el-descriptions>
+
+        <template v-if="task.summary.structure_exit_stats">
+          <h4 class="mt-4 mb-2">结构出场归因</h4>
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="结构止损">{{ task.summary.structure_exit_stats.structure_stop ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="阻力止盈">{{ task.summary.structure_exit_stats.structure_target ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="百分比止盈">{{ task.summary.structure_exit_stats.pct_target ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="百分比止损回退">{{ task.summary.structure_exit_stats.price_stop ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="保本止损">{{ task.summary.structure_exit_stats.breakeven_stop ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="移动止盈">{{ task.summary.structure_exit_stats.fallback_trail ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="分批出场">{{ task.summary.structure_exit_stats.partial_exit_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="到期平仓">{{ task.summary.structure_exit_stats.horizon_end ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="结构缺失回退率">{{ pct(task.summary.structure_exit_stats.structure_fallback_rate) }}</el-descriptions-item>
+            <el-descriptions-item label="回退-无支撑">{{ task.summary.structure_exit_stats.fallback_no_support ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="回退-止损≥入场">{{ task.summary.structure_exit_stats.fallback_stop_above_entry ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="弱结构笔数">{{ task.summary.structure_exit_stats.weak_structure_count ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="KDE重算笔数">{{ task.summary.structure_exit_stats.kde_recomputed_count ?? 0 }}</el-descriptions-item>
+          </el-descriptions>
+        </template>
 
         <h4 v-if="scoreBucketRows.length" class="mt-4 mb-2">按分数分桶</h4>
         <el-table v-if="scoreBucketRows.length" :data="scoreBucketRows" size="small" border>
@@ -126,12 +149,24 @@
         <div v-if="!logs.length" class="text-gray-400">暂无日志</div>
       </div>
     </div>
+    <template #footer>
+      <el-button @click="visible = false">关闭</el-button>
+      <el-button
+        type="primary"
+        :disabled="!task || loading"
+        :loading="exporting"
+        @click="exportPdf"
+      >
+        导出PDF
+      </el-button>
+    </template>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, onUnmounted, ref, watch } from 'vue'
 import { Loading } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps<{ modelValue: boolean; taskId: string }>()
 const emit = defineEmits<{
@@ -149,6 +184,7 @@ const visible = computed({
 const task = ref<any>(null)
 const logs = ref<any[]>([])
 const loading = ref(false)
+const exporting = ref(false)
 let pollTimer: ReturnType<typeof setInterval> | null = null
 
 const statusType = computed(() => {
@@ -198,12 +234,54 @@ const poolSizeLabel = computed(() => {
   return String(n)
 })
 
+const resolvedExitMode = computed(() => {
+  const t = task.value || {}
+  const raw =
+    t.summary?.exit_mode ||
+    t.config?.exit_mode ||
+    t.summary?.risk_params?.exit_mode ||
+    t.config?.risk_params?.exit_mode ||
+    t.summary?.backtest_mode ||
+    ''
+  const m = String(raw || '').trim().toLowerCase()
+  if (m === 'structure_exit') return 'structure_exit'
+  if (m === 'risk_exit') return 'risk_exit'
+  if (m === 'signal_hit_rate' || m === 'hit_rate') return 'hit_rate'
+  if (t.summary?.apply_stop_loss === true && m !== 'structure_exit') return 'risk_exit'
+  return 'hit_rate'
+})
+
+const exitModeLabel = computed(() => {
+  const map: Record<string, string> = {
+    hit_rate: '命中率（不止损）',
+    risk_exit: '纪律出场（止损/连跌/回撤）',
+    structure_exit: '结构出场（支撑止损/阻力止盈）',
+  }
+  return map[resolvedExitMode.value] || resolvedExitMode.value
+})
+
+const riskParamsAlertTitle = computed(() => {
+  const mode = resolvedExitMode.value
+  if (mode === 'structure_exit') {
+    return '当前回测为「结构出场」：支撑止损/阻力止盈参与模拟；下方百分比风控作回退与文档快照。'
+  }
+  if (mode === 'risk_exit') {
+    return '当前回测为「纪律出场」：以下价格止损/连跌/回撤参数参与出场模拟。'
+  }
+  return '当前回测为「命中率/不止损」模式：以下风控参数仅作策略配置快照，不参与出场模拟。'
+})
+
 const EXIT_REASON_ZH: Record<string, string> = {
   target_hit: '触及目标',
   horizon_end: '到期平仓',
   price_stop: '价格止损',
   time_stop: '时间止损',
   trailing_take_profit: '回撤止盈',
+  structure_stop: '结构止损',
+  structure_target: '阻力止盈',
+  pct_target: '百分比止盈',
+  breakeven_stop: '保本止损',
+  fallback_trail: '移动止盈',
   rule_exit: '规则离场',
   stop_loss: '止损',
 }
@@ -323,6 +401,41 @@ function stopPolling() {
 function handleClose() {
   stopPolling()
   emit('closed')
+}
+
+function pdfFilename() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const id = String(task.value?.task_id || props.taskId || '').slice(0, 8) || 'unknown'
+  const rawName = String(task.value?.name || '').trim()
+  const namePart = rawName
+    .replace(/[\\/:*?"<>|]/g, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 40)
+  const mid = namePart || `URT回测_${id}`
+  return `URT回测详情_${mid}_${y}${m}${day}.pdf`
+}
+
+async function exportPdf() {
+  if (!props.taskId || !urtApi || exporting.value) return
+  exporting.value = true
+  try {
+    const blob = await urtApi.downloadBacktestPdf(props.taskId)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = pdfFilename()
+    link.click()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success('PDF导出成功')
+  } catch (e: any) {
+    console.error(e)
+    ElMessage.error(e?.message || '导出PDF失败')
+  } finally {
+    exporting.value = false
+  }
 }
 
 watch(

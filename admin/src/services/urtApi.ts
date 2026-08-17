@@ -161,6 +161,28 @@ class URTApiService {
     return `${API_BASE}${PREFIX}/backtests/${taskId}/export`
   }
 
+  backtestExportPdfUrl(taskId: string) {
+    return `${API_BASE}${PREFIX}/backtests/${taskId}/export-pdf`
+  }
+
+  async downloadBacktestPdf(taskId: string): Promise<Blob> {
+    const response = await fetch(this.backtestExportPdfUrl(taskId), {
+      headers: this.getAuthHeaders(),
+    })
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ detail: '导出PDF失败' }))
+      const detail = err.detail
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d: any) => d.msg || d).join('; ')
+            : err.message || '导出PDF失败'
+      throw new Error(msg)
+    }
+    return response.blob()
+  }
+
   async getReports(params?: { limit?: number; offset?: number }) {
     const q = new URLSearchParams()
     if (params?.limit) q.set('limit', String(params.limit))

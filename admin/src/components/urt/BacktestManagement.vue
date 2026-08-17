@@ -76,6 +76,7 @@
               <el-select v-model="form.exit_mode" class="w-full">
                 <el-option label="命中率（不止损）" value="hit_rate" />
                 <el-option label="纪律出场（止损/连跌/回撤）" value="risk_exit" />
+                <el-option label="结构出场（支撑止损/阻力止盈）" value="structure_exit" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -253,6 +254,9 @@
         <el-table-column label="股票池" width="110">
           <template #default="{ row }">{{ poolModeLabel(row.config?.stock_pool_mode) }}</template>
         </el-table-column>
+        <el-table-column label="出场模式" width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ exitModeLabel(resolveExitMode(row)) }}</template>
+        </el-table-column>
         <el-table-column label="摘要" min-width="240">
           <template #default="{ row }">
             <span v-if="row.summary">
@@ -297,7 +301,7 @@ const form = reactive({
   min_score: 70,
   strategy_config_id: undefined as number | undefined,
   use_trace: true,
-  exit_mode: 'hit_rate' as 'hit_rate' | 'risk_exit',
+  exit_mode: 'hit_rate' as 'hit_rate' | 'risk_exit' | 'structure_exit',
   stock_pool_mode: 'all',
   stock_code: '',
   stock_list: '',
@@ -351,6 +355,33 @@ function poolModeLabel(mode?: string) {
     custom: '自定义',
   }
   return map[mode || 'all'] || mode || '全市场'
+}
+
+function resolveExitMode(row: any): string {
+  const raw =
+    row?.summary?.exit_mode ||
+    row?.config?.exit_mode ||
+    row?.summary?.risk_params?.exit_mode ||
+    row?.config?.risk_params?.exit_mode ||
+    row?.summary?.backtest_mode ||
+    ''
+  const m = String(raw || '').trim().toLowerCase()
+  if (m === 'structure_exit') return 'structure_exit'
+  if (m === 'risk_exit') return 'risk_exit'
+  if (m === 'signal_hit_rate' || m === 'hit_rate') return 'hit_rate'
+  // 旧任务：仅有 apply_stop_loss 时推断
+  if (row?.summary?.apply_stop_loss === true) return 'risk_exit'
+  return 'hit_rate'
+}
+
+function exitModeLabel(mode?: string) {
+  const map: Record<string, string> = {
+    hit_rate: '命中率(不止损)',
+    risk_exit: '纪律出场',
+    structure_exit: '结构出场',
+  }
+  const m = String(mode || 'hit_rate').trim().toLowerCase()
+  return map[m] || m || '命中率(不止损)'
 }
 
 function onStockPoolModeChange() {

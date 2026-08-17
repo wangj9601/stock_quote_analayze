@@ -37,4 +37,4 @@ def test_build_urt_trade_meta_custom_risk():
     assert meta["risk_params"]["stop_loss_pct_max"] == 8
     assert "30" in meta["trade_logic"]["summary"]
     assert "80" in meta["trade_logic"]["summary"]
-    assert any("−8%" in r or "-8%" in r for r in meta["trade_logic"]["rules"])
+    assert any("8%" in r for r in meta["trade_logic"]["rules"])

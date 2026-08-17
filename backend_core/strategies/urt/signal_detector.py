@@ -25,6 +25,85 @@ def history_calendar_days_for_fetch(cfg: Dict[str, Any]) -> int:
     return max(hist, kde_cal, ma_score_cal)
 
 
+def _pick_confluence_nearest(
+    conf: Dict[str, Any],
+    price: float,
+    *,
+    prefer_strong: bool = True,
+) -> Dict[str, Any]:
+    """从共振带取现价下方最近支撑 / 上方最近阻力（可选优先 strong tier）。"""
+    out: Dict[str, Any] = {
+        "nearest_support": None,
+        "nearest_resistance": None,
+        "support_zone": None,
+        "resistance_zone": None,
+        "pick": None,
+    }
+    if not conf.get("ok"):
+        return out
+
+    def _zones(side: str) -> List[Dict[str, Any]]:
+        key = "supports" if side == "support" else "resistances"
+        rows = conf.get(key) or []
+        return [z for z in rows if isinstance(z, dict) and z.get("center") is not None]
+
+    def _center(z: Dict[str, Any]) -> Optional[float]:
+        try:
+            return float(z.get("center"))
+        except (TypeError, ValueError):
+            return None
+
+    below = []
+    for z in _zones("support"):
+        c = _center(z)
+        if c is not None and c < price:
+            below.append(z)
+    above = []
+    for z in _zones("resistance"):
+        c = _center(z)
+        if c is not None and c > price:
+            above.append(z)
+
+    ns_zone = None
+    if prefer_strong:
+        strong_below = [z for z in below if z.get("tier") == "strong"]
+        if strong_below:
+            ns_zone = max(strong_below, key=lambda z: float(z["center"]))
+    if ns_zone is None:
+        nz = conf.get("nearest_support_zone")
+        if isinstance(nz, dict) and _center(nz) is not None and float(nz["center"]) < price:
+            ns_zone = nz
+        elif below:
+            ns_zone = max(below, key=lambda z: float(z["center"]))
+
+    nr_zone = None
+    if prefer_strong:
+        strong_above = [z for z in above if z.get("tier") == "strong"]
+        if strong_above:
+            nr_zone = min(strong_above, key=lambda z: float(z["center"]))
+    if nr_zone is None:
+        nz = conf.get("nearest_resistance_zone")
+        if isinstance(nz, dict) and _center(nz) is not None and float(nz["center"]) > price:
+            nr_zone = nz
+        elif above:
+            nr_zone = min(above, key=lambda z: float(z["center"]))
+
+    if ns_zone is not None:
+        out["support_zone"] = ns_zone
+        out["nearest_support"] = round(float(ns_zone["center"]), 2)
+    if nr_zone is not None:
+        out["resistance_zone"] = nr_zone
+        out["nearest_resistance"] = round(float(nr_zone["center"]), 2)
+
+    if ns_zone or nr_zone:
+        used_strong = bool(
+            (ns_zone and ns_zone.get("tier") == "strong")
+            or (nr_zone and nr_zone.get("tier") == "strong")
+        )
+        out["pick"] = "confluence_strong" if used_strong and prefer_strong else "confluence"
+    return out
+
+
 def _compute_structure_levels(
     bars_desc: List[Dict[str, Any]],
     cfg: Dict[str, Any],
@@ -32,8 +111,11 @@ def _compute_structure_levels(
     price: Optional[float],
 ) -> Dict[str, Any]:
     """
-    成交量加权 KDE 支撑/阻力（与 RPE / 个股关键价位同口径）。
-    bars_desc 为日期 DESC（最新在前）；内部转为升序喂给 KDE。
+    信号日结构位：与个股关键价位同口径。
+    1) ZigZag 结构锚窗 KDE（compute_kde_bundle）
+    2) Fib/Pivot/Cam + VP → compute_confluence_from_reference
+    3) 默认以共振带中心作为 nearest_support / nearest_resistance（供结构出场）
+    bars_desc 为日期 DESC（最新在前）。
     """
     empty = {
         "support_levels": [],
@@ -45,6 +127,10 @@ def _compute_structure_levels(
         "kde_bw": None,
         "kde_lookback_used": 0,
         "kde_lookback_expanded": False,
+        "kde_window_mode": "calendar",
+        "method": "kde_volume_weighted",
+        "structure_level_source": None,
+        "confluence_ok": False,
     }
     if not bars_desc or price is None:
         return empty
@@ -55,59 +141,136 @@ def _compute_structure_levels(
     if px <= 0:
         return empty
 
-    # DESC → ASC
+    use_structural = cfg.get("structure_use_structural_window")
+    if use_structural is None:
+        use_structural = True
+    use_confluence = cfg.get("structure_use_confluence")
+    if use_confluence is None:
+        use_confluence = True
+    prefer_confluence = cfg.get("structure_prefer_confluence")
+    if prefer_confluence is None:
+        prefer_confluence = True
+    prefer_strong = cfg.get("structure_prefer_strong_confluence")
+    if prefer_strong is None:
+        prefer_strong = True
+
+    # 1) 结构锚窗 KDE（与 GMS / 个股 KeyLevels 同路径）
+    from backend_core.strategies.gms.structure_levels import compute_structure_levels as gms_kde_structure
+
+    kde_cfg = dict(cfg or {})
+    if not bool(use_structural):
+        # 强制日历窗：用配置初始回看（≠60 时 GMS 关闭结构锚）
+        init_cal = int(
+            kde_cfg.get("kde_lookback_days")
+            or kde_cfg.get("kde_lookback_initial")
+            or 60
+        )
+        if init_cal == 60:
+            init_cal = 61
+        kde_cfg["kde_lookback_days"] = init_cal
+        kde_cfg["kde_lookback_initial"] = init_cal
+    st = gms_kde_structure(bars_desc, kde_cfg, price=px)
+    out = dict(empty)
+    out.update(st or {})
+    out["kde_nearest_support"] = st.get("nearest_support")
+    out["kde_nearest_resistance"] = st.get("nearest_resistance")
+    out["structure_level_source"] = "kde"
+    out["method"] = "structural_kde+confluence" if use_confluence else "structural_kde"
+
+    if not bool(use_confluence):
+        return out
+
+    # 2) classic + VP + confluence
+    try:
+        from backend_core.analysis.classic_levels import (
+            DEFAULT_LOOKBACK,
+            compute_classic_levels_from_bars,
+        )
+        from backend_core.analysis.confluence_zones import compute_confluence_from_reference
+        from backend_core.analysis.volume_profile import compute_volume_profile_from_bars
+    except Exception:
+        return out
+
     asc = list(reversed(bars_desc))
-    closes: List[float] = []
-    volumes: List[float] = []
-    for b in asc:
-        try:
-            c = float(b.get("close") or 0)
-            v = float(b.get("volume") or 0)
-        except (TypeError, ValueError):
-            continue
-        if c > 0:
-            closes.append(c)
-            volumes.append(v if v > 0 else 0.0)
-    if len(closes) < 20:
-        return empty
+    try:
+        ref = compute_classic_levels_from_bars(asc, last_close=px)
+        vp = compute_volume_profile_from_bars(asc, last_close=px, lookback=DEFAULT_LOOKBACK)
+        ref["volume_profile"] = {
+            "ok": bool(vp.get("ok")),
+            "reason": vp.get("reason"),
+            "lookback": vp.get("lookback"),
+            "bars_used": vp.get("bars_used"),
+            "poc": vp.get("poc"),
+            "vah": vp.get("vah"),
+            "val": vp.get("val"),
+            "nearest_support": vp.get("nearest_support"),
+            "nearest_resistance": vp.get("nearest_resistance"),
+        }
+        conf = compute_confluence_from_reference(
+            ref,
+            kde_support=st.get("nearest_support"),
+            kde_resistance=st.get("nearest_resistance"),
+            kde_supports=st.get("support_levels"),
+            kde_resistances=st.get("resistance_levels"),
+            kde_multi_windows=st.get("kde_multi_windows"),
+            last_close=px,
+            atr=ref.get("atr"),
+        )
+    except Exception:
+        return out
 
-    from backend_core.strategies.rpe.kde_levels import (
-        extract_kde_levels_expand_support,
-        nearest_levels,
-    )
-
-    init_lb = int(cfg.get("kde_lookback_days") or cfg.get("kde_lookback_initial") or 60)
-    step = int(cfg.get("kde_lookback_step") or 250)
-    max_lb = int(cfg.get("kde_lookback_max") or 750)
-    base = float(cfg.get("kde_base_factor") or 1.0)
-    grid = int(cfg.get("kde_grid_points") or 200)
-
-    kde = extract_kde_levels_expand_support(
-        closes,
-        volumes,
-        price=px,
-        initial_lookback=init_lb,
-        step=step,
-        max_lookback=max_lb,
-        base_factor=base,
-        grid_points=grid,
-    )
-    supports = [round(float(x), 2) for x in (kde.get("support_levels") or [])[:8]]
-    resists = [round(float(x), 2) for x in (kde.get("resistance_levels") or [])[:8]]
-    near = nearest_levels(px, supports, resists)
-    ns = near.get("nearest_support")
-    nr = near.get("nearest_resistance")
-    return {
-        "support_levels": supports,
-        "resistance_levels": resists,
-        "nearest_support": round(float(ns), 2) if ns is not None else None,
-        "nearest_resistance": round(float(nr), 2) if nr is not None else None,
-        "kde_ok": bool(kde.get("ok")),
-        "kde_reason": kde.get("reason") or ("ok" if kde.get("ok") else "no_peaks"),
-        "kde_bw": kde.get("bw"),
-        "kde_lookback_used": int(kde.get("lookback_used") or 0),
-        "kde_lookback_expanded": bool(kde.get("lookback_expanded")),
+    out["confluence_ok"] = bool(conf.get("ok"))
+    out["confluence_zones"] = {
+        "ok": bool(conf.get("ok")),
+        "nearest_support_zone": conf.get("nearest_support_zone"),
+        "nearest_resistance_zone": conf.get("nearest_resistance_zone"),
+        "supports": (conf.get("supports") or [])[:6],
+        "resistances": (conf.get("resistances") or [])[:6],
     }
+    nz_s = conf.get("nearest_support_zone") if isinstance(conf.get("nearest_support_zone"), dict) else None
+    nz_r = conf.get("nearest_resistance_zone") if isinstance(conf.get("nearest_resistance_zone"), dict) else None
+    out["nearest_confluence_support"] = (
+        round(float(nz_s["center"]), 2) if nz_s and nz_s.get("center") is not None else None
+    )
+    out["nearest_confluence_resistance"] = (
+        round(float(nz_r["center"]), 2) if nz_r and nz_r.get("center") is not None else None
+    )
+
+    picked = _pick_confluence_nearest(conf, px, prefer_strong=bool(prefer_strong))
+    if bool(prefer_confluence) and (picked.get("nearest_support") is not None or picked.get("nearest_resistance") is not None):
+        if picked.get("nearest_support") is not None:
+            out["nearest_support"] = picked["nearest_support"]
+        if picked.get("nearest_resistance") is not None:
+            out["nearest_resistance"] = picked["nearest_resistance"]
+        out["structure_level_source"] = picked.get("pick") or "confluence"
+        out["confluence_support_zone"] = picked.get("support_zone")
+        out["confluence_resistance_zone"] = picked.get("resistance_zone")
+        # 共振覆盖后重算 RR（与位置分/硬闸一致）
+        try:
+            from backend_core.strategies.gms.structure_levels import (
+                compute_structure_rr,
+                resolve_structure_rr_min_downside_pct,
+                resolve_structure_rr_min_upside_pct,
+            )
+
+            floor_pct = resolve_structure_rr_min_downside_pct(cfg)
+            up_pct = resolve_structure_rr_min_upside_pct(cfg)
+            rr_info = compute_structure_rr(
+                px,
+                out.get("nearest_support"),
+                out.get("nearest_resistance"),
+                min_downside_pct=floor_pct,
+                min_upside_pct=up_pct,
+            )
+            out["rr"] = rr_info.get("rr")
+            out["rr_reason"] = rr_info.get("reason")
+            out["rr_downside_floored"] = bool(rr_info.get("downside_floored"))
+            out["rr_min_downside_pct"] = rr_info.get("min_downside_pct")
+            out["rr_downside_raw"] = rr_info.get("downside_raw")
+            out["rr_downside"] = rr_info.get("downside")
+        except Exception:
+            pass
+    return out
 
 
 def hydrate_detail_from_score_detail(detail: Dict[str, Any]) -> Dict[str, Any]:
@@ -533,16 +696,26 @@ def evaluate_buy_signal(
     if isinstance(score_detail, dict):
         score_detail = dict(score_detail)
         score_detail["structure"] = {
-            "support_levels": structure["support_levels"],
-            "resistance_levels": structure["resistance_levels"],
-            "nearest_support": structure["nearest_support"],
-            "nearest_resistance": structure["nearest_resistance"],
-            "kde_ok": structure["kde_ok"],
-            "kde_reason": structure["kde_reason"],
-            "kde_bw": structure["kde_bw"],
-            "kde_lookback_used": structure["kde_lookback_used"],
-            "kde_lookback_expanded": structure["kde_lookback_expanded"],
-            "method": "kde_volume_weighted",
+            "support_levels": structure.get("support_levels") or [],
+            "resistance_levels": structure.get("resistance_levels") or [],
+            "nearest_support": structure.get("nearest_support"),
+            "nearest_resistance": structure.get("nearest_resistance"),
+            "kde_nearest_support": structure.get("kde_nearest_support"),
+            "kde_nearest_resistance": structure.get("kde_nearest_resistance"),
+            "kde_ok": structure.get("kde_ok"),
+            "kde_reason": structure.get("kde_reason"),
+            "kde_bw": structure.get("kde_bw"),
+            "kde_lookback_used": structure.get("kde_lookback_used"),
+            "kde_lookback_expanded": structure.get("kde_lookback_expanded"),
+            "kde_window_mode": structure.get("kde_window_mode"),
+            "kde_anchor": structure.get("kde_anchor"),
+            "kde_multi_windows": structure.get("kde_multi_windows"),
+            "method": structure.get("method") or "structural_kde+confluence",
+            "structure_level_source": structure.get("structure_level_source"),
+            "confluence_ok": structure.get("confluence_ok"),
+            "nearest_confluence_support": structure.get("nearest_confluence_support"),
+            "nearest_confluence_resistance": structure.get("nearest_confluence_resistance"),
+            "confluence_zones": structure.get("confluence_zones"),
             "rr": structure.get("rr"),
             "rr_reason": structure.get("rr_reason"),
             "rr_downside_floored": structure.get("rr_downside_floored"),
@@ -561,6 +734,15 @@ def evaluate_buy_signal(
 
     from backend_core.analysis.trade_advice import build_trade_advice
 
+    ref_levels = None
+    if structure.get("confluence_zones"):
+        ref_levels = {
+            "confluence_zones": structure.get("confluence_zones"),
+            "nearest_confluence_support": structure.get("nearest_confluence_support"),
+            "nearest_confluence_resistance": structure.get("nearest_confluence_resistance"),
+            "atr": None,
+            "last_close": ind.get("close"),
+        }
     advice_row = {
         "buy_signal": buy,
         "close": ind.get("close"),
@@ -571,7 +753,7 @@ def evaluate_buy_signal(
         "structure_rr": structure.get("rr"),
         "risk_tags": risk_tags,
     }
-    trade_advice = build_trade_advice("urt", advice_row)
+    trade_advice = build_trade_advice("urt", advice_row, reference_levels=ref_levels)
     if isinstance(score_detail, dict):
         score_detail["trade_advice"] = trade_advice
 
@@ -642,6 +824,384 @@ def evaluate_buy_signal(
     }
     payload["buy_logic"] = build_buy_logic(payload, cfg)
     return payload
+
+
+def extract_signal_structure_levels(sig: Dict[str, Any]) -> Dict[str, Any]:
+    """从买点行 / score_detail.structure 取信号日关键支撑阻力。"""
+    sd = sig.get("score_detail") if isinstance(sig.get("score_detail"), dict) else {}
+    st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+    ns = sig.get("nearest_support")
+    if ns is None:
+        ns = st.get("nearest_support")
+    nr = sig.get("nearest_resistance")
+    if nr is None:
+        nr = st.get("nearest_resistance")
+    rr = sig.get("structure_rr")
+    if rr is None:
+        rr = st.get("rr")
+    kde_ok = sig.get("kde_ok") if sig.get("kde_ok") is not None else st.get("kde_ok")
+    kde_reason = sig.get("kde_reason") if sig.get("kde_reason") is not None else st.get("kde_reason")
+    return {
+        "nearest_support": ns,
+        "nearest_resistance": nr,
+        "structure_rr": rr,
+        "kde_ok": kde_ok,
+        "kde_reason": kde_reason,
+        "structure_level_source": (
+            sig.get("structure_level_source")
+            if sig.get("structure_level_source") is not None
+            else st.get("structure_level_source")
+        ),
+        "confluence_ok": (
+            sig.get("confluence_ok") if sig.get("confluence_ok") is not None else st.get("confluence_ok")
+        ),
+    }
+
+
+def compute_weak_structure_levels(
+    bars_desc: List[Dict[str, Any]],
+    *,
+    price: float,
+    cfg: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    KDE 缺失时的弱结构兜底（P2）：
+    - 支撑：近窗最低价（排除信号日），若不低于现价则尝试 MA20
+    - 阻力：近窗最高价中高于现价的最近一侧
+    """
+    cfg = cfg or {}
+    out: Dict[str, Any] = {
+        "nearest_support": None,
+        "nearest_resistance": None,
+        "structure_source": None,
+        "ok": False,
+    }
+    try:
+        px = float(price)
+    except (TypeError, ValueError):
+        return out
+    if px <= 0 or not bars_desc:
+        return out
+    try:
+        lb = int(cfg.get("structure_weak_lookback") or 20)
+    except (TypeError, ValueError):
+        lb = 20
+    lb = max(5, lb)
+    # DESC → 取含信号日的一段，再转 ASC
+    window = list(reversed(bars_desc[: lb + 1]))
+    if len(window) < 5:
+        return out
+
+    def _f(bar: Dict[str, Any], key: str) -> Optional[float]:
+        v = bar.get(key)
+        if v is None and key in ("low", "high"):
+            v = bar.get("close")
+        try:
+            x = float(v)
+            return x if x > 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    # 支撑/阻力用信号日前的历史（去掉末日）
+    hist = window[:-1] if len(window) > 1 else window
+    lows = [x for x in (_f(b, "low") for b in hist) if x is not None]
+    highs = [x for x in (_f(b, "high") for b in hist) if x is not None]
+    closes = [x for x in (_f(b, "close") for b in window) if x is not None]
+
+    support = None
+    source = None
+    if lows:
+        swing_low = min(lows)
+        if swing_low < px:
+            support = round(swing_low, 4)
+            source = "weak_swing"
+    if support is None and len(closes) >= 20:
+        ma20 = sum(closes[-20:]) / 20.0
+        if 0 < ma20 < px:
+            support = round(ma20, 4)
+            source = "weak_ma20"
+
+    resist = None
+    above = [h for h in highs if h > px * 1.005]
+    if above:
+        resist = round(min(above), 4)
+
+    out["nearest_support"] = support
+    out["nearest_resistance"] = resist
+    out["structure_source"] = source
+    out["ok"] = support is not None
+    return out
+
+
+def resolve_structure_exit_levels(
+    *,
+    entry_price: float,
+    nearest_support: Any = None,
+    nearest_resistance: Any = None,
+    cfg: Optional[Dict[str, Any]] = None,
+    target_pct: float = 0.10,
+    structure_source: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    结构出场价位：
+    - 止损：支撑 × (1 - structure_stop_buffer_pct)；无支撑则回退百分比止损
+    - 止盈：阻力（上行空间足够）否则 entry×(1+target_pct)
+    - P3：回退止损可用 structure_fallback_stop_loss_pct（默认 8）替代 risk 上限
+    """
+    cfg = cfg or {}
+    risk = cfg.get("risk") if isinstance(cfg.get("risk"), dict) else {}
+    try:
+        buf = float(cfg.get("structure_stop_buffer_pct"))
+    except (TypeError, ValueError):
+        buf = 0.02
+    if buf < 0:
+        buf = 0.0
+    # 出场专用阻力上行门槛（默认 5%）；未配置时回退选股口径再回退 5%
+    min_up = None
+    for key, default in (
+        ("structure_exit_min_upside_pct", None),
+        ("structure_rr_min_upside_pct", None),
+    ):
+        try:
+            raw = cfg.get(key)
+            if raw is not None:
+                min_up = float(raw)
+                break
+        except (TypeError, ValueError):
+            continue
+    if min_up is None:
+        min_up = 0.05
+    try:
+        stop_max = float(risk.get("stop_loss_pct_max") or 10)
+    except (TypeError, ValueError):
+        stop_max = 10.0
+    # P3：结构缺失回退时可用更紧的止损（百分比）
+    try:
+        fb_stop = cfg.get("structure_fallback_stop_loss_pct")
+        fallback_stop_max = float(fb_stop) if fb_stop is not None else min(stop_max, 8.0)
+    except (TypeError, ValueError):
+        fallback_stop_max = min(stop_max, 8.0)
+    if fallback_stop_max <= 0:
+        fallback_stop_max = stop_max
+
+    entry = float(entry_price)
+    src = str(structure_source or "").strip() or None
+    out: Dict[str, Any] = {
+        "stop_price": None,
+        "target_price": None,
+        "stop_basis": None,
+        "target_basis": None,
+        "structure_fallback": False,
+        "fallback_reason": None,
+        "structure_source": src,
+        "nearest_support": None,
+        "nearest_resistance": None,
+        "buffer_pct": buf,
+        "fallback_stop_loss_pct": fallback_stop_max,
+    }
+    if entry <= 0:
+        return out
+
+    support = None
+    try:
+        if nearest_support is not None:
+            support = float(nearest_support)
+    except (TypeError, ValueError):
+        support = None
+    resist = None
+    try:
+        if nearest_resistance is not None:
+            resist = float(nearest_resistance)
+    except (TypeError, ValueError):
+        resist = None
+
+    out["nearest_support"] = support
+    out["nearest_resistance"] = resist
+    if support is not None and not src:
+        out["structure_source"] = "kde"
+
+    if support is not None and support > 0:
+        stop_px = round(support * (1.0 - buf), 4)
+        # 止损须严格低于入场，否则回退百分比
+        if stop_px < entry:
+            out["stop_price"] = stop_px
+            out["stop_basis"] = (
+                "weak_structure_support" if str(out.get("structure_source") or "").startswith("weak_") else "structure_support"
+            )
+            out["structure_fallback"] = False
+            out["fallback_reason"] = None
+        else:
+            out["stop_price"] = round(entry * (1.0 - fallback_stop_max / 100.0), 4)
+            out["stop_basis"] = "pct_fallback_stop_above_entry"
+            out["structure_fallback"] = True
+            out["fallback_reason"] = "stop_above_entry"
+    else:
+        out["stop_price"] = round(entry * (1.0 - fallback_stop_max / 100.0), 4)
+        out["stop_basis"] = "pct_fallback_no_support"
+        out["structure_fallback"] = True
+        out["fallback_reason"] = "no_support"
+
+    pct_target = round(entry * (1.0 + float(target_pct)), 4)
+    if resist is not None and resist > entry * (1.0 + min_up):
+        out["target_price"] = round(resist, 4)
+        out["target_basis"] = (
+            "weak_structure_resistance"
+            if str(out.get("structure_source") or "").startswith("weak_")
+            else "structure_resistance"
+        )
+    else:
+        out["target_price"] = pct_target
+        out["target_basis"] = "pct_target" if resist is None else "pct_target_low_upside"
+
+    return out
+
+
+def step_structure_fallback_protection(
+    *,
+    entry_price: float,
+    peak_high: float,
+    last_close: float,
+    stop_price: Optional[float],
+    armed: bool,
+    cfg: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    全路径浮盈保护（原 P1，已扩展出回退路径）：
+    浮盈达 arm_pct（默认约 +6.5%）后抬止损至 max(原止损, 入场价, 峰值×(1-trail))。
+    兼容旧键 structure_fallback_*；优先读 structure_protect_*。
+    """
+    cfg = cfg or {}
+    enabled = cfg.get("structure_protect_enabled")
+    if enabled is None:
+        enabled = cfg.get("structure_fallback_protect_enabled")
+    if enabled is None:
+        enabled = True
+
+    def _pct(primary: str, legacy: str, default: float) -> float:
+        for key in (primary, legacy):
+            try:
+                raw = cfg.get(key)
+                if raw is not None:
+                    return float(raw)
+            except (TypeError, ValueError):
+                continue
+        return default
+
+    arm_pct = _pct("structure_protect_arm_pct", "structure_fallback_arm_pct", 0.065)
+    trail = _pct(
+        "structure_protect_trail_drawdown_pct",
+        "structure_fallback_trail_drawdown_pct",
+        0.04,
+    )
+    if trail < 0:
+        trail = 0.0
+
+    entry = float(entry_price)
+    peak = float(peak_high) if peak_high is not None else entry
+    cl = float(last_close)
+    try:
+        cur_stop = float(stop_price) if stop_price is not None else entry * 0.9
+    except (TypeError, ValueError):
+        cur_stop = entry * 0.9
+
+    if not enabled or entry <= 0:
+        return {
+            "armed": bool(armed),
+            "stop_price": cur_stop,
+            "exit_reason": None,
+            "protect_basis": None,
+        }
+
+    peak_gain = peak / entry - 1.0 if entry else 0.0
+    new_armed = bool(armed) or peak_gain >= arm_pct
+    new_stop = cur_stop
+    protect_basis = None
+    if new_armed:
+        be_stop = entry
+        trail_stop = peak * (1.0 - trail) if peak > 0 else entry
+        new_stop = max(cur_stop, be_stop, trail_stop)
+        protect_basis = "fallback_trail" if trail_stop >= be_stop else "breakeven"
+
+    exit_reason = None
+    if new_armed and cl <= new_stop:
+        # 触及抬升后的止损：区分保本 / 回撤
+        if cl >= entry * 0.999 or new_stop >= entry * 0.999:
+            exit_reason = "fallback_trail" if (peak * (1.0 - trail)) >= entry else "breakeven_stop"
+        else:
+            exit_reason = "price_stop"
+
+    return {
+        "armed": new_armed,
+        "stop_price": round(new_stop, 4),
+        "exit_reason": exit_reason,
+        "protect_basis": protect_basis,
+    }
+
+
+# 别名：全路径保护
+step_structure_protect = step_structure_fallback_protection
+
+
+def evaluate_structure_exit_rules(
+    *,
+    entry_price: float,
+    last_close: float,
+    last_high: Optional[float] = None,
+    stop_price: Optional[float] = None,
+    target_price: Optional[float] = None,
+    target_basis: Optional[str] = None,
+    stop_basis: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    结构出场判定（持仓第 2 根 K 起逐日调用）：
+    - 收盘 ≤ 止损 → structure_stop（百分比回退则为 price_stop；弱结构为 structure_stop）
+    - 最高价 ≥ 止盈 → structure_target / pct_target
+    同日优先止损。
+    """
+    if entry_price <= 0:
+        return None
+    cl = float(last_close)
+    hi = float(last_high) if last_high is not None else cl
+    pnl_pct = (cl - entry_price) / entry_price * 100.0
+    sb = str(stop_basis or "")
+
+    if stop_price is not None:
+        try:
+            sp = float(stop_price)
+        except (TypeError, ValueError):
+            sp = None
+        if sp is not None and cl <= sp:
+            if sb.startswith("pct_fallback"):
+                reason = "price_stop"
+            elif sb in ("breakeven", "fallback_trail"):
+                reason = "breakeven_stop" if sb == "breakeven" else "fallback_trail"
+            else:
+                reason = "structure_stop"
+            return {
+                "exit_reason": reason,
+                "pnl_pct": round(pnl_pct, 2),
+                "stop_price": sp,
+            }
+
+    if target_price is not None:
+        try:
+            tp = float(target_price)
+        except (TypeError, ValueError):
+            tp = None
+        if tp is not None and hi >= tp:
+            tb = str(target_basis or "")
+            if tb.startswith("pct_target"):
+                reason = "pct_target"
+            elif "weak_" in tb:
+                reason = "structure_target"
+            else:
+                reason = "structure_target"
+            return {
+                "exit_reason": reason,
+                "pnl_pct": round(pnl_pct, 2),
+                "target_price": tp,
+            }
+    return None
 
 
 def evaluate_exit_rules(

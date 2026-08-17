@@ -18,12 +18,13 @@ GMS 对照见：[GMS交易回测买卖规则说明.md](./GMS交易回测买卖�
 
 ## 1. 回测范围与任务参数
 
-URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持两种出场模式（任务参数 `exit_mode`）：
+URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模式（任务参数 `exit_mode`）：
 
 | 模式 | 说明 |
 |------|------|
 | `hit_rate`（默认） | 命中率统计：观察期内不止损，满期参考出场 |
 | `risk_exit` | 纪律出场：持仓期调用 `evaluate_exit_rules`（价格止损 / 连跌 / 回撤止盈） |
+| `structure_exit` | 结构出场：信号日 KDE 最近支撑止损 / 最近阻力止盈（与选股明细同口径，持仓期不重算） |
 
 ### 1.1 创建任务常用参数
 
@@ -92,15 +93,45 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持两种出场模�
 
 同时仍统计 `hit_target`（观察窗内最高价是否触及目标），与是否提前纪律离场独立。
 
+### 3.0c 模式 `structure_exit`（结构出场）
+
+入场规则同 §2.2。结构位与**个股关键价位**同口径：
+
+1. ZigZag **结构锚窗**成交量加权 KDE（`compute_kde_bundle`）
+2. Fib/Pivot/Cam + Volume Profile → **`compute_confluence_from_reference`**
+3. 默认以共振带中心作为 `nearest_support` / `nearest_resistance`（可优先 `tier=strong`）
+
+| 规则 | 口径 |
+|------|------|
+| 止损价 | `nearest_support × (1 − structure_stop_buffer_pct)`，默认缓冲 **2%** |
+| 止损触发 | 持仓第 2 日起，**收盘** ≤ 止损价 → `structure_stop` |
+| 止盈价 | 优先 `nearest_resistance`（相对入场上行 ≥ `structure_exit_min_upside_pct`，默认 **5%**）；否则进入百分比目标区 |
+| 止盈触发 | 阻力：**最高价** ≥ 阻力 → 默认可先平 `structure_partial_exit_frac`（50%），余仓改移动止盈；百分比目标默认**不硬平**，改武装跟踪 |
+| P0 缺位补齐 | 缓存缺支撑或 `kde_ok=false` 时按上述同口径重算；明细含 `fallback_reason` / `structure_level_source` |
+| P2 弱结构 | 仍无支撑时用近窗低点 / MA20 兜底（`structure_source=weak_*`） |
+| P3 回退止损 | 无有效结构止损时用 `structure_fallback_stop_loss_pct`（默认 **8%**）→ `price_stop` |
+| 全路径保护 | 浮盈达约 **+6.5%** 后保本；峰值回撤约 **4%** → `breakeven_stop` / `fallback_trail`（正结构与回退路径均启用） |
+| 满期 | `horizon_end` |
+| 同日优先级 | 先判保护/止损，再判阻力/百分比目标（可分批或改跟踪） |
+
+配置开关：`structure_use_structural_window` / `structure_use_confluence` / `structure_prefer_confluence` / `structure_prefer_strong_confluence`（默认均开）。
+
+汇总 `structure_exit_stats` 另含：回退原因拆分、弱结构笔数、KDE/共振重算笔数、保本/移动止盈笔数。
+
+汇总额外字段 `structure_exit_stats`：各出场原因笔数、结构缺失回退率等，便于与 `hit_rate` / `risk_exit` 对照。
+
 ### 3.1 明细主要字段
 
 | 字段 | 计算 |
 |------|------|
 | `max_high` | 观察期内最高价 |
 | `max_gain_pct` | `(max_high - entry_price) / entry_price × 100` |
-| `hit_target` / `hit_date` | 是否触及目标及首次触及日 |
-| `pnl_pct` | 期末收盘相对入场价的参考盈亏（满仓持有满期） |
-| `bars_held` | 观察期 K 线根数（通常等于 `horizon_days`） |
+| `hit_target` / `hit_date` | 是否触及目标及首次触及日（相对 `target_pct`，独立统计） |
+| `pnl_pct` | 出场价相对入场价盈亏 |
+| `bars_held` | 实际持有 K 线根数 |
+| `stop_price` / `target_price` | （`structure_exit`）结构或回退止损/止盈价 |
+| `nearest_support` / `nearest_resistance` / `structure_rr` | （`structure_exit`）信号日结构字段 |
+| `structure_fallback` | （`structure_exit`）是否因无支撑等回退百分比止损 |
 
 ---
 
@@ -116,6 +147,10 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持两种出场模�
 | `take_profit_alert_pct_min` | 止盈警惕涨幅下限（%） | 25 |
 | `take_profit_alert_pct_max` | 止盈警惕涨幅上限（%） | 30 |
 | `trailing_drawdown_pct` | 高点回撤止盈（%） | 5 |
+| `structure_stop_buffer_pct` | 结构止损相对支撑下移缓冲 | 0.02（顶层配置） |
+
+`structure_exit` 另读顶层 `structure_exit_min_upside_pct`（默认 **0.05**）判定阻力是否可用作止盈；选股贴阻力硬闸仍用 `structure_rr_min_upside_pct`（默认 0.03）。  
+全路径保护键：`structure_protect_enabled` / `structure_protect_arm_pct` / `structure_protect_trail_drawdown_pct`；分批：`structure_partial_exit_*`；百分比跟踪：`structure_pct_target_trail_enabled`。
 
 ---
 
@@ -132,10 +167,17 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持两种出场模�
 | 按分数分桶 | 得分区间样本与命中率 |
 | 持有天数分布 | 1–3 / 4–10 / 11–20 / 21+ |
 | 离场原因分布 | 各 `exit_reason` 笔数 |
+| `structure_exit_stats` | 仅 `structure_exit`：结构止损/阻力止盈/回退占比等 |
 | 分月收益 | 按出场月对 `pnl_pct` 取均值（简化） |
+| `avg_bars_held` | 平均持有天数 |
 | `trade_logic` / `risk_params` | 交易逻辑说明与风控快照 |
 
 ### 5.2 明细导出
+
+- CSV：`GET /api/admin/urt/backtests/{task_id}/export`
+- XLSX：`GET /api/admin/urt/backtests/{task_id}/export-xlsx`
+- 详情 PDF（服务端 xhtml2pdf）：`GET /api/admin/urt/backtests/{task_id}/export-pdf`  
+  Admin 回测详情弹窗「导出PDF」走此接口；依赖 `xhtml2pdf`，中文使用 ReportLab CID 字体 `STSong-Light`。
 
 完成任务后生成 UTF-8-BOM CSV（Excel 可直接打开），中文列名包括：股票代码、股票名称、信号日期、得分、入场日期、入场价、出场日期、出场价、出场原因、是否命中目标、命中日期、盈亏比例(%)、持有天数。  
 出场原因会译为中文（如「触及目标」「到期平仓」）。旧任务需重跑后才会带中文表头。

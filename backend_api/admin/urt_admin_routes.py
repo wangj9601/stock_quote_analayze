@@ -54,7 +54,10 @@ class BacktestCreateBody(BaseModel):
     use_trace: bool = True
     exit_mode: str = Field(
         "hit_rate",
-        description="出场模式: hit_rate=命中率(不止损) | risk_exit=纪律出场(止损/连跌/回撤)",
+        description=(
+            "出场模式: hit_rate=命中率(不止损) | risk_exit=纪律出场(止损/连跌/回撤) "
+            "| structure_exit=结构出场(支撑止损/阻力止盈)"
+        ),
     )
     stock_pool_mode: Optional[str] = Field(
         "all",
@@ -178,6 +181,9 @@ def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any
         use_trace=bool(config.get("use_trace", True)),
         risk=strategy_cfg.get("risk") if isinstance(strategy_cfg.get("risk"), dict) else {},
         exit_mode=str(config.get("exit_mode") or "hit_rate"),
+        structure_stop_buffer_pct=float(strategy_cfg.get("structure_stop_buffer_pct") or 0.02),
+        structure_rr_min_upside_pct=float(strategy_cfg.get("structure_rr_min_upside_pct") or 0.03),
+        structure_cfg=strategy_cfg,
     )
     config["risk_params"] = meta["risk_params"]
     config["trade_logic"] = meta["trade_logic"]
@@ -197,7 +203,12 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         "horizon_days": body.horizon_days,
         "min_score": body.min_score,
         "use_trace": body.use_trace,
-        "exit_mode": (body.exit_mode or "hit_rate").strip().lower() or "hit_rate",
+        "exit_mode": (
+            em
+            if (em := (body.exit_mode or "hit_rate").strip().lower())
+            in ("hit_rate", "risk_exit", "structure_exit")
+            else "hit_rate"
+        ),
         "stock_pool_mode": mode,
         "market": "cn",
     }
@@ -657,6 +668,68 @@ async def batch_delete_backtests(body: BatchDeleteBody):
 
     n = backtest_storage.batch_delete_tasks(body.task_ids or [])
     return {"success": True, "deleted": n}
+
+
+@router.get("/backtests/{task_id}/export-pdf")
+async def export_backtest_pdf(task_id: str, db: Session = Depends(get_db)):
+    """导出回测详情 PDF（服务端 xhtml2pdf 生成）。"""
+    from urllib.parse import quote
+
+    from backend_core.strategies.urt import backtest_storage
+    from backend_core.strategies.urt.backtest_pdf import render_backtest_pdf
+
+    row = backtest_storage.get_task(task_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
+    summary = row.get("summary") if isinstance(row.get("summary"), dict) else {}
+    if not cfg.get("trade_logic") or not cfg.get("risk_params"):
+        try:
+            patched = _attach_urt_trade_meta(db, dict(cfg))
+            cfg = {
+                **cfg,
+                "trade_logic": patched.get("trade_logic"),
+                "risk_params": patched.get("risk_params"),
+            }
+            row = {**row, "config": cfg}
+        except Exception:
+            logger.exception("URT PDF 导出补齐交易逻辑失败 task=%s", task_id)
+    if summary and (not summary.get("trade_logic") or not summary.get("risk_params")):
+        row = {
+            **row,
+            "summary": {
+                **summary,
+                "trade_logic": summary.get("trade_logic") or cfg.get("trade_logic"),
+                "risk_params": summary.get("risk_params") or cfg.get("risk_params"),
+            },
+        }
+
+    logs = backtest_storage.get_task_logs(task_id)
+    try:
+        pdf_bytes = render_backtest_pdf(row, logs=logs)
+    except RuntimeError as e:
+        msg = str(e)
+        if "xhtml2pdf" in msg and "未安装" in msg:
+            raise HTTPException(status_code=501, detail=msg) from e
+        raise HTTPException(status_code=500, detail=msg) from e
+    except Exception as e:
+        logger.exception("URT 回测 PDF 导出失败 task=%s", task_id)
+        raise HTTPException(status_code=500, detail=f"导出PDF失败: {e}") from e
+
+    short = (task_id or "")[:8] or "unknown"
+    ascii_filename = f"urt_backtest_{short}.pdf"
+    utf8_filename = quote(f"URT回测详情_{short}.pdf")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{ascii_filename}"; '
+                f"filename*=UTF-8''{utf8_filename}"
+            )
+        },
+    )
 
 
 @router.get("/backtests/{task_id}/export")

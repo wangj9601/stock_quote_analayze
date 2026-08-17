@@ -35,6 +35,21 @@ _URT_DETAIL_FIELDS: List[str] = [
     "exit_reason",
     "pnl_pct",
     "bars_held",
+    "structure_fallback",
+    "fallback_reason",
+    "structure_source",
+    "stop_basis",
+    "target_basis",
+    "nearest_support",
+    "nearest_resistance",
+    "stop_price",
+    "target_price",
+    "kde_ok",
+    "partial_exit",
+    "partial_frac",
+    "partial_exit_price",
+    "partial_exit_date",
+    "exit_reason_combo",
 ]
 
 _URT_DETAIL_HEADER_ZH: Dict[str, str] = {
@@ -53,6 +68,21 @@ _URT_DETAIL_HEADER_ZH: Dict[str, str] = {
     "exit_reason": "出场原因",
     "pnl_pct": "期末盈亏比例(%)",
     "bars_held": "持有天数",
+    "structure_fallback": "结构回退",
+    "fallback_reason": "回退原因",
+    "structure_source": "结构来源",
+    "stop_basis": "止损依据",
+    "target_basis": "止盈依据",
+    "nearest_support": "最近支撑",
+    "nearest_resistance": "最近阻力",
+    "stop_price": "止损价",
+    "target_price": "止盈价",
+    "kde_ok": "KDE有效",
+    "partial_exit": "分批出场",
+    "partial_frac": "分批比例",
+    "partial_exit_price": "分批出场价",
+    "partial_exit_date": "分批出场日",
+    "exit_reason_combo": "组合出场原因",
 }
 
 _URT_EXIT_REASON_ZH: Dict[str, str] = {
@@ -60,8 +90,15 @@ _URT_EXIT_REASON_ZH: Dict[str, str] = {
     "horizon_end": "到期平仓",
     "rule_exit": "规则离场",
     "stop_loss": "止损",
+    "price_stop": "价格止损",
     "time_stop": "时间止损",
     "trailing_drawdown": "回撤止盈",
+    "trailing_take_profit": "回撤止盈",
+    "structure_stop": "结构止损",
+    "structure_target": "阻力止盈",
+    "pct_target": "百分比止盈",
+    "breakeven_stop": "保本止损",
+    "fallback_trail": "移动止盈",
 }
 
 
