@@ -80,11 +80,54 @@ const UnifiedTradeObserve = {
         return this.SOURCE_LABELS[src] || src || '—';
     },
 
+    marketLabel(m) {
+        const v = String(m || '').toUpperCase();
+        if (v === 'HK') return 'HK';
+        if (v === 'CN' || v === 'A' || v === 'SH' || v === 'SZ') return 'CN';
+        return v || '—';
+    },
+
     esc(s) {
         return String(s == null ? '' : s)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/"/g, '&quot;');
+    },
+
+    fmtPrice(v) {
+        if (v == null || v === '' || Number.isNaN(Number(v))) return '—';
+        return Number(v).toFixed(2);
+    },
+
+    fmtDt(iso) {
+        if (!iso) return '—';
+        const s = String(iso).replace('T', ' ');
+        return s.length >= 16 ? s.slice(0, 16) : s.slice(0, 19);
+    },
+
+    /** 从统一 API 已返回的 snapshot 取信号价（有则展示，无则 —，不造假） */
+    signalPriceFromItem(it) {
+        const snap = it && typeof it.snapshot === 'object' && it.snapshot ? it.snapshot : {};
+        const keys = [
+            'current_price',
+            'close',
+            'price',
+            'last_price',
+            'signal_price',
+            'entry_price',
+        ];
+        for (let i = 0; i < keys.length; i += 1) {
+            const v = snap[keys[i]];
+            if (v != null && v !== '' && !Number.isNaN(Number(v))) return Number(v);
+        }
+        return null;
+    },
+
+    statusLabel(st) {
+        const s = String(st || '').toLowerCase();
+        if (s === 'open') return '持仓中';
+        if (s === 'closed') return '已平仓';
+        return st || '—';
     },
 
     analysisHref(code, name) {
@@ -132,7 +175,7 @@ const UnifiedTradeObserve = {
             this.renderObserve(items);
         } catch (e) {
             if (tbody) {
-                tbody.innerHTML = `<tr><td colspan="6" class="empty-state">${this.esc(e.message || '加载失败')}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="empty-state">${this.esc(e.message || '加载失败')}</td></tr>`;
             }
             if (errEl) {
                 errEl.hidden = false;
@@ -148,7 +191,7 @@ const UnifiedTradeObserve = {
         const tbody = document.getElementById('utoObserveTableBody');
         if (!tbody) return;
         if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="empty-state">暂无交易观察股票</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="empty-state">暂无交易观察股票</td></tr>';
             return;
         }
         tbody.innerHTML = items
@@ -156,16 +199,21 @@ const UnifiedTradeObserve = {
                 const src = it.source || '';
                 const canFormal = this.FORMAL_SOURCES.has(src);
                 const href = this.analysisHref(it.code, it.name);
-                const created = (it.created_at || '').replace('T', ' ').slice(0, 19);
+                const name = it.name || '';
+                const signalPrice = this.signalPriceFromItem(it);
                 return `<tr data-id="${it.id}" data-source="${this.esc(src)}">
-                    <td><a class="stock-code gms-stock-code-link" href="${this.esc(href)}">${this.esc(it.code)}</a></td>
-                    <td>${this.esc(it.name || '')}</td>
-                    <td>${this.esc(this.sourceLabel(src))}</td>
-                    <td>${this.esc(it.signal_date || '—')}</td>
-                    <td>${this.esc(created || '—')}</td>
-                    <td class="uto-ops">
-                        ${canFormal ? `<button type="button" class="gms-op-btn gms-op-btn--primary uto-transfer" data-id="${it.id}">转正式交易</button>` : ''}
-                        <button type="button" class="gms-op-btn uto-remove" data-id="${it.id}">移除</button>
+                    <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}">${this.esc(it.code)}</a></td>
+                    <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(name)}">${this.esc(name)}</span></td>
+                    <td class="uto-col-market">${this.esc(this.marketLabel(it.market))}</td>
+                    <td class="uto-col-source">${this.esc(this.sourceLabel(src))}</td>
+                    <td class="uto-col-num">${this.esc(this.fmtPrice(signalPrice))}</td>
+                    <td class="uto-col-date">${this.esc(it.signal_date || '—')}</td>
+                    <td class="uto-col-datetime">${this.esc(this.fmtDt(it.created_at))}</td>
+                    <td class="uto-col-ops">
+                        <div class="uto-ops">
+                            ${canFormal ? `<button type="button" class="gms-op-btn gms-op-btn--primary uto-transfer" data-id="${it.id}" title="转入正式交易">转正式</button>` : ''}
+                            <button type="button" class="gms-op-btn uto-remove" data-id="${it.id}" title="移出交易观察">移除</button>
+                        </div>
                     </td>
                 </tr>`;
             })
@@ -276,7 +324,7 @@ const UnifiedTradeObserve = {
             this.renderFormal(items);
         } catch (e) {
             if (tbody) {
-                tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${this.esc(e.message || '加载失败')}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" class="empty-state">${this.esc(e.message || '加载失败')}</td></tr>`;
             }
             if (errEl) {
                 errEl.hidden = false;
@@ -292,29 +340,37 @@ const UnifiedTradeObserve = {
         const tbody = document.getElementById('utoFormalTableBody');
         if (!tbody) return;
         if (!items.length) {
-            tbody.innerHTML = '<tr><td colspan="9" class="empty-state">暂无正式交易记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" class="empty-state">暂无正式交易记录</td></tr>';
             return;
         }
         tbody.innerHTML = items
             .map((it) => {
                 const href = this.analysisHref(it.code, it.name);
-                const entryAt = (it.entry_at || '').replace('T', ' ').slice(0, 19);
-                const pnl =
-                    it.pnl_percent != null && it.pnl_percent !== ''
-                        ? Number(it.pnl_percent).toFixed(2)
-                        : '—';
+                const name = it.name || '';
                 const open = String(it.status || '') === 'open';
+                const stCls = open ? 'uto-status-open' : 'uto-status-closed';
+                let pnlHtml = '—';
+                if (it.pnl_percent != null && it.pnl_percent !== '') {
+                    const n = Number(it.pnl_percent);
+                    const pnlCls = n > 0 ? 'uto-pnl-up' : (n < 0 ? 'uto-pnl-down' : '');
+                    pnlHtml = `<span class="${pnlCls}">${n.toFixed(2)}</span>`;
+                }
+                const notesTitle = it.notes ? ` title="${this.esc(it.notes)}"` : '';
                 return `<tr data-id="${it.id}">
-                    <td><a class="stock-code gms-stock-code-link" href="${this.esc(href)}">${this.esc(it.code)}</a></td>
-                    <td>${this.esc(it.name || '')}</td>
-                    <td>${this.esc(this.sourceLabel(it.source))}</td>
-                    <td>${this.esc(it.status || '—')}</td>
-                    <td>${it.entry_price != null ? this.esc(it.entry_price) : '—'}</td>
-                    <td>${it.position_lots != null ? this.esc(it.position_lots) : '—'}</td>
-                    <td>${this.esc(pnl)}</td>
-                    <td>${this.esc(entryAt || '—')}</td>
-                    <td class="uto-ops">
-                        ${open ? `<button type="button" class="gms-op-btn uto-close-formal" data-id="${it.id}">平仓</button>` : ''}
+                    <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}">${this.esc(it.code)}</a></td>
+                    <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(name)}">${this.esc(name)}</span></td>
+                    <td class="uto-col-source">${this.esc(this.sourceLabel(it.source))}</td>
+                    <td class="uto-col-status"><span class="${stCls}"${notesTitle}>${this.esc(this.statusLabel(it.status))}</span></td>
+                    <td class="uto-col-num">${this.esc(this.fmtPrice(it.entry_price))}</td>
+                    <td class="uto-col-num">${this.esc(this.fmtPrice(it.exit_price))}</td>
+                    <td class="uto-col-num">${it.position_lots != null ? this.esc(it.position_lots) : '—'}</td>
+                    <td class="uto-col-num">${pnlHtml}</td>
+                    <td class="uto-col-date">${this.esc(it.signal_date || '—')}</td>
+                    <td class="uto-col-datetime">${this.esc(this.fmtDt(it.entry_at))}</td>
+                    <td class="uto-col-ops">
+                        <div class="uto-ops">
+                            ${open ? `<button type="button" class="gms-op-btn uto-close-formal" data-id="${it.id}">平仓</button>` : ''}
+                        </div>
                     </td>
                 </tr>`;
             })

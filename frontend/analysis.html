@@ -179,37 +179,51 @@
                             <button type="button" class="uto-subtab" data-uto-sub="formal">正式交易</button>
                         </div>
                         <div class="uto-toolbar">
-                            <label class="uto-source-label">来源
-                                <select id="utoSourceFilter">
-                                    <option value="">全部</option>
-                                    <option value="gms">GMS</option>
-                                    <option value="urt">URT</option>
-                                    <option value="sbbr">SBBR</option>
-                                    <option value="rpe">RPE</option>
-                                    <option value="triple_volume">3倍量</option>
-                                    <option value="stock_analysis">个股分析</option>
-                                </select>
-                            </label>
-                            <button type="button" class="btn btn-primary" id="utoRefreshBtn">刷新</button>
+                            <div class="uto-toolbar-group">
+                                <label class="uto-source-label">来源
+                                    <select id="utoSourceFilter" class="uto-source-select">
+                                        <option value="">全部</option>
+                                        <option value="gms">GMS</option>
+                                        <option value="urt">URT</option>
+                                        <option value="sbbr">SBBR</option>
+                                        <option value="rpe">RPE</option>
+                                        <option value="triple_volume">3倍量</option>
+                                        <option value="stock_analysis">个股分析</option>
+                                    </select>
+                                </label>
+                                <button type="button" class="btn btn-primary uto-refresh-btn" id="utoRefreshBtn">刷新</button>
+                            </div>
                             <span id="utoCount" class="uto-count"></span>
                         </div>
                         <div id="utoObserveWrap" class="uto-panel">
                             <div id="utoObserveError" class="uto-error" hidden></div>
                             <div id="utoObserveLoading" class="uto-loading" hidden>加载中…</div>
-                            <div class="results-table-wrap">
-                                <table class="results-table uto-table">
+                            <div class="results-table-wrapper">
+                                <table class="results-table uto-table uto-table--observe">
+                                    <colgroup>
+                                        <col class="uto-cg-code" />
+                                        <col class="uto-cg-name" />
+                                        <col class="uto-cg-market" />
+                                        <col class="uto-cg-source" />
+                                        <col class="uto-cg-price" />
+                                        <col class="uto-cg-date" />
+                                        <col class="uto-cg-datetime" />
+                                        <col class="uto-cg-ops" />
+                                    </colgroup>
                                     <thead>
                                         <tr>
-                                            <th>股票代码</th>
-                                            <th>名称</th>
-                                            <th>来源</th>
-                                            <th>信号日</th>
-                                            <th>加入时间</th>
-                                            <th>操作</th>
+                                            <th class="uto-col-code">代码</th>
+                                            <th class="uto-col-name">名称</th>
+                                            <th class="uto-col-market">市场</th>
+                                            <th class="uto-col-source">来源</th>
+                                            <th class="uto-col-num">信号价</th>
+                                            <th class="uto-col-date">信号日</th>
+                                            <th class="uto-col-datetime">加入时间</th>
+                                            <th class="uto-col-ops">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody id="utoObserveTableBody">
-                                        <tr><td colspan="6" class="empty-state">点击「刷新」加载观察列表</td></tr>
+                                        <tr><td colspan="8" class="empty-state">点击「刷新」加载观察列表</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -217,23 +231,38 @@
                         <div id="utoFormalWrap" class="uto-panel" hidden>
                             <div id="utoFormalError" class="uto-error" hidden></div>
                             <div id="utoFormalLoading" class="uto-loading" hidden>加载中…</div>
-                            <div class="results-table-wrap">
-                                <table class="results-table uto-table">
+                            <div class="results-table-wrapper">
+                                <table class="results-table uto-table uto-table--formal">
+                                    <colgroup>
+                                        <col class="uto-cg-code" />
+                                        <col class="uto-cg-name" />
+                                        <col class="uto-cg-source" />
+                                        <col class="uto-cg-status" />
+                                        <col class="uto-cg-price" />
+                                        <col class="uto-cg-price" />
+                                        <col class="uto-cg-lots" />
+                                        <col class="uto-cg-pnl" />
+                                        <col class="uto-cg-date" />
+                                        <col class="uto-cg-datetime" />
+                                        <col class="uto-cg-ops-sm" />
+                                    </colgroup>
                                     <thead>
                                         <tr>
-                                            <th>股票代码</th>
-                                            <th>名称</th>
-                                            <th>来源</th>
-                                            <th>状态</th>
-                                            <th>入场价</th>
-                                            <th>仓位/手数</th>
-                                            <th>盈亏%</th>
-                                            <th>入场时间</th>
-                                            <th>操作</th>
+                                            <th class="uto-col-code">代码</th>
+                                            <th class="uto-col-name">名称</th>
+                                            <th class="uto-col-source">来源</th>
+                                            <th class="uto-col-status">状态</th>
+                                            <th class="uto-col-num">入场价</th>
+                                            <th class="uto-col-num">出场价</th>
+                                            <th class="uto-col-num">手数</th>
+                                            <th class="uto-col-num">盈亏%</th>
+                                            <th class="uto-col-date">信号日</th>
+                                            <th class="uto-col-datetime">入场时间</th>
+                                            <th class="uto-col-ops">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody id="utoFormalTableBody">
-                                        <tr><td colspan="9" class="empty-state">点击「刷新」加载正式交易</td></tr>
+                                        <tr><td colspan="11" class="empty-state">点击「刷新」加载正式交易</td></tr>
                                     </tbody>
                                 </table>
                             </div>
