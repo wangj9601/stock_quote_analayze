@@ -1639,14 +1639,21 @@
     white-space: nowrap;
 }
 
-/* GMS：代码列点击进入详情（原「详情」链接已移除） */
-#resultsContainer-gms a.gms-stock-code-link {
-    text-decoration: none;
+/*
+ * 股票代码链接：默认与悬停均无下划线。
+ * 注意：URT/GMS「交易观察」「正式交易」不在 #resultsContainer-* 内
+ *（在 #*-sub-trade-observe-wrap / #*-sub-formal-trade-wrap），
+ * 故不能只绑 #resultsContainer-urt / #resultsContainer-gms。
+ */
+.results-table a.stock-code,
+a.gms-stock-code-link {
+    text-decoration: none !important;
     cursor: pointer;
 }
 
-#resultsContainer-gms a.gms-stock-code-link:hover {
-    text-decoration: underline;
+.results-table a.stock-code:hover,
+a.gms-stock-code-link:hover {
+    text-decoration: none !important;
     color: #0d47a1;
 }
 

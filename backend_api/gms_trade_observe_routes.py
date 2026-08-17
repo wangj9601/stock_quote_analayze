@@ -1,29 +1,28 @@
 """
-用户 GMS 交易观察股：网站选股页「交易观察」加入 / 列表 / 移除。
+用户 GMS 交易观察股：薄封装，读写走统一 trade_observe_service（source=gms）。
+响应形状保持旧前端兼容（key_focus_flag / latest_close_* 来自 extra_json）。
 """
 
 from __future__ import annotations
 
-import threading
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.permissions import require_permission
 from backend_api.models import (
-    GmsFormalTrade,
-    GmsTradeObserveHistory,
-    GmsTradeObserveStock,
     StockBasicInfo,
     StockBasicInfoHK,
+    TradeObserveHistory,
+    TradeObserveStock,
     User,
 )
+from backend_api import trade_observe_service as svc
 from backend_api.utils.latest_close_lookup import batch_lookup_latest_closes
 from backend_api.services.gms_audit_service import write_gms_audit
 from backend_core.strategies.gms.trade_price_plan import (
@@ -33,83 +32,49 @@ from backend_core.strategies.gms.trade_price_plan import (
 from backend_api.utils.industry_board_query import (
     batch_industry_board_names_by_stock_codes,
     clean_industry_display_text,
-    normalize_industry_text,
 )
 from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
 
 router = APIRouter(prefix="/api/stock/gms-trade-observe", tags=["gms-trade-observe"])
 
+SOURCE = svc.SOURCE_GMS
 _DEFAULT_WATCH_THRESHOLD = 60.0
-_key_focus_schema_lock = threading.Lock()
-_key_focus_schema_ensured = False
-_latest_price_schema_lock = threading.Lock()
-_latest_price_schema_ensured = False
 
 
 def ensure_gms_trade_observe_key_focus_column(db: Session) -> None:
-    """确保 gms_trade_observe_stocks 存在 key_focus_flag 列（PostgreSQL 生产库）。"""
-    global _key_focus_schema_ensured
-    if _key_focus_schema_ensured:
-        return
-    with _key_focus_schema_lock:
-        if _key_focus_schema_ensured:
-            return
-        bind = db.get_bind()
-        if bind is not None and bind.dialect.name == "postgresql":
-            db.execute(
-                text(
-                    """
-                    ALTER TABLE gms_trade_observe_stocks
-                    ADD COLUMN IF NOT EXISTS key_focus_flag BOOLEAN NOT NULL DEFAULT FALSE
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    CREATE INDEX IF NOT EXISTS ix_gms_trade_observe_key_focus_flag
-                    ON gms_trade_observe_stocks (user_id, key_focus_flag)
-                    """
-                )
-            )
-            db.commit()
-        _key_focus_schema_ensured = True
+    """兼容旧调用：统一表后 key_focus 存 extra_json，无需改列。"""
+    _ = db
 
 
 def ensure_gms_trade_observe_latest_price_columns(db: Session) -> None:
-    """确保 gms_trade_observe_stocks 存在 latest_close_price / latest_close_date 列。"""
-    global _latest_price_schema_ensured
-    if _latest_price_schema_ensured:
-        return
-    with _latest_price_schema_lock:
-        if _latest_price_schema_ensured:
-            return
-        bind = db.get_bind()
-        if bind is not None and bind.dialect.name == "postgresql":
-            db.execute(
-                text(
-                    """
-                    ALTER TABLE gms_trade_observe_stocks
-                    ADD COLUMN IF NOT EXISTS latest_close_price DOUBLE PRECISION
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    ALTER TABLE gms_trade_observe_stocks
-                    ADD COLUMN IF NOT EXISTS latest_close_date DATE
-                    """
-                )
-            )
-            db.commit()
-        _latest_price_schema_ensured = True
+    """兼容旧调用：统一表后最新价存 extra_json，无需改列。"""
+    _ = db
 
 
 def ensure_gms_trade_observe_schema(db: Session) -> None:
-    """交易观察表 ORM 依赖列（key_focus、最新收盘价）一次性补齐。"""
-    ensure_gms_trade_observe_key_focus_column(db)
-    ensure_gms_trade_observe_latest_price_columns(db)
+    """兼容旧调用：统一表无需补齐旧列。"""
+    _ = db
+
+
+def _extra_dict(row: TradeObserveStock) -> Dict[str, Any]:
+    return dict(row.extra_json) if isinstance(row.extra_json, dict) else {}
+
+
+def _extra_bool(row: TradeObserveStock, key: str, default: bool = False) -> bool:
+    extra = _extra_dict(row)
+    if key not in extra:
+        return default
+    return bool(extra.get(key))
+
+
+def _extra_float(row: TradeObserveStock, key: str) -> Optional[float]:
+    raw = _extra_dict(row).get(key)
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def _score_total_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[float]:
@@ -165,22 +130,11 @@ def resolve_key_focus_display(
 
 
 def _normalize_market(market: Optional[str], code: str) -> str:
-    m = (market or "").strip().upper()
-    if m in ("CN", "HK"):
-        return m
-    c = str(code or "").strip()
-    if len(c) == 5 and c.isdigit():
-        return "HK"
-    return "CN"
+    return svc.normalize_market(market, code)
 
 
 def _normalize_code(code: str) -> str:
-    c = str(code or "").strip()
-    if len(c) == 5 and c.isdigit():
-        return c.zfill(5)
-    if c.isdigit() and len(c) <= 6:
-        return c.zfill(6)
-    return c
+    return svc.normalize_code(code)
 
 
 class GmsTradeObserveAddRequest(BaseModel):
@@ -273,13 +227,22 @@ def _format_stored_quote_date(raw: Any) -> Optional[str]:
 
 
 def _apply_latest_close_to_row(
-    row: GmsTradeObserveStock,
+    row: TradeObserveStock,
     *,
     close_price: Optional[float],
     close_date: Optional[str],
 ) -> None:
-    row.latest_close_price = float(close_price) if close_price is not None else None
-    row.latest_close_date = _parse_quote_date_optional(close_date)
+    patch: Dict[str, Any] = {
+        "latest_close_price": float(close_price) if close_price is not None else None,
+        "latest_close_date": (
+            _parse_quote_date_optional(close_date).isoformat()
+            if _parse_quote_date_optional(close_date)
+            else None
+        ),
+    }
+    extra = _extra_dict(row)
+    extra.update(patch)
+    row.extra_json = extra
 
 
 def _resolve_signal_date_str(
@@ -320,45 +283,14 @@ def _signal_date_from_body(body: GmsTradeObserveAddRequest) -> Optional[date]:
     return None
 
 
-def _observe_row_key(row: GmsTradeObserveStock) -> tuple[str, str]:
+def _observe_row_key(row: TradeObserveStock) -> tuple[str, str]:
     market = (row.market or "CN").upper()
     return market, _normalize_code(row.code)
 
 
-def _formal_trade_keys_for_user(db: Session, user_id: int) -> set[tuple[str, str]]:
-    rows = (
-        db.query(GmsFormalTrade.market, GmsFormalTrade.code)
-        .filter(GmsFormalTrade.user_id == user_id)
-        .all()
-    )
-    return {
-        ((m or "CN").upper(), _normalize_code(c))
-        for m, c in rows
-        if c
-    }
-
-
 def _purge_observe_rows_already_formal_traded(db: Session, user_id: int) -> int:
     """已转入正式交易但观察记录仍残留时，归档并删除（兼容历史数据）。"""
-    ensure_gms_trade_observe_schema(db)
-    formal_keys = _formal_trade_keys_for_user(db, user_id)
-    if not formal_keys:
-        return 0
-    rows = (
-        db.query(GmsTradeObserveStock)
-        .filter(GmsTradeObserveStock.user_id == user_id)
-        .all()
-    )
-    removed = 0
-    now = datetime.now()
-    for row in rows:
-        if _observe_row_key(row) in formal_keys:
-            _archive_trade_observe_row(db, row, removed_at=now)
-            db.delete(row)
-            removed += 1
-    if removed:
-        db.commit()
-    return removed
+    return svc.purge_observe_already_formal(db, user_id, source=SOURCE)
 
 
 def _industry_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -373,7 +305,7 @@ def _industry_from_snapshot(snapshot: Optional[Dict[str, Any]]) -> Optional[str]
 
 
 def _batch_resolve_industries(
-    db: Session, rows: List[GmsTradeObserveStock]
+    db: Session, rows: List[TradeObserveStock]
 ) -> Dict[tuple[str, str], str]:
     """批量解析观察股所属行业：snapshot → 基础信息表 → 行业板块成分。"""
     out: Dict[tuple[str, str], str] = {}
@@ -458,7 +390,7 @@ def batch_resolve_industries_by_pairs(
 
 def _price_plan_for_row(
     db: Session,
-    r: GmsTradeObserveStock,
+    r: TradeObserveStock,
     snap: Optional[Dict[str, Any]],
     *,
     recompute: bool = True,
@@ -488,7 +420,7 @@ def _price_plan_for_row(
 
 def _row_to_item(
     db: Session,
-    r: GmsTradeObserveStock,
+    r: TradeObserveStock,
     *,
     industry: Optional[str] = None,
     recompute_price_plan: bool = True,
@@ -496,12 +428,13 @@ def _row_to_item(
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     sd = _resolve_signal_date_str(r.signal_date, snap)
     resolved_industry = industry or _industry_from_snapshot(snap)
-    key_focus_flag = bool(getattr(r, "key_focus_flag", False))
+    key_focus_flag = _extra_bool(r, "key_focus_flag", False)
     show_focus, manual_focus, score_total, watch_th = resolve_key_focus_display(
         key_focus_flag=key_focus_flag,
         snapshot=snap,
     )
     auto_focus = show_focus and not manual_focus
+    latest_close_date_raw = _extra_dict(r).get("latest_close_date")
     return GmsTradeObserveItem(
         id=r.id,
         market=r.market or "CN",
@@ -516,8 +449,8 @@ def _row_to_item(
         key_focus_auto=auto_focus,
         score_total=score_total,
         watch_threshold=watch_th,
-        latest_close_price=getattr(r, "latest_close_price", None),
-        latest_close_date=_format_stored_quote_date(getattr(r, "latest_close_date", None)),
+        latest_close_price=_extra_float(r, "latest_close_price"),
+        latest_close_date=_format_stored_quote_date(latest_close_date_raw),
         created_at=r.created_at.isoformat() if r.created_at else "",
         updated_at=r.updated_at.isoformat() if r.updated_at else "",
     )
@@ -525,19 +458,21 @@ def _row_to_item(
 
 def _archive_trade_observe_row(
     db: Session,
-    row: GmsTradeObserveStock,
+    row: TradeObserveStock,
     *,
     removed_at: Optional[datetime] = None,
-) -> GmsTradeObserveHistory:
-    """将当前观察记录写入历史表后由调用方删除原记录。"""
+) -> TradeObserveHistory:
+    """将当前观察记录写入统一历史表后由调用方删除原记录。"""
     now = removed_at or datetime.now()
-    hist = GmsTradeObserveHistory(
+    hist = TradeObserveHistory(
         user_id=row.user_id,
         market=row.market,
         code=row.code,
         name=row.name,
+        source=row.source or SOURCE,
         signal_snapshot_json=row.signal_snapshot_json,
         signal_date=row.signal_date,
+        extra_json=row.extra_json,
         observe_created_at=row.created_at,
         observe_updated_at=row.updated_at,
         source_observe_id=row.id,
@@ -547,7 +482,7 @@ def _archive_trade_observe_row(
     return hist
 
 
-def _history_row_to_item(r: GmsTradeObserveHistory) -> GmsTradeObserveHistoryItem:
+def _history_row_to_item(r: TradeObserveHistory) -> GmsTradeObserveHistoryItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     sd = _resolve_signal_date_str(r.signal_date, snap)
     return GmsTradeObserveHistoryItem(
@@ -573,20 +508,21 @@ def list_gms_trade_observe(
 ):
     page = max(1, int(page))
     page_size = min(500, max(1, int(page_size)))
-    ensure_gms_trade_observe_schema(db)
     _purge_observe_rows_already_formal_traded(db, user.id)
-    q = db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.user_id == user.id)
-    total = q.count()
-    rows = (
-        q.order_by(
-            GmsTradeObserveStock.key_focus_flag.desc(),
-            GmsTradeObserveStock.updated_at.desc(),
-            GmsTradeObserveStock.code,
-        )
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    # 取较多记录后按重点关注排序，保持旧前端体验
+    total, all_rows = svc.list_observe(
+        db, user.id, source=SOURCE, page=1, page_size=500
     )
+    all_rows = sorted(
+        all_rows,
+        key=lambda r: (
+            not _extra_bool(r, "key_focus_flag", False),
+            -(r.updated_at.timestamp() if r.updated_at else 0),
+            r.code or "",
+        ),
+    )
+    start = (page - 1) * page_size
+    rows = all_rows[start : start + page_size]
     industries = _batch_resolve_industries(db, rows)
     return GmsTradeObserveListResponse(
         total=total,
@@ -607,16 +543,7 @@ def list_gms_trade_observe(
 def list_user_trade_observe_code_keys(db: Session, user_id: int) -> List[str]:
     """当前用户交易观察 code 键（CN:000001，code 已归一化），供信号列表按钮态。"""
     _purge_observe_rows_already_formal_traded(db, user_id)
-    rows = (
-        db.query(GmsTradeObserveStock.market, GmsTradeObserveStock.code)
-        .filter(GmsTradeObserveStock.user_id == user_id)
-        .all()
-    )
-    return [
-        f"{(m or 'CN').upper()}:{_normalize_code(c)}"
-        for m, c in rows
-        if c
-    ]
+    return svc.list_observe_codes(db, user_id, source=SOURCE)
 
 
 @router.get("/codes", response_model=List[str])
@@ -635,7 +562,6 @@ def add_gms_trade_observe(
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.screening.tab.gms.btn.refresh")),
 ):
-    ensure_gms_trade_observe_schema(db)
     code = _normalize_code(body.code)
     if not code:
         raise HTTPException(status_code=400, detail="股票代码无效")
@@ -646,17 +572,6 @@ def add_gms_trade_observe(
             status_code=400,
             detail="缺少 signal_date：请传入信号对应交易日（与 GMS 筛选基准日一致）",
         )
-
-    existing = (
-        db.query(GmsTradeObserveStock)
-        .filter(
-            GmsTradeObserveStock.user_id == user.id,
-            GmsTradeObserveStock.market == market,
-            GmsTradeObserveStock.code == code,
-        )
-        .first()
-    )
-    now = datetime.now()
 
     from backend_api.services.gms_strategy_watchlist import ensure_gms_strategy_watchlist_stock
 
@@ -670,36 +585,18 @@ def add_gms_trade_observe(
         signal_date=sig_date,
     )
     focus_flag = False if body.key_focus_flag is None else bool(body.key_focus_flag)
-
-    if existing:
-        existing.name = body.name or existing.name
-        existing.signal_snapshot_json = snapshot_with_plan
-        existing.signal_date = sig_date
-        existing.key_focus_flag = focus_flag
-        existing.updated_at = now
-        db.commit()
-        db.refresh(existing)
-        industries = _batch_resolve_industries(db, [existing])
-        return _row_to_item(
-            db,
-            existing,
-            industry=industries.get(_observe_row_key(existing)),
-        )
-
-    row = GmsTradeObserveStock(
-        user_id=user.id,
-        market=market,
+    row = svc.add_observe(
+        db,
+        user,
+        source=SOURCE,
         code=code,
+        market=market,
         name=body.name,
-        signal_snapshot_json=snapshot_with_plan,
         signal_date=sig_date,
-        key_focus_flag=focus_flag,
-        created_at=now,
-        updated_at=now,
+        snapshot=snapshot_with_plan,
+        extra={"key_focus_flag": focus_flag},
+        require_signal_date=True,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
     write_gms_audit(
         db,
         "gms_trade_observe_add",
@@ -720,26 +617,22 @@ def get_gms_trade_observe_latest_price(
     db: Session = Depends(get_db),
 ):
     """按需查询单条观察股最新价格（实时行情优先，历史行情兜底），并写入观察记录。"""
-    ensure_gms_trade_observe_schema(db)
-    row = (
-        db.query(GmsTradeObserveStock)
-        .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
-        .first()
-    )
+    row = svc.get_observe(db, user.id, item_id, source=SOURCE)
     if not row:
         raise HTTPException(status_code=404, detail="记录不存在")
     key = _observe_row_key(row)
     latest = batch_lookup_latest_closes(db, [key]).get(key, (None, None))
     close_price, close_date = latest
     _apply_latest_close_to_row(row, close_price=close_price, close_date=close_date)
+    row.updated_at = datetime.now()
     db.commit()
     db.refresh(row)
     return GmsTradeObserveLatestPriceResponse(
         id=row.id,
         market=row.market or "CN",
         code=row.code,
-        latest_close_price=row.latest_close_price,
-        latest_close_date=_format_stored_quote_date(row.latest_close_date),
+        latest_close_price=_extra_float(row, "latest_close_price"),
+        latest_close_date=_format_stored_quote_date(_extra_dict(row).get("latest_close_date")),
     )
 
 
@@ -749,13 +642,8 @@ def get_gms_trade_observe_price_plan(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ensure_gms_trade_observe_schema(db)
     """刷新单条观察股交易价格计划。"""
-    row = (
-        db.query(GmsTradeObserveStock)
-        .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
-        .first()
-    )
+    row = svc.get_observe(db, user.id, item_id, source=SOURCE)
     if not row:
         raise HTTPException(status_code=404, detail="记录不存在")
     if row.signal_date is None:
@@ -784,18 +672,10 @@ def set_gms_trade_observe_key_focus(
     db: Session = Depends(get_db),
 ):
     """切换交易观察股「重点关注」标记。"""
-    ensure_gms_trade_observe_schema(db)
-    row = (
-        db.query(GmsTradeObserveStock)
-        .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
-        .first()
-    )
+    row = svc.get_observe(db, user.id, item_id, source=SOURCE)
     if not row:
         raise HTTPException(status_code=404, detail="记录不存在")
-    row.key_focus_flag = bool(body.key_focus_flag)
-    row.updated_at = datetime.now()
-    db.commit()
-    db.refresh(row)
+    svc.update_observe_extra(db, row, {"key_focus_flag": bool(body.key_focus_flag)})
     industries = _batch_resolve_industries(db, [row])
     return _row_to_item(
         db,
@@ -813,20 +693,13 @@ def list_gms_trade_observe_history(
     db: Session = Depends(get_db),
 ):
     """已移出交易观察的归档列表。"""
-    page = max(1, int(page))
-    page_size = min(500, max(1, int(page_size)))
-    q = db.query(GmsTradeObserveHistory).filter(GmsTradeObserveHistory.user_id == user.id)
-    total = q.count()
-    rows = (
-        q.order_by(GmsTradeObserveHistory.removed_at.desc(), GmsTradeObserveHistory.code)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    total, rows = svc.list_history(
+        db, user.id, source=SOURCE, page=page, page_size=page_size
     )
     return GmsTradeObserveHistoryListResponse(
         total=total,
-        page=page,
-        page_size=page_size,
+        page=max(1, int(page)),
+        page_size=min(500, max(1, int(page_size))),
         items=[_history_row_to_item(r) for r in rows],
     )
 
@@ -838,22 +711,15 @@ def remove_gms_trade_observe(
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.screening.tab.gms.btn.refresh")),
 ):
-    ensure_gms_trade_observe_schema(db)
-    row = (
-        db.query(GmsTradeObserveStock)
-        .filter(GmsTradeObserveStock.id == item_id, GmsTradeObserveStock.user_id == user.id)
-        .first()
-    )
+    row = svc.get_observe(db, user.id, item_id, source=SOURCE)
     if not row:
         raise HTTPException(status_code=404, detail="记录不存在")
-    hist = _archive_trade_observe_row(db, row)
-    db.delete(row)
-    db.commit()
-    db.refresh(hist)
+    code, market = row.code, row.market
+    hist = svc.remove_observe(db, user, item_id, source=SOURCE)
     write_gms_audit(
         db,
         "gms_trade_observe_remove",
-        {"user_id": user.id, "code": row.code, "market": row.market, "history_id": hist.id},
+        {"user_id": user.id, "code": code, "market": market, "history_id": hist.id},
     )
     return {
         "success": True,

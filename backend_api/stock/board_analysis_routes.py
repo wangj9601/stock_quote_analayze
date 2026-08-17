@@ -333,86 +333,48 @@ def add_board_signal_observe(
 
 
 def _add_gms(db, user, code, name, market, sig_date, snap):
-    from backend_api.gms_trade_observe_routes import (
-        attach_price_plan_to_snapshot,
-        ensure_gms_trade_observe_schema,
-    )
-    from backend_api.models import GmsTradeObserveStock
+    from backend_api.gms_trade_observe_routes import attach_price_plan_to_snapshot
     from backend_api.services.gms_strategy_watchlist import ensure_gms_strategy_watchlist_stock
+    from backend_api import trade_observe_service as svc
 
-    ensure_gms_trade_observe_schema(db)
     ensure_gms_strategy_watchlist_stock(db, market=market, code=code, name=name)
     snapshot_with_plan = attach_price_plan_to_snapshot(
         db, snap, market=market, code=code, signal_date=sig_date
     )
-    now = datetime.now()
-    existing = (
-        db.query(GmsTradeObserveStock)
-        .filter(
-            GmsTradeObserveStock.user_id == user.id,
-            GmsTradeObserveStock.market == market,
-            GmsTradeObserveStock.code == code,
-        )
-        .first()
-    )
-    if existing:
-        existing.name = name or existing.name
-        existing.signal_snapshot_json = snapshot_with_plan
-        existing.signal_date = sig_date
-        existing.updated_at = now
-        db.commit()
-        return {"success": True, "id": existing.id, "duplicated": True, "strategy": "gms"}
-    row = GmsTradeObserveStock(
-        user_id=user.id,
-        market=market,
+    before_codes = set(svc.list_observe_codes(db, user.id, source=svc.SOURCE_GMS))
+    row = svc.add_observe(
+        db,
+        user,
+        source=svc.SOURCE_GMS,
         code=code,
+        market=market,
         name=name,
-        signal_snapshot_json=snapshot_with_plan,
         signal_date=sig_date,
-        key_focus_flag=False,
-        created_at=now,
-        updated_at=now,
+        snapshot=snapshot_with_plan,
+        extra={"key_focus_flag": False},
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"success": True, "id": row.id, "strategy": "gms"}
+    key = svc.code_key(market, code)
+    duplicated = key in before_codes
+    return {"success": True, "id": row.id, "duplicated": duplicated, "strategy": "gms"}
 
 
 def _add_urt(db, user, code, name, market, sig_date, snap):
-    from backend_api.models import UrtTradeObserveStock
+    from backend_api import trade_observe_service as svc
 
-    now = datetime.now()
-    existing = (
-        db.query(UrtTradeObserveStock)
-        .filter(
-            UrtTradeObserveStock.user_id == user.id,
-            UrtTradeObserveStock.market == market,
-            UrtTradeObserveStock.code == code,
-        )
-        .first()
-    )
-    if existing:
-        existing.name = name or existing.name
-        existing.signal_snapshot_json = snap
-        existing.signal_date = sig_date
-        existing.updated_at = now
-        db.commit()
-        return {"success": True, "id": existing.id, "duplicated": True, "strategy": "urt"}
-    row = UrtTradeObserveStock(
-        user_id=user.id,
-        market=market,
+    before_codes = set(svc.list_observe_codes(db, user.id, source=svc.SOURCE_URT))
+    row = svc.add_observe(
+        db,
+        user,
+        source=svc.SOURCE_URT,
         code=code,
+        market=market,
         name=name,
-        signal_snapshot_json=snap,
         signal_date=sig_date,
-        created_at=now,
-        updated_at=now,
+        snapshot=snap,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"success": True, "id": row.id, "strategy": "urt"}
+    key = svc.code_key(market, code)
+    duplicated = key in before_codes
+    return {"success": True, "id": row.id, "duplicated": duplicated, "strategy": "urt"}
 
 
 def _add_sbbr(db, user, code, name, market, sig_date, snap):

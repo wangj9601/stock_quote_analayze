@@ -17,9 +17,9 @@ from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.gms_trade_observe_routes import router
 from backend_api.models import (
-    GmsFormalTrade,
-    GmsTradeObserveHistory,
-    GmsTradeObserveStock,
+    FormalTrade,
+    TradeObserveHistory,
+    TradeObserveStock,
     GMSStrategyVersion,
     GMSStrategyVersionStock,
     HistoricalQuotes,
@@ -36,9 +36,9 @@ def memory_db():
         poolclass=StaticPool,
     )
     User.__table__.create(bind=engine)
-    GmsTradeObserveStock.__table__.create(bind=engine)
-    GmsTradeObserveHistory.__table__.create(bind=engine)
-    GmsFormalTrade.__table__.create(bind=engine)
+    TradeObserveStock.__table__.create(bind=engine)
+    TradeObserveHistory.__table__.create(bind=engine)
+    FormalTrade.__table__.create(bind=engine)
     GMSStrategyVersion.__table__.create(bind=engine)
     GMSStrategyVersionStock.__table__.create(bind=engine)
     StockBasicInfo.__table__.create(bind=engine)
@@ -69,7 +69,7 @@ def test_user(memory_db):
 
 
 @pytest.fixture
-def client(memory_db, test_user):
+def client(memory_db, test_user, monkeypatch):
     app = FastAPI()
     app.include_router(router)
 
@@ -81,6 +81,11 @@ def client(memory_db, test_user):
 
     def override_user():
         return test_user
+
+    monkeypatch.setattr(
+        "backend_api.permissions.user_has_permission",
+        lambda db, user, code: True,
+    )
 
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_current_user] = override_user
@@ -261,11 +266,12 @@ def test_latest_price_endpoint(client, memory_db, test_user):
             close=1720.5,
         )
     )
-    observe = GmsTradeObserveStock(
+    observe = TradeObserveStock(
         user_id=test_user.id,
         market="CN",
         code="600519",
         name="贵州茅台",
+        source="gms",
         signal_date=date(2026, 6, 24),
         signal_snapshot_json={"signal_strength": 0.7},
         created_at=datetime.now(),
@@ -287,8 +293,8 @@ def test_latest_price_endpoint(client, memory_db, test_user):
     assert body["latest_close_date"] == "2026-06-24"
 
     memory_db.refresh(observe)
-    assert observe.latest_close_price == 1720.5
-    assert str(observe.latest_close_date) == "2026-06-24"
+    assert (observe.extra_json or {}).get("latest_close_price") == 1720.5
+    assert str((observe.extra_json or {}).get("latest_close_date")) == "2026-06-24"
 
     lst2 = client.get("/api/stock/gms-trade-observe/list")
     assert lst2.status_code == 200
@@ -308,7 +314,7 @@ def test_latest_price_endpoint(client, memory_db, test_user):
     assert res2.status_code == 200
     assert res2.json()["latest_close_price"] == 1755.0
     memory_db.refresh(observe)
-    assert observe.latest_close_price == 1755.0
+    assert (observe.extra_json or {}).get("latest_close_price") == 1755.0
 
 
 def test_snapshot_meets_watch_threshold_helper():
@@ -320,11 +326,12 @@ def test_snapshot_meets_watch_threshold_helper():
 
 
 def test_list_signal_date_from_snapshot(memory_db, test_user):
-    row = GmsTradeObserveStock(
+    row = TradeObserveStock(
         user_id=test_user.id,
         market="CN",
         code="600519",
         name="贵州茅台",
+        source="gms",
         signal_date=None,
         signal_snapshot_json={"signal_date": "2026-05-15", "buy_type": "左侧"},
         created_at=datetime(2026, 5, 19, 10, 0, 0),
@@ -340,11 +347,12 @@ def test_list_signal_date_from_snapshot(memory_db, test_user):
 
 def test_list_purges_observe_when_formal_trade_exists(client, memory_db, test_user):
     """历史遗留：已有正式交易但观察未删时，列表应自动清理。"""
-    observe = GmsTradeObserveStock(
+    observe = TradeObserveStock(
         user_id=test_user.id,
         market="CN",
         code="603226",
         name="菲林格尔",
+        source="gms",
         signal_date=date(2026, 6, 24),
         signal_snapshot_json={"signal_strength": 0.7},
         created_at=datetime.now(),
@@ -352,11 +360,12 @@ def test_list_purges_observe_when_formal_trade_exists(client, memory_db, test_us
     )
     memory_db.add(observe)
     memory_db.add(
-        GmsFormalTrade(
+        FormalTrade(
             user_id=test_user.id,
             market="CN",
             code="603226",
             name="菲林格尔",
+            source="gms",
             source_observe_id=999,
             entry_price=52.64,
             position_lots=1,
@@ -371,5 +380,5 @@ def test_list_purges_observe_when_formal_trade_exists(client, memory_db, test_us
     lst = client.get("/api/stock/gms-trade-observe/list")
     assert lst.status_code == 200
     assert lst.json()["total"] == 0
-    assert memory_db.query(GmsTradeObserveStock).count() == 0
-    assert memory_db.query(GmsTradeObserveHistory).count() == 1
+    assert memory_db.query(TradeObserveStock).count() == 0
+    assert memory_db.query(TradeObserveHistory).count() == 1

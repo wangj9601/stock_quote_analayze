@@ -55,6 +55,8 @@ async function smartFetch(url, options = {}) {
         '/api/stock/triple-volume-trade-observe',
         '/api/stock/gms-trade-observe',
         '/api/stock/gms-formal-trade',
+        '/api/stock/trade-observe',
+        '/api/stock/formal-trade',
         '/api/stock/urt-trade-observe',
         '/api/stock/urt-formal-trade',
         '/api/stock/vsb-observe-stocks'

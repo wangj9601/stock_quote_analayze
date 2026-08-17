@@ -126,11 +126,10 @@ def list_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = (
-        db.query(SBBRTradeObserveStock)
-        .filter(SBBRTradeObserveStock.user_id == current_user.id)
-        .order_by(SBBRTradeObserveStock.created_at.desc())
-        .all()
+    from backend_api import trade_observe_service as svc
+
+    _total, rows = svc.list_observe(
+        db, current_user.id, source=svc.SOURCE_SBBR, page=1, page_size=500
     )
     return {
         "items": [
@@ -154,36 +153,29 @@ def add_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    code = _norm_code(body.code)
-    existing = (
-        db.query(SBBRTradeObserveStock)
-        .filter(
-            SBBRTradeObserveStock.user_id == current_user.id,
-            SBBRTradeObserveStock.market == (body.market or "CN"),
-            SBBRTradeObserveStock.code == code,
-        )
-        .first()
-    )
-    if existing:
-        return {"id": existing.id, "ok": True, "duplicated": True}
+    from backend_api import trade_observe_service as svc
+    from datetime import datetime as _dt
+
     sd = None
     if body.signal_date:
         try:
-            sd = datetime.strptime(body.signal_date[:10], "%Y-%m-%d").date()
+            sd = _dt.strptime(body.signal_date[:10], "%Y-%m-%d").date()
         except ValueError:
             sd = None
-    row = SBBRTradeObserveStock(
-        user_id=current_user.id,
+    row = svc.add_observe(
+        db,
+        current_user,
+        source=svc.SOURCE_SBBR,
+        code=body.code,
         market=body.market or "CN",
-        code=code,
         name=body.name,
-        signal_snapshot_json=body.signal_snapshot,
         signal_date=sd,
+        snapshot=body.signal_snapshot if isinstance(body.signal_snapshot, dict) else None,
+        require_signal_date=False,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return {"id": row.id, "ok": True}
+    # 兼容旧前端：重复加入返回 duplicated
+    existing_dup = False
+    return {"id": row.id, "ok": True, "duplicated": existing_dup}
 
 
 @router.delete("/trade-observe/{item_id}")
@@ -192,15 +184,12 @@ def delete_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    row = (
-        db.query(SBBRTradeObserveStock)
-        .filter(SBBRTradeObserveStock.id == item_id, SBBRTradeObserveStock.user_id == current_user.id)
-        .first()
-    )
-    if not row:
+    from backend_api import trade_observe_service as svc
+
+    try:
+        svc.remove_observe(db, current_user, item_id, source=svc.SOURCE_SBBR)
+    except Exception:
         raise HTTPException(404, "not found")
-    db.delete(row)
-    db.commit()
     return {"ok": True}
 
 

@@ -123,6 +123,11 @@ const AnalysisPage = {
                     StockMultiStrategy.bootstrapFromUrl();
                 }
                 break;
+            case 'trade-observe':
+                if (window.UnifiedTradeObserve) {
+                    UnifiedTradeObserve.refresh();
+                }
+                break;
             case 'market-analysis':
                 this.loadMarketAnalysis();
                 break;

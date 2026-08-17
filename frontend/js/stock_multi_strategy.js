@@ -5,9 +5,11 @@ const StockMultiStrategy = {
     API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
     running: false,
     exporting: false,
+    observing: false,
     lastStrategy: null,
     lastStrategyError: null,
     lastStock: null,
+    lastTradeDate: null,
     lastLevels: null,
     lastPattern: null,
     lastSwing: null,
@@ -21,6 +23,10 @@ const StockMultiStrategy = {
         if (exportBtn) {
             exportBtn.addEventListener('click', () => this.exportPdf());
         }
+        const observeBtn = document.getElementById('ssaTradeObserveBtn');
+        if (observeBtn) {
+            observeBtn.addEventListener('click', () => this.addTradeObserve());
+        }
         const codeInput = document.getElementById('ssaStockCode');
         if (codeInput) {
             codeInput.addEventListener('keydown', (e) => {
@@ -29,15 +35,22 @@ const StockMultiStrategy = {
                     this.analyze();
                 }
             });
+            codeInput.addEventListener('input', () => this.updateTradeObserveBtn());
         }
         const watchSelect = document.getElementById('ssaWatchlist');
         if (watchSelect) {
             watchSelect.addEventListener('change', () => {
                 const val = (watchSelect.value || '').trim();
                 if (val && codeInput) codeInput.value = val;
+                this.updateTradeObserveBtn();
             });
         }
+        const dateEl = document.getElementById('ssaTradeDate');
+        if (dateEl) {
+            dateEl.addEventListener('change', () => this.updateTradeObserveBtn());
+        }
         this.updateExportBtn();
+        this.updateTradeObserveBtn();
         this.bindScrollFab();
     },
 
@@ -173,10 +186,18 @@ const StockMultiStrategy = {
         this.lastStrategy = null;
         this.lastStrategyError = null;
         this.lastStock = null;
+        this.lastTradeDate = null;
         this.lastLevels = null;
         this.lastPattern = null;
         this.lastSwing = null;
+        const observeBtn = document.getElementById('ssaTradeObserveBtn');
+        if (observeBtn) {
+            observeBtn.classList.remove('is-added');
+            delete observeBtn.dataset.observeCode;
+            observeBtn.textContent = '交易观察';
+        }
         this.updateExportBtn();
+        this.updateTradeObserveBtn();
     },
 
     hasExportableResult() {
@@ -189,6 +210,194 @@ const StockMultiStrategy = {
         if (btn) {
             btn.disabled = !ok || this.exporting;
             if (!this.exporting) btn.textContent = '导出 PDF';
+        }
+        this.updateTradeObserveBtn();
+    },
+
+    _normalizeObserveCode(raw) {
+        let c = String(raw || '').trim();
+        if (!c) return '';
+        if (/^(sh|sz|bj|hk)/i.test(c)) c = c.slice(2);
+        c = c.split(/[\s/|]/)[0].trim();
+        if (/^\d+$/.test(c) && c.length === 5) return c.padStart(5, '0');
+        if (/^\d+$/.test(c) && c.length <= 6) return c.padStart(6, '0');
+        return '';
+    },
+
+    _inferObserveMarket(code) {
+        const c = String(code || '').trim();
+        if (c.length === 5 && /^\d+$/.test(c)) return 'HK';
+        return 'CN';
+    },
+
+    _urtObserveKey(market, code) {
+        const m = (market || 'CN').toUpperCase();
+        const c = this._normalizeObserveCode(code);
+        return c ? `${m}:${c}` : `${m}:`;
+    },
+
+    resolveObserveStock() {
+        const fromLast = this.lastStock || {};
+        let code = this._normalizeObserveCode(fromLast.code);
+        let name = (fromLast.name || '').trim();
+        if (!code) {
+            const input = document.getElementById('ssaStockCode');
+            const query = ((input && input.value) || '').trim();
+            const firstToken = query.split(/\s+/)[0] || '';
+            code = this._normalizeObserveCode(firstToken);
+            if (code && query.length > firstToken.length) {
+                name = query.slice(firstToken.length).trim() || name;
+            }
+        }
+        if (!code) return null;
+        return {
+            code,
+            name: name || code,
+            market: this._inferObserveMarket(code),
+        };
+    },
+
+    resolveObserveSignalDate() {
+        const fromStrategy = this.lastStrategy && this.lastStrategy.trade_date
+            ? String(this.lastStrategy.trade_date).slice(0, 10)
+            : '';
+        if (fromStrategy) return fromStrategy;
+        if (this.lastTradeDate) return String(this.lastTradeDate).slice(0, 10);
+        const dateEl = document.getElementById('ssaTradeDate');
+        const asof = dateEl && dateEl.value ? String(dateEl.value).slice(0, 10) : '';
+        if (asof) return asof;
+        const swingAsof = this.lastSwing && this.lastSwing.asof
+            ? String(this.lastSwing.asof).slice(0, 10)
+            : '';
+        return swingAsof || '';
+    },
+
+    updateTradeObserveBtn() {
+        const btn = document.getElementById('ssaTradeObserveBtn');
+        if (!btn) return;
+        if (this.observing) {
+            btn.disabled = true;
+            return;
+        }
+        const stock = this.resolveObserveStock();
+        const ok = !!(stock && stock.code);
+        const markedCode = btn.dataset.observeCode || '';
+        if (btn.classList.contains('is-added')) {
+            if (stock && stock.code && markedCode && markedCode !== stock.code) {
+                btn.classList.remove('is-added');
+                delete btn.dataset.observeCode;
+                btn.textContent = '交易观察';
+                btn.disabled = !ok;
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = '已观察';
+            return;
+        }
+        btn.disabled = !ok;
+        btn.textContent = '交易观察';
+    },
+
+    async addTradeObserve() {
+        if (this.observing) return;
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        const stock = this.resolveObserveStock();
+        if (!stock || !stock.code) {
+            CommonUtils.showToast('请先输入有效的股票代码', 'warning');
+            const codeInput = document.getElementById('ssaStockCode');
+            if (codeInput) codeInput.focus();
+            return;
+        }
+        const signalDate = this.resolveObserveSignalDate();
+        if (!signalDate) {
+            CommonUtils.showToast('请先指定基准日，或先点击「分析」以确定交易日', 'warning');
+            const dateEl = document.getElementById('ssaTradeDate');
+            if (dateEl) dateEl.focus();
+            return;
+        }
+
+        const btn = document.getElementById('ssaTradeObserveBtn');
+        const key = this._urtObserveKey(stock.market, stock.code);
+        this.observing = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '加入中…';
+            btn.classList.remove('is-added');
+            delete btn.dataset.observeCode;
+        }
+
+        try {
+            const [obsRes, formalRes] = await Promise.all([
+                authFetch(`${this.API_BASE_URL}/api/stock/trade-observe/codes`),
+                authFetch(`${this.API_BASE_URL}/api/stock/formal-trade/codes`),
+            ]);
+            const obsCodes = obsRes.ok ? await obsRes.json().catch(() => []) : [];
+            const formalCodes = formalRes.ok ? await formalRes.json().catch(() => []) : [];
+            const obsSet = new Set(Array.isArray(obsCodes) ? obsCodes : []);
+            const formalSet = new Set(Array.isArray(formalCodes) ? formalCodes : []);
+            if (formalSet.has(key)) {
+                CommonUtils.showToast('该股票已在正式交易中', 'info');
+                if (btn) {
+                    btn.textContent = '已观察';
+                    btn.classList.add('is-added');
+                    btn.dataset.observeCode = stock.code;
+                    btn.disabled = true;
+                }
+                return;
+            }
+            if (obsSet.has(key)) {
+                CommonUtils.showToast('已在交易观察列表中', 'info');
+                if (btn) {
+                    btn.textContent = '已观察';
+                    btn.classList.add('is-added');
+                    btn.dataset.observeCode = stock.code;
+                    btn.disabled = true;
+                }
+                return;
+            }
+
+            const res = await authFetch(`${this.API_BASE_URL}/api/stock/trade-observe/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: stock.code,
+                    market: stock.market,
+                    name: stock.name || stock.code,
+                    signal_date: signalDate,
+                    source: 'stock_analysis',
+                    snapshot: {
+                        source: 'stock_ai',
+                        code: stock.code,
+                        name: stock.name || stock.code,
+                        signal_date: signalDate,
+                        trade_date: signalDate,
+                    },
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加入失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            CommonUtils.showToast(`已加入交易观察：${stock.name || stock.code}`, 'success');
+            if (btn) {
+                btn.textContent = '已观察';
+                btn.classList.add('is-added');
+                btn.dataset.observeCode = stock.code;
+                btn.disabled = true;
+            }
+        } catch (e) {
+            CommonUtils.showToast(e.message || '加入交易观察失败', 'error');
+            if (btn) {
+                btn.textContent = '交易观察';
+                btn.classList.remove('is-added');
+                delete btn.dataset.observeCode;
+            }
+        } finally {
+            this.observing = false;
+            if (btn && !btn.classList.contains('is-added')) {
+                this.updateTradeObserveBtn();
+            }
         }
     },
 
@@ -330,6 +539,7 @@ const StockMultiStrategy = {
             if (stock.code && codeInput) {
                 codeInput.value = stock.name ? `${stock.code} ${stock.name}` : stock.code;
             }
+            this.lastTradeDate = data.trade_date || asof || null;
             this.renderStrategyResult(data);
             if (empty) empty.hidden = true;
 
@@ -362,6 +572,13 @@ const StockMultiStrategy = {
                 this.lastStrategy = null;
                 this.lastStrategyError = e.message || '策略分析失败';
                 this.lastStock = { code: firstToken };
+                this.lastTradeDate = asofFallback || null;
+                const observeBtn = document.getElementById('ssaTradeObserveBtn');
+                if (observeBtn) {
+                    observeBtn.classList.remove('is-added');
+                    delete observeBtn.dataset.observeCode;
+                    observeBtn.textContent = '交易观察';
+                }
                 if (strategyBlock && strategyHost) {
                     strategyBlock.hidden = false;
                     strategyHost.innerHTML = `<div class="ssa-block-status is-error">${this.esc(e.message || '策略分析失败')}</div>`;
@@ -598,6 +815,13 @@ const StockMultiStrategy = {
         this.lastStrategy = data;
         this.lastStrategyError = null;
         this.lastStock = stock;
+        this.lastTradeDate = data.trade_date || null;
+        const observeBtn = document.getElementById('ssaTradeObserveBtn');
+        if (observeBtn) {
+            observeBtn.classList.remove('is-added');
+            delete observeBtn.dataset.observeCode;
+            observeBtn.textContent = '交易观察';
+        }
         if (meta) {
             meta.hidden = false;
             meta.innerHTML = `

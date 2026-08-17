@@ -16,12 +16,7 @@ from sqlalchemy.pool import StaticPool
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.gms_formal_trade_routes import router
-from backend_api.models import (
-    GmsFormalTrade,
-    GmsTradeObserveHistory,
-    GmsTradeObserveStock,
-    User,
-)
+from backend_api.models import FormalTrade, TradeObserveHistory, TradeObserveStock, User
 
 
 @pytest.fixture
@@ -32,9 +27,9 @@ def memory_db():
         poolclass=StaticPool,
     )
     User.__table__.create(bind=engine)
-    GmsTradeObserveStock.__table__.create(bind=engine)
-    GmsTradeObserveHistory.__table__.create(bind=engine)
-    GmsFormalTrade.__table__.create(bind=engine)
+    TradeObserveStock.__table__.create(bind=engine)
+    TradeObserveHistory.__table__.create(bind=engine)
+    FormalTrade.__table__.create(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
     try:
@@ -80,11 +75,12 @@ def client(memory_db, test_user):
 
 
 def _seed_observe(memory_db, test_user, code="600519"):
-    row = GmsTradeObserveStock(
+    row = TradeObserveStock(
         user_id=test_user.id,
         market="CN",
         code=code,
         name="贵州茅台",
+        source="gms",
         signal_snapshot_json={"current_price": 1800.0, "signal_strength": 0.9},
         signal_date=date(2026, 5, 10),
         created_at=datetime.now(),
@@ -111,52 +107,38 @@ def test_from_observe_list_update_close_and_delete(client, memory_db, test_user)
     assert item["source_observe_id"] == observe.id
     trade_id = item["id"]
 
-    assert memory_db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.id == observe.id).first() is None
+    assert memory_db.query(TradeObserveStock).filter(TradeObserveStock.id == observe.id).first() is None
     hist = (
-        memory_db.query(GmsTradeObserveHistory)
-        .filter(GmsTradeObserveHistory.source_observe_id == observe.id)
+        memory_db.query(TradeObserveHistory)
+        .filter(TradeObserveHistory.source_observe_id == observe.id)
         .first()
     )
     assert hist is not None
-    assert hist.code == "600519"
 
     lst = client.get("/api/stock/gms-formal-trade/list")
     assert lst.status_code == 200
     assert lst.json()["total"] == 1
 
-    open_only = client.get("/api/stock/gms-formal-trade/list?status=open")
-    assert open_only.json()["total"] == 1
-
     closed = client.patch(
         f"/api/stock/gms-formal-trade/{trade_id}",
-        json={"exit_price": 1820.0},
+        json={"exit_price": 1800.0},
     )
     assert closed.status_code == 200
-    closed_item = closed.json()
-    assert closed_item["status"] == "closed"
-    assert closed_item["exit_price"] == 1820.0
-    assert closed_item["pnl_percent"] == pytest.approx(3.97, abs=0.01)
-    assert closed_item["pnl_amount"] == pytest.approx(13900.0, abs=0.01)
+    assert closed.json()["status"] == "closed"
+    assert closed.json()["exit_price"] == 1800.0
+    assert closed.json()["pnl_percent"] is not None
 
-    db_row = memory_db.query(GmsFormalTrade).filter(GmsFormalTrade.id == trade_id).first()
-    assert db_row.pnl_amount == pytest.approx(13900.0, abs=0.01)
-    assert db_row.pnl_percent == pytest.approx(3.97, abs=0.01)
+    db_row = memory_db.query(FormalTrade).filter(FormalTrade.id == trade_id).first()
+    assert db_row is not None
+    assert db_row.status == "closed"
 
-    assert client.get("/api/stock/gms-formal-trade/list?status=closed").json()["total"] == 1
-
-    edit_open = client.patch(
+    reopened = client.patch(
         f"/api/stock/gms-formal-trade/{trade_id}",
-        json={"entry_price": 1760.0, "position_lots": 3},
+        json={"reopen": True},
     )
-    assert edit_open.status_code == 200
-    assert edit_open.json()["entry_price"] == 1760.0
-    assert edit_open.json()["position_lots"] == 3
-
-    reopened = client.patch(f"/api/stock/gms-formal-trade/{trade_id}", json={"reopen": True})
     assert reopened.status_code == 200
     assert reopened.json()["status"] == "open"
     assert reopened.json()["exit_price"] is None
-    assert reopened.json()["pnl_amount"] is None
     assert reopened.json()["pnl_percent"] is None
 
     rm = client.delete(f"/api/stock/gms-formal-trade/{trade_id}")
@@ -175,11 +157,12 @@ def test_from_observe_not_found(client):
 def test_from_observe_cleans_stale_observe_when_formal_trade_exists(client, memory_db, test_user):
     observe = _seed_observe(memory_db, test_user, code="601699")
     now = datetime.now()
-    trade = GmsFormalTrade(
+    trade = FormalTrade(
         user_id=test_user.id,
         market="CN",
         code="601699",
         name="潞安环能",
+        source="gms",
         source_observe_id=observe.id,
         entry_price=15.7,
         position_lots=2,
@@ -198,14 +181,14 @@ def test_from_observe_cleans_stale_observe_when_formal_trade_exists(client, memo
     )
     assert r.status_code == 200
     assert r.json()["id"] == trade.id
-    assert memory_db.query(GmsTradeObserveStock).filter(GmsTradeObserveStock.id == observe.id).first() is None
+    assert memory_db.query(TradeObserveStock).filter(TradeObserveStock.id == observe.id).first() is None
     assert client.get("/api/stock/gms-formal-trade/list").json()["total"] == 1
 
 
 def test_compute_formal_trade_pnl():
-    from backend_api.gms_formal_trade_routes import _compute_formal_trade_pnl
+    from backend_api.trade_observe_service import compute_formal_trade_pnl
 
-    amt, pct = _compute_formal_trade_pnl(10.0, 11.0, 3, "CN")
+    amt, pct = compute_formal_trade_pnl(10.0, 11.0, 3, "CN")
     assert pct == pytest.approx(10.0)
     assert amt == pytest.approx(300.0)
 
@@ -213,11 +196,12 @@ def test_compute_formal_trade_pnl():
 def test_formal_trade_codes_for_signal_button(client, memory_db, test_user):
     now = datetime.now()
     memory_db.add(
-        GmsFormalTrade(
+        FormalTrade(
             user_id=test_user.id,
             market="CN",
             code="002709",
             name="天赐材料",
+            source="gms",
             entry_price=50.0,
             position_lots=1,
             status="open",

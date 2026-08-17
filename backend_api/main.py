@@ -228,6 +228,20 @@ except ImportError as e:
     urt_formal_trade_router = None
 
 try:
+    from .trade_observe_routes import router as trade_observe_router
+    print("trade_observe_router 导入成功")
+except ImportError as e:
+    print(f"trade_observe_router 导入失败: {e}")
+    trade_observe_router = None
+
+try:
+    from .formal_trade_routes import router as formal_trade_router
+    print("formal_trade_router 导入成功")
+except ImportError as e:
+    print(f"formal_trade_router 导入失败: {e}")
+    formal_trade_router = None
+
+try:
     from .sbbr_routes import router as sbbr_router
     print("sbbr_router 导入成功")
 except ImportError as e:
@@ -656,6 +670,8 @@ _include_router(app, gms_trade_observe_router, "gms_trade_observe")
 _include_router(app, gms_formal_trade_router, "gms_formal_trade")
 _include_router(app, urt_trade_observe_router, "urt_trade_observe")
 _include_router(app, urt_formal_trade_router, "urt_formal_trade")
+_include_router(app, trade_observe_router, "trade_observe")
+_include_router(app, formal_trade_router, "formal_trade")
 _include_router(app, sbbr_router, "sbbr")
 _include_router(app, rpe_stock_router, "rpe_stock")
 _include_router(app, rpe_frontend_router, "rpe_frontend")

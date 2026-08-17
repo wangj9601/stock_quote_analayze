@@ -25,6 +25,7 @@
                     <button class="analysis-tab active" data-tab="board-analysis" data-perm="channel.analyze.tab.board">板块分析</button>
                     <button class="analysis-tab" data-tab="leader-mid" data-perm="channel.analyze.tab.leader_mid">龙头中军</button>
                     <button class="analysis-tab" data-tab="stock-ai" data-perm="channel.analyze.tab.stock_ai">个股分析</button>
+                    <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
                     <button class="analysis-tab" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
                     <button class="analysis-tab" data-tab="technical-tools" data-perm="channel.analyze.tab.technical">技术工具</button>
                     <button class="analysis-tab" data-tab="strategy" data-perm="channel.analyze.tab.strategy">投资策略</button>
@@ -123,6 +124,10 @@
                                             data-perm="channel.analyze.tab.stock_ai.btn.analyze"
                                             title="将当前策略、阻力支撑、形态识别与波段趋势导出为 PDF"
                                             disabled>导出 PDF</button>
+                                        <button type="button" class="btn btn-secondary" id="ssaTradeObserveBtn"
+                                            data-perm="channel.analyze.tab.trade_observe"
+                                            title="将当前分析股票加入统一交易观察（来源：个股分析）"
+                                            disabled>交易观察</button>
                                     </div>
                                 </div>
                             </div>
@@ -162,6 +167,77 @@
                     </div>
                     <div class="ssa-scroll-fab" id="ssaScrollFab" aria-label="页面快速滚动">
                         <button type="button" class="ssa-scroll-fab__btn" id="ssaScrollToggleBtn" title="直达底部">Bottom</button>
+                    </div>
+                </div>
+
+                <!-- 统一交易观察 / 正式交易 -->
+                <div class="tab-panel" id="trade-observe">
+                    <div class="uto-workbench" data-perm="channel.analyze.tab.trade_observe">
+                        <p class="uto-desc">汇总各策略与个股分析加入的交易观察 / 正式交易，可用来源筛选；股票代码点击进入个股分析。</p>
+                        <div class="uto-subtabs" role="tablist">
+                            <button type="button" class="uto-subtab active" data-uto-sub="observe">观察列表</button>
+                            <button type="button" class="uto-subtab" data-uto-sub="formal">正式交易</button>
+                        </div>
+                        <div class="uto-toolbar">
+                            <label class="uto-source-label">来源
+                                <select id="utoSourceFilter">
+                                    <option value="">全部</option>
+                                    <option value="gms">GMS</option>
+                                    <option value="urt">URT</option>
+                                    <option value="sbbr">SBBR</option>
+                                    <option value="rpe">RPE</option>
+                                    <option value="triple_volume">3倍量</option>
+                                    <option value="stock_analysis">个股分析</option>
+                                </select>
+                            </label>
+                            <button type="button" class="btn btn-primary" id="utoRefreshBtn">刷新</button>
+                            <span id="utoCount" class="uto-count"></span>
+                        </div>
+                        <div id="utoObserveWrap" class="uto-panel">
+                            <div id="utoObserveError" class="uto-error" hidden></div>
+                            <div id="utoObserveLoading" class="uto-loading" hidden>加载中…</div>
+                            <div class="results-table-wrap">
+                                <table class="results-table uto-table">
+                                    <thead>
+                                        <tr>
+                                            <th>股票代码</th>
+                                            <th>名称</th>
+                                            <th>来源</th>
+                                            <th>信号日</th>
+                                            <th>加入时间</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="utoObserveTableBody">
+                                        <tr><td colspan="6" class="empty-state">点击「刷新」加载观察列表</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div id="utoFormalWrap" class="uto-panel" hidden>
+                            <div id="utoFormalError" class="uto-error" hidden></div>
+                            <div id="utoFormalLoading" class="uto-loading" hidden>加载中…</div>
+                            <div class="results-table-wrap">
+                                <table class="results-table uto-table">
+                                    <thead>
+                                        <tr>
+                                            <th>股票代码</th>
+                                            <th>名称</th>
+                                            <th>来源</th>
+                                            <th>状态</th>
+                                            <th>入场价</th>
+                                            <th>仓位/手数</th>
+                                            <th>盈亏%</th>
+                                            <th>入场时间</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="utoFormalTableBody">
+                                        <tr><td colspan="9" class="empty-state">点击「刷新」加载正式交易</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -865,6 +941,7 @@
     <script src="js/market_structure_tool.js"></script>
     <script src="js/stock_analysis_pdf.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
+    <script src="js/trade_observe.js"></script>
     <script src="js/analysis.js"></script>
 </body>
 

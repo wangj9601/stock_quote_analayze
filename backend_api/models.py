@@ -2482,3 +2482,83 @@ class DblbSignalTrace(Base):
     __table_args__ = (
         UniqueConstraint("code", "trade_date", "config_id", name="uq_dblb_signal_trace_code_date_cfg"),
     )
+
+# ========== 统一交易观察 / 正式交易 ==========
+
+class TradeObserveStock(Base):
+    """统一交易观察股：多策略共用，以 source 区分来源。"""
+
+    __tablename__ = "trade_observe_stocks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    source = Column(String(32), nullable=False, index=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    extra_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="trade_observe_stocks")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "market", "code", "source",
+            name="uq_trade_observe_user_market_code_source",
+        ),
+    )
+
+
+class TradeObserveHistory(Base):
+    """统一交易观察移除归档。"""
+
+    __tablename__ = "trade_observe_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    source = Column(String(32), nullable=False, index=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    extra_json = Column(JSON, nullable=True)
+    observe_created_at = Column(DateTime, nullable=True)
+    observe_updated_at = Column(DateTime, nullable=True)
+    source_observe_id = Column(Integer, nullable=True)
+    removed_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("User", backref="trade_observe_history")
+
+
+class FormalTrade(Base):
+    """统一正式交易记录：多策略共用，以 source 区分来源。"""
+
+    __tablename__ = "formal_trades"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    market = Column(String(10), nullable=False, default="CN", index=True)
+    code = Column(String(20), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    source = Column(String(32), nullable=False, index=True)
+    source_observe_id = Column(Integer, nullable=True, index=True)
+    entry_price = Column(Float, nullable=False)
+    position_lots = Column(Integer, nullable=False, default=0)
+    exit_price = Column(Float, nullable=True)
+    status = Column(String(20), nullable=False, default="open", index=True)
+    signal_date = Column(Date, nullable=True, index=True)
+    signal_snapshot_json = Column(JSON, nullable=True)
+    notes = Column(Text, nullable=True)
+    entry_at = Column(DateTime, default=datetime.now, nullable=False)
+    exit_at = Column(DateTime, nullable=True)
+    pnl_amount = Column(Float, nullable=True)
+    pnl_percent = Column(Float, nullable=True)
+    extra_json = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", backref="formal_trades")

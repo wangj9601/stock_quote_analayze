@@ -13,8 +13,10 @@ from sqlalchemy.pool import StaticPool
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
-from backend_api.models import TripleVolumeTradeObserveStock, User
+from backend_api.models import TradeObserveHistory, TradeObserveStock, User
 from backend_api.triple_volume_trade_observe_routes import router
+from backend_api.permissions import require_permission
+from backend_api.auth import get_current_user
 
 
 @pytest.fixture
@@ -25,7 +27,8 @@ def memory_db():
         poolclass=StaticPool,
     )
     User.__table__.create(bind=engine)
-    TripleVolumeTradeObserveStock.__table__.create(bind=engine)
+    TradeObserveStock.__table__.create(bind=engine)
+    TradeObserveHistory.__table__.create(bind=engine)
     Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = Session()
     try:

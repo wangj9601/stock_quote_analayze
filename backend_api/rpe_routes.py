@@ -274,18 +274,17 @@ def list_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _ensure_rpe_trade_observe_schema()
-    rows = (
-        db.query(RPETradeObserveStock)
-        .filter(RPETradeObserveStock.user_id == current_user.id)
-        .order_by(RPETradeObserveStock.created_at.desc())
-        .all()
+    from backend_api import trade_observe_service as svc
+
+    _total, rows = svc.list_observe(
+        db, current_user.id, source=svc.SOURCE_RPE, page=1, page_size=500
     )
     items = []
     for r in rows:
         snap = r.signal_snapshot_json or {}
+        if not isinstance(snap, dict):
+            snap = {}
         support = snap.get("nearest_support")
-        # 盘中二次确认：现价是否仍在支撑上方
         above_support = None
         try:
             rq = (
@@ -307,7 +306,6 @@ def list_trade_observe(
                 "name": r.name,
                 "signal_date": r.signal_date.isoformat() if r.signal_date else None,
                 "signal_snapshot": snap,
-                # 最初信号关键字段（便于列表直接展示；完整快照仍在 signal_snapshot）
                 "sector_id": snap.get("sector_id"),
                 "sector_name": snap.get("sector_name"),
                 "z_score": snap.get("z_score"),
@@ -333,37 +331,41 @@ def add_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _ensure_rpe_trade_observe_schema()
+    from backend_api import trade_observe_service as svc
+
     code = _norm_code(body.code)
     try:
-        existing = (
-            db.query(RPETradeObserveStock)
-            .filter(
-                RPETradeObserveStock.user_id == current_user.id,
-                RPETradeObserveStock.market == (body.market or "CN"),
-                RPETradeObserveStock.code == code,
-            )
-            .first()
-        )
-        if existing:
-            return {"id": existing.id, "ok": True, "duplicated": True}
         sd = None
         if body.signal_date:
             try:
                 sd = datetime.strptime(body.signal_date[:10], "%Y-%m-%d").date()
             except ValueError:
                 sd = None
-        row = RPETradeObserveStock(
-            user_id=current_user.id,
-            market=body.market or "CN",
-            code=code,
-            name=body.name,
-            signal_snapshot_json=body.signal_snapshot,
-            signal_date=sd,
+        from backend_api.models import TradeObserveStock as _TOS
+
+        existing = (
+            db.query(_TOS)
+            .filter(
+                _TOS.user_id == current_user.id,
+                _TOS.market == (body.market or "CN"),
+                _TOS.code == code,
+                _TOS.source == svc.SOURCE_RPE,
+            )
+            .first()
         )
-        db.add(row)
-        db.commit()
-        db.refresh(row)
+        if existing:
+            return {"id": existing.id, "ok": True, "duplicated": True}
+        row = svc.add_observe(
+            db,
+            current_user,
+            source=svc.SOURCE_RPE,
+            code=code,
+            market=body.market or "CN",
+            name=body.name,
+            signal_date=sd,
+            snapshot=body.signal_snapshot if isinstance(body.signal_snapshot, dict) else None,
+            require_signal_date=False,
+        )
         return {"id": row.id, "ok": True}
     except HTTPException:
         raise
@@ -379,28 +381,14 @@ def delete_trade_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _ensure_rpe_trade_observe_schema()
-    row = (
-        db.query(RPETradeObserveStock)
-        .filter(RPETradeObserveStock.id == item_id, RPETradeObserveStock.user_id == current_user.id)
-        .first()
-    )
-    if not row:
+    from backend_api import trade_observe_service as svc
+
+    try:
+        svc.remove_observe(db, current_user, item_id, source=svc.SOURCE_RPE)
+    except HTTPException:
+        raise
+    except Exception:
         raise HTTPException(404, "not found")
-    db.add(
-        RPETradeObserveHistory(
-            user_id=current_user.id,
-            market=row.market,
-            code=row.code,
-            name=row.name,
-            signal_snapshot_json=row.signal_snapshot_json,
-            signal_date=row.signal_date,
-            source_observe_id=row.id,
-            removed_at=datetime.now(),
-        )
-    )
-    db.delete(row)
-    db.commit()
     return {"ok": True}
 
 
@@ -455,32 +443,25 @@ def formal_from_observe(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    _ensure_rpe_trade_observe_schema()
-    obs = (
-        db.query(RPETradeObserveStock)
-        .filter(RPETradeObserveStock.id == observe_id, RPETradeObserveStock.user_id == current_user.id)
-        .first()
-    )
+    from backend_api import trade_observe_service as svc
+
+    obs = svc.get_observe(db, current_user.id, observe_id, source=svc.SOURCE_RPE)
     if not obs:
         raise HTTPException(404, "observe not found")
-    snap = obs.signal_snapshot_json or {}
-    row = RPEFormalTrade(
-        user_id=current_user.id,
-        market=obs.market,
-        code=obs.code,
-        name=obs.name,
-        source_observe_id=obs.id,
+    snap = obs.signal_snapshot_json if isinstance(obs.signal_snapshot_json, dict) else {}
+    row = svc.add_formal_from_observe(
+        db,
+        current_user,
+        observe_id,
         entry_price=float(body.entry_price),
-        status="open",
-        signal_date=obs.signal_date,
-        signal_snapshot_json=snap,
+        position_lots=0,
         notes=body.notes,
-        structure_support=snap.get("nearest_support"),
-        structure_resistance=snap.get("nearest_resistance"),
+        source=svc.SOURCE_RPE,
+        extra={
+            "structure_support": snap.get("nearest_support"),
+            "structure_resistance": snap.get("nearest_resistance"),
+        },
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
     return {"id": row.id, "ok": True}
 
 

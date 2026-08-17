@@ -53,6 +53,7 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.analyze.tab.strategy", "name": "投资策略", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 30},
     {"code": "channel.analyze.tab.report", "name": "分析报告", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 40},
     {"code": "channel.analyze.tab.stock_ai", "name": "个股分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 50},
+    {"code": "channel.analyze.tab.trade_observe", "name": "交易观察", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 55},
 
     # ── 三级：分析按钮 ──
     {"code": "channel.analyze.tab.board.btn.run", "name": "开始板块分析", "level": 3, "parent_code": "channel.analyze.tab.board", "channel_code": "analyze", "sort_order": 10},

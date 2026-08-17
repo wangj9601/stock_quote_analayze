@@ -1,6 +1,5 @@
-"""
-用户 URT 正式交易：薄封装，读写走统一 trade_observe_service（source=urt）。
-"""
+# -*- coding: utf-8 -*-
+"""统一正式交易 API：/api/stock/formal-trade"""
 
 from __future__ import annotations
 
@@ -13,36 +12,38 @@ from sqlalchemy.orm import Session
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
 from backend_api.models import FormalTrade, User
-from backend_api.permissions import require_permission
 from backend_api import trade_observe_service as svc
-from backend_api.stock.urt_trade_observe_routes import _resolve_signal_date_str
 
-router = APIRouter(prefix="/api/stock/urt-formal-trade", tags=["urt-formal-trade"])
+router = APIRouter(prefix="/api/stock/formal-trade", tags=["formal-trade"])
 
-SOURCE = svc.SOURCE_URT
 TradeStatus = Literal["open", "closed"]
 
 
-class UrtFormalTradeFromObserveRequest(BaseModel):
+class FormalTradeFromObserveRequest(BaseModel):
     entry_price: float = Field(..., gt=0, description="入场价格")
-    position_lots: int = Field(..., ge=1, description="仓位（手）")
+    position_lots: int = Field(0, ge=0, description="仓位（手），GMS/URT 常用；其它来源可为 0")
     notes: Optional[str] = None
+    extra: Optional[Dict[str, Any]] = None
+    source: Optional[str] = Field(None, description="可选，用于校验观察来源")
 
 
-class UrtFormalTradeUpdateRequest(BaseModel):
+class FormalTradeUpdateRequest(BaseModel):
     entry_price: Optional[float] = Field(None, gt=0)
-    position_lots: Optional[int] = Field(None, ge=1)
+    position_lots: Optional[int] = Field(None, ge=0)
     exit_price: Optional[float] = Field(None, gt=0)
     status: Optional[TradeStatus] = None
     notes: Optional[str] = None
     reopen: Optional[bool] = Field(None, description="为 true 时清空出场价并恢复为持仓中")
+    extra: Optional[Dict[str, Any]] = None
+    source: Optional[str] = None
 
 
-class UrtFormalTradeItem(BaseModel):
+class FormalTradeItem(BaseModel):
     id: int
     market: str
     code: str
     name: Optional[str]
+    source: str
     source_observe_id: Optional[int]
     entry_price: float
     position_lots: int
@@ -51,6 +52,7 @@ class UrtFormalTradeItem(BaseModel):
     signal_date: Optional[str]
     snapshot: Optional[Dict[str, Any]]
     notes: Optional[str]
+    extra: Optional[Dict[str, Any]] = None
     entry_at: str
     exit_at: Optional[str]
     created_at: str
@@ -59,16 +61,16 @@ class UrtFormalTradeItem(BaseModel):
     pnl_percent: Optional[float] = None
 
 
-class UrtFormalTradeListResponse(BaseModel):
+class FormalTradeListResponse(BaseModel):
     total: int
     page: int
     page_size: int
-    items: List[UrtFormalTradeItem]
+    items: List[FormalTradeItem]
 
 
-def _row_to_item(r: FormalTrade) -> UrtFormalTradeItem:
+def _row_to_item(r: FormalTrade) -> FormalTradeItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
-    sd = _resolve_signal_date_str(r.signal_date, snap)
+    extra = r.extra_json if isinstance(r.extra_json, dict) else None
     pnl_amount = r.pnl_amount
     pnl_percent = r.pnl_percent
     if pnl_amount is None and pnl_percent is None and r.exit_price is not None and r.entry_price:
@@ -78,19 +80,21 @@ def _row_to_item(r: FormalTrade) -> UrtFormalTradeItem:
             r.position_lots,
             r.market,
         )
-    return UrtFormalTradeItem(
+    return FormalTradeItem(
         id=r.id,
         market=r.market or "CN",
         code=r.code,
         name=r.name,
+        source=r.source,
         source_observe_id=r.source_observe_id,
         entry_price=float(r.entry_price),
         position_lots=int(r.position_lots or 0),
         exit_price=float(r.exit_price) if r.exit_price is not None else None,
         status=r.status or "open",
-        signal_date=sd,
+        signal_date=svc.resolve_signal_date_str(r.signal_date, snap),
         snapshot=snap,
         notes=r.notes,
+        extra=extra,
         entry_at=r.entry_at.isoformat() if r.entry_at else "",
         exit_at=r.exit_at.isoformat() if r.exit_at else None,
         created_at=r.created_at.isoformat() if r.created_at else "",
@@ -100,22 +104,24 @@ def _row_to_item(r: FormalTrade) -> UrtFormalTradeItem:
     )
 
 
-def list_user_formal_trade_code_keys(db: Session, user_id: int) -> List[str]:
-    return svc.list_formal_codes(db, user_id, source=SOURCE)
-
-
-@router.get("/list", response_model=UrtFormalTradeListResponse)
-def list_urt_formal_trades(
+@router.get("/list", response_model=FormalTradeListResponse)
+def list_formal_trades(
     page: int = 1,
     page_size: int = 200,
     status: Optional[str] = None,
+    source: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     total, rows = svc.list_formal(
-        db, user.id, source=SOURCE, status=status, page=page, page_size=page_size
+        db,
+        user.id,
+        source=source,
+        status=status,
+        page=page,
+        page_size=page_size,
     )
-    return UrtFormalTradeListResponse(
+    return FormalTradeListResponse(
         total=total,
         page=max(1, int(page)),
         page_size=min(500, max(1, int(page_size))),
@@ -124,20 +130,20 @@ def list_urt_formal_trades(
 
 
 @router.get("/codes", response_model=List[str])
-def list_urt_formal_trade_codes(
+def list_formal_trade_codes(
+    source: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return list_user_formal_trade_code_keys(db, user.id)
+    return svc.list_formal_codes(db, user.id, source=source)
 
 
-@router.post("/from-observe/{observe_id}", response_model=UrtFormalTradeItem)
+@router.post("/from-observe/{observe_id}", response_model=FormalTradeItem)
 def create_from_observe(
     observe_id: int,
-    body: UrtFormalTradeFromObserveRequest,
+    body: FormalTradeFromObserveRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    _perm: None = Depends(require_permission("channel.screening.tab.urt.btn.formal")),
 ):
     row = svc.add_formal_from_observe(
         db,
@@ -146,40 +152,41 @@ def create_from_observe(
         entry_price=body.entry_price,
         position_lots=body.position_lots,
         notes=body.notes,
-        source=SOURCE,
+        source=body.source,
+        extra=body.extra,
     )
     return _row_to_item(row)
 
 
-@router.patch("/{trade_id}", response_model=UrtFormalTradeItem)
-def update_urt_formal_trade(
+@router.patch("/{trade_id}", response_model=FormalTradeItem)
+def update_formal_trade(
     trade_id: int,
-    body: UrtFormalTradeUpdateRequest,
+    body: FormalTradeUpdateRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    _perm: None = Depends(require_permission("channel.screening.tab.urt.btn.formal")),
 ):
     row = svc.patch_formal(
         db,
         user,
         trade_id,
-        source=SOURCE,
+        source=body.source,
         entry_price=body.entry_price,
         position_lots=body.position_lots,
         exit_price=body.exit_price,
         status=body.status,
         notes=body.notes,
         reopen=body.reopen,
+        extra=body.extra,
     )
     return _row_to_item(row)
 
 
 @router.delete("/{trade_id}")
-def delete_urt_formal_trade(
+def delete_formal_trade(
     trade_id: int,
+    source: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    _perm: None = Depends(require_permission("channel.screening.tab.urt.btn.formal")),
 ):
-    svc.delete_formal(db, user, trade_id, source=SOURCE)
+    svc.delete_formal(db, user, trade_id, source=source)
     return {"success": True, "message": "已删除正式交易记录"}

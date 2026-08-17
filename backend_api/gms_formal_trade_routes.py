@@ -1,108 +1,30 @@
 """
-用户 GMS 正式交易：从交易观察转入、列表、更新出场等。
+用户 GMS 正式交易：薄封装，读写走统一 trade_observe_service（source=gms）。
 """
 
 from __future__ import annotations
 
-import threading
-from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
-from backend_api.gms_trade_observe_routes import (
-    _archive_trade_observe_row,
-    _normalize_code,
-    _resolve_signal_date_str,
-    ensure_gms_trade_observe_schema,
-)
-from backend_api.models import GmsFormalTrade, GmsTradeObserveStock, User
+from backend_api.gms_trade_observe_routes import _resolve_signal_date_str
+from backend_api.models import FormalTrade, User
+from backend_api import trade_observe_service as svc
 
 router = APIRouter(prefix="/api/stock/gms-formal-trade", tags=["gms-formal-trade"])
 
+SOURCE = svc.SOURCE_GMS
 TradeStatus = Literal["open", "closed"]
-
-# 与行情库「手」约定一致：A 股 / 港股默认 1 手 = 100 股
-_DEFAULT_LOT_SIZE = 100
-
-_pnl_schema_lock = threading.Lock()
-_pnl_schema_ensured = False
 
 
 def ensure_gms_formal_trade_pnl_columns(db: Session) -> None:
-    """确保 gms_formal_trades 存在 pnl_amount / pnl_percent 列（PostgreSQL 生产库）。"""
-    global _pnl_schema_ensured
-    if _pnl_schema_ensured:
-        return
-    with _pnl_schema_lock:
-        if _pnl_schema_ensured:
-            return
-        bind = db.get_bind()
-        if bind is not None and bind.dialect.name == "postgresql":
-            db.execute(
-                text(
-                    """
-                    ALTER TABLE gms_formal_trades
-                    ADD COLUMN IF NOT EXISTS pnl_amount DOUBLE PRECISION
-                    """
-                )
-            )
-            db.execute(
-                text(
-                    """
-                    ALTER TABLE gms_formal_trades
-                    ADD COLUMN IF NOT EXISTS pnl_percent DOUBLE PRECISION
-                    """
-                )
-            )
-            db.commit()
-        _pnl_schema_ensured = True
-
-
-def _lot_size_for_market(market: Optional[str]) -> int:
-    _ = (market or "").strip().upper()
-    return _DEFAULT_LOT_SIZE
-
-
-def _compute_formal_trade_pnl(
-    entry_price: Optional[float],
-    exit_price: Optional[float],
-    position_lots: Optional[int],
-    market: Optional[str],
-) -> tuple[Optional[float], Optional[float]]:
-    """计算盈亏金额（元）与盈亏比例（%）。"""
-    if entry_price is None or exit_price is None:
-        return None, None
-    ep = float(entry_price)
-    xp = float(exit_price)
-    if ep <= 0:
-        return None, None
-    lots = max(0, int(position_lots or 0))
-    shares = lots * _lot_size_for_market(market)
-    pnl_amount = round((xp - ep) * shares, 2)
-    pnl_percent = round((xp - ep) / ep * 100, 2)
-    return pnl_amount, pnl_percent
-
-
-def _sync_formal_trade_pnl(row: GmsFormalTrade) -> None:
-    """平仓时写入盈亏；持仓中或重新开仓时清空。"""
-    if (row.status or "open") == "closed" and row.exit_price is not None:
-        amt, pct = _compute_formal_trade_pnl(
-            row.entry_price,
-            row.exit_price,
-            row.position_lots,
-            row.market,
-        )
-        row.pnl_amount = amt
-        row.pnl_percent = pct
-    else:
-        row.pnl_amount = None
-        row.pnl_percent = None
+    """兼容旧调用：统一表已含 pnl 列。"""
+    _ = db
 
 
 class GmsFormalTradeFromObserveRequest(BaseModel):
@@ -148,20 +70,20 @@ class GmsFormalTradeListResponse(BaseModel):
     items: List[GmsFormalTradeItem]
 
 
-def _row_to_item(r: GmsFormalTrade) -> GmsFormalTradeItem:
+def _row_to_item(r: FormalTrade) -> GmsFormalTradeItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     sd = _resolve_signal_date_str(r.signal_date, snap)
     pnl_amount = r.pnl_amount
     pnl_percent = r.pnl_percent
     if pnl_amount is None and pnl_percent is None and r.exit_price is not None and r.entry_price:
-        pnl_amount, pnl_percent = _compute_formal_trade_pnl(
+        pnl_amount, pnl_percent = svc.compute_formal_trade_pnl(
             r.entry_price,
             r.exit_price,
             r.position_lots,
             r.market,
         )
     elif pnl_percent is None and r.exit_price is not None and r.entry_price:
-        _, pnl_percent = _compute_formal_trade_pnl(
+        _, pnl_percent = svc.compute_formal_trade_pnl(
             r.entry_price,
             r.exit_price,
             r.position_lots,
@@ -197,40 +119,20 @@ def list_gms_formal_trades(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    page = max(1, int(page))
-    page_size = min(500, max(1, int(page_size)))
-    ensure_gms_formal_trade_pnl_columns(db)
-    q = db.query(GmsFormalTrade).filter(GmsFormalTrade.user_id == user.id)
-    st = (status or "").strip().lower()
-    if st in ("open", "closed"):
-        q = q.filter(GmsFormalTrade.status == st)
-    total = q.count()
-    rows = (
-        q.order_by(GmsFormalTrade.entry_at.desc(), GmsFormalTrade.code)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    total, rows = svc.list_formal(
+        db, user.id, source=SOURCE, status=status, page=page, page_size=page_size
     )
     return GmsFormalTradeListResponse(
         total=total,
-        page=page,
-        page_size=page_size,
+        page=max(1, int(page)),
+        page_size=min(500, max(1, int(page_size))),
         items=[_row_to_item(r) for r in rows],
     )
 
 
 def list_user_formal_trade_code_keys(db: Session, user_id: int) -> List[str]:
     """当前用户正式交易 code 键（CN:000001，code 已归一化），供信号列表按钮态。"""
-    rows = (
-        db.query(GmsFormalTrade.market, GmsFormalTrade.code)
-        .filter(GmsFormalTrade.user_id == user_id)
-        .all()
-    )
-    return [
-        f"{(m or 'CN').upper()}:{_normalize_code(c)}"
-        for m, c in rows
-        if c
-    ]
+    return svc.list_formal_codes(db, user_id, source=SOURCE)
 
 
 @router.get("/codes", response_model=List[str])
@@ -250,54 +152,15 @@ def create_from_observe(
     db: Session = Depends(get_db),
 ):
     """从交易观察记录转入正式交易。"""
-    ensure_gms_formal_trade_pnl_columns(db)
-    ensure_gms_trade_observe_schema(db)
-    observe = (
-        db.query(GmsTradeObserveStock)
-        .filter(GmsTradeObserveStock.id == observe_id, GmsTradeObserveStock.user_id == user.id)
-        .first()
+    row = svc.add_formal_from_observe(
+        db,
+        user,
+        observe_id,
+        entry_price=body.entry_price,
+        position_lots=body.position_lots,
+        notes=body.notes,
+        source=SOURCE,
     )
-    if not observe:
-        raise HTTPException(status_code=404, detail="交易观察记录不存在")
-    now = datetime.now()
-    existing_trade = (
-        db.query(GmsFormalTrade)
-        .filter(
-            GmsFormalTrade.user_id == user.id,
-            GmsFormalTrade.market == observe.market,
-            GmsFormalTrade.code == observe.code,
-        )
-        .first()
-    )
-    if existing_trade:
-        _archive_trade_observe_row(db, observe, removed_at=now)
-        db.delete(observe)
-        db.commit()
-        return _row_to_item(existing_trade)
-    source_observe_id = observe.id
-    row = GmsFormalTrade(
-        user_id=user.id,
-        market=observe.market,
-        code=observe.code,
-        name=observe.name,
-        source_observe_id=source_observe_id,
-        entry_price=float(body.entry_price),
-        position_lots=int(body.position_lots),
-        exit_price=None,
-        status="open",
-        signal_date=observe.signal_date,
-        signal_snapshot_json=observe.signal_snapshot_json,
-        notes=(body.notes or "").strip() or None,
-        entry_at=now,
-        exit_at=None,
-        created_at=now,
-        updated_at=now,
-    )
-    db.add(row)
-    _archive_trade_observe_row(db, observe, removed_at=now)
-    db.delete(observe)
-    db.commit()
-    db.refresh(row)
     return _row_to_item(row)
 
 
@@ -308,43 +171,18 @@ def update_gms_formal_trade(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    ensure_gms_formal_trade_pnl_columns(db)
-    row = (
-        db.query(GmsFormalTrade)
-        .filter(GmsFormalTrade.id == trade_id, GmsFormalTrade.user_id == user.id)
-        .first()
+    row = svc.patch_formal(
+        db,
+        user,
+        trade_id,
+        source=SOURCE,
+        entry_price=body.entry_price,
+        position_lots=body.position_lots,
+        exit_price=body.exit_price,
+        status=body.status,
+        notes=body.notes,
+        reopen=body.reopen,
     )
-    if not row:
-        raise HTTPException(status_code=404, detail="正式交易记录不存在")
-    now = datetime.now()
-    was_closed = (row.status or "open") == "closed"
-    if body.entry_price is not None:
-        row.entry_price = float(body.entry_price)
-    if body.position_lots is not None:
-        row.position_lots = int(body.position_lots)
-    if body.notes is not None:
-        row.notes = body.notes.strip() or None
-    if body.reopen:
-        row.exit_price = None
-        row.status = "open"
-        row.exit_at = None
-    elif body.exit_price is not None:
-        row.exit_price = float(body.exit_price)
-        if not was_closed:
-            row.status = "closed"
-            row.exit_at = now
-    if body.status is not None and not body.reopen:
-        row.status = body.status
-        if body.status == "closed" and row.exit_at is None:
-            row.exit_at = now
-        if body.status == "open":
-            row.exit_at = None
-            if body.exit_price is None:
-                row.exit_price = None
-    _sync_formal_trade_pnl(row)
-    row.updated_at = now
-    db.commit()
-    db.refresh(row)
     return _row_to_item(row)
 
 
@@ -354,13 +192,5 @@ def delete_gms_formal_trade(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    row = (
-        db.query(GmsFormalTrade)
-        .filter(GmsFormalTrade.id == trade_id, GmsFormalTrade.user_id == user.id)
-        .first()
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="正式交易记录不存在")
-    db.delete(row)
-    db.commit()
+    svc.delete_formal(db, user, trade_id, source=SOURCE)
     return {"success": True, "message": "已删除正式交易记录"}

@@ -638,7 +638,12 @@ const ScreeningPage = {
         };
         tbody.innerHTML = this.urtTradeObserveItems.map((it, index) => {
             const snap = it.snapshot || {};
-            const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
+            // 代码列 → 智能分析「个股分析」页（与 URT 策略信号 / 龙头中军同口径）
+            const urtAnalysisQ = new URLSearchParams({ tab: 'stock-ai' });
+            const urtCode = String(it.code || '').trim();
+            if (urtCode) urtAnalysisQ.set('code', urtCode);
+            if (it.name) urtAnalysisQ.set('name', String(it.name));
+            const href = `analysis.html?${urtAnalysisQ.toString()}`;
             const traceHref = `stock_urt_trace.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             const qfqTag = snap.price_adjust === 'qfq' ? '前复权 ' : '';
             const nearSup = snap.nearest_support;
@@ -653,7 +658,7 @@ const ScreeningPage = {
             }
             return `
                 <tr class="urt-trade-observe-row" data-observe-id="${it.id}">
-                    <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                    <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${href}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${esc(it.code)}</a></td>
                     <td class="gms-col-name"><span class="stock-name" title="${esc(it.name)}">${esc(it.name || '--')}</span></td>
                     <td class="gms-col-narrow">${esc(it.signal_date || snap.signal_date || '--')}</td>
                     <td class="gms-col-price">${fmtPrice(snap.close)}</td>
@@ -1073,7 +1078,7 @@ const ScreeningPage = {
             const href = `stock.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             return `
                 <tr data-trade-id="${it.id}">
-                    <td class="gms-col-code"><a class="stock-code" href="${href}" target="_blank" rel="noopener noreferrer">${esc(it.code)}</a></td>
+                    <td class="gms-col-code"><a class="stock-code gms-stock-code-link" href="${href}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${esc(it.code)}</a></td>
                     <td class="gms-col-name"><span class="stock-name">${esc(it.name || '--')}</span></td>
                     <td class="gms-col-price">${fmtPrice(it.entry_price)}</td>
                     <td class="gms-col-narrow">${it.position_lots != null ? it.position_lots : '--'}</td>

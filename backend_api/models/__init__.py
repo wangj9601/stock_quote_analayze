@@ -91,6 +91,9 @@ try:
         UrtTradeObserveStock = getattr(models_module, 'UrtTradeObserveStock', None)
         UrtTradeObserveHistory = getattr(models_module, 'UrtTradeObserveHistory', None)
         UrtFormalTrade = getattr(models_module, 'UrtFormalTrade', None)
+        TradeObserveStock = getattr(models_module, 'TradeObserveStock', None)
+        TradeObserveHistory = getattr(models_module, 'TradeObserveHistory', None)
+        FormalTrade = getattr(models_module, 'FormalTrade', None)
         TripleVolumeTradeObserveStock = getattr(models_module, 'TripleVolumeTradeObserveStock', None)
         GMSStrategyVersion = getattr(models_module, 'GMSStrategyVersion', None)
         GMSStrategyVersionStock = getattr(models_module, 'GMSStrategyVersionStock', None)
@@ -232,6 +235,9 @@ except Exception as e:
     UrtTradeObserveStock = None
     UrtTradeObserveHistory = None
     UrtFormalTrade = None
+    TradeObserveStock = None
+    TradeObserveHistory = None
+    FormalTrade = None
     TripleVolumeTradeObserveStock = None
     GMSStrategyVersion = None
     GMSStrategyVersionStock = None
@@ -378,6 +384,9 @@ __all__ = [
     'UrtTradeObserveStock',
     'UrtTradeObserveHistory',
     'UrtFormalTrade',
+    'TradeObserveStock',
+    'TradeObserveHistory',
+    'FormalTrade',
     'TripleVolumeTradeObserveStock',
     'GMSStrategyVersion',
     'GMSStrategyVersionStock',

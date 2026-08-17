@@ -1,5 +1,5 @@
 """
-用户 3倍量策略交易观察股：日终爆量列表「交易观察」加入 / 列表 / 移除。
+用户 3倍量策略交易观察股：薄封装，读写走统一 trade_observe_service（source=triple_volume）。
 """
 
 from __future__ import annotations
@@ -11,34 +11,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from backend_api import trade_observe_service as svc
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
-from backend_api.permissions import require_permission
-from backend_api.models import TripleVolumeTradeObserveStock, User
+from backend_api.models import TradeObserveStock, User
 
 router = APIRouter(
     prefix="/api/stock/triple-volume-trade-observe",
     tags=["triple-volume-trade-observe"],
 )
 
-
-def _normalize_market(market: Optional[str], code: str) -> str:
-    m = (market or "").strip().upper()
-    if m in ("CN", "HK"):
-        return m
-    c = str(code or "").strip()
-    if len(c) == 5 and c.isdigit():
-        return "HK"
-    return "CN"
-
-
-def _normalize_code(code: str) -> str:
-    c = str(code or "").strip()
-    if len(c) == 5 and c.isdigit():
-        return c.zfill(5)
-    if c.isdigit() and len(c) <= 6:
-        return c.zfill(6)
-    return c
+_SOURCE = svc.SOURCE_TRIPLE_VOLUME
 
 
 class TvoTradeObserveAddRequest(BaseModel):
@@ -88,13 +71,9 @@ def _observe_date_from_body(body: TvoTradeObserveAddRequest) -> Optional[date]:
     return None
 
 
-def _row_to_item(r: TripleVolumeTradeObserveStock) -> TvoTradeObserveItem:
-    snap = r.observe_snapshot_json if isinstance(r.observe_snapshot_json, dict) else None
-    ob = (
-        r.observe_trade_date.strftime("%Y-%m-%d")
-        if r.observe_trade_date and hasattr(r.observe_trade_date, "strftime")
-        else (str(r.observe_trade_date)[:10] if r.observe_trade_date else None)
-    )
+def _row_to_item(r: TradeObserveStock) -> TvoTradeObserveItem:
+    snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
+    ob = svc.resolve_signal_date_str(r.signal_date, snap)
     return TvoTradeObserveItem(
         id=r.id,
         market=r.market or "CN",
@@ -116,18 +95,8 @@ def list_tvo_trade_observe(
 ):
     page = max(1, int(page))
     page_size = min(500, max(1, int(page_size)))
-    q = db.query(TripleVolumeTradeObserveStock).filter(
-        TripleVolumeTradeObserveStock.user_id == user.id
-    )
-    total = q.count()
-    rows = (
-        q.order_by(
-            TripleVolumeTradeObserveStock.updated_at.desc(),
-            TripleVolumeTradeObserveStock.code,
-        )
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    total, rows = svc.list_observe(
+        db, user.id, source=_SOURCE, page=page, page_size=page_size
     )
     return TvoTradeObserveListResponse(
         total=total,
@@ -142,13 +111,7 @@ def list_tvo_trade_observe_codes(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """当前用户已加入观察的 code 列表（用于日终爆量列表按钮态）。"""
-    rows = (
-        db.query(TripleVolumeTradeObserveStock.code, TripleVolumeTradeObserveStock.market)
-        .filter(TripleVolumeTradeObserveStock.user_id == user.id)
-        .all()
-    )
-    return [f"{(m or 'CN').upper()}:{c}" for c, m in rows]
+    return svc.list_observe_codes(db, user.id, source=_SOURCE)
 
 
 @router.post("/add", response_model=TvoTradeObserveItem)
@@ -156,50 +119,20 @@ def add_tvo_trade_observe(
     body: TvoTradeObserveAddRequest,
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    _perm: None = Depends(require_permission("channel.screening.tab.vsb.btn.add_observe")),
 ):
-    code = _normalize_code(body.code)
-    if not code:
-        raise HTTPException(status_code=400, detail="股票代码无效")
-    market = _normalize_market(body.market, code)
-    ob_date = _observe_date_from_body(body)
-    if ob_date is None:
-        raise HTTPException(status_code=400, detail="缺少 observe_trade_date（观察日）")
-
-    existing = (
-        db.query(TripleVolumeTradeObserveStock)
-        .filter(
-            TripleVolumeTradeObserveStock.user_id == user.id,
-            TripleVolumeTradeObserveStock.market == market,
-            TripleVolumeTradeObserveStock.code == code,
-        )
-        .first()
-    )
-    now = datetime.now()
-    if existing:
-        existing.name = body.name or existing.name
-        existing.observe_snapshot_json = (
-            body.snapshot if body.snapshot is not None else existing.observe_snapshot_json
-        )
-        existing.observe_trade_date = ob_date
-        existing.updated_at = now
-        db.commit()
-        db.refresh(existing)
-        return _row_to_item(existing)
-
-    row = TripleVolumeTradeObserveStock(
-        user_id=user.id,
-        market=market,
-        code=code,
+    signal_date = _observe_date_from_body(body)
+    row = svc.add_observe(
+        db,
+        user,
+        source=_SOURCE,
+        code=body.code,
+        market=body.market,
         name=body.name,
-        observe_snapshot_json=body.snapshot,
-        observe_trade_date=ob_date,
-        created_at=now,
-        updated_at=now,
+        signal_date=signal_date,
+        snapshot=body.snapshot if isinstance(body.snapshot, dict) else None,
+        extra=None,
+        require_signal_date=False,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
     return _row_to_item(row)
 
 
@@ -209,16 +142,5 @@ def remove_tvo_trade_observe(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    row = (
-        db.query(TripleVolumeTradeObserveStock)
-        .filter(
-            TripleVolumeTradeObserveStock.id == item_id,
-            TripleVolumeTradeObserveStock.user_id == user.id,
-        )
-        .first()
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="记录不存在")
-    db.delete(row)
-    db.commit()
-    return {"success": True, "message": "已移出3倍量交易观察列表"}
+    svc.remove_observe(db, user, item_id, source=_SOURCE)
+    return {"ok": True, "id": item_id}

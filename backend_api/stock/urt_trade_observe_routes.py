@@ -1,10 +1,11 @@
 """
-用户 URT 交易观察股：网站选股页「观察」加入 / 列表 / 移除 / 历史。
+用户 URT 交易观察股：薄封装，读写走统一 trade_observe_service（source=urt）。
+响应形状保持旧前端兼容（config_id 来自 extra_json）。
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,60 +14,32 @@ from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_user
 from backend_api.database import get_db
-from backend_api.models import (
-    UrtFormalTrade,
-    UrtTradeObserveHistory,
-    UrtTradeObserveStock,
-    User,
-)
+from backend_api.models import TradeObserveHistory, TradeObserveStock, User
 from backend_api.permissions import require_permission
+from backend_api import trade_observe_service as svc
 
 router = APIRouter(prefix="/api/stock/urt-trade-observe", tags=["urt-trade-observe"])
 
+SOURCE = svc.SOURCE_URT
+
 
 def _normalize_market(market: Optional[str], code: str) -> str:
-    m = (market or "").strip().upper()
-    if m in ("CN", "HK"):
-        return m
-    c = str(code or "").strip()
-    if len(c) == 5 and c.isdigit():
-        return "HK"
-    return "CN"
+    return svc.normalize_market(market, code)
 
 
 def _normalize_code(code: str) -> str:
-    c = str(code or "").strip()
-    if len(c) == 5 and c.isdigit():
-        return c.zfill(5)
-    if c.isdigit() and len(c) <= 6:
-        return c.zfill(6)
-    return c
+    return svc.normalize_code(code)
 
 
 def _parse_signal_date_optional(raw: Optional[str]) -> Optional[date]:
-    if not raw:
-        return None
-    try:
-        return datetime.strptime(str(raw).strip()[:10], "%Y-%m-%d").date()
-    except ValueError:
-        raise HTTPException(status_code=400, detail="signal_date 格式应为 YYYY-MM-DD")
+    return svc.parse_signal_date_optional(raw)
 
 
 def _resolve_signal_date_str(
     stored: Optional[date],
     snapshot: Optional[Dict[str, Any]],
 ) -> Optional[str]:
-    if stored and hasattr(stored, "strftime"):
-        return stored.strftime("%Y-%m-%d")
-    if stored:
-        s = str(stored).strip()[:10]
-        return s if s else None
-    if isinstance(snapshot, dict):
-        for key in ("signal_date", "search_date", "date"):
-            raw = snapshot.get(key)
-            if raw:
-                return str(raw).strip()[:10]
-    return None
+    return svc.resolve_signal_date_str(stored, snapshot)
 
 
 def _signal_date_from_body(body: "UrtTradeObserveAddRequest") -> Optional[date]:
@@ -81,22 +54,16 @@ def _signal_date_from_body(body: "UrtTradeObserveAddRequest") -> Optional[date]:
     return None
 
 
-def _observe_row_key(row: UrtTradeObserveStock) -> tuple[str, str]:
-    market = (row.market or "CN").upper()
-    return market, _normalize_code(row.code)
-
-
-def _formal_trade_keys_for_user(db: Session, user_id: int) -> set[tuple[str, str]]:
-    rows = (
-        db.query(UrtFormalTrade.market, UrtFormalTrade.code)
-        .filter(UrtFormalTrade.user_id == user_id)
-        .all()
-    )
-    return {
-        ((m or "CN").upper(), _normalize_code(c))
-        for m, c in rows
-        if c
-    }
+def _extra_config_id(extra: Any) -> Optional[int]:
+    if not isinstance(extra, dict):
+        return None
+    raw = extra.get("config_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 class UrtTradeObserveAddRequest(BaseModel):
@@ -148,7 +115,7 @@ class UrtTradeObserveHistoryListResponse(BaseModel):
     items: List[UrtTradeObserveHistoryItem]
 
 
-def _row_to_item(r: UrtTradeObserveStock) -> UrtTradeObserveItem:
+def _row_to_item(r: TradeObserveStock) -> UrtTradeObserveItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     return UrtTradeObserveItem(
         id=r.id,
@@ -157,37 +124,13 @@ def _row_to_item(r: UrtTradeObserveStock) -> UrtTradeObserveItem:
         name=r.name,
         signal_date=_resolve_signal_date_str(r.signal_date, snap),
         snapshot=snap,
-        config_id=r.config_id,
+        config_id=_extra_config_id(r.extra_json),
         created_at=r.created_at.isoformat() if r.created_at else "",
         updated_at=r.updated_at.isoformat() if r.updated_at else "",
     )
 
 
-def _archive_trade_observe_row(
-    db: Session,
-    row: UrtTradeObserveStock,
-    *,
-    removed_at: Optional[datetime] = None,
-) -> UrtTradeObserveHistory:
-    now = removed_at or datetime.now()
-    hist = UrtTradeObserveHistory(
-        user_id=row.user_id,
-        market=row.market,
-        code=row.code,
-        name=row.name,
-        signal_snapshot_json=row.signal_snapshot_json,
-        signal_date=row.signal_date,
-        config_id=row.config_id,
-        observe_created_at=row.created_at,
-        observe_updated_at=row.updated_at,
-        source_observe_id=row.id,
-        removed_at=now,
-    )
-    db.add(hist)
-    return hist
-
-
-def _history_row_to_item(r: UrtTradeObserveHistory) -> UrtTradeObserveHistoryItem:
+def _history_row_to_item(r: TradeObserveHistory) -> UrtTradeObserveHistoryItem:
     snap = r.signal_snapshot_json if isinstance(r.signal_snapshot_json, dict) else None
     return UrtTradeObserveHistoryItem(
         id=r.id,
@@ -196,7 +139,7 @@ def _history_row_to_item(r: UrtTradeObserveHistory) -> UrtTradeObserveHistoryIte
         name=r.name,
         signal_date=_resolve_signal_date_str(r.signal_date, snap),
         snapshot=snap,
-        config_id=r.config_id,
+        config_id=_extra_config_id(r.extra_json),
         observe_created_at=r.observe_created_at.isoformat() if r.observe_created_at else None,
         observe_updated_at=r.observe_updated_at.isoformat() if r.observe_updated_at else None,
         removed_at=r.removed_at.isoformat() if r.removed_at else "",
@@ -204,39 +147,9 @@ def _history_row_to_item(r: UrtTradeObserveHistory) -> UrtTradeObserveHistoryIte
     )
 
 
-def _purge_observe_rows_already_formal_traded(db: Session, user_id: int) -> int:
-    formal_keys = _formal_trade_keys_for_user(db, user_id)
-    if not formal_keys:
-        return 0
-    rows = (
-        db.query(UrtTradeObserveStock)
-        .filter(UrtTradeObserveStock.user_id == user_id)
-        .all()
-    )
-    removed = 0
-    now = datetime.now()
-    for row in rows:
-        if _observe_row_key(row) in formal_keys:
-            _archive_trade_observe_row(db, row, removed_at=now)
-            db.delete(row)
-            removed += 1
-    if removed:
-        db.commit()
-    return removed
-
-
 def list_user_trade_observe_code_keys(db: Session, user_id: int) -> List[str]:
-    _purge_observe_rows_already_formal_traded(db, user_id)
-    rows = (
-        db.query(UrtTradeObserveStock.market, UrtTradeObserveStock.code)
-        .filter(UrtTradeObserveStock.user_id == user_id)
-        .all()
-    )
-    return [
-        f"{(m or 'CN').upper()}:{_normalize_code(c)}"
-        for m, c in rows
-        if c
-    ]
+    svc.purge_observe_already_formal(db, user_id, source=SOURCE)
+    return svc.list_observe_codes(db, user_id, source=SOURCE)
 
 
 @router.get("/list", response_model=UrtTradeObserveListResponse)
@@ -246,24 +159,14 @@ def list_urt_trade_observe(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    page = max(1, int(page))
-    page_size = min(500, max(1, int(page_size)))
-    _purge_observe_rows_already_formal_traded(db, user.id)
-    q = db.query(UrtTradeObserveStock).filter(UrtTradeObserveStock.user_id == user.id)
-    total = q.count()
-    rows = (
-        q.order_by(
-            UrtTradeObserveStock.updated_at.desc(),
-            UrtTradeObserveStock.code,
-        )
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    svc.purge_observe_already_formal(db, user.id, source=SOURCE)
+    total, rows = svc.list_observe(
+        db, user.id, source=SOURCE, page=page, page_size=page_size
     )
     return UrtTradeObserveListResponse(
         total=total,
-        page=page,
-        page_size=page_size,
+        page=max(1, int(page)),
+        page_size=min(500, max(1, int(page_size))),
         items=[_row_to_item(r) for r in rows],
     )
 
@@ -283,53 +186,27 @@ def add_urt_trade_observe(
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.screening.tab.urt.btn.observe")),
 ):
-    code = _normalize_code(body.code)
-    if not code:
-        raise HTTPException(status_code=400, detail="股票代码无效")
-    market = _normalize_market(body.market, code)
     sig_date = _signal_date_from_body(body)
     if sig_date is None:
         raise HTTPException(
             status_code=400,
             detail="缺少 signal_date：请传入信号对应交易日",
         )
-
-    existing = (
-        db.query(UrtTradeObserveStock)
-        .filter(
-            UrtTradeObserveStock.user_id == user.id,
-            UrtTradeObserveStock.market == market,
-            UrtTradeObserveStock.code == code,
-        )
-        .first()
-    )
-    now = datetime.now()
-    snapshot = body.snapshot if isinstance(body.snapshot, dict) else None
-
-    if existing:
-        existing.name = body.name or existing.name
-        existing.signal_snapshot_json = snapshot
-        existing.signal_date = sig_date
-        existing.config_id = body.config_id if body.config_id is not None else existing.config_id
-        existing.updated_at = now
-        db.commit()
-        db.refresh(existing)
-        return _row_to_item(existing)
-
-    row = UrtTradeObserveStock(
-        user_id=user.id,
-        market=market,
-        code=code,
+    extra: Optional[Dict[str, Any]] = None
+    if body.config_id is not None:
+        extra = {"config_id": int(body.config_id)}
+    row = svc.add_observe(
+        db,
+        user,
+        source=SOURCE,
+        code=body.code,
+        market=body.market,
         name=body.name,
-        signal_snapshot_json=snapshot,
         signal_date=sig_date,
-        config_id=body.config_id,
-        created_at=now,
-        updated_at=now,
+        snapshot=body.snapshot if isinstance(body.snapshot, dict) else None,
+        extra=extra,
+        require_signal_date=True,
     )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
     return _row_to_item(row)
 
 
@@ -340,20 +217,13 @@ def list_urt_trade_observe_history(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    page = max(1, int(page))
-    page_size = min(500, max(1, int(page_size)))
-    q = db.query(UrtTradeObserveHistory).filter(UrtTradeObserveHistory.user_id == user.id)
-    total = q.count()
-    rows = (
-        q.order_by(UrtTradeObserveHistory.removed_at.desc(), UrtTradeObserveHistory.code)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-        .all()
+    total, rows = svc.list_history(
+        db, user.id, source=SOURCE, page=page, page_size=page_size
     )
     return UrtTradeObserveHistoryListResponse(
         total=total,
-        page=page,
-        page_size=page_size,
+        page=max(1, int(page)),
+        page_size=min(500, max(1, int(page_size))),
         items=[_history_row_to_item(r) for r in rows],
     )
 
@@ -365,17 +235,7 @@ def remove_urt_trade_observe(
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.screening.tab.urt.btn.observe")),
 ):
-    row = (
-        db.query(UrtTradeObserveStock)
-        .filter(UrtTradeObserveStock.id == item_id, UrtTradeObserveStock.user_id == user.id)
-        .first()
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="记录不存在")
-    hist = _archive_trade_observe_row(db, row)
-    db.delete(row)
-    db.commit()
-    db.refresh(hist)
+    hist = svc.remove_observe(db, user, item_id, source=SOURCE)
     return {
         "success": True,
         "message": "已移出交易观察列表并归档",
