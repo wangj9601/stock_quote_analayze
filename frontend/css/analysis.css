@@ -1,6 +1,6 @@
-/* Ã¥ÂÂÃ¦ÂÂÃ©Â¡ÂµÃ©ÂÂ¢Ã¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¥ÃÂÃÂÃÂ¦ÃÂÃÂÃÂ©ÃÂ¡ÃÂµÃÂ©ÃÂÃÂ¢ÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 
-/* Ã¤Â¸Â»Ã¦Â ÂÃ©Â¢ÂÃ¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¤ÃÂ¸ÃÂ»ÃÂ¦ÃÂ ÃÂÃÂ©ÃÂ¢ÃÂÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .main-content h1 {
     font-size: 2rem;
     font-weight: 700;
@@ -8,7 +8,7 @@
     margin-bottom: 2rem;
 }
 
-/* Ã¥Â¿Â«Ã©ÂÂÃ¥ÂÂÃ¦ÂÂÃ¥ÂÂºÃ¥ÂÂ */
+/* ÃÂ¥ÃÂ¿ÃÂ«ÃÂ©ÃÂÃÂÃÂ¥ÃÂÃÂÃÂ¦ÃÂÃÂÃÂ¥ÃÂÃÂºÃÂ¥ÃÂÃÂ */
 .quick-analysis {
     background: white;
     border-radius: 8px;
@@ -87,7 +87,7 @@
     margin-bottom: 1rem;
 }
 
-/* Ã¥ÂÂÃ¦ÂÂÃ¦Â ÂÃ§Â­Â¾Ã¥ÂÂºÃ¥ÂÂ */
+/* ÃÂ¥ÃÂÃÂÃÂ¦ÃÂÃÂÃÂ¦ÃÂ ÃÂÃÂ§ÃÂ­ÃÂ¾ÃÂ¥ÃÂÃÂºÃÂ¥ÃÂÃÂ */
 .analysis-tabs {
     margin-top: 2rem;
 }
@@ -128,7 +128,7 @@
     display: block;
 }
 
-/* Ã¥Â¸ÂÃ¥ÂÂºÃ¥ÂÂÃ¦ÂÂÃ¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¥ÃÂ¸ÃÂÃÂ¥ÃÂÃÂºÃÂ¥ÃÂÃÂÃÂ¦ÃÂÃÂÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .market-analysis-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -161,7 +161,7 @@
     flex-shrink: 0;
 }
 
-/* Ã¥Â¸ÂÃ¥ÂÂºÃ¦Â¸Â©Ã¥ÂºÂ¦Ã¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¥ÃÂ¸ÃÂÃÂ¥ÃÂÃÂºÃÂ¦ÃÂ¸ÃÂ©ÃÂ¥ÃÂºÃÂ¦ÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .temperature-meter {
     margin-bottom: 1rem;
 }
@@ -192,7 +192,7 @@
     line-height: 1.5;
 }
 
-/* Ã¨ÂµÂÃ©ÂÂÃ¦ÂµÂÃ¥ÂÂÃ¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¨ÃÂµÃÂÃÂ©ÃÂÃÂÃÂ¦ÃÂµÃÂÃÂ¥ÃÂÃÂÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .flow-chart {
     height: 200px;
     background: #f8fafc;
@@ -225,7 +225,7 @@
     font-size: 0.9rem;
 }
 
-/* Ã¨Â¶ÂÃ¥ÂÂ¿Ã§Â ÂÃ¥ÂÂ¤Ã¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¨ÃÂ¶ÃÂÃÂ¥ÃÂÃÂ¿ÃÂ§ÃÂ ÃÂÃÂ¥ÃÂÃÂ¤ÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .trend-indicators {
     margin-bottom: 1rem;
 }
@@ -275,7 +275,7 @@
     line-height: 1.5;
 }
 
-/* Ã©Â£ÂÃ©ÂÂ©Ã¦ÂÂÃ§Â¤ÂºÃ¦Â Â·Ã¥Â¼Â */
+/* ÃÂ©ÃÂ£ÃÂÃÂ©ÃÂÃÂ©ÃÂ¦ÃÂÃÂÃÂ§ÃÂ¤ÃÂºÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .risk-alerts {
     display: flex;
     flex-direction: column;
@@ -341,7 +341,7 @@
     flex: 1;
 }
 
-/* Ã¦ÂÂÃ¦ÂÂ¯Ã¥Â·Â¥Ã¥ÂÂ·Ã¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¦ÃÂÃÂÃÂ¦ÃÂÃÂ¯ÃÂ¥ÃÂ·ÃÂ¥ÃÂ¥ÃÂÃÂ·ÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .tools-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -411,7 +411,7 @@
 }
 
 .tool-desc li::before {
-    content: "â¢";
+    content: "\2022";
     color: #2563eb;
     position: absolute;
     left: 0;
@@ -433,7 +433,7 @@
     padding: 0;
 }
 
-/* Ã¦ÂÂÃ¨ÂµÂÃ§Â­ÂÃ§ÂÂ¥Ã¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¦ÃÂÃÂÃÂ¨ÃÂµÃÂÃÂ§ÃÂ­ÃÂÃÂ§ÃÂÃÂ¥ÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .strategy-section {
     display: grid;
     grid-template-columns: 2fr 1fr;
@@ -520,7 +520,7 @@
     font-weight: 500;
 }
 
-/* Ã§Â»ÂÃ¥ÂÂÃ¥Â»ÂºÃ¨Â®Â®Ã¦Â Â·Ã¥Â¼Â */
+/* ÃÂ§ÃÂ»ÃÂÃÂ¥ÃÂÃÂÃÂ¥ÃÂ»ÃÂºÃÂ¨ÃÂ®ÃÂ®ÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .portfolio-card {
     background: white;
     border-radius: 8px;
@@ -575,7 +575,7 @@
     color: #1f2937;
 }
 
-/* Ã¥ÂÂÃ¦ÂÂÃ¦ÂÂ¥Ã¥ÂÂÃ¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¥ÃÂÃÂÃÂ¦ÃÂÃÂÃÂ¦ÃÂÃÂ¥ÃÂ¥ÃÂÃÂÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .reports-section {
     display: flex;
     flex-direction: column;
@@ -658,7 +658,7 @@
     margin-bottom: 0.5rem;
 }
 
-/* Ã¥ÂÂÃ¥ÂºÂÃ¥Â¼ÂÃ¨Â®Â¾Ã¨Â®Â¡ */
+/* ÃÂ¥ÃÂÃÂÃÂ¥ÃÂºÃÂÃÂ¥ÃÂ¼ÃÂÃÂ¨ÃÂ®ÃÂ¾ÃÂ¨ÃÂ®ÃÂ¡ */
 @media (max-width: 768px) {
     .analysis-header {
         flex-direction: column;
@@ -749,7 +749,7 @@
     }
 }
 
-/* Ã¦ÂÂÃ§Â´Â¢Ã¥Â¼Â¹Ã§ÂªÂÃ¦Â Â·Ã¥Â¼Â */
+/* ÃÂ¦ÃÂÃÂÃÂ§ÃÂ´ÃÂ¢ÃÂ¥ÃÂ¼ÃÂ¹ÃÂ§ÃÂªÃÂÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
 .search-modal {
     display: none !important;
     position: fixed;
@@ -825,7 +825,7 @@
     overflow-y: auto;
     padding: 10px;
 } 
-/* Â°Ã¥Â¿Ã©Â·ÃÃÃ¶Â¹Â¤ÃÃ·ÃÂ¨ */
+/* ÃÂ°ÃÂ¥ÃÂ¿ÃÂ©ÃÂ·ÃÂÃÂÃÂ¶ÃÂ¹ÃÂ¤ÃÂÃÂ·ÃÂÃÂ¨ */
 .ba-workbench { background: #fff; border-radius: 8px; padding: 1.25rem 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 .ba-desc { color: #64748b; font-size: .9rem; margin: 0 0 1rem; line-height: 1.5; }
 .ba-toolbar { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; margin-bottom: 1rem; }
@@ -850,7 +850,7 @@
   padding-right: 4px;
 }
 
-/* ç­çº¿è§è²ï¼å¯¹é½åå°æåé¡µ el-tag danger/warning */
+/* Ã§ÂÂ­Ã§ÂºÂ¿Ã¨Â§ÂÃ¨ÂÂ²Ã¯Â¼ÂÃ¥Â¯Â¹Ã©Â½ÂÃ¥ÂÂÃ¥ÂÂ°Ã¦ÂÂÃ¥ÂÂÃ©Â¡Âµ el-tag danger/warning */
 .ba-short-roles {
   display: flex;
   flex-wrap: wrap;
@@ -973,7 +973,7 @@
 .ba-watch { margin-top: .75rem; }
 .btn-sm { padding: .25rem .55rem; font-size: .8rem; }
 
-/* é¾å¤´ä¸­åå½ä¸­ç©éµ */
+/* Ã©Â¾ÂÃ¥Â¤Â´Ã¤Â¸Â­Ã¥ÂÂÃ¥ÂÂ½Ã¤Â¸Â­Ã§ÂÂ©Ã©ÂÂµ */
 .lm-workbench {
   background: #fff;
   border-radius: 8px;
@@ -1260,7 +1260,7 @@
   line-height: 1.35;
 }
 
-/* ä¸ªè¡åæï¼åç­ç¥å½ä¸­ */
+/* Ã¤Â¸ÂªÃ¨ÂÂ¡Ã¥ÂÂÃ¦ÂÂÃ¯Â¼ÂÃ¥ÂÂÃ§Â­ÂÃ§ÂÂ¥Ã¥ÂÂ½Ã¤Â¸Â­ */
 .ssa-scroll-fab {
     position: fixed;
     right: 1.25rem;
@@ -1459,7 +1459,7 @@
     margin-top: 1rem;
 }
 
-/* æ³¢æ®µä¸è¶å¿ */
+/* Ã¦Â³Â¢Ã¦Â®ÂµÃ¤Â¸ÂÃ¨Â¶ÂÃ¥ÂÂ¿ */
 .ms-result-wrap { font-size: 13px; color: #334155; }
 .ms-meta { color: #64748b; font-size: 12px; margin-bottom: 8px; }
 .ms-trend-row {
@@ -1664,7 +1664,7 @@
     .ssa-form input, .ssa-form select { min-width: 0; width: 100%; }
 }
 
-/* ææ¯å·¥å·ï¼æ¯æ/ååä½ */
+/* Ã¦ÂÂÃ¦ÂÂ¯Ã¥Â·Â¥Ã¥ÂÂ·Ã¯Â¼ÂÃ¦ÂÂ¯Ã¦ÂÂ/Ã¥ÂÂÃ¥ÂÂÃ¤Â½Â */
 .kde-levels-section {
     background: white;
     border-radius: 8px;
@@ -1960,15 +1960,16 @@
     display: none;
 }
 
+/* 仅用 ASCII 转义；勿写裸 Unicode 三角（易因编码再变 mojibake） */
 .kde-algo-details > summary::before,
 .kde-conf-list-details > summary::before {
-    content: 'â¸ ';
+    content: "\25B8\00a0";
     color: #64748b;
 }
 
 .kde-algo-details[open] > summary::before,
 .kde-conf-list-details[open] > summary::before {
-    content: 'â¾ ';
+    content: "\25BE\00a0";
 }
 
 .kde-levels-details-toolbar {
@@ -2059,8 +2060,10 @@
     line-height: 1.4;
 }
 
-.kde-levels-card li .idx-label {
+.kde-levels-card li .idx-label,
+.kde-conf-list-details li .idx-label {
     display: inline-flex;
+    flex-shrink: 0;
     min-width: 3.2rem;
     padding: 0 0.35rem;
     align-items: center;
@@ -2156,28 +2159,38 @@
     text-align: center;
 }
 
-.kde-levels-card ul {
+/* 与关键价位卡片同款；共振带完整列表不在 .kde-levels-card 内，须单独纳入。
+   common.css 的 *{padding:0} 会清掉 ul 默认左边距，outside 圆点会溢出浅蓝边框。 */
+.kde-levels-card ul,
+.kde-conf-list-details ul {
     list-style: none;
     margin: 0;
     padding: 0;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
-.kde-levels-card li {
+.kde-levels-card li,
+.kde-conf-list-details li {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.5rem;
     padding: 0.35rem 0;
     border-bottom: 1px solid #f3f4f6;
     font-variant-numeric: tabular-nums;
     color: #1f2937;
+    min-width: 0;
 }
 
-.kde-levels-card li:last-child {
+.kde-levels-card li:last-child,
+.kde-conf-list-details li:last-child {
     border-bottom: none;
 }
 
-.kde-levels-card li .idx {
+.kde-levels-card li .idx,
+.kde-conf-list-details li .idx {
     display: inline-flex;
+    flex-shrink: 0;
     width: 1.25rem;
     height: 1.25rem;
     align-items: center;
@@ -2188,7 +2201,8 @@
     font-size: 0.75rem;
 }
 
-.kde-levels-card li.muted {
+.kde-levels-card li.muted,
+.kde-conf-list-details li.muted {
     color: #9ca3af;
 }
 
@@ -2219,7 +2233,7 @@
     }
 }
 
-/* å½¢æè¯å«å·¥å· */
+/* Ã¥Â½Â¢Ã¦ÂÂÃ¨Â¯ÂÃ¥ÂÂ«Ã¥Â·Â¥Ã¥ÂÂ· */
 .pattern-tool-form .form-row + .form-row {
     margin-top: 0.75rem;
 }
@@ -2267,7 +2281,7 @@
     accent-color: #2563eb;
 }
 
-/* æ«æå­æ®µåä¸ä¸»è¡ flexï¼éèæ¶ä¸å ä½ */
+/* Ã¦ÂÂ«Ã¦ÂÂÃ¥Â­ÂÃ¦Â®ÂµÃ¥ÂÂÃ¤Â¸ÂÃ¤Â¸Â»Ã¨Â¡Â flexÃ¯Â¼ÂÃ©ÂÂÃ¨ÂÂÃ¦ÂÂ¶Ã¤Â¸ÂÃ¥ÂÂ Ã¤Â½Â */
 .pattern-tool-form .pattern-scan-inline {
     display: contents;
 }
@@ -2549,7 +2563,7 @@
     margin: 0.08rem 0;
 }
 
-/* 统一交易观察 Tab（分析页未引入 screening.css，需自带表格基础样式） */
+/* ç»ä¸äº¤æè§å¯ Tabï¼åæé¡µæªå¼å¥ screening.cssï¼éèªå¸¦è¡¨æ ¼åºç¡æ ·å¼ï¼ */
 .uto-workbench { margin-top: 0.5rem; }
 .uto-desc { color: #64748b; font-size: 0.875rem; margin: 0 0 0.65rem; line-height: 1.45; }
 .uto-subtabs { display: flex; gap: 0.4rem; margin-bottom: 0.65rem; }
@@ -2620,8 +2634,8 @@
 }
 
 /*
- * 列宽策略：fixed + colgroup，避免 width:100% 时多余空白堆到操作列。
- * 名称列吸收剩余宽度并省略；操作列固定贴右。
+ * åå®½ç­ç¥ï¼fixed + colgroupï¼é¿å width:100% æ¶å¤ä½ç©ºç½å å°æä½åã
+ * åç§°åå¸æ¶å©ä½å®½åº¦å¹¶çç¥ï¼æä½ååºå®è´´å³ã
  */
 .uto-table {
   width: 100%;

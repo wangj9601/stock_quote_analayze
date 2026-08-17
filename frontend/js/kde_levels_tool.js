@@ -400,7 +400,7 @@ const KdeLevelsTool = {
                         ${heroZoneHtml(heroR, '压力')}
                     </div>
                     <div class="kde-conf-hero-near muted">最近支撑带 ${this._esc(confNearS)} · 最近压力带 ${this._esc(confNearR)}</div>
-                    <details class="kde-conf-list-details">
+                    <details class="kde-conf-list-details" open>
                         <summary>共振带完整列表</summary>
                         <ul>${this._labeledListHtml(confRows)}</ul>
                     </details>
@@ -490,7 +490,7 @@ const KdeLevelsTool = {
                         </div>
                     </div>
                 </details>
-                <details class="kde-algo-details">
+                <details class="kde-algo-details" open>
                     <summary>KDE 结构位 <span class="${tagCls(d.price_adjust === 'qfq' ? 'qfq' : 'none')}">${tagTxt(d.price_adjust === 'qfq' ? 'qfq' : 'none')}</span></summary>
                     <div class="kde-levels-grid">
                         <div class="kde-levels-card support">
@@ -527,7 +527,7 @@ const KdeLevelsTool = {
                         </div>
                     </div>
                 </details>
-                <details class="kde-algo-details">
+                <details class="kde-algo-details" open>
                     <summary>Volume Profile（参考）
                         <span class="${tagCls(vpAdjust)}">${tagTxt(vpAdjust)}</span>
                     </summary>
@@ -582,7 +582,7 @@ const KdeLevelsTool = {
                         </div>
                     </div>
                 </details>
-                <details class="kde-algo-details">
+                <details class="kde-algo-details" open>
                     <summary>黄金分割 / Pivot / Camarilla
                         <span class="${tagCls(classicAdjust)}">${tagTxt(classicAdjust)}</span>
                     </summary>
@@ -628,6 +628,11 @@ const KdeLevelsTool = {
                 </details>
                 <p class="kde-levels-meta">${this._esc(metaParts.join(' · '))}</p>
             </div>`;
+
+        // 缺省全部展开（与模板 open 一致；保证动态插入后状态正确）
+        container.querySelectorAll('details.kde-algo-details, details.kde-conf-list-details').forEach((el) => {
+            el.open = true;
+        });
 
         const expandAllBtn = container.querySelector('.kde-levels-expand-all');
         const collapseAllBtn = container.querySelector('.kde-levels-collapse-all');
