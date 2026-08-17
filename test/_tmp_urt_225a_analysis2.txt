@@ -1,0 +1,42 @@
+n=42 avg_pnl=1.57% avg_max=14.89% gap=13.32%
+win=52.4% hit=54.8%
+reasons={'百分比止盈': 17, '结构止损': 18, '到期平仓': 1, '阻力止盈': 5, '价格止损': 1}
+tgt_basis={'pct_target_low_upside': 23, 'pct_target': 10, 'structure_resistance': 9}
+stop_basis={'structure_support': 39, 'pct_fallback_stop_above_entry': 3}
+src={'kde_recomputed': 41, 'kde': 1} fb=3
+structure_stop=18 max>=5=8 avg_pnl=-6.86 avg_max=6.62
+--- structure_stop max>=5 ---
+山东玻纤|605006|max=23.1|pnl=-12.07|ru=3.09|score=76.03|src=kde_recomputed
+模塑科技|000700|max=22.92|pnl=-6.59|ru=None|score=78.09|src=kde_recomputed
+易德龙|603380|max=14.6|pnl=-5.73|ru=1.96|score=76.14|src=kde_recomputed
+领益智造|002600|max=9.02|pnl=-11.28|ru=0.0|score=83.92|src=kde_recomputed
+三花智控|002050|max=8.23|pnl=-10.44|ru=0.0|score=81.36|src=kde_recomputed
+能科科技|603859|max=7.85|pnl=-5.84|ru=0.18|score=73.81|src=kde_recomputed
+东方盛虹|000301|max=5.71|pnl=-8.36|ru=3.22|score=83.39|src=kde
+中科曙光|603019|max=5.21|pnl=-3.51|ru=None|score=70.68|src=kde_recomputed
+resist_exit=5 avg_pnl=4.54 avg_max=16.13
+RT 博通集成|603068|sig=2026-05-06|pnl=2.97|max=7.23|ru=4.54|tgt=38.03|entry=36.38|basis=structure_resistance
+RT 模塑科技|000700|sig=2026-05-08|pnl=7.56|max=33.0|ru=5.27|tgt=14.77|entry=14.03|basis=structure_resistance
+RT 中国能建|601868|sig=2026-05-08|pnl=2.79|max=10.84|ru=3.72|tgt=3.35|entry=3.23|basis=structure_resistance
+RT 华大智造|688114|sig=2026-06-12|pnl=2.98|max=21.18|ru=3.59|tgt=52.48|entry=50.66|basis=structure_resistance
+RT 片仔癀|600436|sig=2026-07-17|pnl=6.42|max=8.39|ru=7.64|tgt=146.71|entry=136.3|basis=structure_resistance
+pct_target=17 avg_pnl=10.46 avg_max=24.46
+pct_target leftover_avg=14.00 (max - realized)
+resist_up<5=30; reasons={'百分比止盈': 13, '结构止损': 13, '到期平仓': 1, '阻力止盈': 3}; tgt_basis={'pct_target_low_upside': 23, 'structure_resistance': 7}
+structure_resistance basis n=9
+SR 博通集成|reason=阻力止盈|pnl=2.97|max=7.23|ru=4.54
+SR 模塑科技|reason=阻力止盈|pnl=7.56|max=33.0|ru=5.27
+SR 石基信息|reason=结构止损|pnl=-9.25|max=1.42|ru=3.77
+SR 中国能建|reason=阻力止盈|pnl=2.79|max=10.84|ru=3.72
+SR 山东玻纤|reason=结构止损|pnl=-12.07|max=23.1|ru=3.09
+SR 天府文旅|reason=结构止损|pnl=-7.34|max=2.28|ru=4.56
+SR 华大智造|reason=阻力止盈|pnl=2.98|max=21.18|ru=3.59
+SR 东方盛虹|reason=结构止损|pnl=-8.36|max=5.71|ru=3.22
+SR 片仔癀|reason=阻力止盈|pnl=6.42|max=8.39|ru=7.64
+bucket [70,80): n=25 hit=60.0% win=52.0% avg_pnl=2.00 avg_max=16.62
+bucket [80,90): n=17 hit=47.1% win=52.9% avg_pnl=0.93 avg_max=12.34
+corr(score,pnl)=-0.0441
+corr(score,max)=-0.0067
+rough_protect_ss5 actual_avg=-7.98 sim_avg=5.75
+rough_whole_avg_if_protect_ss5_only=4.18 (from 1.57)
+rough_partial_resist actual=4.54 sim=8.54
