@@ -71,7 +71,20 @@ def _sample_task():
                 "structure_fallback_rate": 0.1,
             },
             "by_score_bucket": {
-                "70-80": {"total": 5, "hit": 2, "hit_rate": 0.4},
+                "70-80": {"total": 5, "hit": 2, "hit_rate": 0.4, "win_rate": 0.4, "avg_pnl_pct": 1.2, "avg_max_gain_pct": 8.0},
+            },
+            "hit_rate_compare": {
+                "note": "同一批成交信号对照",
+                "hit_rate": 0.4,
+                "avg_max_gain_pct": 6.5,
+                "actual": {"avg_pnl_pct": -1.2, "win_rate": 0.35},
+                "horizon_hold": {"avg_pnl_pct": 2.0, "win_rate": 0.4},
+            },
+            "by_factor_bucket": {
+                "volume_multiple": {
+                    "label": "量能倍数",
+                    "bins": [{"bucket": "≥5", "total": 3, "hit": 2, "hit_rate": 0.67, "avg_pnl_pct": 1.0, "avg_max_gain_pct": 8.0}],
+                }
             },
             "exit_reason_dist": {"structure_stop": 2, "horizon_end": 3},
         },
@@ -96,8 +109,11 @@ def test_build_html_contains_key_sections():
     assert "URT 交易回测详情" in html
     assert "结构出场" in html
     assert "结构出场归因" in html
+    assert "命中率对照" in html
+    assert "按信号因子分桶" in html
     assert "STSong-Light" in html
-    assert "done" in html
+    assert "done" not in html
+    assert "<h2>日志</h2>" not in html
 
 
 def test_render_backtest_pdf_bytes():

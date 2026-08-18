@@ -170,7 +170,7 @@ def build_backtest_detail_html(
     task: Dict[str, Any],
     logs: Optional[Sequence[Any]] = None,
 ) -> str:
-    """根据任务详情与日志生成 xhtml2pdf 友好 HTML。"""
+    """根据任务详情生成 xhtml2pdf 友好 HTML。PDF 不含执行日志。"""
     config = task.get("config") if isinstance(task.get("config"), dict) else {}
     summary = task.get("summary") if isinstance(task.get("summary"), dict) else {}
     mode = resolve_exit_mode(task)
@@ -282,6 +282,39 @@ def build_backtest_detail_html(
     else:
         summary_html = "<p class='muted'>暂无汇总</p>"
 
+    compare_html = ""
+    cmpd = summary.get("hit_rate_compare")
+    if isinstance(cmpd, dict) and cmpd:
+        actual = cmpd.get("actual") if isinstance(cmpd.get("actual"), dict) else {}
+        hz = cmpd.get("horizon_hold") if isinstance(cmpd.get("horizon_hold"), dict) else {}
+        compare_rows: List[Tuple[str, str]] = [
+            ("说明", str(cmpd.get("note") or "")),
+            ("同批命中率", _pct(cmpd.get("hit_rate"))),
+            ("同批均最大涨幅", f"{cmpd.get('avg_max_gain_pct') if cmpd.get('avg_max_gain_pct') is not None else '-'}%"),
+            ("实际出场均盈亏", f"{actual.get('avg_pnl_pct') if actual.get('avg_pnl_pct') is not None else '-'}%"),
+            ("实际出场胜率", _pct(actual.get("win_rate"))),
+            ("满观察期均盈亏", f"{hz.get('avg_pnl_pct') if hz.get('avg_pnl_pct') is not None else '-'}%"),
+            ("满观察期胜率", _pct(hz.get("win_rate"))),
+            ("最大涨幅−实际盈亏", f"{cmpd.get('max_gain_vs_actual_pnl_gap') if cmpd.get('max_gain_vs_actual_pnl_gap') is not None else '-'}%"),
+            ("满期盈亏−实际盈亏", f"{cmpd.get('horizon_vs_actual_pnl_gap') if cmpd.get('horizon_vs_actual_pnl_gap') is not None else '-'}%"),
+        ]
+        paired = summary.get("paired_hit_rate_summary")
+        if isinstance(paired, dict) and paired:
+            compare_rows.extend(
+                [
+                    ("独立对照任务", str(paired.get("task_id") or summary.get("paired_hit_rate_task_id") or "")[:8]),
+                    ("独立对照信号数", str(paired.get("total_signals") if paired.get("total_signals") is not None else "-")),
+                    ("独立对照命中率", _pct(paired.get("hit_rate"))),
+                    ("独立对照均盈亏", f"{paired.get('avg_pnl_pct') if paired.get('avg_pnl_pct') is not None else '-'}%"),
+                    ("独立对照均最大涨幅", f"{paired.get('avg_max_gain_pct') if paired.get('avg_max_gain_pct') is not None else '-'}%"),
+                ]
+            )
+        elif summary.get("paired_hit_rate_task_id"):
+            compare_rows.append(
+                ("独立对照任务", f"{str(summary.get('paired_hit_rate_task_id'))[:8]}（排队中或未完成）")
+            )
+        compare_html = "<h2>命中率对照（同批信号）</h2>" + _kv_table(compare_rows)
+
     structure_html = ""
     ses = summary.get("structure_exit_stats")
     if isinstance(ses, dict):
@@ -307,17 +340,49 @@ def build_backtest_detail_html(
     buckets = summary.get("by_score_bucket")
     if isinstance(buckets, dict) and buckets:
         buckets_html = "<h2>按分数分桶</h2>" + _data_table(
-            ["分桶", "样本数", "命中", "命中率"],
+            ["分桶", "样本数", "命中", "命中率", "胜率", "均盈亏", "均最大涨幅"],
             [
                 [
                     name,
                     (buckets[name] or {}).get("total") or 0,
                     (buckets[name] or {}).get("hit") or 0,
                     _pct((buckets[name] or {}).get("hit_rate")),
+                    _pct((buckets[name] or {}).get("win_rate")),
+                    f"{(buckets[name] or {}).get('avg_pnl_pct') if (buckets[name] or {}).get('avg_pnl_pct') is not None else '-'}%",
+                    f"{(buckets[name] or {}).get('avg_max_gain_pct') if (buckets[name] or {}).get('avg_max_gain_pct') is not None else '-'}%",
                 ]
                 for name in buckets
             ],
         )
+
+    factor_html = ""
+    factors = summary.get("by_factor_bucket")
+    if isinstance(factors, dict) and factors:
+        factor_rows: List[List[Any]] = []
+        for spec in factors.values():
+            if not isinstance(spec, dict):
+                continue
+            label = spec.get("label") or spec.get("field") or ""
+            for b in spec.get("bins") or []:
+                if not isinstance(b, dict):
+                    continue
+                factor_rows.append(
+                    [
+                        label,
+                        b.get("bucket") or "",
+                        b.get("total") or 0,
+                        b.get("hit") or 0,
+                        _pct(b.get("hit_rate")),
+                        _pct(b.get("win_rate")),
+                        f"{b.get('avg_pnl_pct') if b.get('avg_pnl_pct') is not None else '-'}%",
+                        f"{b.get('avg_max_gain_pct') if b.get('avg_max_gain_pct') is not None else '-'}%",
+                    ]
+                )
+        if factor_rows:
+            factor_html = "<h2>按信号因子分桶</h2>" + _data_table(
+                ["因子", "分箱", "样本", "命中", "命中率", "胜率", "均盈亏", "均最大涨幅"],
+                factor_rows,
+            )
 
     exit_html = ""
     dist = summary.get("exit_reason_dist")
@@ -326,18 +391,6 @@ def build_backtest_detail_html(
             ["原因", "中文", "笔数"],
             [[name, EXIT_REASON_ZH.get(name, name), dist[name]] for name in dist],
         )
-
-    log_lines: List[str] = []
-    for item in (logs or [])[:80]:
-        if isinstance(item, dict):
-            log_lines.append(str(item.get("text") or item.get("message") or item))
-        else:
-            log_lines.append(str(item))
-    logs_html = (
-        f"<pre class='logs'>{_esc(chr(10).join(log_lines))}</pre>"
-        if log_lines
-        else "<p class='muted'>暂无日志</p>"
-    )
 
     font_family = _resolve_font_family()
 
@@ -374,14 +427,6 @@ th, td {{ border: 1px solid #ccc; padding: 3px 6px; text-align: left; vertical-a
 th {{ background: #f1f5f9; }}
 table.kv th {{ width: 32%; }}
 ol {{ margin: 0 0 8px; padding-left: 18px; }}
-.logs {{
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 6px;
-  font-size: 8pt;
-}}
 </style>
 </head>
 <body>
@@ -394,11 +439,11 @@ ol {{ margin: 0 0 8px; padding-left: 18px; }}
   {risk_html}
   <h2>汇总统计</h2>
   {summary_html}
+  {compare_html}
   {structure_html}
   {buckets_html}
+  {factor_html}
   {exit_html}
-  <h2>日志</h2>
-  {logs_html}
 </body>
 </html>
 """

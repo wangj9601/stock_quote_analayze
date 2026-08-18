@@ -17,6 +17,12 @@ from sqlalchemy.orm import Session
 from .config import URTConfigManager
 from .data_loader import URTDataLoader
 from .strategy_engine import URTStrategyEngine
+from .backtest_factor_report import (
+    assign_score_buckets,
+    build_factor_buckets,
+    build_hit_rate_compare,
+    enrich_detail_with_factors,
+)
 from .trace_store import (
     dates_ready_for_universe_backtest,
     mark_date_scanned,
@@ -977,6 +983,7 @@ def run_urt_backtest(
                 "pnl_pct": round(pnl_pct, 2),
                 "bars_held": bars_held,
             }
+            enrich_detail_with_factors(row_out, sig, future, entry_price)
             if mode == "structure_exit" and struct_levels:
                 row_out.update(
                     {
@@ -1011,32 +1018,9 @@ def run_urt_backtest(
         sum(float(r.get("max_gain_pct") or 0) for r in details) / total if total else 0.0
     )
 
-    by_score_bucket: Dict[str, Dict[str, Any]] = {}
-    for r in details:
-        s = r.get("score")
-        try:
-            sv = float(s) if s is not None else None
-        except (TypeError, ValueError):
-            sv = None
-        if sv is None:
-            bucket = "未知"
-        elif sv < 60:
-            bucket = "[0,60)"
-        elif sv < 70:
-            bucket = "[60,70)"
-        elif sv < 80:
-            bucket = "[70,80)"
-        elif sv < 90:
-            bucket = "[80,90)"
-        else:
-            bucket = "[90,100]"
-        if bucket not in by_score_bucket:
-            by_score_bucket[bucket] = {"total": 0, "hit": 0}
-        by_score_bucket[bucket]["total"] += 1
-        if r.get("hit_target"):
-            by_score_bucket[bucket]["hit"] += 1
-    for v in by_score_bucket.values():
-        v["hit_rate"] = round(v["hit"] / v["total"], 4) if v["total"] else 0.0
+    by_score_bucket = assign_score_buckets(details)
+    by_factor_bucket = build_factor_buckets(details)
+    hit_rate_compare = build_hit_rate_compare(details, mode)
 
     holding_hist = {"1-3": 0, "4-10": 0, "11-20": 0, "21+": 0}
     for r in details:
@@ -1142,6 +1126,8 @@ def run_urt_backtest(
         "strategy_config_id": resolved_id,
         "min_score": cfg.get("min_score"),
         "by_score_bucket": by_score_bucket,
+        "by_factor_bucket": by_factor_bucket,
+        "hit_rate_compare": hit_rate_compare,
         "holding_days_histogram": holding_hist,
         "exit_reason_dist": exit_reason_dist,
         "structure_exit_stats": structure_exit_stats,

@@ -71,6 +71,10 @@ class BacktestCreateBody(BaseModel):
     cn_board_segment: Optional[str] = Field(
         None, description="A股板块: ALL/MAIN/CYB/SZ_SME/KCB/BJ"
     )
+    compare_hit_rate: Optional[bool] = Field(
+        None,
+        description="结构/纪律出场完成后是否自动再跑一条同配置命中率对照；默认对非 hit_rate 开启",
+    )
 
 
 class BatchDeleteBody(BaseModel):
@@ -212,6 +216,10 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         "stock_pool_mode": mode,
         "market": "cn",
     }
+    if body.compare_hit_rate is None:
+        config["compare_hit_rate"] = config["exit_mode"] in ("structure_exit", "risk_exit")
+    else:
+        config["compare_hit_rate"] = bool(body.compare_hit_rate)
     if cn_seg:
         config["cn_board_segment"] = cn_seg
 
@@ -705,9 +713,8 @@ async def export_backtest_pdf(task_id: str, db: Session = Depends(get_db)):
             },
         }
 
-    logs = backtest_storage.get_task_logs(task_id)
     try:
-        pdf_bytes = render_backtest_pdf(row, logs=logs)
+        pdf_bytes = render_backtest_pdf(row)
     except RuntimeError as e:
         msg = str(e)
         if "xhtml2pdf" in msg and "未安装" in msg:

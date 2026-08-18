@@ -40,6 +40,8 @@ def test_urt_details_csv_chinese_headers():
     assert "信号日期" in header
     assert "是否命中目标" in header
     assert "出场原因" in header
+    assert "量能分" in header
+    assert "满观察期盈亏(%)" in header
     assert "code" not in header
     body = text.splitlines()[1]
     assert "是" in body

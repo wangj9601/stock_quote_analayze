@@ -50,6 +50,28 @@ _URT_DETAIL_FIELDS: List[str] = [
     "partial_exit_price",
     "partial_exit_date",
     "exit_reason_combo",
+    "f_above_ma20",
+    "f_yang",
+    "f_yang_quality",
+    "f_volume",
+    "f_yang_medium",
+    "f_ma_bull",
+    "f_turnover",
+    "f_volume_ratio",
+    "f_structure_position",
+    "f_overheat_penalty",
+    "volume_multiple",
+    "yang_count_5",
+    "structure_rr",
+    "dist_to_support_pct",
+    "proximity_reason",
+    "turnover_rate",
+    "turnover_relative",
+    "ma_bull_depth",
+    "overheat_intensity",
+    "ret_from_low_n",
+    "horizon_pnl_pct",
+    "horizon_exit_price",
 ]
 
 _URT_DETAIL_HEADER_ZH: Dict[str, str] = {
@@ -83,6 +105,28 @@ _URT_DETAIL_HEADER_ZH: Dict[str, str] = {
     "partial_exit_price": "分批出场价",
     "partial_exit_date": "分批出场日",
     "exit_reason_combo": "组合出场原因",
+    "f_above_ma20": "MA20趋势分",
+    "f_yang": "连阳分",
+    "f_yang_quality": "阳线质量分",
+    "f_volume": "量能分",
+    "f_yang_medium": "中期阳线分",
+    "f_ma_bull": "均线多头分",
+    "f_turnover": "换手分",
+    "f_volume_ratio": "量比分",
+    "f_structure_position": "结构位分",
+    "f_overheat_penalty": "过热扣分",
+    "volume_multiple": "量能倍数",
+    "yang_count_5": "5日连阳",
+    "structure_rr": "结构盈亏比",
+    "dist_to_support_pct": "距支撑(%)",
+    "proximity_reason": "贴近支撑原因",
+    "turnover_rate": "换手率(%)",
+    "turnover_relative": "换手相对中位",
+    "ma_bull_depth": "均线多头深度",
+    "overheat_intensity": "过热强度",
+    "ret_from_low_n": "近低点涨幅",
+    "horizon_pnl_pct": "满观察期盈亏(%)",
+    "horizon_exit_price": "满观察期收盘",
 }
 
 _URT_EXIT_REASON_ZH: Dict[str, str] = {
@@ -311,6 +355,48 @@ def complete_task(
         row.error = None
         if details_rows:
             row.details_csv_bytes = _build_urt_details_csv_bytes(details_rows)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def patch_task_config(task_id: str, extra: Dict[str, Any]) -> None:
+    """合并写入任务 config JSON（对照任务 ID 等）。"""
+    tid = normalize_task_id(task_id)
+    if not tid or not extra:
+        return
+    db = _session()
+    try:
+        row = db.query(URTBacktestTask).filter(URTBacktestTask.task_id == tid).first()
+        if not row:
+            return
+        cfg = dict(row.config) if isinstance(row.config, dict) else {}
+        cfg.update(extra)
+        row.config = cfg
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def patch_task_summary(task_id: str, extra: Dict[str, Any]) -> None:
+    """合并写入任务 summary JSON。"""
+    tid = normalize_task_id(task_id)
+    if not tid or not extra:
+        return
+    db = _session()
+    try:
+        row = db.query(URTBacktestTask).filter(URTBacktestTask.task_id == tid).first()
+        if not row:
+            return
+        summary = dict(row.summary) if isinstance(row.summary, dict) else {}
+        summary.update(extra)
+        row.summary = summary
         db.commit()
     except Exception:
         db.rollback()

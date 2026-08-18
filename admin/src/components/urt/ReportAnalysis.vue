@@ -61,6 +61,28 @@
               <el-table-column label="命中率" width="100">
                 <template #default="{ row }">{{ formatPct(row.hit_rate) }}</template>
               </el-table-column>
+              <el-table-column label="胜率" width="100">
+                <template #default="{ row }">{{ formatPct(row.win_rate) }}</template>
+              </el-table-column>
+              <el-table-column label="均盈亏" width="100">
+                <template #default="{ row }">{{ row.avg_pnl_pct ?? '-' }}%</template>
+              </el-table-column>
+            </el-table>
+
+            <h4 v-if="factorBucketRows.length" class="mt-4 mb-2">按信号因子分桶</h4>
+            <el-table v-if="factorBucketRows.length" :data="factorBucketRows" size="small" border>
+              <el-table-column prop="factor" label="因子" width="120" />
+              <el-table-column prop="bucket" label="分箱" width="100" />
+              <el-table-column prop="total" label="样本" width="70" />
+              <el-table-column label="命中率" width="90">
+                <template #default="{ row }">{{ formatPct(row.hit_rate) }}</template>
+              </el-table-column>
+              <el-table-column label="均盈亏" width="90">
+                <template #default="{ row }">{{ row.avg_pnl_pct ?? '-' }}%</template>
+              </el-table-column>
+              <el-table-column label="均最大涨幅" width="100">
+                <template #default="{ row }">{{ row.avg_max_gain_pct ?? '-' }}%</template>
+              </el-table-column>
             </el-table>
           </el-tab-pane>
           <el-tab-pane label="分布图表" name="charts" v-if="currentReport.summary">
@@ -96,7 +118,30 @@ const scoreBucketRows = computed(() => {
     total: buckets[name]?.total ?? 0,
     hit: buckets[name]?.hit ?? 0,
     hit_rate: buckets[name]?.hit_rate ?? 0,
+    win_rate: buckets[name]?.win_rate,
+    avg_pnl_pct: buckets[name]?.avg_pnl_pct,
   }))
+})
+
+const factorBucketRows = computed(() => {
+  const factors = currentReport.value?.summary?.by_factor_bucket || {}
+  const rows: any[] = []
+  Object.keys(factors).forEach((key) => {
+    const spec = factors[key] || {}
+    const label = spec.label || key
+    const bins = Array.isArray(spec.bins) ? spec.bins : []
+    bins.forEach((b: any) => {
+      rows.push({
+        factor: label,
+        bucket: b.bucket,
+        total: b.total,
+        hit_rate: b.hit_rate,
+        avg_pnl_pct: b.avg_pnl_pct,
+        avg_max_gain_pct: b.avg_max_gain_pct,
+      })
+    })
+  })
+  return rows
 })
 
 function formatPct(v: unknown) {

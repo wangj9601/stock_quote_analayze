@@ -80,6 +80,12 @@
               </el-select>
             </el-form-item>
           </el-col>
+          <el-col v-if="form.exit_mode !== 'hit_rate'" :span="12">
+            <el-form-item label="命中率对照">
+              <el-switch v-model="form.compare_hit_rate" />
+              <span class="hint">完成后自动再跑一条同配置「命中率（不止损）」</span>
+            </el-form-item>
+          </el-col>
         </el-row>
 
         <el-row :gutter="16">
@@ -302,6 +308,7 @@ const form = reactive({
   strategy_config_id: undefined as number | undefined,
   use_trace: true,
   exit_mode: 'hit_rate' as 'hit_rate' | 'risk_exit' | 'structure_exit',
+  compare_hit_rate: true,
   stock_pool_mode: 'all',
   stock_code: '',
   stock_list: '',
@@ -493,6 +500,7 @@ async function createTask() {
       strategy_config_id: form.strategy_config_id,
       use_trace: form.use_trace,
       exit_mode: form.exit_mode,
+      compare_hit_rate: form.exit_mode === 'hit_rate' ? false : form.compare_hit_rate,
       stock_pool_mode: mode,
       cn_board_segment: cnBoardSegment.value === 'ALL' ? undefined : cnBoardSegment.value,
     }

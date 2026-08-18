@@ -2,7 +2,7 @@
   <el-dialog
     v-model="visible"
     title="URT 交易回测详情"
-    width="860px"
+    width="920px"
     destroy-on-close
     @close="handleClose"
   >
@@ -125,13 +125,73 @@
           </el-descriptions>
         </template>
 
+        <template v-if="hitRateCompare">
+          <h4 class="mt-4 mb-2">命中率对照（同批信号）</h4>
+          <el-alert
+            class="mb-2"
+            type="info"
+            :closable="false"
+            show-icon
+            :title="hitRateCompare.note || '命中率/最大涨幅与出场无关；满观察期盈亏按末日收盘。'"
+          />
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="同批命中率">{{ pct(hitRateCompare.hit_rate) }}</el-descriptions-item>
+            <el-descriptions-item label="同批均最大涨幅">{{ hitRateCompare.avg_max_gain_pct ?? '-' }}%</el-descriptions-item>
+            <el-descriptions-item label="实际出场均盈亏">{{ hitRateCompare.actual?.avg_pnl_pct ?? '-' }}%</el-descriptions-item>
+            <el-descriptions-item label="实际出场胜率">{{ pct(hitRateCompare.actual?.win_rate) }}</el-descriptions-item>
+            <el-descriptions-item label="满观察期均盈亏">{{ hitRateCompare.horizon_hold?.avg_pnl_pct ?? '-' }}%</el-descriptions-item>
+            <el-descriptions-item label="满观察期胜率">{{ pct(hitRateCompare.horizon_hold?.win_rate) }}</el-descriptions-item>
+            <el-descriptions-item label="最大涨幅−实际盈亏">{{ hitRateCompare.max_gain_vs_actual_pnl_gap ?? '-' }}%</el-descriptions-item>
+            <el-descriptions-item label="满期盈亏−实际盈亏">{{ hitRateCompare.horizon_vs_actual_pnl_gap ?? '-' }}%</el-descriptions-item>
+            <el-descriptions-item v-if="pairedHitRate" label="独立对照命中率" :span="2">
+              {{ pct(pairedHitRate.hit_rate) }}
+              · 信号 {{ pairedHitRate.total_signals ?? '-' }}
+              · 均盈亏 {{ pairedHitRate.avg_pnl_pct ?? '-' }}%
+              · 均最大涨幅 {{ pairedHitRate.avg_max_gain_pct ?? '-' }}%
+              <span v-if="pairedTaskId" class="hint-inline">（任务 {{ pairedTaskId.slice(0, 8) }}）</span>
+            </el-descriptions-item>
+            <el-descriptions-item v-else-if="pairedTaskId" label="独立对照任务" :span="2">
+              {{ pairedTaskId.slice(0, 8) }}（排队中或未完成）
+            </el-descriptions-item>
+          </el-descriptions>
+        </template>
+
         <h4 v-if="scoreBucketRows.length" class="mt-4 mb-2">按分数分桶</h4>
         <el-table v-if="scoreBucketRows.length" :data="scoreBucketRows" size="small" border>
           <el-table-column prop="name" label="分桶" />
-          <el-table-column prop="total" label="样本数" width="90" />
-          <el-table-column prop="hit" label="命中" width="80" />
-          <el-table-column label="命中率" width="100">
+          <el-table-column prop="total" label="样本数" width="80" />
+          <el-table-column prop="hit" label="命中" width="70" />
+          <el-table-column label="命中率" width="90">
             <template #default="{ row }">{{ pct(row.hit_rate) }}</template>
+          </el-table-column>
+          <el-table-column label="胜率" width="90">
+            <template #default="{ row }">{{ pct(row.win_rate) }}</template>
+          </el-table-column>
+          <el-table-column label="均盈亏" width="90">
+            <template #default="{ row }">{{ row.avg_pnl_pct ?? '-' }}%</template>
+          </el-table-column>
+          <el-table-column label="均最大涨幅" width="100">
+            <template #default="{ row }">{{ row.avg_max_gain_pct ?? '-' }}%</template>
+          </el-table-column>
+        </el-table>
+
+        <h4 v-if="factorBucketRows.length" class="mt-4 mb-2">按信号因子分桶</h4>
+        <el-table v-if="factorBucketRows.length" :data="factorBucketRows" size="small" border>
+          <el-table-column prop="factor" label="因子" width="120" />
+          <el-table-column prop="bucket" label="分箱" width="100" />
+          <el-table-column prop="total" label="样本" width="70" />
+          <el-table-column prop="hit" label="命中" width="70" />
+          <el-table-column label="命中率" width="90">
+            <template #default="{ row }">{{ pct(row.hit_rate) }}</template>
+          </el-table-column>
+          <el-table-column label="胜率" width="90">
+            <template #default="{ row }">{{ pct(row.win_rate) }}</template>
+          </el-table-column>
+          <el-table-column label="均盈亏" width="90">
+            <template #default="{ row }">{{ row.avg_pnl_pct ?? '-' }}%</template>
+          </el-table-column>
+          <el-table-column label="均最大涨幅" width="100">
+            <template #default="{ row }">{{ row.avg_max_gain_pct ?? '-' }}%</template>
           </el-table-column>
         </el-table>
 
@@ -333,7 +393,44 @@ const scoreBucketRows = computed(() => {
     total: buckets[name]?.total ?? 0,
     hit: buckets[name]?.hit ?? 0,
     hit_rate: buckets[name]?.hit_rate ?? 0,
+    win_rate: buckets[name]?.win_rate,
+    avg_pnl_pct: buckets[name]?.avg_pnl_pct,
+    avg_max_gain_pct: buckets[name]?.avg_max_gain_pct,
   }))
+})
+
+const hitRateCompare = computed(() => task.value?.summary?.hit_rate_compare || null)
+const pairedHitRate = computed(() => task.value?.summary?.paired_hit_rate_summary || null)
+const pairedTaskId = computed(() => {
+  return (
+    task.value?.summary?.paired_hit_rate_task_id ||
+    task.value?.config?.paired_hit_rate_task_id ||
+    pairedHitRate.value?.task_id ||
+    ''
+  )
+})
+
+const factorBucketRows = computed(() => {
+  const factors = task.value?.summary?.by_factor_bucket || {}
+  const rows: any[] = []
+  Object.keys(factors).forEach((key) => {
+    const spec = factors[key] || {}
+    const label = spec.label || key
+    const bins = Array.isArray(spec.bins) ? spec.bins : []
+    bins.forEach((b: any) => {
+      rows.push({
+        factor: label,
+        bucket: b.bucket,
+        total: b.total,
+        hit: b.hit,
+        hit_rate: b.hit_rate,
+        win_rate: b.win_rate,
+        avg_pnl_pct: b.avg_pnl_pct,
+        avg_max_gain_pct: b.avg_max_gain_pct,
+      })
+    })
+  })
+  return rows
 })
 
 const exitReasonRows = computed(() => {

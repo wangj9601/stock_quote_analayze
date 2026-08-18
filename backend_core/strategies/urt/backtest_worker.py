@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Set
+from typing import Optional, Set
 
 from backend_api.database import SessionLocal
 
@@ -73,6 +73,24 @@ def _run_task(task_id: str) -> None:
             summary=result.get("summary") or {},
             details_rows=result.get("details") or [],
         )
+        if cfg.get("is_hit_rate_compare") and cfg.get("paired_from_task_id"):
+            sm = result.get("summary") or {}
+            backtest_storage.patch_task_summary(
+                str(cfg.get("paired_from_task_id")),
+                {
+                    "paired_hit_rate_task_id": task_id,
+                    "paired_hit_rate_summary": {
+                        "task_id": task_id,
+                        "total_signals": sm.get("total_signals"),
+                        "hit_rate": sm.get("hit_rate"),
+                        "win_rate": sm.get("win_rate"),
+                        "avg_pnl_pct": sm.get("avg_pnl_pct"),
+                        "avg_max_gain_pct": sm.get("avg_max_gain_pct"),
+                        "avg_bars_held": sm.get("avg_bars_held"),
+                    },
+                },
+            )
+        _maybe_start_hit_rate_compare(task_id)
     except Exception as e:
         logger.exception("URT 回测任务失败 %s", task_id)
         backtest_storage.fail_task(task_id, str(e))
@@ -80,6 +98,48 @@ def _run_task(task_id: str) -> None:
         with _lock:
             _cancelled.discard(task_id)
         db.close()
+
+
+def _maybe_start_hit_rate_compare(parent_id: str) -> Optional[str]:
+    """结构/纪律出场完成后，同配置自动排队一条 hit_rate 对照任务。"""
+    parent = backtest_storage.get_task(parent_id)
+    if not parent:
+        return None
+    cfg = parent.get("config") if isinstance(parent.get("config"), dict) else {}
+    mode = str(cfg.get("exit_mode") or "hit_rate").strip().lower()
+    if mode not in ("structure_exit", "risk_exit"):
+        return None
+    if cfg.get("is_hit_rate_compare"):
+        return None
+    if cfg.get("compare_hit_rate") is False:
+        return None
+    existing = str(cfg.get("paired_hit_rate_task_id") or "").strip()
+    if existing:
+        child = backtest_storage.get_task(existing)
+        if child and child.get("status") == "pending":
+            start_backtest_task(existing)
+            return existing
+        return existing
+
+    child_cfg = dict(cfg)
+    child_cfg["exit_mode"] = "hit_rate"
+    child_cfg["compare_hit_rate"] = False
+    child_cfg["is_hit_rate_compare"] = True
+    child_cfg["paired_from_task_id"] = parent_id
+    parent_name = str(parent.get("name") or "URT回测")
+    child_name = f"{parent_name}_命中率对照"
+    child_id = backtest_storage.create_task(child_cfg, name=child_name)
+    backtest_storage.patch_task_config(parent_id, {"paired_hit_rate_task_id": child_id})
+    backtest_storage.patch_task_summary(
+        parent_id,
+        {
+            "paired_hit_rate_task_id": child_id,
+            "paired_hit_rate_name": child_name,
+        },
+    )
+    start_backtest_task(child_id)
+    logger.info("URT 已自动创建 hit_rate 对照任务 parent=%s child=%s", parent_id[:8], child_id[:8])
+    return child_id
 
 
 def start_backtest_task(task_id: str) -> None:
