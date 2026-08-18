@@ -167,29 +167,81 @@ class URTDataLoader:
             ORDER BY date DESC
         """
         rows = self.db.execute(text(sql), params).fetchall()
-        out: List[Dict[str, Any]] = []
-        for row in rows:
-            date_val = row[2]
-            if hasattr(date_val, "strftime"):
-                date_str = date_val.strftime("%Y-%m-%d")
-            else:
-                date_str = str(date_val)[:10]
-            out.append(
-                {
-                    "code": row[0],
-                    "name": row[1],
-                    "date": date_str,
-                    "open": float(row[3]) if row[3] is not None else 0.0,
-                    "close": float(row[4]) if row[4] is not None else 0.0,
-                    "high": float(row[5]) if row[5] is not None else 0.0,
-                    "low": float(row[6]) if row[6] is not None else 0.0,
-                    "change_percent": float(row[7]) if row[7] is not None else 0.0,
-                    "volume": float(row[8]) if row[8] is not None else 0.0,
-                    "amount": float(row[9]) if row[9] is not None else 0.0,
-                    "turnover_rate": float(row[10]) if row[10] is not None else None,
-                }
-            )
+        return [self._quote_row_to_bar(row) for row in rows]
+
+    def fetch_historical_desc_batch(
+        self,
+        codes: List[str],
+        *,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        market: Optional[str] = None,
+        chunk_size: int = 400,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """按代码批量拉取日 K（每只日期 DESC）。减少全市场扫描的逐股查询。"""
+        from sqlalchemy import bindparam
+
+        mkt = str(market or self.market or "CN").strip().upper()
+        table = "historical_quotes_hk" if mkt == "HK" else "historical_quotes"
+        uniq: List[str] = []
+        seen: set[str] = set()
+        for c in codes:
+            s = str(c or "").strip()
+            if not s or s in seen:
+                continue
+            seen.add(s)
+            uniq.append(s)
+        out: Dict[str, List[Dict[str, Any]]] = {c: [] for c in uniq}
+        if not uniq:
+            return out
+        n = max(50, int(chunk_size or 400))
+        for i in range(0, len(uniq), n):
+            chunk = uniq[i : i + n]
+            clauses = ["code IN :codes"]
+            params: Dict[str, Any] = {"codes": chunk}
+            if start_date:
+                clauses.append("date >= :start_date")
+                params["start_date"] = str(start_date)[:10]
+            if end_date:
+                clauses.append("date <= :end_date")
+                params["end_date"] = str(end_date)[:10]
+            sql = text(
+                f"""
+                SELECT code, name, date, open, close, high, low,
+                       change_percent, volume, amount, turnover_rate
+                FROM {table}
+                WHERE {' AND '.join(clauses)}
+                ORDER BY code ASC, date DESC
+                """
+            ).bindparams(bindparam("codes", expanding=True))
+            rows = self.db.execute(sql, params).fetchall()
+            for row in rows:
+                bar = self._quote_row_to_bar(row)
+                code = str(bar.get("code") or "")
+                if code in out:
+                    out[code].append(bar)
         return out
+
+    @staticmethod
+    def _quote_row_to_bar(row: Any) -> Dict[str, Any]:
+        date_val = row[2]
+        if hasattr(date_val, "strftime"):
+            date_str = date_val.strftime("%Y-%m-%d")
+        else:
+            date_str = str(date_val)[:10]
+        return {
+            "code": row[0],
+            "name": row[1],
+            "date": date_str,
+            "open": float(row[3]) if row[3] is not None else 0.0,
+            "close": float(row[4]) if row[4] is not None else 0.0,
+            "high": float(row[5]) if row[5] is not None else 0.0,
+            "low": float(row[6]) if row[6] is not None else 0.0,
+            "change_percent": float(row[7]) if row[7] is not None else 0.0,
+            "volume": float(row[8]) if row[8] is not None else 0.0,
+            "amount": float(row[9]) if row[9] is not None else 0.0,
+            "turnover_rate": float(row[10]) if row[10] is not None else None,
+        }
 
     @staticmethod
     def resolve_effective_history_end_date(

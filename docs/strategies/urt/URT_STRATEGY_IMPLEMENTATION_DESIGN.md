@@ -8,6 +8,7 @@
 |------|------|----------|
 | [URT_上升趋势_业务简化版.md](./URT_上升趋势_业务简化版.md) | 业务 / 交易员 | 找什么票、何时可买、推送与买点区别 |
 | [URT策略交易回测说明.md](./URT策略交易回测说明.md) | 策略 / 业务 / 研发 | 回测入场、观察期、出场与汇总 |
+| [URT策略回测优化方案.md](./URT策略回测优化方案.md) | 策略 / 研发 | 回测样本结论与出场/选股优化待办 |
 | [URT_GMS功能对比与技术方案.md](./URT_GMS功能对比与技术方案.md) | 研发 | 与 GMS 能力对照 |
 | **本文** | 研发 / 架构 | 硬筛、得分、模块、API、预计算、配置 |
 
@@ -34,7 +35,7 @@
 
 **出信号流程**：先过硬筛（MA20 + 连阳 + 量能，以及若启用的换手/量比/中期阳线/多头）→ 再计算得分 → `score < min_score` 仍过滤。
 
-交易纪律（写入配置，选股不强制；**回测持仓阶段生效**）：价格止损 5%–10%、连跌 3 日离场、涨 25%–30% 后高点回撤 5% 止盈。完整买卖与观察期规则见：[URT策略交易回测说明.md](./URT策略交易回测说明.md)。
+交易纪律（写入配置，选股不强制；**回测持仓阶段生效**）：价格止损 5%–10%、连跌 3 日且浮亏≥4% 离场、涨约 **8%–10%** 后高点回撤 5% 止盈。完整买卖与观察期规则见：[URT策略交易回测说明.md](./URT策略交易回测说明.md)。
 
 与 GMS 差异：不做左侧吸附；数据源为 `historical_quotes`（现算 MA），不依赖 `mean_frequency_resonance_indicators`。
 
@@ -255,7 +256,7 @@ admin/  # /urt-management 参数配置页
 | 市场 | 暂仅 A 股 |
 | 信号 | 优先 `urt_signal_trace`；区间内缺失日先按时间范围全市场/股票池补算一次再回测；`use_trace=false` 则逐日实时（含全市场） |
 | 入场 | 信号次日开盘价；同标的上一笔出场日前不重复开仓 |
-| 观察期 | `horizon_days`，**默认 20 个交易日** |
+| 观察期 | `horizon_days`，**默认 10 个交易日**（短线；可任务级改为 5/15/20） |
 | 出场 | 默认 `hit_rate`：观察期内最高价判定目标（默认 10%），**不止损**；可选 `risk_exit` 调用 `evaluate_exit_rules` |
 | 元数据 | 任务 `config`/`summary` 含 `trade_logic`、`risk_params`；详情页展示 |
 | 导出 | UTF-8-BOM CSV，中文列名（Excel 可开） |
@@ -340,9 +341,10 @@ admin/  # /urt-management 参数配置页
 |------|------|------|---------------|------|
 | `risk.stop_loss_pct_min` | 止损区间下限（%） | 5 | JSON | 文档化区间；当前离场逻辑主要用上限 |
 | `risk.stop_loss_pct_max` | 价格止损阈值（%） | 10 | 管理端 **1～30** | 浮亏 ≤ −该值 → `price_stop` |
-| `risk.time_stop_down_days` | 连跌离场天数 | 3 | 管理端 **1～10** | 连续收跌天数 ≥ 该值 → `time_stop` |
-| `risk.take_profit_alert_pct_min` | 止盈警惕涨幅下限（%） | 25 | JSON | 自成本涨幅达警惕区后才启用回撤止盈 |
-| `risk.take_profit_alert_pct_max` | 止盈警惕涨幅上限（%） | 30 | JSON | 与会议纪律区间对应；现实现以 `alert_min` 起步 |
+| `risk.time_stop_down_days` | 连跌离场天数 | 3 | 管理端 **1～10** | 连续收跌天数 ≥ 该值，且浮亏 ≥ `time_stop_min_loss_pct` → `time_stop` |
+| `risk.time_stop_min_loss_pct` | 连跌须浮亏（%） | **4** | 管理端 **0～20** | 0 表示仅看连跌天数 |
+| `risk.take_profit_alert_pct_min` | 止盈警惕涨幅下限（%） | **8** | 管理端 | 自成本涨幅达警惕区后才启用回撤止盈 |
+| `risk.take_profit_alert_pct_max` | 止盈警惕涨幅上限（%） | **10** | 管理端 | 文档区间上限；实现以 `alert_min` 起步 |
 | `risk.trailing_drawdown_pct` | 高点回撤止盈（%） | 5 | 管理端 **1～20** | 达警惕涨幅后，自峰值回撤 ≥ 该值 → `trailing_take_profit` |
 
 回测任务级参数（不写入 `risk`，写在任务 `config`）：
@@ -350,7 +352,7 @@ admin/  # /urt-management 参数配置页
 | 参数 | 含义 | 默认 |
 |------|------|------|
 | `target_pct` | 目标涨幅（小数） | 0.10 |
-| `horizon_days` | 观察期交易日数 | **20** |
+| `horizon_days` | 观察期交易日数 | **10** |
 | `use_trace` | 是否优先读 `urt_signal_trace` | true |
 
 ### 6.6 选股 API 运行时参数（Query，不写配置表）

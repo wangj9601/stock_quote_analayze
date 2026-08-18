@@ -93,8 +93,9 @@
     "stop_loss_pct_min": 5,
     "stop_loss_pct_max": 10,
     "time_stop_down_days": 3,
-    "take_profit_alert_pct_min": 25,
-    "take_profit_alert_pct_max": 30,
+    "time_stop_min_loss_pct": 4.0,
+    "take_profit_alert_pct_min": 8,
+    "take_profit_alert_pct_max": 10,
     "trailing_drawdown_pct": 5
   }
 }

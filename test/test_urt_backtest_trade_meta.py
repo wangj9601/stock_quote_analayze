@@ -14,8 +14,10 @@ def test_build_urt_trade_meta_defaults():
     logic = meta["trade_logic"]
     assert risk["stop_loss_pct_max"] == 10
     assert risk["time_stop_down_days"] == 3
+    assert risk["time_stop_min_loss_pct"] == 4.0
+    assert risk["take_profit_alert_pct_min"] == 8
     assert risk["trailing_drawdown_pct"] == 5
-    assert "20" in logic["summary"]
+    assert "观察期 10" in logic["summary"]
     assert any("开盘价" in r for r in logic["rules"])
     codes = [x["code"] for x in logic["exit_priority"]]
     assert codes[0] == "target_hit"

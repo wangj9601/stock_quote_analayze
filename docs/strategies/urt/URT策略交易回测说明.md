@@ -12,6 +12,7 @@
 | 管理端详情 | `admin/src/components/urt/TaskDetail.vue` |
 
 策略选股与得分规则见：[URT_STRATEGY_IMPLEMENTATION_DESIGN.md](./URT_STRATEGY_IMPLEMENTATION_DESIGN.md)。  
+回测优化结论与待办见：[URT策略回测优化方案.md](./URT策略回测优化方案.md)。  
 GMS 对照见：[GMS交易回测买卖规则说明.md](./GMS交易回测买卖规则说明.md)。
 
 ---
@@ -32,7 +33,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 |------|------|------|------|
 | `start_date` / `end_date` | 信号扫描区间 | 必填 | 按区间内交易日逐日扫描 |
 | `target_pct` | 目标涨幅 | **0.10（10%）** | 入场价 × (1 + target_pct) 为目标价 |
-| `horizon_days` | 观察期交易日数 | **20** | 入场日后最多取 N 根 K 线 |
+| `horizon_days` | 观察期交易日数 | **10** | 入场日后最多取 N 根 K 线（短线默认；可对照 5/15） |
 | `min_score` | 最低得分 | 策略配置（常为 70） | 过滤买点；可任务级覆盖 |
 | `use_trace` | 优先读缓存 | `true` | 优先 `urt_signal_trace`；无则实时引擎 |
 | `exit_mode` | 出场模式 | `hit_rate` | `hit_rate` / `risk_exit` |
@@ -49,11 +50,11 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 ### 2.1 信号来源
 
 1. **优先**（`use_trace=true` 且有配置 ID）：读当日 `urt_signal_trace`，且 `score ≥ min_score`。
-2. **区间补齐**：回测开始时检查时间范围内各交易日是否已具备**全市场/股票池级**预计算（仅有个股强制重算的零星 trace **不算**覆盖）。未覆盖日对全市场（或任务股票池）扫描一次并写入 `urt_signal_trace`，并打上 `__URT_SCANNED__` 扫描占位，再进入交易模拟。
-3. **关闭缓存**（`use_trace=false`）：逐日实时 `screen_universe`（含全市场，不再因候选过多跳过）。
+2. **区间补齐**：回测开始时检查时间范围内各交易日是否已具备**全市场/股票池级**预计算（仅有个股强制重算的零星 trace **不算**覆盖）。未覆盖日对全市场（或任务股票池）**一次拉齐区间行情、内存按日评买点**并写入 `urt_signal_trace`，打上 `__URT_SCANNED__` 扫描占位，再进入交易模拟。不要按每个交易日重复拉取全市场 K 线。
+3. **关闭缓存**（`use_trace=false`）：同样走区间一次扫描（内存出信号），不再逐日 `screen_universe`。全市场务必打开「优先读缓存」：结果可复用，且命中率对照不必再扫一遍。
 
 买点判定（硬筛 + 得分）与选股一致，详见设计文档 §1 / §6。  
-全市场首次回测若区间较长，预计算阶段耗时会明显增加，进度条前半段为「补齐预计算」。
+「手动预计算」只跑选定的**一天**，不能覆盖整段回测区间。全市场首次回测若区间缺缓存，进度条前半段为「区间一次扫描」补齐预计算。环境变量 `URT_SCREEN_WORKERS`（默认最多 4）可加快评点。
 
 ### 2.2 买入规则
 
@@ -70,7 +71,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 
 ### 3.0 模式 `hit_rate`（默认，对齐 GMS 命中率）
 
-观察窗口为信号日之后共 **`horizon_days` 根交易日 K 线**（默认 **20**，首根为入场日）。
+观察窗口为信号日之后共 **`horizon_days` 根交易日 K 线**（默认 **10**，首根为入场日）。
 
 | 规则项 | 说明 |
 |--------|------|
@@ -87,8 +88,8 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | 出场码 | 条件 |
 |--------|------|
 | `price_stop` | 浮亏 ≤ −`risk.stop_loss_pct_max`（默认 10%） |
-| `time_stop` | 连续收跌 ≥ `risk.time_stop_down_days`（默认 3） |
-| `trailing_take_profit` | 涨幅达警惕区后自峰值回撤 ≥ `risk.trailing_drawdown_pct` |
+| `time_stop` | 连续收跌 ≥ `risk.time_stop_down_days`（默认 3）**且**浮亏 ≥ `risk.time_stop_min_loss_pct`（默认 **4%**） |
+| `trailing_take_profit` | 涨幅达警惕区（默认 **8%–10%**）后自峰值回撤 ≥ `risk.trailing_drawdown_pct` |
 | `horizon_end` | 未触发纪律则满观察期收盘出场 |
 
 同时仍统计 `hit_target`（观察窗内最高价是否触及目标），与是否提前纪律离场独立。
@@ -144,8 +145,9 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | `stop_loss_pct_min` | 止损区间下限（%） | 5 |
 | `stop_loss_pct_max` | 价格止损阈值（%） | 10 |
 | `time_stop_down_days` | 连跌离场天数 | 3 |
-| `take_profit_alert_pct_min` | 止盈警惕涨幅下限（%） | 25 |
-| `take_profit_alert_pct_max` | 止盈警惕涨幅上限（%） | 30 |
+| `time_stop_min_loss_pct` | 连跌须同时达到的浮亏（%） | **4** |
+| `take_profit_alert_pct_min` | 止盈警惕涨幅下限（%） | **8** |
+| `take_profit_alert_pct_max` | 止盈警惕涨幅上限（%） | **10** |
 | `trailing_drawdown_pct` | 高点回撤止盈（%） | 5 |
 | `structure_stop_buffer_pct` | 结构止损相对支撑下移缓冲 | 0.02（顶层配置） |
 
@@ -201,7 +203,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
         ↓
 信号次日开盘价入场
         ↓
-观察期（默认 20 个交易日）逐日检查
+观察期（默认 10 个交易日）逐日检查
         ├─ high ≥ 目标价 → target_hit（出场价=目标价）
         ├─ 浮亏 ≤ −止损% → price_stop
         ├─ 连跌 ≥ N 日 → time_stop

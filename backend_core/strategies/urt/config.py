@@ -147,8 +147,11 @@ class URTConfigManager:
                 "stop_loss_pct_min": 5,
                 "stop_loss_pct_max": 10,
                 "time_stop_down_days": 3,
-                "take_profit_alert_pct_min": 25,
-                "take_profit_alert_pct_max": 30,
+                # 连跌须同时浮亏达到该比例才离场（避免放量后普通回调被洗出）
+                "time_stop_min_loss_pct": 4.0,
+                # 短线：约 +8% 起武装回撤止盈（原 25%–30% 几乎触发不到）
+                "take_profit_alert_pct_min": 8,
+                "take_profit_alert_pct_max": 10,
                 "trailing_drawdown_pct": 5,
             },
         }

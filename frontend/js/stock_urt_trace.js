@@ -438,7 +438,7 @@
                 return;
             }
             const targetPct = pctRaw / 100;
-            const horizon = parseInt(document.getElementById('btHorizon')?.value || '20', 10);
+            const horizon = parseInt(document.getElementById('btHorizon')?.value || '10', 10);
             const minScoreRaw = document.getElementById('btMinScore')?.value;
             const minScore = minScoreRaw !== '' && minScoreRaw != null ? parseFloat(minScoreRaw) : null;
             if (horizon < 10 || horizon > 30) {

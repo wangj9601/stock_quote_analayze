@@ -192,7 +192,7 @@ def build_backtest_detail_html(
             [
                 ("日期范围", f"{config.get('start_date') or '-'} ~ {config.get('end_date') or '-'}"),
                 ("目标涨幅", f"{float(config.get('target_pct') or 0) * 100:.1f}%"),
-                ("观察期", f"{config.get('horizon_days') if config.get('horizon_days') is not None else 20} 个交易日"),
+                ("观察期", f"{config.get('horizon_days') if config.get('horizon_days') is not None else 10} 个交易日"),
                 ("最低得分", str(config.get("min_score") if config.get("min_score") is not None else summary.get("min_score") or "-")),
                 ("优先读缓存", "是" if config.get("use_trace") else "否"),
                 ("出场模式", mode_label),
@@ -246,7 +246,8 @@ def build_backtest_detail_html(
                 "价格止损阈值",
                 f"−{_num(risk.get('stop_loss_pct_max'))}%（文档区间 {_num(risk.get('stop_loss_pct_min'))}%–{_num(risk.get('stop_loss_pct_max'))}%）",
             ),
-            ("时间止损", f"连续收跌 ≥ {risk.get('time_stop_down_days') if risk.get('time_stop_down_days') is not None else '-'} 日"),
+            ("时间止损", f"连续收跌 ≥ {risk.get('time_stop_down_days') if risk.get('time_stop_down_days') is not None else '-'} 日"
+             + (f" 且浮亏 ≥ {_num(risk.get('time_stop_min_loss_pct'))}%" if risk.get("time_stop_min_loss_pct") is not None else "")),
             (
                 "止盈警惕涨幅",
                 f"{_num(risk.get('take_profit_alert_pct_min'))}%–{_num(risk.get('take_profit_alert_pct_max'))}%",

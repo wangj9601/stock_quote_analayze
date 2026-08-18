@@ -23,7 +23,7 @@
           <el-descriptions-item v-if="cnBoardLabel" label="A股板块">{{ cnBoardLabel }}</el-descriptions-item>
           <el-descriptions-item label="日期范围">{{ task.config.start_date }} ~ {{ task.config.end_date }}</el-descriptions-item>
           <el-descriptions-item label="目标涨幅">{{ ((task.config.target_pct || 0) * 100).toFixed(1) }}%</el-descriptions-item>
-          <el-descriptions-item label="观察期">{{ task.config.horizon_days ?? 20 }} 个交易日</el-descriptions-item>
+          <el-descriptions-item label="观察期">{{ task.config.horizon_days ?? 10 }} 个交易日</el-descriptions-item>
           <el-descriptions-item label="最低得分">{{ task.config.min_score ?? task.summary?.min_score ?? '-' }}</el-descriptions-item>
           <el-descriptions-item label="优先读缓存">{{ task.config.use_trace ? '是' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="出场模式">{{ exitModeLabel }}</el-descriptions-item>
@@ -74,6 +74,9 @@
         </el-descriptions-item>
         <el-descriptions-item label="时间止损">
           连续收跌 ≥ {{ riskParams.time_stop_down_days ?? '-' }} 日
+          <span v-if="riskParams.time_stop_min_loss_pct != null">
+            且浮亏 ≥ {{ num(riskParams.time_stop_min_loss_pct) }}%
+          </span>
         </el-descriptions-item>
         <el-descriptions-item label="止盈警惕涨幅">
           {{ num(riskParams.take_profit_alert_pct_min) }}%–{{ num(riskParams.take_profit_alert_pct_max) }}%

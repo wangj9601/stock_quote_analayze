@@ -83,45 +83,55 @@ def _ensure_trace_for_backtest_range(
         config_id,
     )
 
+    span = max(1, progress_end - progress_start)
+
+    def _range_progress(done_stocks: int, total_stocks: int, message: str) -> None:
+        if not progress_cb:
+            return
+        pct = progress_start + int(span * done_stocks / max(1, total_stocks))
+        progress_cb(min(progress_end - 1, pct), message)
+
+    hits_by_date, completed = engine.screen_universe_for_dates(
+        stocks,
+        missing,
+        require_pass=True,
+        progress_cb=_range_progress,
+        cancel_check=cancel_check,
+    )
     hit_total = 0
     done = 0
-    span = max(1, progress_end - progress_start)
-    for j, d in enumerate(missing):
-        if cancel_check and cancel_check():
-            break
-        if progress_cb:
-            pct = progress_start + int(span * j / max(1, len(missing)))
-            progress_cb(
-                min(progress_end - 1, pct),
-                f"补齐全市场预计算 {d}（{j + 1}/{len(missing)}，{pool_label}）",
-            )
+    if completed:
         try:
-            day_hits = engine.screen_universe(stocks, as_of_end_date=d)
-            day_hits = [h for h in day_hits if str(h.get("signal_date"))[:10] == d]
-            if day_hits:
-                upsert_trace_rows(db, config_id=config_id, rows=day_hits)
-                hit_total += len(day_hits)
-            # 无论是否有买点，都打扫描占位（全市场级覆盖标记）
-            mark_date_scanned(
-                db,
-                config_id=config_id,
-                trade_date=d,
-                extra={
-                    "hits": len(day_hits),
-                    "candidates": len(stocks),
-                    "scope": "pool" if stock_pool else "full_market",
-                },
-            )
-            done += 1
+            all_hits = [h for rows in hits_by_date.values() for h in rows]
+            if all_hits:
+                upsert_trace_rows(db, config_id=config_id, rows=all_hits)
+                hit_total = len(all_hits)
+            for d in missing:
+                day_hits = hits_by_date.get(d) or []
+                mark_date_scanned(
+                    db,
+                    config_id=config_id,
+                    trade_date=d,
+                    extra={
+                        "hits": len(day_hits),
+                        "candidates": len(stocks),
+                        "scope": "pool" if stock_pool else "full_market",
+                    },
+                )
+                done += 1
         except Exception as e:
-            logger.warning("URT 回测补算预计算失败 date=%s: %s", d, e)
+            logger.warning("URT 回测补算预计算落库失败: %s", e)
             try:
                 db.rollback()
             except Exception:
                 pass
+    else:
+        logger.info("URT 回测区间扫描未完成，不打扫描占位以免误标覆盖")
 
     meta["precomputed_days"] = done
     meta["precompute_hits"] = hit_total
+    meta["range_scan"] = True
+    meta["range_scan_completed"] = bool(completed)
     if progress_cb:
         progress_cb(
             progress_end,
@@ -133,7 +143,7 @@ def _ensure_trace_for_backtest_range(
 def build_urt_trade_meta(
     *,
     target_pct: float = 0.10,
-    horizon_days: int = 20,
+    horizon_days: int = 10,
     min_score: Optional[float] = None,
     use_trace: bool = True,
     risk: Optional[Dict[str, Any]] = None,
@@ -148,9 +158,15 @@ def build_urt_trade_meta(
     stop_max = float(risk.get("stop_loss_pct_max") or 10)
     stop_min = float(risk.get("stop_loss_pct_min") or 5)
     time_stop_days = int(risk.get("time_stop_down_days") or 3)
-    alert_min = float(risk.get("take_profit_alert_pct_min") or 25)
-    alert_max = float(risk.get("take_profit_alert_pct_max") or 30)
+    alert_min = float(risk.get("take_profit_alert_pct_min") or 8)
+    alert_max = float(risk.get("take_profit_alert_pct_max") or 10)
     trail = float(risk.get("trailing_drawdown_pct") or 5)
+    try:
+        time_stop_min_loss = float(
+            risk.get("time_stop_min_loss_pct") if risk.get("time_stop_min_loss_pct") is not None else 4.0
+        )
+    except (TypeError, ValueError):
+        time_stop_min_loss = 4.0
     ms = float(min_score) if min_score is not None else 70.0
     tp = float(target_pct) * 100.0
     hz = int(horizon_days)
@@ -194,6 +210,7 @@ def build_urt_trade_meta(
         "stop_loss_pct_min": stop_min,
         "stop_loss_pct_max": stop_max,
         "time_stop_down_days": time_stop_days,
+        "time_stop_min_loss_pct": time_stop_min_loss,
         "take_profit_alert_pct_min": alert_min,
         "take_profit_alert_pct_max": alert_max,
         "trailing_drawdown_pct": trail,
@@ -315,7 +332,8 @@ def build_urt_trade_meta(
                 "入场：信号日之后下一交易日开盘价买入；开盘价无效则跳过。",
                 f"最长持有：自入场日起至多 {hz} 根交易日 K 线。",
                 (
-                    f"纪律出场：浮亏达 {stop_max:.0f}%→price_stop；连跌 {time_stop_days} 日→time_stop；"
+                    f"纪律出场：浮亏达 {stop_max:.0f}%→price_stop；"
+                    f"连跌 {time_stop_days} 日且浮亏≥{time_stop_min_loss:.0f}%→time_stop；"
                     f"涨幅达警惕区 {alert_min:.0f}%–{alert_max:.0f}% 后自高点回撤 {trail:.0f}%→trailing_take_profit。"
                 ),
                 f"目标统计：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是（不必然立即平仓）。",
@@ -324,7 +342,7 @@ def build_urt_trade_meta(
             ],
             "exit_priority": [
                 {"code": "price_stop", "label": "价格止损", "desc": f"浮亏 ≤ -{stop_max:.0f}%"},
-                {"code": "time_stop", "label": "连跌离场", "desc": f"连续收跌 ≥ {time_stop_days} 日"},
+                {"code": "time_stop", "label": "连跌离场", "desc": f"连续收跌 ≥ {time_stop_days} 日且浮亏 ≥ {time_stop_min_loss:.0f}%"},
                 {
                     "code": "trailing_take_profit",
                     "label": "回撤止盈",
@@ -350,7 +368,7 @@ def build_urt_trade_meta(
                     + ("优先读取 urt_signal_trace 预计算买点。" if use_trace else "实时引擎扫描买点。")
                 ),
                 "入场：信号日之后下一交易日开盘价买入；开盘价无效则跳过。",
-                f"观察期：自入场日起共 {hz} 根交易日 K 线（默认 20，与 GMS horizon_days 一致）。",
+                f"观察期：自入场日起共 {hz} 根交易日 K 线（默认 10，短线定位）。",
                 (
                     f"目标命中（不止损）：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是；"
                     "同时记录观察期最高价与最大涨幅；不因浮亏/连跌/回撤提前离场。"
@@ -490,7 +508,7 @@ def run_urt_backtest(
     end_date: str,
     strategy_config_id: Optional[int] = None,
     target_pct: float = 0.10,
-    horizon_days: int = 20,
+    horizon_days: int = 10,
     min_score: Optional[float] = None,
     use_trace: bool = True,
     stock_pool: Optional[List[str]] = None,
@@ -566,7 +584,31 @@ def run_urt_backtest(
 
     details: List[Dict[str, Any]] = []
     cooldown: Dict[str, str] = {}  # code -> next allowed signal date
-    trade_progress_start = 45 if (use_trace and resolved_id is not None) else 0
+    use_trace_ok = bool(use_trace and resolved_id is not None)
+    trade_progress_start = 45 if use_trace_ok else 85
+    realtime_hits_by_date: Dict[str, List[Dict[str, Any]]] = {}
+    if not use_trace_ok:
+        stocks = loader.list_a_share_candidates(stock_codes=pool)
+        if pool:
+            allow = set(pool)
+            stocks = [(c, n) for c, n in stocks if c in allow]
+        span = max(1, trade_progress_start)
+
+        def _rt_progress(done_stocks: int, total_stocks: int, message: str) -> None:
+            if not progress_cb:
+                return
+            pct = int(span * done_stocks / max(1, total_stocks))
+            progress_cb(min(trade_progress_start - 1, pct), message)
+
+        realtime_hits_by_date, _completed = engine.screen_universe_for_dates(
+            stocks,
+            dates,
+            require_pass=True,
+            progress_cb=_rt_progress,
+            cancel_check=cancel_check,
+        )
+        if progress_cb:
+            progress_cb(trade_progress_start, "区间扫描完成，开始模拟交易")
 
     for i, d in enumerate(dates):
         if cancel_check and cancel_check():
@@ -578,7 +620,7 @@ def run_urt_backtest(
             progress_cb(min(99, pct), f"扫描交易日 {d}")
 
         signals: List[Dict[str, Any]] = []
-        if use_trace and resolved_id is not None:
+        if use_trace_ok:
             try:
                 signals = query_buy_signals_for_date(
                     db,
@@ -591,7 +633,7 @@ def run_urt_backtest(
 
         need_realtime = False
         if not signals:
-            if use_trace and resolved_id is not None:
+            if use_trace_ok:
                 # 仅「全市场/池级」未覆盖时回退实时；零星个股 trace 不算覆盖
                 covered = dates_ready_for_universe_backtest(
                     db,
@@ -601,7 +643,7 @@ def run_urt_backtest(
                 )
                 need_realtime = d not in covered
             else:
-                need_realtime = True
+                signals = list(realtime_hits_by_date.get(d) or [])
 
         if need_realtime:
             stocks = loader.list_a_share_candidates(stock_codes=pool)
@@ -609,7 +651,7 @@ def run_urt_backtest(
                 stocks = [(c, n) for c, n in stocks if c in set(pool)]
             day_hits = engine.screen_universe(stocks, as_of_end_date=d)
             signals = [h for h in day_hits if str(h.get("signal_date"))[:10] == d]
-            if use_trace and resolved_id is not None:
+            if use_trace_ok:
                 try:
                     if signals:
                         upsert_trace_rows(db, config_id=int(resolved_id), rows=signals)
@@ -636,7 +678,7 @@ def run_urt_backtest(
                 continue
             if code in cooldown and d < cooldown[code]:
                 continue
-            # 与 GMS 一致：信号日之后 horizon_days 根 K 线为观察窗（首根为入场日）
+            # 信号日之后 horizon_days 根 K 线为观察窗（首根为入场日）
             future = _future_bars(db, code, d, horizon_days)
             if not future or future[0].get("open") is None or float(future[0]["open"]) <= 0:
                 continue

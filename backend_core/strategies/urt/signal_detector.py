@@ -648,6 +648,9 @@ def evaluate_buy_signal(
     if not ind:
         return None
     ok, reason = hard_filter_pass(ind, cfg)
+    # 全市场扫描：硬筛失败则跳过 KDE/打分（KDE 是主要耗时）
+    if require_pass and not ok:
+        return None
 
     yang_rule = "4d3" if ind.get("rule_a_ok") else "5d4"
     if ind.get("rule_a_ok") and ind.get("rule_b_ok"):
@@ -1214,8 +1217,8 @@ def evaluate_exit_rules(
     """
     卖出纪律（供回测）：
     - 价格止损：亏损达 stop_loss_pct
-    - 时间止损：连续下跌 N 日
-    - 回撤止盈：涨幅达警惕区后，自高点回撤 trailing_drawdown_pct
+    - 时间止损：连续下跌 N 日，且浮亏 ≥ time_stop_min_loss_pct（默认 4%）
+    - 回撤止盈：涨幅达警惕区（默认 8%）后，自高点回撤 trailing_drawdown_pct
     closes: 持仓以来收盘价序列（时间正序，含最新）。
     """
     risk = cfg.get("risk") or {}
@@ -1229,6 +1232,10 @@ def evaluate_exit_rules(
         return {"exit_reason": "price_stop", "pnl_pct": round(pnl_pct, 2)}
 
     down_days = int(risk.get("time_stop_down_days") or 3)
+    try:
+        min_loss = float(risk.get("time_stop_min_loss_pct") if risk.get("time_stop_min_loss_pct") is not None else 4.0)
+    except (TypeError, ValueError):
+        min_loss = 4.0
     if len(closes) >= down_days + 1:
         streak = 0
         for i in range(len(closes) - 1, 0, -1):
@@ -1236,10 +1243,10 @@ def evaluate_exit_rules(
                 streak += 1
             else:
                 break
-        if streak >= down_days:
+        if streak >= down_days and (min_loss <= 0 or pnl_pct <= -min_loss):
             return {"exit_reason": "time_stop", "pnl_pct": round(pnl_pct, 2), "down_days": streak}
 
-    alert_min = float(risk.get("take_profit_alert_pct_min") or 25)
+    alert_min = float(risk.get("take_profit_alert_pct_min") or 8)
     trail = float(risk.get("trailing_drawdown_pct") or 5)
     peak = max(float(peak_price), max(float(c) for c in closes))
     gain_from_entry = (peak - entry_price) / entry_price * 100.0

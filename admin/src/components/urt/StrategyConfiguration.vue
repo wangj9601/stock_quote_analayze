@@ -270,8 +270,25 @@
                 </el-form-item>
               </el-col>
               <el-col :span="8">
+                <el-form-item label="连跌须浮亏%">
+                  <el-input-number v-model="form.risk.time_stop_min_loss_pct" :min="0" :max="20" :step="0.5" class="w-full" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
                 <el-form-item label="回撤止盈%">
                   <el-input-number v-model="form.risk.trailing_drawdown_pct" :min="1" :max="20" class="w-full" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="12">
+              <el-col :span="8">
+                <el-form-item label="止盈武装下限%">
+                  <el-input-number v-model="form.risk.take_profit_alert_pct_min" :min="1" :max="50" class="w-full" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="止盈武装上限%">
+                  <el-input-number v-model="form.risk.take_profit_alert_pct_max" :min="1" :max="50" class="w-full" />
                 </el-form-item>
               </el-col>
             </el-row>
@@ -367,8 +384,9 @@ const form = reactive<any>({
     stop_loss_pct_min: 5,
     stop_loss_pct_max: 10,
     time_stop_down_days: 3,
-    take_profit_alert_pct_min: 25,
-    take_profit_alert_pct_max: 30,
+    time_stop_min_loss_pct: 4,
+    take_profit_alert_pct_min: 8,
+    take_profit_alert_pct_max: 10,
     trailing_drawdown_pct: 5,
   },
 })
@@ -451,8 +469,9 @@ function applyParams(params: Record<string, any> = {}) {
     stop_loss_pct_min: 5,
     stop_loss_pct_max: 10,
     time_stop_down_days: 3,
-    take_profit_alert_pct_min: 25,
-    take_profit_alert_pct_max: 30,
+    time_stop_min_loss_pct: 4,
+    take_profit_alert_pct_min: 8,
+    take_profit_alert_pct_max: 10,
     trailing_drawdown_pct: 5,
     ...(params.risk || {}),
   }

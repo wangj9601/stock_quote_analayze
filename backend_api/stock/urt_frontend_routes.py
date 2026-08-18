@@ -513,7 +513,7 @@ class URTStockBacktestBody(BaseModel):
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
     target_pct: float = Field(0.10, description="目标涨幅，如 0.10 表示 10%")
-    horizon_days: int = Field(20, ge=10, le=30, description="持有窗口交易日数")
+    horizon_days: int = Field(10, ge=10, le=30, description="持有窗口交易日数（短线默认 10）")
     min_score: Optional[float] = Field(None, ge=0, le=100, description="最低得分")
     use_trace: bool = Field(True, description="是否优先读信号追溯表")
     exit_mode: str = Field("hit_rate", description="hit_rate | risk_exit")

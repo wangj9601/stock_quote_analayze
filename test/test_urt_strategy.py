@@ -131,6 +131,24 @@ def test_reject_when_below_ma():
     assert "MA20" in reason
 
 
+def test_require_pass_skips_kde_when_hard_filter_fails(monkeypatch):
+    cfg = _loose_cfg()
+    bars = _bars(40, yang_pattern=[False] * 5, vol_spike=False, above_ma=False)
+    for b in bars:
+        b["close"] = 1.0
+        b["open"] = 1.1
+        b["volume"] = 10
+
+    def _boom(*_a, **_k):
+        raise AssertionError("hard filter failed should skip KDE")
+
+    monkeypatch.setattr(
+        "backend_core.strategies.urt.signal_detector._compute_structure_levels",
+        _boom,
+    )
+    assert evaluate_buy_signal(bars, cfg, require_pass=True) is None
+
+
 def test_reject_low_volume_multiple():
     cfg = _loose_cfg()
     yang = [True, True, True, True, True]
@@ -196,8 +214,11 @@ def test_exit_price_stop():
 
 def test_exit_time_stop():
     cfg = URTConfigManager().get_default_config()
-    # 连跌 3 日但跌幅未达 10%
-    closes = [10.0, 9.9, 9.8, 9.7]
+    # 连跌 3 日但浮亏不足 4%：不触发
+    mild = evaluate_exit_rules(entry_price=10.0, closes=[10.0, 9.9, 9.8, 9.7], peak_price=10.0, cfg=cfg)
+    assert mild is None or mild.get("exit_reason") != "time_stop"
+    # 连跌 3 日且浮亏 ≥4%
+    closes = [10.0, 9.8, 9.6, 9.5]
     r = evaluate_exit_rules(entry_price=10.0, closes=closes, peak_price=10.0, cfg=cfg)
     assert r is not None
     assert r["exit_reason"] == "time_stop"
@@ -205,9 +226,9 @@ def test_exit_time_stop():
 
 def test_exit_trailing_take_profit():
     cfg = URTConfigManager().get_default_config()
-    # 涨到 13(+30%) 后回撤到 12.2 (~6% from peak)
-    closes = [10.0, 11.0, 12.0, 13.0, 12.2]
-    r = evaluate_exit_rules(entry_price=10.0, closes=closes, peak_price=13.0, cfg=cfg)
+    # 涨到约 +9% 后自峰值回撤 ≥5%
+    closes = [10.0, 10.5, 10.9, 10.3]
+    r = evaluate_exit_rules(entry_price=10.0, closes=closes, peak_price=10.9, cfg=cfg)
     assert r is not None
     assert r["exit_reason"] == "trailing_take_profit"
 
@@ -268,6 +289,39 @@ def test_screen_universe_require_pass_false_keeps_failed_signal():
     assert len(kept) == 1
     assert kept[0]["buy_signal"] is False
     assert kept[0]["code"] == "000001"
+
+
+def test_screen_universe_for_dates_fetches_once():
+    """多日扫描只批量拉一次行情，并按日切片。"""
+    from backend_core.strategies.urt.strategy_engine import URTStrategyEngine
+
+    cfg = _loose_cfg()
+    yang = [True, True, True, False, True]
+    bars = _bars(40, yang_pattern=yang, vol_spike=False, above_ma=True)
+    for b in bars:
+        b["volume"] = 1000.0
+    calls = {"n": 0}
+
+    class _Loader:
+        def fetch_historical_desc_batch(self, codes, start_date=None, end_date=None, **_k):
+            calls["n"] += 1
+            return {str(codes[0]): list(bars)}
+
+        def fetch_historical_desc(self, code, start_date=None, end_date=None):
+            raise AssertionError("range scan should use batch")
+
+    engine = URTStrategyEngine(_Loader(), cfg)
+    by_date, completed = engine.screen_universe_for_dates(
+        [("000001", "测试")],
+        ["2026-07-29", "2026-07-30"],
+        require_pass=False,
+    )
+    assert completed is True
+    assert calls["n"] == 1
+    assert len(by_date["2026-07-30"]) == 1
+    assert len(by_date["2026-07-29"]) == 1
+    assert by_date["2026-07-30"][0]["signal_date"] == "2026-07-30"
+    assert by_date["2026-07-29"][0]["signal_date"] == "2026-07-29"
 
 
 def test_backtest_progress_helpers_import():

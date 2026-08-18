@@ -57,7 +57,7 @@ def _run_task(task_id: str) -> None:
             end_date=str(end_date)[:10],
             strategy_config_id=cfg.get("strategy_config_id") or cfg.get("config_id"),
             target_pct=float(cfg.get("target_pct", 0.10)),
-            horizon_days=int(cfg.get("horizon_days", 20)),
+            horizon_days=int(cfg.get("horizon_days", 10)),
             min_score=cfg.get("min_score"),
             use_trace=bool(cfg.get("use_trace", True)),
             stock_pool=stock_pool if isinstance(stock_pool, list) else None,

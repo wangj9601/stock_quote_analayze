@@ -66,7 +66,7 @@
           <el-col :span="12">
             <el-form-item label="优先读缓存">
               <el-switch v-model="form.use_trace" />
-              <span class="hint">开启后优先使用 urt_signal_trace 预计算信号</span>
+              <span class="hint">全市场务必开启：用预计算信号，避免逐日实时扫五千只。关掉约需十余小时。</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -195,9 +195,18 @@
           </el-col>
         </el-row>
 
+        <el-alert
+          v-if="form.stock_pool_mode === 'all' && !form.use_trace"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="mb-3"
+          title="全市场未开「优先读缓存」会按交易日实时扫描约五千只，进度可能长时间停在个位数。请开启缓存；区间缺数时任务会先自动补预计算。"
+        />
         <el-form-item>
           <el-button type="primary" :loading="creating" @click="createTask">创建并运行</el-button>
           <el-button :loading="precomputing" @click="openPrecomputeDialog">手动预计算</el-button>
+          <span class="hint">手动预计算只跑选定的一天；整段区间请开缓存后创建任务自动补齐。</span>
         </el-form-item>
       </el-form>
     </el-card>
@@ -303,7 +312,7 @@ const form = reactive({
   start_date: '',
   end_date: '',
   target_pct: 0.1,
-  horizon_days: 20,
+  horizon_days: 10,
   min_score: 70,
   strategy_config_id: undefined as number | undefined,
   use_trace: true,
@@ -486,6 +495,17 @@ async function createTask() {
   if (mode === 'concept_board' && !selectedConceptBoardCodes.value.length) {
     ElMessage.warning('请选择概念板块')
     return
+  }
+  if (mode === 'all' && !form.use_trace) {
+    try {
+      await ElMessageBox.confirm(
+        '全市场未开启「优先读缓存」会按每个交易日实时扫描约五千只，可能十余小时。建议取消并打开缓存（缺数时任务会自动补预计算）。仍要继续？',
+        '扫描会很慢',
+        { type: 'warning', confirmButtonText: '仍要运行', cancelButtonText: '去开缓存' },
+      )
+    } catch {
+      return
+    }
   }
 
   creating.value = true

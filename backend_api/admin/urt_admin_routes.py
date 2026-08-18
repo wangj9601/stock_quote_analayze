@@ -49,7 +49,7 @@ class BacktestCreateBody(BaseModel):
     task_name: Optional[str] = None
     strategy_config_id: Optional[int] = None
     target_pct: float = 0.10
-    horizon_days: int = 20
+    horizon_days: int = 10
     min_score: Optional[float] = None
     use_trace: bool = True
     exit_mode: str = Field(
@@ -180,7 +180,7 @@ def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any
         min_score = strategy_cfg.get("min_score")
     meta = build_urt_trade_meta(
         target_pct=float(config.get("target_pct", 0.10)),
-        horizon_days=int(config.get("horizon_days", 20)),
+        horizon_days=int(config.get("horizon_days", 10)),
         min_score=min_score,
         use_trace=bool(config.get("use_trace", True)),
         risk=strategy_cfg.get("risk") if isinstance(strategy_cfg.get("risk"), dict) else {},
