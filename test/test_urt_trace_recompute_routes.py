@@ -78,3 +78,26 @@ def test_update_and_get_trace_recompute_task(recompute_task_db):
 def test_normalize_code():
     assert urt_routes._normalize_code("676") == "000676"
     assert urt_routes._normalize_code("000676") == "000676"
+
+
+def test_urt_trace_recompute_request_accepts_date_range():
+    req = urt_routes.UrtTraceRecomputeRequest(
+        code="002271",
+        config_id=1,
+        start_date="2026-05-21",
+        end_date="2026-08-19",
+    )
+    assert req.start_date == "2026-05-21"
+    assert req.end_date == "2026-08-19"
+    assert req.full_history is False
+
+
+def test_urt_trace_recompute_request_full_history_flag():
+    req = urt_routes.UrtTraceRecomputeRequest(
+        code="002271",
+        config_id=1,
+        start_date="2026-05-21",
+        end_date="2026-08-19",
+        full_history=True,
+    )
+    assert req.full_history is True

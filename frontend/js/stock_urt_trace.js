@@ -190,14 +190,30 @@
                 alert('请先选择股票');
                 return;
             }
+            const fullHistory = Boolean(document.getElementById('forceComputeFullHistory')?.checked);
+            const startDate = document.getElementById('startDate')?.value?.trim() || '';
+            const endDate = document.getElementById('endDate')?.value?.trim() || '';
+            if (!fullHistory) {
+                if (!startDate || !endDate) {
+                    alert('请先选择开始与结束日期，或勾选「重算全历史」');
+                    return;
+                }
+                if (startDate > endDate) {
+                    alert('开始日期不能晚于结束日期');
+                    return;
+                }
+            }
             const label = this.getActiveConfigLabel();
-            if (!confirm(`将按「${label}」重新计算该股全部历史行情的 URT 信号（仅影响该策略版本，耗时可能较长），是否继续？`)) {
+            const confirmMsg = fullHistory
+                ? `将按「${label}」重新计算该股全部历史行情的 URT 信号（仅影响该策略版本，耗时可长达数十分钟），是否继续？`
+                : `将按「${label}」重新计算 ${startDate}～${endDate} 区间内的 URT 信号（仅影响该策略版本），是否继续？`;
+            if (!confirm(confirmMsg)) {
                 return;
             }
-            void this.startForceComputeTask();
+            void this.startForceComputeTask({ fullHistory, startDate, endDate });
         }
 
-        async startForceComputeTask() {
+        async startForceComputeTask({ fullHistory = false, startDate = '', endDate = '' } = {}) {
             this.clearForceComputePoll();
             this.setForceComputeRunning(true);
             const area = document.getElementById('forceComputeProgress');
@@ -209,13 +225,19 @@
             if (loading) loading.style.display = 'none';
 
             try {
+                const body = {
+                    code: this.code,
+                    config_id: this.configId,
+                    full_history: fullHistory,
+                };
+                if (!fullHistory) {
+                    body.start_date = startDate;
+                    body.end_date = endDate;
+                }
                 const resp = await fetch(`${apiBase}/api/stock/urt-signal-trace/recompute`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        code: this.code,
-                        config_id: this.configId,
-                    }),
+                    body: JSON.stringify(body),
                 });
                 const json = await resp.json().catch(() => ({}));
                 if (!resp.ok || !json.success) {

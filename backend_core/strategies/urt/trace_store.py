@@ -102,6 +102,62 @@ def delete_trace_for_code_config(db: Session, *, code: str, config_id: int) -> i
     return int(n or 0)
 
 
+def delete_trace_for_code_config_in_range(
+    db: Session,
+    *,
+    code: str,
+    config_id: int,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> int:
+    """删除某股某参数版本在指定日期区间内的 URT 信号（含区间端点）。"""
+    from backend_api.models import URTSignalTrace
+
+    code_n = _normalize_a_share_code(code)
+    q = db.query(URTSignalTrace).filter(
+        URTSignalTrace.code == code_n,
+        URTSignalTrace.config_id == int(config_id),
+    )
+    start_s = str(start_date).strip()[:10] if start_date else None
+    end_s = str(end_date).strip()[:10] if end_date else None
+    if start_s:
+        q = q.filter(URTSignalTrace.date >= start_s)
+    if end_s:
+        q = q.filter(URTSignalTrace.date <= end_s)
+    n = q.delete(synchronize_session=False)
+    db.commit()
+    return int(n or 0)
+
+
+def _throttled_progress_cb(
+    progress_cb: Optional[Callable[[int, int, str], None]],
+    *,
+    min_step: int = 25,
+    min_interval_sec: float = 2.0,
+) -> Optional[Callable[[int, int, str], None]]:
+    """降低进度回调频率，避免每个交易日写库。"""
+    if progress_cb is None:
+        return None
+    state = {"last_current": 0, "last_ts": 0.0}
+
+    def wrapper(current: int, total: int, msg: str) -> None:
+        import time
+
+        now = time.monotonic()
+        force = current <= 1 or current >= total
+        if (
+            not force
+            and current - state["last_current"] < min_step
+            and now - state["last_ts"] < min_interval_sec
+        ):
+            return
+        state["last_current"] = current
+        state["last_ts"] = now
+        progress_cb(current, total, msg)
+
+    return wrapper
+
+
 def count_trace_rows_for_config(db: Session, *, config_id: int) -> int:
     """统计某参数版本在 urt_signal_trace 中的行数（含扫描占位）。"""
     from sqlalchemy import func
@@ -137,6 +193,8 @@ def recompute_trace_for_stock(
     config_id: int,
     config: Dict[str, Any],
     lookback_calendar_days: Optional[int] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     progress_cb: Optional[Callable[[int, int, str], None]] = None,
 ) -> int:
     """
@@ -144,27 +202,46 @@ def recompute_trace_for_stock(
 
     默认对齐 GMS：使用该股 historical_quotes 中的**全部**历史行情；
     仅跳过指标预热不足的最早若干日。进度分母为可评交易日数。
+    若传入 start_date/end_date，仅重算该区间内可评日（并向前多取指标预热段），
+    且只删除/覆盖区间内旧 trace。
     若传入 lookback_calendar_days 或环境变量 URT_TRACE_RECOMPUTE_LOOKBACK_DAYS，
-    则仅重算最近 N 个自然日（兼容旧行为/压测）。
+    则仅重算最近 N 个自然日（兼容旧行为/压测；与显式 start_date 互斥时以 start_date 为准）。
     返回写入条数。
     """
     from backend_core.strategies.urt.data_loader import URTDataLoader
     from backend_core.strategies.urt.indicators import min_bars_needed
-    from backend_core.strategies.urt.signal_detector import evaluate_buy_signal
+    from backend_core.strategies.urt.signal_detector import (
+        evaluate_buy_signal,
+        history_calendar_days_for_fetch,
+    )
 
     code_n = _normalize_a_share_code(code)
     need = max(1, int(min_bars_needed(config)))
+    progress_cb = _throttled_progress_cb(progress_cb)
+
+    range_start = str(start_date).strip()[:10] if start_date else None
+    range_end = str(end_date).strip()[:10] if end_date else None
+    use_explicit_range = bool(range_start or range_end)
 
     # 默认全历史；显式参数或环境变量可限制窗口
-    if lookback_calendar_days is None:
+    if not use_explicit_range and lookback_calendar_days is None:
         env_raw = (os.getenv("URT_TRACE_RECOMPUTE_LOOKBACK_DAYS") or "").strip()
         if env_raw.isdigit() and int(env_raw) > 0:
             lookback_calendar_days = int(env_raw)
 
-    delete_trace_for_code_config(db, code=code_n, config_id=config_id)
+    if use_explicit_range:
+        delete_trace_for_code_config_in_range(
+            db,
+            code=code_n,
+            config_id=config_id,
+            start_date=range_start,
+            end_date=range_end,
+        )
+    else:
+        delete_trace_for_code_config(db, code=code_n, config_id=config_id)
 
     loader = URTDataLoader(db)
-    end_s = URTDataLoader.resolve_effective_history_end_date(db, None)
+    end_s = range_end or URTDataLoader.resolve_effective_history_end_date(db, None)
     try:
         end_d = datetime.strptime(end_s, "%Y-%m-%d").date()
     except ValueError:
@@ -172,12 +249,22 @@ def recompute_trace_for_stock(
         end_s = end_d.strftime("%Y-%m-%d")
 
     start_s: Optional[str] = None
-    if lookback_calendar_days is not None and int(lookback_calendar_days) > 0:
+    if use_explicit_range and range_start:
+        try:
+            range_start_d = datetime.strptime(range_start, "%Y-%m-%d").date()
+        except ValueError:
+            range_start_d = None
+        if range_start_d is not None:
+            warmup_cal = max(
+                int(history_calendar_days_for_fetch(config)),
+                max(60, need * 3),
+            )
+            start_s = (range_start_d - timedelta(days=warmup_cal)).strftime("%Y-%m-%d")
+    elif lookback_calendar_days is not None and int(lookback_calendar_days) > 0:
         # 限制窗口时额外多取预热段，避免窗口头部不可评
         fetch_days = int(lookback_calendar_days) + max(60, need * 3)
         start_s = (end_d - timedelta(days=fetch_days)).strftime("%Y-%m-%d")
 
-    # 默认：不传 start_date，拉取该股全部历史行情
     hist = loader.fetch_historical_desc(code_n, start_date=start_s, end_date=end_s)
     if not hist:
         return 0
@@ -196,26 +283,38 @@ def recompute_trace_for_stock(
         return 0
 
     eval_indices: List[int] = list(range(0, last_eval_i + 1))
-    if lookback_calendar_days is not None and int(lookback_calendar_days) > 0:
-        window_start = (end_d - timedelta(days=int(lookback_calendar_days))).strftime("%Y-%m-%d")
+    if use_explicit_range:
         clipped: List[int] = []
+        for i in eval_indices:
+            date_i = str(hist[i].get("date") or "")[:10]
+            if range_start and date_i < range_start:
+                continue
+            if range_end and date_i > range_end:
+                continue
+            clipped.append(i)
+        eval_indices = clipped
+    elif lookback_calendar_days is not None and int(lookback_calendar_days) > 0:
+        window_start = (end_d - timedelta(days=int(lookback_calendar_days))).strftime("%Y-%m-%d")
+        clipped_lb: List[int] = []
         for i in eval_indices:
             date_i = str(hist[i].get("date") or "")[:10]
             if date_i < window_start:
                 break
-            clipped.append(i)
-        eval_indices = clipped
+            clipped_lb.append(i)
+        eval_indices = clipped_lb
 
     eval_total = len(eval_indices)
     if eval_total <= 0:
         return 0
 
     logger.info(
-        "URT 单股全历史重算 %s config_id=%s bars=%s evaluable=%s lookback=%s",
+        "URT 单股重算 %s config_id=%s bars=%s evaluable=%s range=%s..%s lookback=%s",
         code_n,
         config_id,
         bar_total,
         eval_total,
+        range_start or "-",
+        range_end or end_s,
         lookback_calendar_days,
     )
 

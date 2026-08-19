@@ -190,6 +190,12 @@ def _config_display_name(cm: URTConfigManager, db: Session, config_id: int) -> s
 class UrtTraceRecomputeRequest(BaseModel):
     code: str = Field(..., description="股票代码")
     config_id: Optional[int] = Field(None, ge=1, description="URT 策略参数版本 ID")
+    start_date: Optional[str] = Field(None, description="重算起始日期 YYYY-MM-DD（与页面查询区间一致）")
+    end_date: Optional[str] = Field(None, description="重算结束日期 YYYY-MM-DD")
+    full_history: bool = Field(
+        False,
+        description="为 true 时重算该股全部历史（忽略 start_date/end_date）",
+    )
 
 
 def _run_trace_recompute_background(
@@ -198,10 +204,24 @@ def _run_trace_recompute_background(
     config_id: int,
     config: dict,
     config_display: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> None:
     db = SessionLocal()
     try:
-        _update_trace_recompute_task(task_id, status="running", message="正在清除旧记录…", progress=0)
+        start_s = str(start_date).strip()[:10] if start_date else None
+        end_s = str(end_date).strip()[:10] if end_date else None
+        range_hint = ""
+        if start_s or end_s:
+            range_hint = f"（{start_s or '…'}～{end_s or '…'}）"
+        elif not start_s and not end_s:
+            range_hint = "（全历史）"
+        _update_trace_recompute_task(
+            task_id,
+            status="running",
+            message=f"正在清除旧记录{range_hint}…",
+            progress=0,
+        )
 
         def progress_cb(current: int, total: int, msg: str) -> None:
             pct = int(round(current * 100 / total)) if total else 0
@@ -218,6 +238,8 @@ def _run_trace_recompute_background(
             code=code,
             config_id=config_id,
             config=config,
+            start_date=start_s,
+            end_date=end_s,
             progress_cb=progress_cb,
         )
         _update_trace_recompute_task(
@@ -227,9 +249,16 @@ def _run_trace_recompute_background(
             saved_count=count,
             current=count,
             total=count,
-            message=f"已按「{config_display}」重新计算，写入 {count} 条",
+            message=f"已按「{config_display}」{range_hint}重新计算，写入 {count} 条",
         )
-        logger.info("URT 追溯异步重算完成: %s config_id=%s, 写入 %s 条", code, config_id, count)
+        logger.info(
+            "URT 追溯异步重算完成: %s config_id=%s range=%s..%s, 写入 %s 条",
+            code,
+            config_id,
+            start_s,
+            end_s,
+            count,
+        )
     except Exception as e:
         logger.exception("URT 追溯异步重算失败 task_id=%s", task_id)
         _update_trace_recompute_task(
@@ -320,6 +349,14 @@ async def start_urt_signal_trace_recompute(
     config = cm.get_config(resolved_config_id, db=db)
     config_display = _config_display_name(cm, db, resolved_config_id)
 
+    start_s = str(body.start_date).strip()[:10] if body.start_date else None
+    end_s = str(body.end_date).strip()[:10] if body.end_date else None
+    if body.full_history:
+        start_s = None
+        end_s = None
+    elif start_s and end_s and start_s > end_s:
+        raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期")
+
     existing = _find_running_trace_recompute(code, resolved_config_id)
     if existing:
         return JSONResponse(
@@ -350,7 +387,7 @@ async def start_urt_signal_trace_recompute(
 
     thread = threading.Thread(
         target=_run_trace_recompute_background,
-        args=(task_id, code, resolved_config_id, config, config_display),
+        args=(task_id, code, resolved_config_id, config, config_display, start_s, end_s),
         daemon=True,
     )
     thread.start()
@@ -362,6 +399,9 @@ async def start_urt_signal_trace_recompute(
                 "task_id": task_id,
                 "config_id": resolved_config_id,
                 "config_name": config_display,
+                "start_date": start_s,
+                "end_date": end_s,
+                "full_history": bool(body.full_history),
             },
         }
     )
