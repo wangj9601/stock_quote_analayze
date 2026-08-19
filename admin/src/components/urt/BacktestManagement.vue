@@ -305,6 +305,9 @@
             <span v-else>{{ row.message || '--' }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="完成时间" width="168">
+          <template #default="{ row }">{{ formatDateTime(row.completed_at) }}</template>
+        </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row.task_id)">详情</el-button>
@@ -445,6 +448,16 @@ let timer: number | undefined
 function pct(v: any) {
   if (v == null) return '--'
   return `${(Number(v) * 100).toFixed(1)}%`
+}
+
+/** 列表展示：未完成显示 --；ISO/UTC 转为本地 YYYY-MM-DD HH:mm:ss */
+function formatDateTime(v: unknown) {
+  if (v == null || v === '') return '--'
+  const raw = String(v).trim()
+  const d = new Date(raw.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(raw) ? raw : raw + 'Z')
+  if (Number.isNaN(d.getTime())) return raw
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
 function poolModeLabel(mode?: string) {

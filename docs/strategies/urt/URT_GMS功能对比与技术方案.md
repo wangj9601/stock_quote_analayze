@@ -178,7 +178,7 @@ flowchart TD
 
 业务视角完成列表（可导入 Excel）：
 
-- 生成脚本：`generate_urt_completion_excel.py`（已与本文 §2 对齐；若再改能力请同步脚本或重跑导出）
+- 生成脚本：`generate_urt_completion_excel.py`（已与领导汇报版 V1.2 / 本文 §2 对齐；含待优化与待跟踪页）
 - 输出文件：`exported_docs/URT上升趋势策略功能模块列表.xlsx`
 
 运行：

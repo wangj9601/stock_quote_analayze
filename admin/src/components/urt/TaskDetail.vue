@@ -17,7 +17,8 @@
           <el-tag :type="statusType">{{ task.status }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="进度">{{ displayProgress(task.progress) }}%</el-descriptions-item>
-        <el-descriptions-item label="创建时间" :span="2">{{ task.created_at || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ task.created_at || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="完成时间">{{ task.completed_at || '-' }}</el-descriptions-item>
         <template v-if="task.config">
           <el-descriptions-item label="股票池">{{ stockPoolLabel }}</el-descriptions-item>
           <el-descriptions-item v-if="cnBoardLabel" label="A股板块">{{ cnBoardLabel }}</el-descriptions-item>
