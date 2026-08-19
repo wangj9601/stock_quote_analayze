@@ -21,6 +21,7 @@
             this.code = (params.get('code') || '').trim();
             this.name = decodeURIComponent(params.get('name') || '');
             this.configId = params.get('config_id') ? Number(params.get('config_id')) : null;
+            this.effectiveConfigId = null;
             this.configOptions = [];
             this.allData = [];
             this.currentPage = 1;
@@ -56,6 +57,7 @@
             document.getElementById('configSelect').addEventListener('change', () => {
                 if (this.forceComputeRunning) return;
                 this.configId = Number(document.getElementById('configSelect').value) || null;
+                this.updateConfigAlignHint();
                 this.fetchData();
             });
             document.getElementById('firstPage').addEventListener('click', () => this.goToPage(1));
@@ -100,7 +102,33 @@
             const opt = (this.configOptions || []).find((o) => String(o.id) === String(this.configId));
             if (!opt) return '当前策略版本';
             const name = opt.name || `配置${opt.id}`;
-            return opt.is_default ? `${name} (默认)` : name;
+            return opt.is_default ? `${name}（默认/生效）` : name;
+        }
+
+        updateConfigAlignHint() {
+            const hintEl = document.getElementById('urtConfigAlignHint');
+            if (!hintEl) return;
+            const eff = this.effectiveConfigId;
+            if (eff != null && this.configId != null && Number(this.configId) !== Number(eff)) {
+                hintEl.style.display = '';
+                hintEl.textContent = '当前非生效（默认）版本，与管理端日常回测可能不一致';
+            } else {
+                hintEl.style.display = 'none';
+                hintEl.textContent = '';
+            }
+        }
+
+        updateTraceStaleHint(json) {
+            const hintEl = document.getElementById('urtTraceStaleHint');
+            if (!hintEl) return;
+            if (json && json.stale) {
+                hintEl.style.display = '';
+                hintEl.textContent =
+                    '参数已更新，本页信号可能来自改参前缓存；可点「强制重新计算」或管理端对该版本预计算';
+            } else {
+                hintEl.style.display = 'none';
+                hintEl.textContent = '';
+            }
         }
 
         setForceComputeRunning(running) {
@@ -616,11 +644,16 @@
                 }
                 const configs = json.configs || [];
                 this.configOptions = configs;
+                this.effectiveConfigId = json.effective_config_id ?? (
+                    configs.find((c) => c.is_default)?.id ?? null
+                );
                 const sel = document.getElementById('configSelect');
                 sel.innerHTML = configs.map((c) =>
-                    `<option value="${c.id}" ${c.id === json.config_id ? 'selected' : ''}>${escapeHtml(c.name)}${c.is_default ? ' (默认)' : ''}</option>`
+                    `<option value="${c.id}" ${c.id === json.config_id ? 'selected' : ''}>${escapeHtml(c.name)}${c.is_default ? '（默认/生效）' : ''}</option>`
                 ).join('');
                 this.configId = json.config_id;
+                this.updateConfigAlignHint();
+                this.updateTraceStaleHint(json);
                 const detail = document.getElementById('detailLink');
                 detail.href = `stock_urt_score_detail.html?code=${encodeURIComponent(this.code)}&name=${encodeURIComponent(this.name)}&config_id=${this.configId || ''}`;
                 this.allData = json.data || [];

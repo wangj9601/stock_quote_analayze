@@ -59,6 +59,8 @@ def test_default_config_has_min_downside_pct():
     assert abs(float(cfg.get("structure_rr_min_downside_pct")) - 0.015) < 1e-9
     assert abs(float(cfg.get("structure_rr_min_rr")) - 2.0) < 1e-9
     assert cfg.get("structure_rr_hard_gate_enabled") is True
+    assert abs(float(cfg.get("structure_rr_atr_k")) - 0.75) < 1e-9
+    assert cfg.get("structure_rr_use_second_level") is True
 
 
 def test_build_tags_below_support_danger():
@@ -199,3 +201,60 @@ def test_query_trace_enrich_rr_from_old_structure(monkeypatch):
     assert rows[0]["structure_rr"] is not None
     assert rows[0]["structure_rr"] < 1.5
     assert any(t.get("id") == "poor_structure_rr" for t in (rows[0].get("risk_tags") or []))
+
+
+def test_pick_nth_level_second_support_and_resistance():
+    from backend_core.strategies.gms.structure_levels import pick_nth_level
+
+    px = 10.0
+    supports = [9.8, 9.0, 8.2]
+    resists = [10.15, 11.5, 13.0]
+    assert pick_nth_level(supports, px, side="support", n=1) == 9.8
+    assert pick_nth_level(supports, px, side="support", n=2) == 9.0
+    assert pick_nth_level(resists, px, side="resistance", n=1) == 10.15
+    assert pick_nth_level(resists, px, side="resistance", n=2) == 11.5
+    assert pick_nth_level([9.8], px, side="support", n=2) == 9.8
+
+
+def test_enrich_second_level_rr_hard_gate_uses_nearest():
+    cfg = {
+        "structure_rr_warn_enabled": True,
+        "structure_rr_min_rr": 2.0,
+        "structure_rr_min_upside_pct": 0.03,
+        "structure_rr_hard_gate_enabled": True,
+        "structure_rr_use_second_level": True,
+        "structure_hang_min_upside_pct": 0.20,
+        "kde_ok": True,
+    }
+    st = {
+        "kde_ok": True,
+        "nearest_support": 9.85,
+        "nearest_resistance": 10.20,
+        "support_levels": [9.85, 9.0],
+        "resistance_levels": [10.20, 12.0],
+    }
+    enriched = enrich_structure_with_rr(st, price=10.0, cfg=cfg)
+    out = enriched["structure"]
+    assert out["rr_level_rank"] == 2
+    assert abs(float(out["rr_support"]) - 9.0) < 1e-9
+    assert abs(float(out["rr_resistance"]) - 12.0) < 1e-9
+    # 结构 RR：上行 2 / 下行 1 = 2
+    assert abs(float(out["rr"]) - 2.0) < 0.05
+    gate = enriched["structure_hard_gate"]
+    assert gate["blocked"] is True
+    assert "上行空间不足" in (gate.get("reasons") or [])
+
+
+def test_compute_structure_rr_atr_floor():
+    from backend_core.strategies.gms.structure_levels import compute_structure_rr
+
+    # 价 10、支撑 9.8 → raw=0.2；价×1.5%=0.15；k×ATR=0.75*1.0=0.75 → 分母 0.75
+    info = compute_structure_rr(
+        10.0, 9.8, 13.0, min_downside_pct=0.015, atr=1.0, atr_k=0.75
+    )
+    assert info["downside_floored"] is True
+    assert info["floor_source"] == "atr"
+    assert abs(info["downside"] - 0.75) < 1e-6
+    assert abs(info["rr"] - (3.0 / 0.75)) < 1e-6
+    assert abs(info["upside_pct"] - 0.3) < 1e-9
+    assert abs(info["downside_pct"] - 0.02) < 1e-9

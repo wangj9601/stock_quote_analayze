@@ -7,7 +7,7 @@ import logging
 import threading
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse, Response
@@ -20,6 +20,7 @@ from backend_core.strategies.urt.config import URTConfigManager
 from backend_core.strategies.urt.data_loader import URTDataLoader
 from backend_core.strategies.urt.signal_detector import build_buy_logic, evaluate_buy_signal
 from backend_core.strategies.urt.trace_store import (
+    get_trace_freshness,
     query_trace_by_code,
     recompute_trace_for_stock,
 )
@@ -152,16 +153,29 @@ def _get_trace_recompute_task(task_id: str) -> Optional[dict]:
 
 
 def _resolve_config_id(db: Session, config_id: Optional[int], cm: URTConfigManager) -> int:
+    """解析策略版本：显式 id 优先，否则取生效（is_default）版本。"""
     cm.ensure_default_row(db)
     if config_id is not None:
         return int(config_id)
+    effective = cm.resolve_effective_config_id(db)
+    if effective is not None:
+        return int(effective)
     configs = cm.list_configs(db, active_only=True)
-    for c in configs:
-        if c.get("is_default"):
-            return int(c["id"])
     if configs:
         return int(configs[0]["id"])
     raise HTTPException(status_code=400, detail="无可用 URT 参数版本")
+
+
+def _config_alignment_meta(cm: URTConfigManager, db: Session, resolved: int) -> Dict[str, Any]:
+    effective_id = cm.resolve_effective_config_id(db)
+    return {
+        "config_id": int(resolved),
+        "effective_config_id": int(effective_id) if effective_id is not None else None,
+        "is_effective_config": bool(
+            effective_id is not None and int(resolved) == int(effective_id)
+        ),
+        "config_name": _config_display_name(cm, db, int(resolved)),
+    }
 
 
 def _config_display_name(cm: URTConfigManager, db: Session, config_id: int) -> str:
@@ -241,14 +255,8 @@ async def get_urt_signal_trace(
         cm = URTConfigManager()
         cm.ensure_default_row(db)
         configs = cm.list_configs(db, active_only=True)
-        resolved = config_id
-        if resolved is None:
-            for c in configs:
-                if c.get("is_default"):
-                    resolved = c["id"]
-                    break
-            if resolved is None and configs:
-                resolved = configs[0]["id"]
+        resolved = _resolve_config_id(db, config_id, cm)
+        align = _config_alignment_meta(cm, db, resolved)
         code_n = _normalize_code(code)
         start_s = str(start_date).strip()[:10] if start_date else None
         end_s = str(end_date).strip()[:10] if end_date else None
@@ -269,10 +277,18 @@ async def get_urt_signal_trace(
             row["filter_ok"] = bl.get("filter_ok")
             row["score_ok"] = bl.get("score_ok")
             row["filter_reason"] = bl.get("filter_reason") or None
+        freshness = get_trace_freshness(db, config_id=int(resolved), code=code_n)
         return {
             "success": True,
             "code": code_n,
             "config_id": resolved,
+            "effective_config_id": align.get("effective_config_id"),
+            "is_effective_config": align.get("is_effective_config"),
+            "config_name": align.get("config_name"),
+            "config_updated_at": freshness.get("config_updated_at"),
+            "trace_computed_at": freshness.get("trace_computed_at"),
+            "stale": freshness.get("stale"),
+            "need_recompute": freshness.get("need_recompute"),
             "configs": configs,
             "start_date": start_s,
             "end_date": end_s,
@@ -371,82 +387,80 @@ async def get_urt_score_detail(
     try:
         cm = URTConfigManager()
         cm.ensure_default_row(db)
-        cfg = cm.get_config(config_id, db=db)
+        resolved = _resolve_config_id(db, config_id, cm)
+        align = _config_alignment_meta(cm, db, resolved)
+        cfg = cm.get_config(resolved, db=db)
         code_n = _normalize_code(code)
+        freshness = get_trace_freshness(db, config_id=int(resolved), code=code_n)
 
         # 优先读缓存
         if date:
             from backend_api.models import URTSignalTrace
 
-            resolved = config_id
-            if resolved is None:
-                from backend_api.models import URTStrategyConfig
-
-                row0 = (
-                    db.query(URTStrategyConfig)
-                    .filter(URTStrategyConfig.is_default.is_(True))
-                    .order_by(URTStrategyConfig.id.asc())
-                    .first()
+            cached = (
+                db.query(URTSignalTrace)
+                .filter(
+                    URTSignalTrace.code == code_n,
+                    URTSignalTrace.date == str(date)[:10],
+                    URTSignalTrace.config_id == int(resolved),
                 )
-                resolved = int(row0.id) if row0 else None
-            if resolved is not None:
-                cached = (
-                    db.query(URTSignalTrace)
-                    .filter(
-                        URTSignalTrace.code == code_n,
-                        URTSignalTrace.date == str(date)[:10],
-                        URTSignalTrace.config_id == int(resolved),
-                    )
-                    .first()
-                )
-                if cached and cached.score_detail:
-                    fields = {
-                        "close": cached.close,
-                        "open": cached.open,
-                        "ma20": cached.ma20,
-                        "yang_count_4": cached.yang_count_4,
-                        "yang_count_5": cached.yang_count_5,
-                        "volume_multiple": cached.volume_multiple,
-                        "volume_ratio": cached.volume_ratio,
-                        "turnover_rate": cached.turnover_rate,
-                        "filter_reason": None,
-                    }
-                    buy_logic = build_buy_logic(
-                        {
-                            **fields,
-                            "score": cached.score,
-                            "buy_signal": cached.buy_signal,
-                            "score_detail": cached.score_detail,
-                        },
-                        cfg,
-                    )
-                    fields["filter_ok"] = buy_logic.get("filter_ok")
-                    fields["score_ok"] = buy_logic.get("score_ok")
-                    fields["filter_reason"] = buy_logic.get("filter_reason") or None
-                    sd = cached.score_detail if isinstance(cached.score_detail, dict) else {}
-                    st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
-                    fields["nearest_support"] = st.get("nearest_support")
-                    fields["nearest_resistance"] = st.get("nearest_resistance")
-                    return {
-                        "success": True,
-                        "source": "urt_signal_trace",
-                        "code": code_n,
-                        "name": cached.name,
-                        "date": cached.date,
-                        "config_id": resolved,
-                        "buy_signal": cached.buy_signal,
+                .first()
+            )
+            if cached and cached.score_detail:
+                fields = {
+                    "close": cached.close,
+                    "open": cached.open,
+                    "ma20": cached.ma20,
+                    "yang_count_4": cached.yang_count_4,
+                    "yang_count_5": cached.yang_count_5,
+                    "volume_multiple": cached.volume_multiple,
+                    "volume_ratio": cached.volume_ratio,
+                    "turnover_rate": cached.turnover_rate,
+                    "filter_reason": None,
+                }
+                buy_logic = build_buy_logic(
+                    {
+                        **fields,
                         "score": cached.score,
+                        "buy_signal": cached.buy_signal,
                         "score_detail": cached.score_detail,
-                        "buy_logic": buy_logic,
-                        "filter_ok": buy_logic.get("filter_ok"),
-                        "score_ok": buy_logic.get("score_ok"),
-                        "filter_reason": buy_logic.get("filter_reason") or None,
-                        "support_levels": st.get("support_levels") or [],
-                        "resistance_levels": st.get("resistance_levels") or [],
-                        "nearest_support": st.get("nearest_support"),
-                        "nearest_resistance": st.get("nearest_resistance"),
-                        "fields": fields,
-                    }
+                    },
+                    cfg,
+                )
+                fields["filter_ok"] = buy_logic.get("filter_ok")
+                fields["score_ok"] = buy_logic.get("score_ok")
+                fields["filter_reason"] = buy_logic.get("filter_reason") or None
+                sd = cached.score_detail if isinstance(cached.score_detail, dict) else {}
+                st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+                fields["nearest_support"] = st.get("nearest_support")
+                fields["nearest_resistance"] = st.get("nearest_resistance")
+                return {
+                    "success": True,
+                    "source": "urt_signal_trace",
+                    "code": code_n,
+                    "name": cached.name,
+                    "date": cached.date,
+                    "config_id": resolved,
+                    "effective_config_id": align.get("effective_config_id"),
+                    "is_effective_config": align.get("is_effective_config"),
+                    "config_name": align.get("config_name"),
+                    "config_updated_at": freshness.get("config_updated_at"),
+                    "trace_computed_at": freshness.get("trace_computed_at"),
+                    "stale": freshness.get("stale"),
+                    "need_recompute": freshness.get("need_recompute"),
+                    "buy_signal": cached.buy_signal,
+                    "score": cached.score,
+                    "score_detail": cached.score_detail,
+                    "buy_logic": buy_logic,
+                    "filter_ok": buy_logic.get("filter_ok"),
+                    "score_ok": buy_logic.get("score_ok"),
+                    "filter_reason": buy_logic.get("filter_reason") or None,
+                    "support_levels": st.get("support_levels") or [],
+                    "resistance_levels": st.get("resistance_levels") or [],
+                    "nearest_support": st.get("nearest_support"),
+                    "nearest_resistance": st.get("nearest_resistance"),
+                    "fields": fields,
+                }
 
         from backend_core.strategies.urt.signal_detector import history_calendar_days_for_fetch
 
@@ -468,7 +482,14 @@ async def get_urt_score_detail(
             "code": code_n,
             "name": (hist[0].get("name") if hist else None),
             "date": detail.get("signal_date"),
-            "config_id": config_id,
+            "config_id": resolved,
+            "effective_config_id": align.get("effective_config_id"),
+            "is_effective_config": align.get("is_effective_config"),
+            "config_name": align.get("config_name"),
+            "config_updated_at": freshness.get("config_updated_at"),
+            "trace_computed_at": freshness.get("trace_computed_at"),
+            "stale": False,
+            "need_recompute": freshness.get("need_recompute"),
             "buy_signal": detail.get("buy_signal"),
             "score": detail.get("score"),
             "score_detail": detail.get("score_detail"),

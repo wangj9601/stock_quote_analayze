@@ -139,7 +139,7 @@
               :closable="false"
               show-icon
               class="mb-3"
-              title="RR 偏低仅风险提示；破位支撑、贴/超阻力、悬空离支撑在硬闸开启时否决正式买点。KDE 无效不硬闸。"
+              title="RR 无量纲：分母 = max(价−支撑, 现价×1.5%, k×ATR)。偏低仅提示；破位/贴阻力/悬空硬闸看最近档，打分默认用第二档。"
             />
             <el-row :gutter="12">
               <el-col :span="8">
@@ -183,6 +183,27 @@
                     @change="onHangPctUiChange"
                   />
                   <span class="hang-hint">相对支撑距离 ≥ 此% 视为悬空</span>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="12">
+              <el-col :span="8">
+                <el-form-item label="ATR 分母系数 k">
+                  <el-input-number
+                    v-model="form.structure_rr_atr_k"
+                    :min="0"
+                    :max="2"
+                    :step="0.05"
+                    :precision="2"
+                    class="w-full"
+                  />
+                  <span class="hang-hint">0=关闭；建议 0.5～1.0</span>
+                </el-form-item>
+              </el-col>
+              <el-col :span="8">
+                <el-form-item label="第二档算 RR">
+                  <el-switch v-model="form.structure_rr_use_second_level" active-text="开" inactive-text="关" />
+                  <span class="hang-hint">开：打分用第二档；硬闸仍用最近档</span>
                 </el-form-item>
               </el-col>
             </el-row>
@@ -323,6 +344,10 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { urtApiService, type URTStrategyConfig } from '@/services/urtApi'
 
+const emit = defineEmits<{
+  (e: 'need-precompute', configId: number | null): void
+}>()
+
 const versions = ref<URTStrategyConfig[]>([])
 const listLoading = ref(false)
 const selectedId = ref<number | null>(null)
@@ -365,6 +390,8 @@ const form = reactive<any>({
   structure_rr_warn_enabled: true,
   structure_rr_hard_gate_enabled: true,
   structure_rr_min_rr: 2.0,
+  structure_rr_atr_k: 0.75,
+  structure_rr_use_second_level: true,
   structure_rr_min_upside_pct: 0.03,
   structure_rr_min_upside_pct_ui: 3.0,
   structure_hang_min_upside_pct: 0.08,
@@ -444,6 +471,8 @@ function applyParams(params: Record<string, any> = {}) {
   form.structure_rr_warn_enabled = params.structure_rr_warn_enabled !== false
   form.structure_rr_hard_gate_enabled = params.structure_rr_hard_gate_enabled !== false
   form.structure_rr_min_rr = params.structure_rr_min_rr ?? 2.0
+  form.structure_rr_atr_k = params.structure_rr_atr_k ?? 0.75
+  form.structure_rr_use_second_level = params.structure_rr_use_second_level !== false
   const minUp = Number(params.structure_rr_min_upside_pct)
   form.structure_rr_min_upside_pct = Number.isFinite(minUp) ? minUp : 0.03
   form.structure_rr_min_upside_pct_ui = Math.round(form.structure_rr_min_upside_pct * 1000) / 10
@@ -548,6 +577,20 @@ async function saveVersion() {
     })
     ElMessage.success('已保存')
     await loadVersions()
+    try {
+      await ElMessageBox.confirm(
+        '参数已更新。本版本旧信号仍按 config_id 保留，选股可能读到改参前结果；历史回测任务不会自动重跑。是否打开「信号预计算」对该版本重算？',
+        '建议重跑预计算',
+        {
+          confirmButtonText: '打开预计算',
+          cancelButtonText: '稍后',
+          type: 'warning',
+        }
+      )
+      emit('need-precompute', selectedId.value)
+    } catch {
+      /* 用户取消 */
+    }
   } catch (e: any) {
     ElMessage.error(e.message || '保存失败')
   } finally {

@@ -38,6 +38,8 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | `use_trace` | 优先读缓存 | `true` | 优先 `urt_signal_trace`；无则实时引擎 |
 | `exit_mode` | 出场模式 | `hit_rate` | `hit_rate` / `risk_exit` |
 | `strategy_config_id` | 参数版本 | 默认版本 | 含硬筛、得分、`risk` 风控 |
+
+创建时固化 `strategy_config_id`（默认绑生效/`is_default` 版本）。**改参不会改写已完成任务**；若 `use_trace=true` 重跑，读的是该 id **当前** trace（可能已按新参重算）。任务级覆盖 `min_score` 或选用非生效版本会标 `params_diverged`。
 | `stock_pool_mode` | 股票池 | `all` | 全市场 / 自选 / 行业 / 概念 / 单股 / 自定义 |
 | `cn_board_segment` | A 股板块 | 全部 | MAIN / CYB / SZ_SME / KCB / BJ |
 

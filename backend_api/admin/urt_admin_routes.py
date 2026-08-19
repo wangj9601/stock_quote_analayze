@@ -198,14 +198,65 @@ def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any
 def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, Any]:
     mode = (body.stock_pool_mode or "all").strip() or "all"
     cn_seg = _normalize_cn_board_segment(body.cn_board_segment)
+
+    mgr = URTConfigManager()
+    mgr.ensure_default_row(db)
+    effective_id = mgr.resolve_effective_config_id(db)
+    requested_id = body.strategy_config_id
+    if requested_id is not None:
+        try:
+            requested_id = int(requested_id)
+        except (TypeError, ValueError):
+            requested_id = None
+    resolved_id = requested_id if requested_id is not None else effective_id
+    meta = mgr.get_config_meta(db, resolved_id)
+    strategy_cfg = meta.get("config_params") if isinstance(meta.get("config_params"), dict) else {}
+    package_min_score = strategy_cfg.get("min_score")
+    try:
+        package_min_score_f = float(package_min_score) if package_min_score is not None else None
+    except (TypeError, ValueError):
+        package_min_score_f = None
+
+    min_score_override = body.min_score
+    if min_score_override is not None:
+        try:
+            min_score_override = float(min_score_override)
+        except (TypeError, ValueError):
+            min_score_override = None
+
+    params_diverged = False
+    diverge_reasons: List[str] = []
+    if (
+        resolved_id is not None
+        and effective_id is not None
+        and int(resolved_id) != int(effective_id)
+    ):
+        params_diverged = True
+        diverge_reasons.append("strategy_config_id_not_effective")
+    if min_score_override is not None and (
+        package_min_score_f is None or abs(float(min_score_override) - float(package_min_score_f)) > 1e-9
+    ):
+        params_diverged = True
+        diverge_reasons.append("min_score_override")
+
     config: Dict[str, Any] = {
         "start_date": body.start_date,
         "end_date": body.end_date,
         "task_name": body.task_name,
-        "strategy_config_id": body.strategy_config_id,
+        "strategy_config_id": resolved_id,
+        "effective_config_id": effective_id,
+        "config_name": meta.get("name"),
+        "config_version_label": meta.get("version_label"),
+        "is_effective_config": bool(meta.get("is_effective")),
+        "package_min_score": package_min_score_f,
+        "package_volume_multiple": strategy_cfg.get("volume_multiple"),
+        # 未覆盖时不写死 70：回测 runner 用策略包 min_score
+        "min_score": min_score_override,
+        "min_score_override": min_score_override is not None,
+        "params_diverged": params_diverged,
+        "diverge_reasons": diverge_reasons,
         "target_pct": body.target_pct,
         "horizon_days": body.horizon_days,
-        "min_score": body.min_score,
         "use_trace": body.use_trace,
         "exit_mode": (
             em
@@ -454,7 +505,12 @@ async def update_strategy_config(
             "urt_config_update",
             {"config_id": config_id, "name": data.get("name"), "action": "update"},
         )
-        return {"success": True, "data": data}
+        return {
+            "success": True,
+            "data": data,
+            "need_recompute": True,
+            "message": "参数已保存；旧 trace 按 config_id 保留，建议对该版本重跑信号预计算或个股强制重算",
+        }
     except HTTPException:
         raise
     except Exception as e:

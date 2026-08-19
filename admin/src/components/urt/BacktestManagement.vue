@@ -10,14 +10,20 @@
           </el-col>
           <el-col :span="12">
             <el-form-item label="参数版本">
-              <el-select v-model="form.strategy_config_id" clearable placeholder="默认" class="w-full" filterable>
+              <el-select
+                v-model="form.strategy_config_id"
+                class="w-full"
+                filterable
+                @change="onStrategyConfigChange"
+              >
                 <el-option
                   v-for="c in configs"
                   :key="c.id"
-                  :label="`${c.name}${c.is_default ? ' (默认)' : ''}`"
+                  :label="`${c.name}${c.is_default ? ' (默认/生效)' : ''}`"
                   :value="c.id"
                 />
               </el-select>
+              <div v-if="configDivergeHint" class="hint warn">{{ configDivergeHint }}</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -46,7 +52,18 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="最低得分">
-              <el-input-number v-model="form.min_score" :min="0" :max="100" :step="5" class="w-full" />
+              <el-input-number
+                v-model="form.min_score"
+                :min="0"
+                :max="100"
+                :step="5"
+                class="w-full"
+                controls-position="right"
+                :value-on-clear="undefined"
+                placeholder="用参数版本"
+              />
+              <span class="hint">空=使用所选参数版本的 min_score（当前包内 {{ packageMinScoreLabel }}）</span>
+              <div v-if="minScoreDivergeHint" class="hint warn">{{ minScoreDivergeHint }}</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -313,7 +330,7 @@ const form = reactive({
   end_date: '',
   target_pct: 0.1,
   horizon_days: 10,
-  min_score: 70,
+  min_score: undefined as number | undefined,
   strategy_config_id: undefined as number | undefined,
   use_trace: true,
   exit_mode: 'hit_rate' as 'hit_rate' | 'risk_exit' | 'structure_exit',
@@ -343,6 +360,48 @@ const industryBoardLoading = ref(false)
 const conceptBoardLoading = ref(false)
 
 const configs = ref<URTStrategyConfig[]>([])
+const effectiveConfigId = computed(() => {
+  const d = configs.value.find((c) => c.is_default)
+  return d?.id
+})
+
+const selectedConfig = computed(() => {
+  const id = form.strategy_config_id
+  if (id == null) return null
+  return configs.value.find((c) => c.id === id) || null
+})
+
+const packageMinScore = computed(() => {
+  const p = selectedConfig.value?.config_params as Record<string, any> | undefined
+  const v = p?.min_score
+  return v == null || Number.isNaN(Number(v)) ? null : Number(v)
+})
+
+const packageMinScoreLabel = computed(() =>
+  packageMinScore.value == null ? '—' : String(packageMinScore.value),
+)
+
+const configDivergeHint = computed(() => {
+  if (form.strategy_config_id == null || effectiveConfigId.value == null) return ''
+  if (form.strategy_config_id === effectiveConfigId.value) return ''
+  return '已选非生效（非默认）版本，与前台日常选股/信号跟踪可能不一致'
+})
+
+const minScoreDivergeHint = computed(() => {
+  if (form.min_score == null || packageMinScore.value == null) return ''
+  if (Number(form.min_score) === Number(packageMinScore.value)) return ''
+  return `最低得分已偏离参数版本（${packageMinScore.value}），将覆盖策略包并标记为偏离`
+})
+
+function syncMinScoreFromSelectedConfig(forceClear = true) {
+  if (forceClear) {
+    form.min_score = undefined
+  }
+}
+
+function onStrategyConfigChange() {
+  syncMinScoreFromSelectedConfig(true)
+}
 const tasks = ref<any[]>([])
 const loading = ref(false)
 const creating = ref(false)
@@ -450,6 +509,11 @@ async function loadWatchlistUsers() {
 
 async function loadConfigs() {
   configs.value = await urtApiService.listStrategyConfigs(true)
+  const def = configs.value.find((c) => c.is_default) || configs.value[0]
+  if (def?.id != null) {
+    form.strategy_config_id = def.id
+  }
+  syncMinScoreFromSelectedConfig(true)
 }
 
 async function loadTasks() {
@@ -508,6 +572,18 @@ async function createTask() {
     }
   }
 
+  if (configDivergeHint.value || minScoreDivergeHint.value) {
+    try {
+      await ElMessageBox.confirm(
+        [configDivergeHint.value, minScoreDivergeHint.value].filter(Boolean).join('\n'),
+        '参数与前台生效配置不一致',
+        { type: 'warning', confirmButtonText: '仍要创建', cancelButtonText: '返回修改' },
+      )
+    } catch {
+      return
+    }
+  }
+
   creating.value = true
   try {
     const body: Record<string, any> = {
@@ -516,13 +592,16 @@ async function createTask() {
       task_name: form.task_name || undefined,
       target_pct: form.target_pct,
       horizon_days: form.horizon_days,
-      min_score: form.min_score,
       strategy_config_id: form.strategy_config_id,
       use_trace: form.use_trace,
       exit_mode: form.exit_mode,
       compare_hit_rate: form.exit_mode === 'hit_rate' ? false : form.compare_hit_rate,
       stock_pool_mode: mode,
       cn_board_segment: cnBoardSegment.value === 'ALL' ? undefined : cnBoardSegment.value,
+    }
+    // 空=不覆盖，使用参数版本 min_score（禁止静默写死 70）
+    if (form.min_score != null && form.min_score !== ('' as any)) {
+      body.min_score = form.min_score
     }
     if (mode === 'single') body.stock_code = form.stock_code.trim()
     if (mode === 'custom') body.stock_pool = parseCustomPool(form.stock_list)
@@ -646,6 +725,7 @@ onUnmounted(() => {
 .mt-3 { margin-top: 12px; }
 .w-full { width: 100%; }
 .hint { margin-left: 8px; color: #6b7280; font-size: 12px; }
+.hint.warn { display: block; margin: 4px 0 0; margin-left: 0; color: #b45309; }
 .list-header { display: flex; justify-content: space-between; align-items: center; }
 .list-actions { display: flex; gap: 8px; align-items: center; }
 </style>

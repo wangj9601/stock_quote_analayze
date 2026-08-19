@@ -94,53 +94,130 @@ def evaluate_structure_hard_gate(
     }
 
 
-def enrich_structure_with_rr(
-    structure: Optional[Dict[str, Any]],
-    *,
-    price: Optional[float],
-    cfg: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """为 structure 补写 rr / rr_reason / 分母下限字段，并生成 risk_tags + 硬闸结果。"""
-    cfg = cfg or {}
-    st = dict(structure or {})
+def _rr_kwargs(cfg: Optional[Dict[str, Any]], atr: Any) -> Dict[str, Any]:
     from backend_core.strategies.gms.structure_levels import (
-        compute_structure_rr,
+        resolve_structure_rr_atr_k,
         resolve_structure_rr_min_downside_pct,
         resolve_structure_rr_min_upside_pct,
     )
 
-    floor_pct = resolve_structure_rr_min_downside_pct(cfg)
-    up_pct = resolve_structure_rr_min_upside_pct(cfg)
-    info = compute_structure_rr(
-        price,
-        st.get("nearest_support"),
-        st.get("nearest_resistance"),
-        min_downside_pct=floor_pct,
-        min_upside_pct=up_pct,
-    )
+    atr_v = None
+    try:
+        if atr is not None:
+            atr_v = float(atr)
+            if atr_v <= 0 or atr_v != atr_v:
+                atr_v = None
+    except (TypeError, ValueError):
+        atr_v = None
+    return {
+        "min_downside_pct": resolve_structure_rr_min_downside_pct(cfg),
+        "min_upside_pct": resolve_structure_rr_min_upside_pct(cfg),
+        "atr": atr_v,
+        "atr_k": resolve_structure_rr_atr_k(cfg),
+    }
+
+
+def _level_pool(structure: Dict[str, Any], side: str) -> Any:
+    cz = structure.get("confluence_zones")
+    if isinstance(cz, dict):
+        zones = cz.get("supports" if side == "support" else "resistances")
+        if zones:
+            return zones
+    return structure.get("support_levels" if side == "support" else "resistance_levels")
+
+
+def _apply_rr_info(st: Dict[str, Any], info: Dict[str, Any]) -> None:
     st["rr"] = info.get("rr")
     st["rr_reason"] = info.get("reason")
     st["rr_downside_floored"] = bool(info.get("downside_floored"))
     st["rr_min_downside_pct"] = info.get("min_downside_pct")
     st["rr_downside_raw"] = info.get("downside_raw")
     st["rr_downside"] = info.get("downside")
+    st["rr_downside_pct"] = info.get("downside_pct")
     st["rr_upside"] = info.get("upside")
     st["rr_upside_pct"] = info.get("upside_pct")
     st["rr_min_upside_pct"] = info.get("min_upside_pct")
+    st["rr_floor_source"] = info.get("floor_source")
+    st["rr_atr"] = info.get("atr")
+    st["rr_atr_k"] = info.get("atr_k")
+    st["rr_atr_floor"] = info.get("atr_floor")
+
+
+def enrich_structure_with_rr(
+    structure: Optional[Dict[str, Any]],
+    *,
+    price: Optional[float],
+    cfg: Optional[Dict[str, Any]] = None,
+    atr: Any = None,
+) -> Dict[str, Any]:
+    """为 structure 补写 rr / 分母下限字段，并生成 risk_tags + 硬闸结果。
+
+    最近支撑/阻力只用于硬闸；打分与「RR 偏低」提示默认用第二档（不足则退回最近档）。
+    """
+    cfg = cfg or {}
+    st = dict(structure or {})
+    from backend_core.strategies.gms.structure_levels import compute_structure_rr, pick_nth_level
+
+    atr_v = atr if atr is not None else st.get("atr")
+    kwargs = _rr_kwargs(cfg, atr_v)
+    nearest_s = st.get("nearest_support")
+    nearest_r = st.get("nearest_resistance")
+    nearest_info = compute_structure_rr(price, nearest_s, nearest_r, **kwargs)
+
+    use_second = cfg.get("structure_rr_use_second_level")
+    if use_second is None:
+        use_second = True
+    struct_s, struct_r = nearest_s, nearest_r
+    rank = 1
+    if use_second:
+        s2 = pick_nth_level(_level_pool(st, "support"), price, side="support", n=2)
+        r2 = pick_nth_level(_level_pool(st, "resistance"), price, side="resistance", n=2)
+        if s2 is not None:
+            struct_s = s2
+        if r2 is not None:
+            struct_r = r2
+
+        def _diff(a: Any, b: Any) -> bool:
+            try:
+                return a is not None and b is not None and abs(float(a) - float(b)) > 1e-6
+            except (TypeError, ValueError):
+                return False
+
+        if _diff(struct_s, nearest_s) or _diff(struct_r, nearest_r):
+            rank = 2
+    if rank == 2:
+        struct_info = compute_structure_rr(price, struct_s, struct_r, **kwargs)
+    else:
+        struct_info = nearest_info
+
+    _apply_rr_info(st, struct_info)
+    st["rr_support"] = struct_s
+    st["rr_resistance"] = struct_r
+    st["rr_level_rank"] = rank
+    st["rr_nearest"] = nearest_info.get("rr")
+    st["rr_nearest_reason"] = nearest_info.get("reason")
+    st["atr"] = kwargs.get("atr")
 
     hanging, hang_pct = is_structure_hanging(price, st.get("nearest_support"), cfg)
     st["hanging"] = hanging
     st["hang_distance_pct"] = round(hang_pct, 4) if hang_pct is not None else None
 
-    tags = build_structure_rr_risk_tags(st, cfg, price=price, rr_info=info)
-    hard_gate = evaluate_structure_hard_gate(st, cfg, price=price, rr_info=info)
+    tags = build_structure_rr_risk_tags(
+        st, cfg, price=price, rr_info=nearest_info, score_rr_info=struct_info
+    )
+    hard_gate = evaluate_structure_hard_gate(st, cfg, price=price, rr_info=nearest_info)
     return {"structure": st, "risk_tags": tags, "structure_hard_gate": hard_gate}
 
 
 def _floor_hint(rr_info: Optional[Dict[str, Any]]) -> str:
-    if rr_info and rr_info.get("downside_floored"):
-        return "；已用分母下限"
-    return ""
+    if not rr_info or not rr_info.get("downside_floored"):
+        return ""
+    src = rr_info.get("floor_source")
+    if src == "atr":
+        return "；已用 ATR 分母下限"
+    if src == "pct":
+        return "；已用分母下限（现价比例）"
+    return "；已用分母下限"
 
 
 def build_structure_rr_risk_tags(
@@ -149,11 +226,11 @@ def build_structure_rr_risk_tags(
     *,
     price: Optional[float] = None,
     rr_info: Optional[Dict[str, Any]] = None,
+    score_rr_info: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, str]]:
     """
-    基于 KDE 最近支撑/阻力生成 risk_tags。
-    复用 GMS compute_structure_rr 口径；无阻力 / 无支撑 / KDE 失败不提示。
-    另：悬空离支撑打独立标签。
+    最近档 RR（rr_info）用于破位/贴阻力等危险标签；
+    结构 RR（score_rr_info，默认第二档）用于「盈亏比偏低」提示。
     """
     cfg = cfg or {}
     if cfg.get("structure_rr_warn_enabled") is False:
@@ -161,27 +238,20 @@ def build_structure_rr_risk_tags(
 
     st = structure if isinstance(structure, dict) else {}
     if rr_info is None:
-        from backend_core.strategies.gms.structure_levels import (
-            compute_structure_rr,
-            resolve_structure_rr_min_downside_pct,
-            resolve_structure_rr_min_upside_pct,
-        )
+        from backend_core.strategies.gms.structure_levels import compute_structure_rr
 
-        px = price
-        floor_pct = resolve_structure_rr_min_downside_pct(cfg)
-        up_pct = resolve_structure_rr_min_upside_pct(cfg)
         rr_info = compute_structure_rr(
-            px,
+            price,
             st.get("nearest_support"),
             st.get("nearest_resistance"),
-            min_downside_pct=floor_pct,
-            min_upside_pct=up_pct,
+            **_rr_kwargs(cfg, st.get("atr")),
         )
+    warn_info = score_rr_info if score_rr_info is not None else rr_info
 
-    rr = rr_info.get("rr") if rr_info else st.get("rr")
+    rr = warn_info.get("rr") if warn_info else st.get("rr")
     reason = (rr_info.get("reason") if rr_info else None) or st.get("rr_reason") or ""
     should = rr_info.get("should_penalize") if rr_info else None
-    hint = _floor_hint(rr_info)
+    hint = _floor_hint(warn_info)
 
     try:
         min_rr = float(cfg.get("structure_rr_min_rr") or 2.0)
@@ -196,7 +266,7 @@ def build_structure_rr_risk_tags(
                     "id": "poor_structure_rr",
                     "label": "破位支撑",
                     "level": "danger",
-                    "reason": f"现价不高于最近支撑（结构盈亏比要求 ≥{min_rr:g}）{hint}",
+                    "reason": f"现价不高于最近支撑（结构盈亏比要求 ≥{min_rr:g}）{_floor_hint(rr_info)}",
                 }
             )
         elif reason == "at_resistance":
@@ -205,7 +275,7 @@ def build_structure_rr_risk_tags(
                     "id": "poor_structure_rr",
                     "label": "贴/超阻力",
                     "level": "danger",
-                    "reason": f"上行空间不足 RR={rr if rr is not None else 0}（要求 ≥{min_rr:g}）{hint}",
+                    "reason": f"上行空间不足 RR={rr_info.get('rr') if rr_info else 0}（要求 ≥{min_rr:g}）{_floor_hint(rr_info)}",
                 }
             )
         elif reason == "thin_upside":
@@ -222,7 +292,7 @@ def build_structure_rr_risk_tags(
                     "level": "danger",
                     "reason": (
                         f"距最近阻力仅约 {up_txt}（{pct_txt}），低于最小上行要求 {need_txt}"
-                        f"；RR={rr if rr is not None else '—'}{hint}"
+                        f"；RR={rr_info.get('rr') if rr_info else '—'}{_floor_hint(rr_info)}"
                     ),
                 }
             )

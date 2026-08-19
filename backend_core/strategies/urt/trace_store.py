@@ -70,6 +70,10 @@ def _enrich_trace_structure_fields(
     item["structure_rr_reason"] = st.get("rr_reason")
     item["structure_rr_downside_floored"] = st.get("rr_downside_floored")
     item["structure_rr_min_downside_pct"] = st.get("rr_min_downside_pct")
+    item["structure_rr_upside_pct"] = st.get("rr_upside_pct")
+    item["structure_rr_downside_pct"] = st.get("rr_downside_pct")
+    item["structure_rr_floor_source"] = st.get("rr_floor_source")
+    item["structure_rr_level_rank"] = st.get("rr_level_rank")
     item["risk_tags"] = risk_tags if isinstance(risk_tags, list) else (sd.get("risk_tags") or [])
     return item
 
@@ -535,3 +539,67 @@ def query_trace_by_code(
         _enrich_trace_structure_fields(item, score_detail=r.score_detail, close=r.close)
         out.append(item)
     return out
+
+
+def _parse_dt(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s.replace(" ", "T") if "T" not in s and " " in s else s)
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    except Exception:
+        return None
+
+
+def get_trace_freshness(
+    db: Session,
+    *,
+    config_id: int,
+    config_updated_at: Any = None,
+    code: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    比较策略版本 updated_at 与 trace 最新 created_at，标记是否可能读到改参前缓存。
+    不删数据；仅供提示。
+    """
+    from sqlalchemy import func
+
+    from backend_api.models import URTSignalTrace, URTStrategyConfig
+
+    cfg_dt = _parse_dt(config_updated_at)
+    if cfg_dt is None:
+        row = (
+            db.query(URTStrategyConfig)
+            .filter(URTStrategyConfig.id == int(config_id))
+            .first()
+        )
+        cfg_dt = _parse_dt(getattr(row, "updated_at", None) if row else None)
+
+    q = db.query(func.max(URTSignalTrace.created_at)).filter(
+        URTSignalTrace.config_id == int(config_id)
+    )
+    if code:
+        code_n = str(code).strip()
+        if code_n.isdigit() and len(code_n) <= 6:
+            code_n = code_n.zfill(6)
+        q = q.filter(URTSignalTrace.code == code_n)
+    trace_dt = _parse_dt(q.scalar())
+
+    stale = bool(cfg_dt and trace_dt and trace_dt < cfg_dt)
+    need_recompute = bool(cfg_dt and (trace_dt is None or trace_dt < cfg_dt))
+    return {
+        "config_id": int(config_id),
+        "config_updated_at": cfg_dt.isoformat(sep=" ", timespec="seconds") if cfg_dt else None,
+        "trace_computed_at": (
+            trace_dt.isoformat(sep=" ", timespec="seconds") if trace_dt else None
+        ),
+        "stale": stale,
+        "need_recompute": need_recompute,
+    }

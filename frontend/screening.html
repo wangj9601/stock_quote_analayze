@@ -1520,13 +1520,15 @@
 
             <div class="parameters-card">
                 <h3>可选参数</h3>
-                <p class="gms-params-refresh-hint">切换参数版本或修改量能/得分后，须点击「刷新筛选」才会重新计算。量能倍数与最低得分仅在「全部A股 / 全部港股」生效并过滤买点；自选、行业、概念、单股对齐 GMS：列表不过滤，得分原样返回。</p>
+                <p class="gms-params-refresh-hint">默认使用「生效（默认）」参数版本及其中的量能/最低得分；量能与最低得分留空表示不覆盖（可读预计算缓存）。仅在「全部A股 / 全部港股」填写覆盖值时才会过滤买点并关闭缓存。切换版本或覆盖项后须点「刷新筛选」。</p>
                 <div class="parameters-grid">
                     <div class="parameter-group">
                         <label for="urt-config_id">策略参数版本</label>
                         <select id="urt-config_id" class="param-input">
                             <option value="">加载中…</option>
                         </select>
+                        <span id="urtConfigAlignHint" class="param-hint" style="display:none;color:#b45309;"></span>
+                        <span id="urtTraceStaleHint" class="param-hint" style="display:none;color:#b45309;"></span>
                     </div>
                     <div class="parameter-group">
                         <label for="urtScreeningDate">筛选基准日</label>
@@ -1537,12 +1539,12 @@
                         <input type="number" id="urtLimit" class="param-input" min="1" max="10000" step="1" placeholder="如 200">
                     </div>
                     <div class="parameter-group">
-                        <label for="urtVolumeMultiple">量能倍数</label>
-                        <input type="number" id="urtVolumeMultiple" class="param-input" min="1" max="30" step="0.1" value="3.0">
+                        <label for="urtVolumeMultiple">量能倍数（空=用版本）</label>
+                        <input type="number" id="urtVolumeMultiple" class="param-input" min="1" max="30" step="0.1" placeholder="生效配置">
                     </div>
                     <div class="parameter-group">
-                        <label for="urtMinScore">最低得分</label>
-                        <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" value="70">
+                        <label for="urtMinScore">最低得分（空=用版本）</label>
+                        <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" placeholder="生效配置">
                     </div>
                 </div>
                 <p id="urtSingleSkipFilterHint" class="param-hint" style="display:none;margin:8px 0 0;color:#64748b;font-size:13px;">

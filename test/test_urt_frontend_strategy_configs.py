@@ -21,6 +21,8 @@ def test_list_urt_strategy_configs_public_shape():
             "description": "d",
             "is_default": True,
             "precompute_enabled": True,
+            "updated_at": "2026-08-19T10:00:00",
+            "config_params": {"min_score": 72, "volume_multiple": 3.2},
         },
         {
             "id": 2,
@@ -29,6 +31,8 @@ def test_list_urt_strategy_configs_public_shape():
             "description": None,
             "is_default": False,
             "precompute_enabled": False,
+            "updated_at": "2026-08-18T10:00:00",
+            "config_params": {"min_score": 65, "volume_multiple": 2.5},
         },
     ]
 
@@ -36,6 +40,20 @@ def test_list_urt_strategy_configs_public_shape():
         inst = Mgr.return_value
         inst.ensure_default_row = MagicMock()
         inst.list_configs = MagicMock(return_value=fake_rows)
+        inst.get_config = MagicMock(
+            side_effect=lambda cid, db=None: {
+                1: {"min_score": 72, "volume_multiple": 3.2},
+                2: {"min_score": 65, "volume_multiple": 2.5},
+            }.get(int(cid), {})
+        )
+        inst.get_config_meta = MagicMock(
+            return_value={
+                "config_id": 1,
+                "name": "默认",
+                "min_score": 72,
+                "volume_multiple": 3.2,
+            }
+        )
         # override get_db dependency
         from backend_api.database import get_db
 
@@ -49,5 +67,11 @@ def test_list_urt_strategy_configs_public_shape():
         body = res.json()
         assert body["success"] is True
         assert body["default_config_id"] == 1
+        assert body["effective_config_id"] == 1
+        assert body["effective"]["min_score"] == 72
         assert len(body["data"]) == 2
         assert body["data"][0]["name"] == "默认"
+        assert body["data"][0]["min_score"] == 72
+        assert body["data"][0]["volume_multiple"] == 3.2
+        # updated_at 可选透出（有则便于前台陈旧判断）
+        assert "updated_at" in body["data"][0]

@@ -1811,8 +1811,22 @@ const StockPage = {
         const signalClass = buySignal ? 'positive' : 'neutral';
         const fields = data.fields || {};
         const fmt = (v, d = 2) => (v != null && v !== '' ? Number(v).toFixed(d) : '--');
-        const traceUrl = `stock_urt_trace.html?code=${encodeURIComponent(this.stockCode)}&name=${encodeURIComponent(this.stockName || '')}`;
-        const detailUrl = `stock_urt_score_detail.html?code=${encodeURIComponent(this.stockCode)}&name=${encodeURIComponent(this.stockName || '')}`;
+        // 始终带上 API 已解析的 config_id，保证跳转页与个股卡同一套参数
+        const cid = data.config_id != null ? String(data.config_id) : '';
+        const qBase = `code=${encodeURIComponent(this.stockCode)}&name=${encodeURIComponent(this.stockName || '')}`;
+        const cfgQ = cid ? `&config_id=${encodeURIComponent(cid)}` : '';
+        const dateQ = data.date ? `&date=${encodeURIComponent(data.date)}` : '';
+        const traceUrl = `stock_urt_trace.html?${qBase}${cfgQ}`;
+        const detailUrl = `stock_urt_score_detail.html?${qBase}${cfgQ}${dateQ}`;
+        const cfgName = data.config_name || (cid ? `配置#${cid}` : '');
+        const alignHint = data.is_effective_config === false
+            ? '<div class="gms-info-row" style="color:#b45309;">参数版本非生效（与日常回测可能不一致）</div>'
+            : (cfgName
+                ? `<div class="gms-info-row"><span>参数版本：</span><span>${cfgName}</span></div>`
+                : '');
+        const staleHint = data.stale
+            ? '<div class="gms-info-row" style="color:#b45309;">参数已更新，得分可能来自改参前缓存</div>'
+            : '';
         container.innerHTML = `
             <div class="gms-overview">
                 <div class="gms-score-box ${buySignal ? 'high' : 'medium'}">
@@ -1828,6 +1842,8 @@ const StockPage = {
                         <span>信号日期：</span>
                         <span>${data.date || '--'}</span>
                     </div>
+                    ${alignHint}
+                    ${staleHint}
                 </div>
             </div>
             <div class="gms-details-grid">

@@ -150,10 +150,20 @@
     );
 
     const st = model.structure || {};
+    const upTxt = st.upsidePct != null && Number.isFinite(Number(st.upsidePct))
+      ? `${(Number(st.upsidePct) * 100).toFixed(1)}%`
+      : '--';
+    const dnTxt = st.downsidePct != null && Number.isFinite(Number(st.downsidePct))
+      ? `${(Number(st.downsidePct) * 100).toFixed(1)}%`
+      : '--';
+    const floorTxt = st.rrFloored
+      ? (st.floorSource === 'atr' ? '已用 ATR 分母下限' : (st.floorSource === 'pct' ? '已用分母下限（现价比例）' : '已用分母下限'))
+      : '未触分母下限';
     drawTitle('四、支撑 / 阻力', 12, [30, 64, 175]);
     drawWrapped(
       `最近支撑 ${st.nearestSupport} · 最近阻力 ${st.nearestResistance} · 盈亏比 RR ${st.rr}` +
-        `${st.rrFloored ? ' · 已用分母下限' : ''}` +
+        ` · 上行 ${upTxt} · 下行 ${dnTxt} · ${floorTxt}` +
+        `${st.rrRank != null ? ` · RR用第${st.rrRank}档` : ''}` +
         `${st.rrReason ? ` · ${st.rrReason}` : ''}`,
       9,
       4.2

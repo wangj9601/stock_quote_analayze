@@ -113,6 +113,10 @@ class URTConfigManager:
             "structure_rr_min_upside_pct": 0.03,
             "structure_rr_hard_gate_enabled": True,
             "structure_hang_min_upside_pct": 0.08,
+            # RR 分母额外下限 k×ATR（0.5～1.0，默认 0.75）；0=关闭
+            "structure_rr_atr_k": 0.75,
+            # True：打分/提示用第二档支撑阻力；最近档仍只做硬闸
+            "structure_rr_use_second_level": True,
             # 结构出场：阻力止盈最小上行空间（默认 5%，过近则改百分比/移动）
             "structure_exit_min_upside_pct": 0.05,
             # 结构出场回测：止损 = 支撑 × (1 - buffer)
@@ -207,6 +211,45 @@ class URTConfigManager:
                 logger.warning("URT default config lookup failed: %s", e)
         return self.load_file_config()
 
+    def resolve_effective_config_id(self, db) -> Optional[int]:
+        """当前生效策略版本 id（is_default && is_active）；无则 None（调用方回退文件默认）。"""
+        if db is None:
+            return None
+        try:
+            from backend_api.models import URTStrategyConfig
+
+            row = (
+                db.query(URTStrategyConfig)
+                .filter(URTStrategyConfig.is_default.is_(True), URTStrategyConfig.is_active.is_(True))
+                .order_by(URTStrategyConfig.id.asc())
+                .first()
+            )
+            return int(row.id) if row else None
+        except Exception as e:
+            logger.warning("URT resolve_effective_config_id failed: %s", e)
+            return None
+
+    def get_config_meta(self, db, config_id: Optional[int] = None) -> Dict[str, Any]:
+        """返回版本元信息 + 合并后的关键阈值（供前后端对齐展示）。"""
+        self.ensure_default_row(db)
+        effective_id = self.resolve_effective_config_id(db)
+        resolved_id = int(config_id) if config_id is not None else effective_id
+        row = self.get_config_row(db, resolved_id) if resolved_id is not None else None
+        cfg = self.get_config(resolved_id, db=db)
+        return {
+            "config_id": resolved_id,
+            "effective_config_id": effective_id,
+            "is_effective": bool(
+                resolved_id is not None and effective_id is not None and int(resolved_id) == int(effective_id)
+            ),
+            "name": (row.name if row else None) or "文件默认",
+            "version_label": row.version_label if row else None,
+            "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
+            "min_score": cfg.get("min_score"),
+            "volume_multiple": cfg.get("volume_multiple"),
+            "config_params": cfg,
+        }
+
     def merge_overrides(self, base: Optional[Dict[str, Any]] = None, **overrides) -> Dict[str, Any]:
         cfg = deepcopy(base or self.load_file_config())
         for key in (
@@ -263,6 +306,8 @@ class URTConfigManager:
             "structure_exit_min_upside_pct",
             "structure_rr_hard_gate_enabled",
             "structure_hang_min_upside_pct",
+            "structure_rr_atr_k",
+            "structure_rr_use_second_level",
             "structure_stop_buffer_pct",
             "structure_use_structural_window",
             "structure_use_confluence",

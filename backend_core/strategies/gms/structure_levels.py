@@ -32,6 +32,47 @@ def empty_structure() -> Dict[str, Any]:
     }
 
 
+def pick_nth_level(
+    levels: Any,
+    price: Optional[float],
+    *,
+    side: str,
+    n: int = 2,
+) -> Optional[float]:
+    """
+    从支撑/阻力列表取第 n 档（1=最近）。
+    levels 可为 float 或 {center|price}；不足 n 档则退回最近档。
+    """
+    if price is None:
+        return None
+    try:
+        px = float(price)
+    except (TypeError, ValueError):
+        return None
+    if px <= 0:
+        return None
+    vals: List[float] = []
+    for x in levels or []:
+        raw = x.get("center") if isinstance(x, dict) else x
+        if raw is None and isinstance(x, dict):
+            raw = x.get("price")
+        try:
+            f = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if f != f:
+            continue
+        if side == "support" and f < px:
+            vals.append(f)
+        elif side == "resistance" and f > px:
+            vals.append(f)
+    if not vals:
+        return None
+    vals.sort(reverse=(side == "support"))
+    idx = min(max(int(n or 1), 1), len(vals)) - 1
+    return round(vals[idx], 2)
+
+
 def compute_structure_rr(
     price: Optional[float],
     nearest_support: Optional[float],
@@ -39,31 +80,40 @@ def compute_structure_rr(
     *,
     min_downside_pct: float = 0.015,
     min_upside_pct: float = 0.0,
+    atr: Optional[float] = None,
+    atr_k: float = 0.0,
 ) -> Dict[str, Any]:
     """
-    结构盈亏比（与 RPE structure_filter 同口径，并对分母做下限）。
+    结构盈亏比（无量纲）。
 
-    RR = upside / max(价−支撑, 现价×min_downside_pct)
+    RR = upside / max(价−支撑, 现价×min_downside_pct, k×ATR)
 
     贴支撑时原始 downside 极小会导致 RR 虚高；默认至少按现价 1.5% 作为风险分母
-    （覆盖滑点/假破缓冲）。min_downside_pct<=0 时关闭下限。
+    （覆盖滑点/假破缓冲）。atr_k>0 且 ATR 有效时再与 k×ATR 取 max。
+    min_downside_pct<=0 时关闭价格比例下限；atr 缺失或 atr_k<=0 时关闭波动下限。
 
     min_upside_pct>0 时：若 (阻力−价)/价 低于该比例，视为上行空间不足（贴阻力类），
     should_penalize=True，reason=thin_upside（避免「支撑贴身、阻力仅几毛」仍算可交易）。
 
     返回:
       rr / reason / should_penalize
-      downside_raw / downside / downside_floored / min_downside_pct
+      downside_raw / downside / downside_floored / min_downside_pct / downside_pct
       upside / upside_pct / min_upside_pct
+      floor_source / atr / atr_k / atr_floor
     """
     empty_extra = {
         "downside_raw": None,
         "downside": None,
         "downside_floored": False,
+        "downside_pct": None,
         "min_downside_pct": float(min_downside_pct or 0),
         "upside": None,
         "upside_pct": None,
         "min_upside_pct": float(min_upside_pct or 0),
+        "floor_source": "raw",
+        "atr": None,
+        "atr_k": float(atr_k or 0),
+        "atr_floor": None,
     }
     if price is None:
         return {"rr": None, "reason": "no_price", "should_penalize": False, **empty_extra}
@@ -93,9 +143,30 @@ def compute_structure_rr(
         floor_pct = 0.015
     if floor_pct < 0:
         floor_pct = 0.0
-    floor = px * floor_pct if floor_pct > 0 else 0.0
-    downside = max(downside_raw, floor) if floor > 0 else downside_raw
-    floored = bool(floor > 0 and downside_raw < floor)
+    pct_floor = px * floor_pct if floor_pct > 0 else 0.0
+    try:
+        atr_v = float(atr) if atr is not None else None
+    except (TypeError, ValueError):
+        atr_v = None
+    if atr_v is not None and (atr_v <= 0 or atr_v != atr_v):
+        atr_v = None
+    try:
+        k = float(atr_k or 0)
+    except (TypeError, ValueError):
+        k = 0.0
+    if k < 0:
+        k = 0.0
+    atr_floor = (atr_v * k) if (atr_v is not None and k > 0) else 0.0
+    downside = max(downside_raw, pct_floor, atr_floor)
+    if downside <= downside_raw + 1e-15:
+        floor_source = "raw"
+        floored = False
+    elif atr_floor >= pct_floor and atr_floor > downside_raw:
+        floor_source = "atr"
+        floored = True
+    else:
+        floor_source = "pct"
+        floored = True
 
     try:
         up_floor_pct = float(min_upside_pct or 0)
@@ -108,8 +179,13 @@ def compute_structure_rr(
         "downside_raw": round(downside_raw, 6),
         "downside": round(downside, 6),
         "downside_floored": floored,
+        "downside_pct": round(downside_raw / px, 6) if px > 0 else None,
         "min_downside_pct": floor_pct,
         "min_upside_pct": up_floor_pct,
+        "floor_source": floor_source,
+        "atr": round(atr_v, 6) if atr_v is not None else None,
+        "atr_k": k,
+        "atr_floor": round(atr_floor, 6) if atr_floor > 0 else None,
     }
 
     if nearest_resistance is None:
@@ -195,6 +271,21 @@ def resolve_structure_rr_min_upside_pct(cfg: Optional[Dict[str, Any]] = None) ->
     except (TypeError, ValueError):
         v = 0.0
     return max(0.0, v)
+
+
+def resolve_structure_rr_atr_k(cfg: Optional[Dict[str, Any]] = None) -> float:
+    """配置键 structure_rr_atr_k；默认 0.75。0 表示关闭 ATR 分母。"""
+    root = cfg if isinstance(cfg, dict) else {}
+    raw = root.get("structure_rr_atr_k")
+    if raw is None and isinstance(root.get("structure"), dict):
+        raw = root["structure"].get("structure_rr_atr_k")
+    if raw is None and isinstance(root.get("scoring"), dict):
+        raw = root["scoring"].get("structure_rr_atr_k")
+    try:
+        v = float(raw) if raw is not None else 0.75
+    except (TypeError, ValueError):
+        v = 0.75
+    return max(0.0, min(3.0, v))
 
 
 def resolve_kde_config(cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:

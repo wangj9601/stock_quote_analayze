@@ -549,6 +549,13 @@ const ScreeningPage = {
             structure_rr_reason: stock.structure_rr_reason || st.rr_reason || null,
             structure_rr_downside_floored: !!(stock.structure_rr_downside_floored
                 || st.rr_downside_floored),
+            structure_rr_upside_pct: stock.structure_rr_upside_pct != null
+                ? stock.structure_rr_upside_pct : st.rr_upside_pct,
+            structure_rr_downside_pct: stock.structure_rr_downside_pct != null
+                ? stock.structure_rr_downside_pct : st.rr_downside_pct,
+            structure_rr_floor_source: stock.structure_rr_floor_source || st.rr_floor_source || null,
+            structure_rr_level_rank: stock.structure_rr_level_rank != null
+                ? stock.structure_rr_level_rank : st.rr_level_rank,
             risk_tags: Array.isArray(stock.risk_tags) && stock.risk_tags.length
                 ? stock.risk_tags
                 : (Array.isArray(sd && sd.risk_tags) ? sd.risk_tags : []),
@@ -4443,17 +4450,65 @@ const ScreeningPage = {
         const cid = configEl && configEl.value ? parseInt(configEl.value, 10) : NaN;
         if (!isNaN(cid) && cid > 0) params.set('config_id', String(cid));
 
-        // 量能/最低得分覆盖：仅全部A股、全部港股；自选/板块/单股用参数版本默认（单股另跳过硬筛）
+        // 量能/最低得分：仅用户填写非空时才覆盖；默认空 → 用参数版本，可走预计算缓存
         if (scope === 'cn' || scope === 'hk') {
-            const vm = parseFloat(document.getElementById('urtVolumeMultiple')?.value);
-            if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
-            const ms = parseFloat(document.getElementById('urtMinScore')?.value);
-            if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
+            const vmRaw = String(document.getElementById('urtVolumeMultiple')?.value || '').trim();
+            const msRaw = String(document.getElementById('urtMinScore')?.value || '').trim();
+            if (vmRaw !== '') {
+                const vm = parseFloat(vmRaw);
+                if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
+            }
+            if (msRaw !== '') {
+                const ms = parseFloat(msRaw);
+                if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
+            }
         }
         return params;
     },
 
-    /** 加载 URT 策略参数版本列表（切换后不自动刷新，须点「刷新筛选」） */
+    _updateUrtConfigAlignHint(defaultId) {
+        const hintEl = document.getElementById('urtConfigAlignHint');
+        const selectEl = document.getElementById('urt-config_id');
+        if (!hintEl || !selectEl) return;
+        const cid = selectEl.value ? parseInt(selectEl.value, 10) : NaN;
+        if (!isNaN(cid) && defaultId != null && cid !== Number(defaultId)) {
+            hintEl.style.display = 'block';
+            hintEl.textContent = '当前非生效（默认）版本，与管理端日常回测可能不一致';
+        } else {
+            hintEl.style.display = 'none';
+            hintEl.textContent = '';
+        }
+    },
+
+    _updateUrtTraceStaleHint(result) {
+        const hintEl = document.getElementById('urtTraceStaleHint');
+        if (!hintEl) return;
+        if (result && (result.stale || result.need_recompute) && result.data_source === 'urt_signal_trace') {
+            hintEl.style.display = 'block';
+            hintEl.textContent = result.stale
+                ? '参数已更新，当前结果可能来自改参前缓存；请到管理端对该版本重跑预计算'
+                : '该参数版本尚无足够新的预计算缓存，建议管理端重跑预计算';
+        } else if (result && result.stale) {
+            hintEl.style.display = 'block';
+            hintEl.textContent = '参数已更新，缓存可能过期；建议管理端重跑预计算';
+        } else {
+            hintEl.style.display = 'none';
+            hintEl.textContent = '';
+        }
+    },
+
+    _fillUrtParamPlaceholders(item) {
+        const vmEl = document.getElementById('urtVolumeMultiple');
+        const msEl = document.getElementById('urtMinScore');
+        if (vmEl && item && item.volume_multiple != null) {
+            vmEl.placeholder = `版本 ${item.volume_multiple}`;
+        }
+        if (msEl && item && item.min_score != null) {
+            msEl.placeholder = `版本 ${item.min_score}`;
+        }
+    },
+
+    /** 加载 URT 策略参数版本列表（默认锁定生效版本；切换后不自动刷新，须点「刷新筛选」） */
     async initUrtStrategyConfig() {
         const selectEl = document.getElementById('urt-config_id');
         if (!selectEl) return;
@@ -4468,12 +4523,7 @@ const ScreeningPage = {
                 selectEl.innerHTML = '<option value="">暂无可用参数版本</option>';
                 return;
             }
-            const defaultId = json.default_config_id;
-            let preferId = null;
-            try {
-                const saved = sessionStorage.getItem('urtScreeningConfigId');
-                if (saved) preferId = parseInt(saved, 10);
-            } catch (_) { /* ignore */ }
+            const defaultId = json.effective_config_id ?? json.default_config_id;
             selectEl.innerHTML = '';
             list.forEach((item) => {
                 const opt = document.createElement('option');
@@ -4481,23 +4531,26 @@ const ScreeningPage = {
                 const label = item.version_label
                     ? `${item.name}（${item.version_label}）`
                     : item.name;
-                opt.textContent = item.is_default ? `${label}（默认）` : label;
+                opt.textContent = item.is_default ? `${label}（默认/生效）` : label;
                 selectEl.appendChild(opt);
             });
             const ids = new Set(list.map((x) => x.id));
-            let selected = preferId && ids.has(preferId) ? preferId : defaultId;
+            // 日常路径：始终优先生效（默认）版本，不再用 sessionStorage 静默换版
+            let selected = defaultId;
             if (selected == null || !ids.has(selected)) selected = list[0].id;
             selectEl.value = String(selected);
             this.urtConfigId = selected;
+            this.urtDefaultConfigId = defaultId;
+            const selectedItem = list.find((x) => x.id === selected) || list[0];
+            this._fillUrtParamPlaceholders(selectedItem);
+            this._updateUrtConfigAlignHint(defaultId);
             if (!selectEl._urtConfigBound) {
                 selectEl.addEventListener('change', () => {
                     const v = parseInt(selectEl.value, 10);
                     this.urtConfigId = !isNaN(v) ? v : null;
-                    try {
-                        if (this.urtConfigId != null) {
-                            sessionStorage.setItem('urtScreeningConfigId', String(this.urtConfigId));
-                        }
-                    } catch (_) { /* ignore */ }
+                    const item = list.find((x) => x.id === this.urtConfigId);
+                    this._fillUrtParamPlaceholders(item);
+                    this._updateUrtConfigAlignHint(this.urtDefaultConfigId);
                 });
                 selectEl._urtConfigBound = true;
             }
@@ -4877,6 +4930,7 @@ const ScreeningPage = {
                 }
                 if (strategy === 'urt') {
                     await this.loadUrtObservedCodeSets();
+                    this._updateUrtTraceStaleHint(result);
                 }
                 this.renderResults(result.data, result.search_date, strategy, emptyMsg, gmsPaging);
                 if (strategy === 'gms') {

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from .config import URTConfigManager
 from .data_loader import URTDataLoader, is_hk_stock_code, normalize_urt_board_keys
 from .strategy_engine import URTStrategyEngine
-from .trace_store import query_buy_signals_for_date
+from .trace_store import get_trace_freshness, query_buy_signals_for_date
 
 logger = logging.getLogger(__name__)
 
@@ -271,4 +271,13 @@ class URTFrontendInterface:
         }
         if hint:
             out["message"] = hint
+        if resolved_id is not None:
+            freshness = get_trace_freshness(db, config_id=int(resolved_id))
+            out["config_updated_at"] = freshness.get("config_updated_at")
+            out["trace_computed_at"] = freshness.get("trace_computed_at")
+            # 仅读缓存时「陈旧」有意义；实时重算不标 stale
+            out["stale"] = bool(freshness.get("stale")) and data_source == "urt_signal_trace"
+            out["need_recompute"] = freshness.get("need_recompute")
+            parameters_out["stale"] = out["stale"]
+            parameters_out["need_recompute"] = out["need_recompute"]
         return out

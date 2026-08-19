@@ -49,7 +49,7 @@
 
     <el-tabs v-model="activeTab">
       <el-tab-pane label="策略参数" name="config">
-        <UrtStrategyConfiguration />
+        <UrtStrategyConfiguration @need-precompute="onNeedPrecompute" />
       </el-tab-pane>
       <el-tab-pane label="回测管理" name="backtest">
         <UrtBacktestManagement />
@@ -111,7 +111,9 @@
           />
         </el-form-item>
         <p class="precompute-hint">
-          将扫描全市场硬筛命中并写入 urt_signal_trace；任务在后台执行，完成后选股/推送可读缓存。
+          将扫描全市场硬筛命中并写入 urt_signal_trace；任务在后台执行。保存参数后建议对本版本重跑。
+          日终预计算只覆盖命中行：收紧参数后旧买点可能残留，必要时对该版本预计算或个股「强制重新计算」。
+          不会自动删除旧 trace，也不会改写历史回测任务。
         </p>
       </el-form>
       <template #footer>
@@ -161,6 +163,13 @@ function openPrecompute() {
     precomputeForm.date = new Date().toISOString().slice(0, 10)
   }
   precomputeVisible.value = true
+}
+
+function onNeedPrecompute(configId?: number | null) {
+  if (configId != null) {
+    precomputeForm.config_id = Number(configId)
+  }
+  openPrecompute()
 }
 
 async function loadPrecomputeConfigs() {

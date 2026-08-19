@@ -239,11 +239,23 @@ admin/  # /urt-management 参数配置页
 |----|------|
 | 表 | `urt_signal_trace`（PK: `code`+`date`+`config_id`），含得分、硬筛字段、`score_detail` JSON（含 `structure`：KDE 支撑/阻力） |
 | 结构位 | 信号计算时用成交量加权 KDE（`extract_kde_levels_expand_support`，与 RPE/个股关键价位同口径）；写入结果顶层 `support_levels`/`resistance_levels`/`nearest_*` 及 `score_detail.structure`；**不参与硬筛** |
-| 结构盈亏比提示 | `structure.rr` / `rr_reason` + `risk_tags`（id=`poor_structure_rr`）：RR=(阻力−收盘)/max(收盘−支撑, 收盘×分母下限)；默认分母下限 1.5%；偏低或破位时打 warn/danger 标签；配置 `structure_rr_warn_enabled`（默认 true）、`structure_rr_min_rr`（默认 1.5）、`structure_rr_min_downside_pct`（默认 0.015）；**不改得分、不硬筛** |
+| 结构盈亏比提示 | `structure.rr`：无量纲 RR=上行/max(价−支撑, 价×1.5%, k×ATR)；打分默认第二档，最近档只硬闸。明细展示 RR、上行%、下行%、是否触分母下限。`poor_structure_rr` 偏低为 warn（阈值 2～3）；破位/贴阻力为 danger。 |
 | 配置 | `urt_strategy_configs.precompute_enabled`；默认版本或开关开启才算 |
 | 任务 | `backend_core/strategies/urt/scheduled_precompute.py` → `scheduled_urt_signals_cn`；`data_collectors/main.py` 注册，默认 **16:45**（港股 17:20），`ENABLE_URT_PRECOMPUTE`；`urt_daily` 推送建议 **17:30**（须晚于预计算） |
 | 选股 | `URTFrontendInterface.screen` 无 Query 覆盖时优先读 `urt_signal_trace` |
 | 手动 | `POST /api/admin/urt/precompute/run?date=&config_id=&market=CN|HK`；管理端「URT上升趋势策略」页「信号预计算」支持选日期 |
+
+### 改参后行为与验收（参数统一）
+
+| 项 | 约定 |
+|----|------|
+| 生效源 | 日常路径一律绑定 `is_default=true` 的版本；回测创建固化 `strategy_config_id`；前台默认同一生效 id |
+| 保存参数 | 管理端「策略参数」保存成功后提示重跑预计算；确认则打开「信号预计算」并预填当前 `config_id`（**不自动**全市场重算） |
+| 旧 trace | 按 `(code, date, config_id)` 隔离；保存**不删除**旧行；同 id 原地改参后，若 `trace.created_at < config.updated_at` 则接口标 `stale` / `need_recompute` |
+| 日终预计算 | 仅 `is_default` 或 `precompute_enabled`（及环境变量额外 id）；只 upsert 命中买点，收紧参数后旧买点可能残留，需手动预计算或个股强制重算 |
+| 个股强制重算 | `POST /api/stock/urt-signal-trace/recompute`：仅清除该 `code+config_id` 再全历史写入 |
+| 历史回测 | 已完成任务快照不改写；改参后重跑任务仍用任务内 `strategy_config_id`，读到的是**当前**该 id 的 trace |
+| 验收 | ① 保存有提示且可打开预计算；② 改参后选股/信号历史可见陈旧提示；③ 预计算或强制重算后 `stale=false`；④ 新旧 `config_id` 不串；⑤ 旧回测任务结果不变 |
 
 ### 回测管理
 
@@ -321,8 +333,10 @@ admin/  # /urt-management 参数配置页
 |------|------|------|------|
 | `kde_lookback_days` 等 | KDE 回看 | 60/250/750 | 初始/步进/上限 |
 | `structure_rr_warn_enabled` | 是否打盈亏比风险标签 | `true` | 软提示；关闭后不生成 `risk_tags` |
-| `structure_rr_min_rr` | 最低可接受 RR | `1.5` | RR=(阻力−收盘)/max(收盘−支撑, 收盘×分母下限)；破位/贴阻力为 danger，偏低为 warn |
-| `structure_rr_min_downside_pct` | RR 分母下限（现价比例） | `0.015` | 贴支撑时避免 RR 虚高；设 `0` 关闭；命中时标签/明细可提示「已用分母下限」 |
+| `structure_rr_min_rr` | 最低可接受 RR | `2.0` | 无量纲；≥3 满分档、2～3 插值；偏低为 warn |
+| `structure_rr_min_downside_pct` | RR 价格比例分母下限 | `0.015` | 与 k×ATR 取 max；贴支撑避免 RR 虚高 |
+| `structure_rr_atr_k` | ATR 分母系数 | `0.75` | 分母 max(价−支撑, 价×1.5%, k×ATR)；0=关闭 |
+| `structure_rr_use_second_level` | 第二档算结构 RR | `true` | 打分/提示用第 2 档；最近档只做硬闸 |
 
 实现：`signal_detector.evaluate_buy_signal` → `urt/risk_tags.enrich_structure_with_rr`（复用 GMS `compute_structure_rr`）。旧 trace 读路径由 `trace_store._enrich_trace_structure_fields` 只读补算。
 

@@ -96,7 +96,24 @@
             if (!json.code) json.code = code;
             if (!json.name) json.name = name;
             lastDetail = json;
-            meta.textContent = `日期 ${json.date || '--'} · 来源 ${json.source || '--'}`;
+            const resolvedId = json.config_id != null ? String(json.config_id) : configId;
+            const cfgLabel = json.config_name
+                || (resolvedId ? `配置#${resolvedId}` : '');
+            const alignNote = json.is_effective_config === false
+                ? ' · 非生效版本（与日常回测可能不一致）'
+                : (json.is_effective_config === true ? ' · 生效版本' : '');
+            const staleNote = json.stale
+                ? ' · 参数已更新，缓存可能过期（可返回信号历史强制重算）'
+                : '';
+            meta.textContent =
+                `日期 ${json.date || '--'} · 来源 ${json.source || '--'}`
+                + (cfgLabel ? ` · ${cfgLabel}` : '')
+                + alignNote
+                + staleNote;
+            // 回写解析后的 config_id，保证「返回信号历史」与当前明细一致
+            traceLink.href =
+                `stock_urt_trace.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}`
+                + (resolvedId ? `&config_id=${encodeURIComponent(resolvedId)}` : '');
             if (window.UrtScoreDetail) {
                 content.innerHTML = window.UrtScoreDetail.buildHtml(json);
             } else {

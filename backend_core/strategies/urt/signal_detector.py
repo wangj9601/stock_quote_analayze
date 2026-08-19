@@ -25,6 +25,37 @@ def history_calendar_days_for_fetch(cfg: Dict[str, Any]) -> int:
     return max(hist, kde_cal, ma_score_cal)
 
 
+def _atr_from_bars_desc(bars_desc: List[Dict[str, Any]], period: int = 14) -> Optional[float]:
+    """Wilder ATR；bars_desc 为日期 DESC。"""
+    from datetime import date, datetime
+
+    try:
+        from backend_core.analysis.swing_zigzag import wilder_atr
+    except Exception:
+        return None
+    rows: List[tuple] = []
+    for b in reversed(bars_desc or []):
+        if not isinstance(b, dict):
+            continue
+        d = str(b.get("date") or "")[:10]
+        try:
+            h = float(b.get("high"))
+            lo = float(b.get("low"))
+            c = float(b.get("close"))
+        except (TypeError, ValueError):
+            continue
+        if min(h, lo, c) <= 0:
+            continue
+        try:
+            dt = datetime.strptime(d, "%Y-%m-%d").date() if d else date.today()
+        except ValueError:
+            continue
+        rows.append((dt, h, lo, c))
+    if len(rows) < 3:
+        return None
+    return wilder_atr(rows, period=period)
+
+
 def _pick_confluence_nearest(
     conf: Dict[str, Any],
     price: float,
@@ -131,6 +162,7 @@ def _compute_structure_levels(
         "method": "kde_volume_weighted",
         "structure_level_source": None,
         "confluence_ok": False,
+        "atr": None,
     }
     if not bars_desc or price is None:
         return empty
@@ -176,6 +208,7 @@ def _compute_structure_levels(
     out["kde_nearest_resistance"] = st.get("nearest_resistance")
     out["structure_level_source"] = "kde"
     out["method"] = "structural_kde+confluence" if use_confluence else "structural_kde"
+    out["atr"] = _atr_from_bars_desc(bars_desc)
 
     if not bool(use_confluence):
         return out
@@ -214,10 +247,18 @@ def _compute_structure_levels(
             kde_resistances=st.get("resistance_levels"),
             kde_multi_windows=st.get("kde_multi_windows"),
             last_close=px,
-            atr=ref.get("atr"),
+            atr=ref.get("atr") or out.get("atr"),
         )
     except Exception:
         return out
+
+    if ref.get("atr"):
+        try:
+            atr_ref = float(ref["atr"])
+            if atr_ref > 0:
+                out["atr"] = atr_ref
+        except (TypeError, ValueError):
+            pass
 
     out["confluence_ok"] = bool(conf.get("ok"))
     out["confluence_zones"] = {
@@ -245,22 +286,23 @@ def _compute_structure_levels(
         out["structure_level_source"] = picked.get("pick") or "confluence"
         out["confluence_support_zone"] = picked.get("support_zone")
         out["confluence_resistance_zone"] = picked.get("resistance_zone")
-        # 共振覆盖后重算 RR（与位置分/硬闸一致）
+        # 共振覆盖后的最近档 RR 仅作中间值；enrich_structure_with_rr 会按第二档+ATR 重写
         try:
             from backend_core.strategies.gms.structure_levels import (
                 compute_structure_rr,
+                resolve_structure_rr_atr_k,
                 resolve_structure_rr_min_downside_pct,
                 resolve_structure_rr_min_upside_pct,
             )
 
-            floor_pct = resolve_structure_rr_min_downside_pct(cfg)
-            up_pct = resolve_structure_rr_min_upside_pct(cfg)
             rr_info = compute_structure_rr(
                 px,
                 out.get("nearest_support"),
                 out.get("nearest_resistance"),
-                min_downside_pct=floor_pct,
-                min_upside_pct=up_pct,
+                min_downside_pct=resolve_structure_rr_min_downside_pct(cfg),
+                min_upside_pct=resolve_structure_rr_min_upside_pct(cfg),
+                atr=out.get("atr"),
+                atr_k=resolve_structure_rr_atr_k(cfg),
             )
             out["rr"] = rr_info.get("rr")
             out["rr_reason"] = rr_info.get("reason")
@@ -268,6 +310,9 @@ def _compute_structure_levels(
             out["rr_min_downside_pct"] = rr_info.get("min_downside_pct")
             out["rr_downside_raw"] = rr_info.get("downside_raw")
             out["rr_downside"] = rr_info.get("downside")
+            out["rr_upside_pct"] = rr_info.get("upside_pct")
+            out["rr_downside_pct"] = rr_info.get("downside_pct")
+            out["rr_floor_source"] = rr_info.get("floor_source")
         except Exception:
             pass
     return out
@@ -725,6 +770,17 @@ def evaluate_buy_signal(
             "rr_min_downside_pct": structure.get("rr_min_downside_pct"),
             "rr_downside_raw": structure.get("rr_downside_raw"),
             "rr_downside": structure.get("rr_downside"),
+            "rr_downside_pct": structure.get("rr_downside_pct"),
+            "rr_upside": structure.get("rr_upside"),
+            "rr_upside_pct": structure.get("rr_upside_pct"),
+            "rr_floor_source": structure.get("rr_floor_source"),
+            "rr_atr": structure.get("rr_atr"),
+            "rr_atr_k": structure.get("rr_atr_k"),
+            "rr_support": structure.get("rr_support"),
+            "rr_resistance": structure.get("rr_resistance"),
+            "rr_level_rank": structure.get("rr_level_rank"),
+            "rr_nearest": structure.get("rr_nearest"),
+            "atr": structure.get("atr"),
             "hanging": structure.get("hanging"),
             "hang_distance_pct": structure.get("hang_distance_pct"),
         }
@@ -743,7 +799,7 @@ def evaluate_buy_signal(
             "confluence_zones": structure.get("confluence_zones"),
             "nearest_confluence_support": structure.get("nearest_confluence_support"),
             "nearest_confluence_resistance": structure.get("nearest_confluence_resistance"),
-            "atr": None,
+            "atr": structure.get("atr"),
             "last_close": ind.get("close"),
         }
     advice_row = {

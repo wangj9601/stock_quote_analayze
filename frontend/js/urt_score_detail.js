@@ -337,8 +337,20 @@ const UrtScoreDetail = {
         html += `<span>最近支撑 <strong>${this._fmt(nearSup, 2)}</strong></span>`;
         html += `<span>最近阻力 <strong>${this._fmt(nearRes, 2)}</strong></span>`;
         html += `<span>盈亏比 RR <strong>${structureRr != null && Number.isFinite(Number(structureRr)) ? Number(structureRr).toFixed(2) : '--'}</strong></span>`;
+        const upPct = src.structure_rr_upside_pct != null ? src.structure_rr_upside_pct : st.rr_upside_pct;
+        const dnPct = src.structure_rr_downside_pct != null ? src.structure_rr_downside_pct : st.rr_downside_pct;
+        html += `<span>上行 ${upPct != null && Number.isFinite(Number(upPct)) ? (Number(upPct) * 100).toFixed(1) + '%' : '--'}</span>`;
+        html += `<span>下行 ${dnPct != null && Number.isFinite(Number(dnPct)) ? (Number(dnPct) * 100).toFixed(1) + '%' : '--'}</span>`;
+        const floorSrc = src.structure_rr_floor_source || st.rr_floor_source || '';
         if (structureRrFloored) {
-            html += '<span title="贴支撑时分母已按现价比例下限计算">已用分母下限</span>';
+            const floorTxt = floorSrc === 'atr' ? '已用 ATR 分母下限' : (floorSrc === 'pct' ? '已用分母下限（现价比例）' : '已用分母下限');
+            html += `<span title="分母取 max(价−支撑, 现价×1.5%, k×ATR)">${floorTxt}</span>`;
+        } else {
+            html += '<span>未触分母下限</span>';
+        }
+        const rrRank = src.structure_rr_level_rank != null ? src.structure_rr_level_rank : st.rr_level_rank;
+        if (rrRank != null) {
+            html += `<span>RR用第${rrRank}档</span>`;
         }
         if (structureRrReason && structureRrReason !== 'ok') {
             html += `<span>${structureRrReason}</span>`;
@@ -630,7 +642,11 @@ const UrtScoreDetail = {
                 rr: structureRr != null && Number.isFinite(Number(structureRr))
                     ? Number(structureRr).toFixed(2)
                     : '--',
+                upsidePct: (src.structure_rr_upside_pct != null ? src.structure_rr_upside_pct : st.rr_upside_pct),
+                downsidePct: (src.structure_rr_downside_pct != null ? src.structure_rr_downside_pct : st.rr_downside_pct),
                 rrFloored: structureRrFloored,
+                floorSource: src.structure_rr_floor_source || st.rr_floor_source || '',
+                rrRank: src.structure_rr_level_rank != null ? src.structure_rr_level_rank : st.rr_level_rank,
                 rrReason: structureRrReason && structureRrReason !== 'ok' ? structureRrReason : '',
                 kde: kdeOk == null ? '--' : (kdeOk ? '成功' : '未识别'),
                 lookback: lookbackUsed != null ? String(lookbackUsed) : '--',

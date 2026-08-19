@@ -159,9 +159,9 @@
 
 - **KDE 筹码密度峰**支撑/阻力：与 RPE / 个股关键价位同口径（`signal_detector._compute_structure_levels` → `rpe.kde_levels`）。  
 - 默认回看：初始 60、步进 250、最大 750；网格 200 等（配置 `kde_*`）。  
-- **结构盈亏比** `RR = (最近阻力 − 现价) / (现价 − 最近支撑)`（分母有下限，复用 GMS `compute_structure_rr`）。  
-- **软标签**：`RR < structure_rr_min_rr`（默认 **2.0**）→「结构盈亏比偏低」warn；**不否决买点**（RR 另计入「筹码位置与 RR」分项）。  
-- **硬闸**（`structure_rr_hard_gate_enabled`，默认 true）：破位支撑、贴/超阻力、**上行空间不足**（距阻力相对现价 &lt; `structure_rr_min_upside_pct`，默认 **3%**）、悬空离支撑（`structure_hang_min_upside_pct` 默认 0.08）→ 否决正式买点。  
+- **结构盈亏比**（无量纲）`RR = 上行 / max(价−支撑, 现价×1.5%, k×ATR)`，k 默认 **0.75**。打分/「RR 偏低」默认用**第二档**支撑阻力；**最近档只做硬闸**。展示同时给 RR、上行%、下行%、是否触分母下限。  
+- **软标签**：结构 RR &lt; `structure_rr_min_rr`（默认 **2.0**；满分档 3.0）→「结构盈亏比偏低」warn；**不否决买点**。  
+- **硬闸**（`structure_rr_hard_gate_enabled`，默认 true）：相对**最近**支撑/阻力判定破位、贴/超阻力、**上行空间不足**（距最近阻力 &lt; `structure_rr_min_upside_pct`，默认 **3%**）、悬空离支撑（默认 8%）→ 否决正式买点。  
 - **趋势标签**：空头排列 → `bearish_ma_trend`；跌破 MA20 → `below_ma20`（warn）。  
 - **近期涨幅过大**（`indicators.ret_from_low_n` / `ma20_bias`）：  
   - 口径：近 **N** 日（默认 10）相对窗内最低价涨幅 \(R_N=close/\min(close_{0..N-1})-1\)；另算相对 MA20 乖离。  
@@ -212,7 +212,9 @@
 | `history_calendar_days` | 120 |
 | `structure_rr_warn_enabled` / `structure_rr_min_rr` | true / **2.0** |
 | `structure_rr_hard_gate_enabled` | **true** |
-| `structure_rr_min_upside_pct` | **0.03**（相对现价最小上行；不足则硬闸） |
+| `structure_rr_min_upside_pct` | **0.03**（最近档最小上行；不足则硬闸） |
+| `structure_rr_atr_k` | **0.75**（0=关闭 ATR 分母） |
+| `structure_rr_use_second_level` | **true**（打分用第二档） |
 | `structure_hang_min_upside_pct` | **0.08** |
 | `overheat_lookback_days` | **10** |
 | `overheat_soft_pct` / `overheat_hard_pct` | **0.15 / 0.25**（相对近窗最低价） |
@@ -257,6 +259,7 @@
 
 - 预计算：`scheduled_precompute.py`；默认工作日 A 股约 **16:45**、港股约 **17:20**（`ENABLE_URT_PRECOMPUTE`）；写入 `urt_signal_trace`。  
 - 日报：`report_type=urt_daily`；建议推送时刻晚于预计算（约 **17:30**）；仅自选 A 股 + 买点/连阳补充。
+- **改参后**：管理端保存参数会提示打开「信号预计算」；旧信号按 `config_id` 保留、**不自动删**，也不改历史回测任务。同版本原地改严后，日终只覆盖命中行，旧买点可能残留——需对该版本手动预计算，或个股页「强制重新计算」。前台在 `stale` 时提示缓存可能过期。
 
 ---
 

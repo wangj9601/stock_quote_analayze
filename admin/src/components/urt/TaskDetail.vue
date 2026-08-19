@@ -24,10 +24,20 @@
           <el-descriptions-item label="日期范围">{{ task.config.start_date }} ~ {{ task.config.end_date }}</el-descriptions-item>
           <el-descriptions-item label="目标涨幅">{{ ((task.config.target_pct || 0) * 100).toFixed(1) }}%</el-descriptions-item>
           <el-descriptions-item label="观察期">{{ task.config.horizon_days ?? 10 }} 个交易日</el-descriptions-item>
-          <el-descriptions-item label="最低得分">{{ task.config.min_score ?? task.summary?.min_score ?? '-' }}</el-descriptions-item>
+          <el-descriptions-item label="参数版本">
+            {{ configVersionLabel }}
+            <el-tag v-if="task.config.params_diverged" type="warning" size="small" class="ml-tag">已偏离生效配置</el-tag>
+            <el-tag v-else-if="task.config.is_effective_config" type="success" size="small" class="ml-tag">生效</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="最低得分">
+            {{ minScoreDisplay }}
+            <span v-if="task.config.min_score_override" class="hint-inline">（任务覆盖）</span>
+            <span v-else class="hint-inline">（参数版本）</span>
+          </el-descriptions-item>
           <el-descriptions-item label="优先读缓存">{{ task.config.use_trace ? '是' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="出场模式">{{ exitModeLabel }}</el-descriptions-item>
           <el-descriptions-item v-if="poolSizeLabel" label="股票池规模">{{ poolSizeLabel }}</el-descriptions-item>
+          <el-descriptions-item v-if="divergeReasonsLabel" label="偏离原因" :span="2">{{ divergeReasonsLabel }}</el-descriptions-item>
         </template>
       </el-descriptions>
 
@@ -295,6 +305,31 @@ const poolSizeLabel = computed(() => {
   const n = task.value?.summary?.stock_pool_size
   if (n == null) return ''
   return String(n)
+})
+
+const configVersionLabel = computed(() => {
+  const cfg = task.value?.config || {}
+  const id = cfg.strategy_config_id
+  const name = cfg.config_name || ''
+  const ver = cfg.config_version_label ? ` / ${cfg.config_version_label}` : ''
+  if (id == null && !name) return '-'
+  return `${name || '未命名'}${ver}${id != null ? ` (#${id})` : ''}`
+})
+
+const minScoreDisplay = computed(() => {
+  const cfg = task.value?.config || {}
+  const v = cfg.min_score ?? task.value?.summary?.min_score ?? cfg.package_min_score
+  return v == null || Number.isNaN(Number(v)) ? '-' : String(v)
+})
+
+const divergeReasonsLabel = computed(() => {
+  const reasons = task.value?.config?.diverge_reasons
+  if (!Array.isArray(reasons) || !reasons.length) return ''
+  const map: Record<string, string> = {
+    strategy_config_id_not_effective: '非生效参数版本',
+    min_score_override: '最低得分任务覆盖',
+  }
+  return reasons.map((r: string) => map[r] || r).join('；')
 })
 
 const resolvedExitMode = computed(() => {
@@ -576,6 +611,7 @@ onUnmounted(stopPolling)
   color: #94a3b8;
   font-size: 12px;
 }
+.ml-tag { margin-left: 8px; }
 .text-sm { font-size: 13px; }
 .log-box {
   max-height: 220px;
