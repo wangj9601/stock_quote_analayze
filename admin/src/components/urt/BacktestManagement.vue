@@ -230,13 +230,20 @@
         />
         <el-form-item>
           <el-button type="primary" :loading="creating" @click="createTask">创建并运行</el-button>
-          <el-button :loading="precomputing" @click="openPrecomputeDialog">手动预计算</el-button>
-          <span class="hint">手动预计算只跑选定的一天；整段区间请开缓存后创建任务自动补齐。</span>
+          <el-button :loading="precomputing" @click="openPrecomputeDialog">手动预计算（单日）</el-button>
+          <el-button :loading="traceRefreshing" @click="openTraceRefreshDialog">强制刷新区间预计算</el-button>
+          <el-button type="danger" plain :loading="tracePurging" @click="confirmPurgeTrace">清空该版本 trace</el-button>
+        </el-form-item>
+        <el-form-item>
+          <span class="hint">
+            单日预计算只写选定交易日。改参数或要与实时扫对齐时：先「清空 trace」或「强制刷新区间」（与回测同引擎），再开「优先读缓存」创建任务。
+            <template v-if="traceStatsLabel">当前 trace：{{ traceStatsLabel }}</template>
+          </span>
         </el-form-item>
       </el-form>
     </el-card>
 
-    <el-dialog v-model="precomputeVisible" title="URT 信号预计算" width="440px">
+    <el-dialog v-model="precomputeVisible" title="URT 信号预计算（单日）" width="440px">
       <el-form label-width="90px">
         <el-form-item label="交易日" required>
           <el-date-picker
@@ -260,6 +267,38 @@
       <template #footer>
         <el-button @click="precomputeVisible = false">取消</el-button>
         <el-button type="primary" :loading="precomputing" @click="runPrecompute">启动</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="traceRefreshVisible" title="强制刷新区间预计算" width="480px">
+      <el-alert
+        type="warning"
+        show-icon
+        :closable="false"
+        class="mb-3"
+        title="将先删除所选参数版本的全部 urt_signal_trace，再按区间全市场一次扫描写入（与关缓存实时扫同源）。任务在后台执行，耗时可与全市场回测补预计算相当。"
+      />
+      <el-form label-width="100px">
+        <el-form-item label="参数版本" required>
+          <el-select v-model="traceRefreshConfigId" filterable placeholder="选择参数版本" class="w-full">
+            <el-option
+              v-for="c in configs"
+              :key="c.id"
+              :label="`${c.name}${c.is_default ? ' (默认)' : ''} · ID ${c.id}`"
+              :value="c.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="开始日期" required>
+          <el-date-picker v-model="traceRefreshStart" type="date" value-format="YYYY-MM-DD" class="w-full" />
+        </el-form-item>
+        <el-form-item label="结束日期" required>
+          <el-date-picker v-model="traceRefreshEnd" type="date" value-format="YYYY-MM-DD" class="w-full" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="traceRefreshVisible = false">取消</el-button>
+        <el-button type="primary" :loading="traceRefreshing" @click="runTraceRefresh">启动刷新</el-button>
       </template>
     </el-dialog>
 
@@ -423,6 +462,32 @@ const minScoreDivergeHint = computed(() => {
   return `最低得分已偏离参数版本（${packageMinScore.value}），将覆盖策略包并标记为偏离`
 })
 
+const traceStatsLabel = computed(() => {
+  const cid = resolveTraceConfigId()
+  if (cid == null || traceStatsRows.value == null) return ''
+  return `版本 ID ${cid} 约 ${traceStatsRows.value} 行`
+})
+
+function resolveTraceConfigId(): number | undefined {
+  if (form.strategy_config_id != null) return form.strategy_config_id
+  if (effectiveConfigId.value != null) return effectiveConfigId.value
+  return undefined
+}
+
+async function loadTraceStats() {
+  const cid = resolveTraceConfigId()
+  if (cid == null) {
+    traceStatsRows.value = null
+    return
+  }
+  try {
+    const data = await urtApiService.getTraceStats(cid)
+    traceStatsRows.value = data?.total_rows ?? null
+  } catch {
+    traceStatsRows.value = null
+  }
+}
+
 function syncMinScoreFromSelectedConfig(forceClear = true) {
   if (forceClear) {
     form.min_score = undefined
@@ -431,6 +496,7 @@ function syncMinScoreFromSelectedConfig(forceClear = true) {
 
 function onStrategyConfigChange() {
   syncMinScoreFromSelectedConfig(true)
+  void loadTraceStats()
 }
 const tasks = ref<any[]>([])
 const loading = ref(false)
@@ -439,6 +505,13 @@ const precomputing = ref(false)
 const precomputeVisible = ref(false)
 const precomputeDate = ref(new Date().toISOString().slice(0, 10))
 const precomputeMarket = ref<'CN' | 'HK'>('CN')
+const tracePurging = ref(false)
+const traceRefreshing = ref(false)
+const traceRefreshVisible = ref(false)
+const traceRefreshConfigId = ref<number | undefined>()
+const traceRefreshStart = ref('')
+const traceRefreshEnd = ref('')
+const traceStatsRows = ref<number | null>(null)
 const statusFilter = ref('')
 const selectedIds = ref<string[]>([])
 const detailVisible = ref(false)
@@ -554,6 +627,7 @@ async function loadConfigs() {
     form.strategy_config_id = def.id
   }
   syncMinScoreFromSelectedConfig(true)
+  await loadTraceStats()
 }
 
 async function loadTasks() {
@@ -681,10 +755,96 @@ async function runPrecompute() {
     })
     ElMessage.success(`预计算已启动（${precomputeMarket.value} / ${precomputeDate.value}）`)
     precomputeVisible.value = false
+    await loadTraceStats()
   } catch (e: any) {
     ElMessage.error(e.message || '启动失败')
   } finally {
     precomputing.value = false
+  }
+}
+
+function openTraceRefreshDialog() {
+  const cid = resolveTraceConfigId()
+  if (cid == null) {
+    ElMessage.warning('请先选择参数版本')
+    return
+  }
+  if (!form.start_date || !form.end_date) {
+    ElMessage.warning('请填写回测开始/结束日期作为刷新区间')
+    return
+  }
+  traceRefreshConfigId.value = cid
+  traceRefreshStart.value = form.start_date
+  traceRefreshEnd.value = form.end_date
+  traceRefreshVisible.value = true
+}
+
+async function runTraceRefresh() {
+  const cid = traceRefreshConfigId.value
+  if (cid == null) {
+    ElMessage.warning('请选择参数版本')
+    return
+  }
+  if (!traceRefreshStart.value || !traceRefreshEnd.value) {
+    ElMessage.warning('请填写日期区间')
+    return
+  }
+  if (traceRefreshStart.value > traceRefreshEnd.value) {
+    ElMessage.warning('开始日期不能晚于结束日期')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将删除参数版本 ID ${cid} 的全部 trace，并重新扫描 ${traceRefreshStart.value}～${traceRefreshEnd.value} 全市场买点。耗时较长，在后台执行。`,
+      '确认强制刷新',
+      { type: 'warning', confirmButtonText: '启动', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  traceRefreshing.value = true
+  try {
+    const res = await urtApiService.refreshTraceRange({
+      config_id: cid,
+      start_date: traceRefreshStart.value,
+      end_date: traceRefreshEnd.value,
+      purge_first: true,
+    })
+    ElMessage.success(res.message || '区间 trace 刷新已启动')
+    traceRefreshVisible.value = false
+    traceStatsRows.value = 0
+  } catch (e: any) {
+    ElMessage.error(e.message || '启动失败')
+  } finally {
+    traceRefreshing.value = false
+  }
+}
+
+async function confirmPurgeTrace() {
+  const cid = resolveTraceConfigId()
+  if (cid == null) {
+    ElMessage.warning('请先选择参数版本')
+    return
+  }
+  const label = selectedConfig.value?.name || `ID ${cid}`
+  try {
+    await ElMessageBox.confirm(
+      `将删除参数版本「${label}」(ID ${cid}) 在 urt_signal_trace 中的全部记录（含扫描占位）。之后开缓存回测会先补预计算。`,
+      '清空 trace',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  tracePurging.value = true
+  try {
+    const res = await urtApiService.purgeTrace(cid)
+    ElMessage.success(res.message || `已删除 ${res.deleted_rows} 行`)
+    traceStatsRows.value = 0
+  } catch (e: any) {
+    ElMessage.error(e.message || '清空失败')
+  } finally {
+    tracePurging.value = false
   }
 }
 

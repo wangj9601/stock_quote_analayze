@@ -169,6 +169,95 @@ def run_urt_precompute_hk(*, trade_date: Optional[str] = None, limit: Optional[i
     return run_urt_precompute_market("HK", trade_date=trade_date, limit=limit)
 
 
+def run_urt_trace_refresh_range(
+    config_id: int,
+    *,
+    start_date: str,
+    end_date: str,
+    purge_first: bool = True,
+    stock_pool: Optional[List[str]] = None,
+) -> dict:
+    """
+    按回测区间强制刷新 urt_signal_trace（A 股全市场或指定股票池）。
+    先可选清空该 config_id 全部 trace，再调用与回测相同的区间一次扫描落库。
+    """
+    from backend_api.database import SessionLocal
+    from backend_core.strategies.urt.config import URTConfigManager
+    from backend_core.strategies.urt.data_loader import URTDataLoader
+    from backend_core.strategies.urt.strategy_engine import URTStrategyEngine
+    from backend_core.strategies.urt.trace_store import delete_trace_for_config
+
+    started = datetime.now()
+    db = SessionLocal()
+    try:
+        cm = URTConfigManager()
+        cm.ensure_default_row(db)
+        row = cm.get_config_row(db, int(config_id))
+        if not row:
+            return {"success": False, "config_id": config_id, "error": "参数版本不存在"}
+        cfg = cm.get_config(int(config_id), db=db)
+
+        purged = 0
+        if purge_first:
+            purged = delete_trace_for_config(db, config_id=int(config_id))
+
+        from backend_core.strategies.urt.backtest_runner import (
+            _ensure_trace_for_backtest_range,
+            _trading_dates,
+        )
+
+        dates = _trading_dates(db, start_date, end_date)
+        if not dates:
+            return {
+                "success": False,
+                "config_id": config_id,
+                "error": "区间内无交易日",
+                "purged_rows": purged,
+            }
+
+        loader = URTDataLoader(db, market="CN")
+        engine = URTStrategyEngine(loader, cfg)
+        meta = _ensure_trace_for_backtest_range(
+            db,
+            dates=dates,
+            config_id=int(config_id),
+            cfg=cfg,
+            loader=loader,
+            engine=engine,
+            stock_pool=stock_pool,
+        )
+        elapsed = (datetime.now() - started).total_seconds()
+        logger.info(
+            "URT 区间 trace 刷新完成 config_id=%s %s~%s purged=%s precomputed_days=%s hits=%s elapsed=%.1fs",
+            config_id,
+            start_date,
+            end_date,
+            purged,
+            meta.get("precomputed_days"),
+            meta.get("precompute_hits"),
+            elapsed,
+        )
+        return {
+            "success": True,
+            "config_id": config_id,
+            "start_date": str(start_date)[:10],
+            "end_date": str(end_date)[:10],
+            "purged_rows": purged,
+            "range_days": len(dates),
+            "elapsed_sec": elapsed,
+            **meta,
+        }
+    except Exception as e:
+        logger.exception("URT 区间 trace 刷新失败 config_id=%s: %s", config_id, e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {"success": False, "config_id": config_id, "error": str(e)}
+    finally:
+        db.close()
+
+
 def scheduled_urt_signals_cn() -> None:
     """定时入口：工作日 A 股全量预计算。"""
     if datetime.now().weekday() >= 5:

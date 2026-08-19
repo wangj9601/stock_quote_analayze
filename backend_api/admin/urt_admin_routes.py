@@ -85,6 +85,45 @@ class BatchDeleteBody(BaseModel):
     task_ids: List[str] = Field(default_factory=list)
 
 
+class TracePurgeBody(BaseModel):
+    config_id: int = Field(..., ge=1, description="参数版本 ID")
+
+
+class TraceRefreshRangeBody(BaseModel):
+    config_id: int = Field(..., ge=1, description="参数版本 ID")
+    start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
+    end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
+    purge_first: bool = Field(True, description="刷新前先清空该版本全部 trace")
+
+
+def _resolve_strategy_config_id(db: Session, config_id: Optional[int]) -> int:
+    from backend_api.models import URTStrategyConfig
+
+    mgr = URTConfigManager()
+    mgr.ensure_default_row(db)
+    if config_id is not None:
+        row = mgr.get_config_row(db, int(config_id))
+        if not row:
+            raise HTTPException(status_code=404, detail=f"参数版本不存在: {config_id}")
+        return int(config_id)
+    row = (
+        db.query(URTStrategyConfig)
+        .filter(URTStrategyConfig.is_default.is_(True))
+        .order_by(URTStrategyConfig.id.asc())
+        .first()
+    )
+    if not row:
+        row = (
+            db.query(URTStrategyConfig)
+            .filter(URTStrategyConfig.is_active.is_(True))
+            .order_by(URTStrategyConfig.id.asc())
+            .first()
+        )
+    if not row:
+        raise HTTPException(status_code=400, detail="无可用 URT 参数版本")
+    return int(row.id)
+
+
 def _normalize_a_code(code: str) -> str:
     s = str(code or "").strip()
     if s.isdigit() and len(s) <= 6:
@@ -625,6 +664,87 @@ async def run_precompute(
         "config_id": config_id,
         "market": mkt,
         "limit": limit,
+    }
+
+
+@router.get("/trace/stats")
+async def get_trace_stats(
+    config_id: int = Query(..., ge=1, description="参数版本 ID"),
+    db: Session = Depends(get_db),
+):
+    from backend_core.strategies.urt.trace_store import count_trace_rows_for_config
+
+    cid = _resolve_strategy_config_id(db, config_id)
+    total = count_trace_rows_for_config(db, config_id=cid)
+    return {
+        "success": True,
+        "data": {
+            "config_id": cid,
+            "total_rows": total,
+        },
+    }
+
+
+@router.post("/trace/purge")
+async def purge_trace(body: TracePurgeBody, db: Session = Depends(get_db)):
+    from backend_core.strategies.urt.trace_store import delete_trace_for_config
+
+    cid = _resolve_strategy_config_id(db, body.config_id)
+    deleted = delete_trace_for_config(db, config_id=cid)
+    write_urt_audit(
+        db,
+        "urt_trace_purge",
+        {"config_id": cid, "deleted_rows": deleted},
+    )
+    return {
+        "success": True,
+        "config_id": cid,
+        "deleted_rows": deleted,
+        "message": f"已清空参数版本 {cid} 的 trace（{deleted} 行）",
+    }
+
+
+@router.post("/trace/refresh-range")
+async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends(get_db)):
+    start_s = str(body.start_date)[:10]
+    end_s = str(body.end_date)[:10]
+    if start_s > end_s:
+        raise HTTPException(status_code=400, detail="start_date 不能晚于 end_date")
+
+    cid = _resolve_strategy_config_id(db, body.config_id)
+
+    def _job():
+        from backend_core.strategies.urt.scheduled_precompute import run_urt_trace_refresh_range
+
+        run_urt_trace_refresh_range(
+            cid,
+            start_date=start_s,
+            end_date=end_s,
+            purge_first=bool(body.purge_first),
+        )
+
+    threading.Thread(
+        target=_job,
+        daemon=True,
+        name=f"urt-trace-refresh-{cid}",
+    ).start()
+    write_urt_audit(
+        db,
+        "urt_trace_refresh_range",
+        {
+            "config_id": cid,
+            "start_date": start_s,
+            "end_date": end_s,
+            "purge_first": bool(body.purge_first),
+        },
+    )
+    return {
+        "success": True,
+        "message": "区间 trace 强制刷新已在后台启动",
+        "config_id": cid,
+        "start_date": start_s,
+        "end_date": end_s,
+        "purge_first": bool(body.purge_first),
     }
 
 

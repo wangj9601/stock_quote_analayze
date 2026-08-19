@@ -110,6 +110,39 @@ class URTApiService {
     return this.request(`${PREFIX}/precompute/run${qs ? `?${qs}` : ''}`, { method: 'POST' })
   }
 
+  async getTraceStats(configId: number) {
+    const res = await this.request<{ success: boolean; data: { config_id: number; total_rows: number } }>(
+      `${PREFIX}/trace/stats?config_id=${configId}`
+    )
+    return res.data
+  }
+
+  async purgeTrace(configId: number) {
+    return this.request<{ success: boolean; config_id: number; deleted_rows: number; message: string }>(
+      `${PREFIX}/trace/purge`,
+      { method: 'POST', body: JSON.stringify({ config_id: configId }) }
+    )
+  }
+
+  async refreshTraceRange(body: {
+    config_id: number
+    start_date: string
+    end_date: string
+    purge_first?: boolean
+  }) {
+    return this.request<{
+      success: boolean
+      message: string
+      config_id: number
+      start_date: string
+      end_date: string
+      purge_first: boolean
+    }>(`${PREFIX}/trace/refresh-range`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  }
+
   async createBacktest(body: Record<string, any>) {
     return this.request<{ success: boolean; task_id: string; data: any }>(
       `${PREFIX}/backtests`,

@@ -102,6 +102,34 @@ def delete_trace_for_code_config(db: Session, *, code: str, config_id: int) -> i
     return int(n or 0)
 
 
+def count_trace_rows_for_config(db: Session, *, config_id: int) -> int:
+    """统计某参数版本在 urt_signal_trace 中的行数（含扫描占位）。"""
+    from sqlalchemy import func
+
+    from backend_api.models import URTSignalTrace
+
+    n = (
+        db.query(func.count())
+        .select_from(URTSignalTrace)
+        .filter(URTSignalTrace.config_id == int(config_id))
+        .scalar()
+    )
+    return int(n or 0)
+
+
+def delete_trace_for_config(db: Session, *, config_id: int) -> int:
+    """删除某参数版本的全部 URT 信号与扫描占位（__URT_SCANNED__）。"""
+    from backend_api.models import URTSignalTrace
+
+    n = (
+        db.query(URTSignalTrace)
+        .filter(URTSignalTrace.config_id == int(config_id))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n or 0)
+
+
 def recompute_trace_for_stock(
     db: Session,
     *,
