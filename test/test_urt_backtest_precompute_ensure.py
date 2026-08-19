@@ -9,11 +9,33 @@ from backend_core.strategies.urt.trace_store import (
     URT_TRACE_SCANNED_MARKER,
     dates_ready_for_universe_backtest,
     dates_with_trace_coverage,
+    marker_covers_universe_request,
 )
 
 
 def test_scanned_marker_constant():
     assert URT_TRACE_SCANNED_MARKER == "__URT_SCANNED__"
+
+
+def test_pool_marker_does_not_cover_full_market():
+    extra = {"marker": "universe_scanned", "hits": 0, "candidates": 111, "scope": "pool"}
+    assert marker_covers_universe_request(extra, want_pool=False, min_full_market_codes=500) is False
+    assert marker_covers_universe_request(
+        extra, want_pool=True, pool_need=89, min_full_market_codes=500
+    ) is True
+
+
+def test_full_market_marker_covers_pool_and_market():
+    extra = {"marker": "universe_scanned", "hits": 12, "candidates": 4800, "scope": "full_market"}
+    assert marker_covers_universe_request(extra, want_pool=False, min_full_market_codes=500) is True
+    assert marker_covers_universe_request(extra, want_pool=True, pool_need=80) is True
+
+
+def test_marker_without_scope_needs_candidate_count():
+    assert marker_covers_universe_request({}, want_pool=False) is False
+    assert marker_covers_universe_request({"candidates": 600}, want_pool=False) is True
+    assert marker_covers_universe_request({"candidates": 100}, want_pool=False) is False
+
 
 
 def test_dates_with_trace_coverage_empty_dates():

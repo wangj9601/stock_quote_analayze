@@ -365,7 +365,8 @@ admin/  # /urt-management 参数配置页
 
 | 参数 | 含义 | 默认 |
 |------|------|------|
-| `target_pct` | 目标涨幅（小数） | 0.10 |
+| `target_pct` | 目标涨幅下限（小数） | 0.10 |
+| `target_pct_max` | 目标涨幅上限（小数） | 等于下限（缺省 10%～10%） |
 | `horizon_days` | 观察期交易日数 | **10** |
 | `use_trace` | 是否优先读 `urt_signal_trace` | true |
 

@@ -22,7 +22,7 @@
           <el-descriptions-item label="股票池">{{ stockPoolLabel }}</el-descriptions-item>
           <el-descriptions-item v-if="cnBoardLabel" label="A股板块">{{ cnBoardLabel }}</el-descriptions-item>
           <el-descriptions-item label="日期范围">{{ task.config.start_date }} ~ {{ task.config.end_date }}</el-descriptions-item>
-          <el-descriptions-item label="目标涨幅">{{ ((task.config.target_pct || 0) * 100).toFixed(1) }}%</el-descriptions-item>
+          <el-descriptions-item label="目标涨幅">{{ formatTargetPctRange(task.config) }}</el-descriptions-item>
           <el-descriptions-item label="观察期">{{ task.config.horizon_days ?? 10 }} 个交易日</el-descriptions-item>
           <el-descriptions-item label="参数版本">
             {{ configVersionLabel }}
@@ -109,10 +109,11 @@
           <el-descriptions-item label="信号数">{{ task.summary.total_signals ?? task.summary.total_samples ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="命中数">{{ task.summary.target_hits ?? task.summary.hit_count ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="命中率">{{ pct(task.summary.hit_rate) }}</el-descriptions-item>
+          <el-descriptions-item v-if="targetRangeOpen" label="上限触及率">{{ pct(task.summary.hit_rate_upper) }}</el-descriptions-item>
           <el-descriptions-item label="胜率">{{ pct(task.summary.win_rate) }}</el-descriptions-item>
           <el-descriptions-item label="均盈亏(期末)">{{ task.summary.avg_pnl_pct ?? '-' }}%</el-descriptions-item>
           <el-descriptions-item label="均最大涨幅">{{ task.summary.avg_max_gain_pct ?? '-' }}%</el-descriptions-item>
-          <el-descriptions-item label="目标涨幅">{{ ((task.summary.target_pct || 0) * 100).toFixed(1) }}%</el-descriptions-item>
+          <el-descriptions-item label="目标涨幅">{{ formatTargetPctRange(task.summary) }}</el-descriptions-item>
           <el-descriptions-item label="出场模式">{{ exitModeLabel }}</el-descriptions-item>
           <el-descriptions-item v-if="task.summary.avg_bars_held != null" label="均持有天数">
             {{ task.summary.avg_bars_held }}
@@ -478,6 +479,24 @@ const exitReasonRows = computed(() => {
     label: EXIT_REASON_ZH[name] || name,
     count: dist[name],
   }))
+})
+
+function formatTargetPctRange(src: any) {
+  if (!src) return '-'
+  const lo = Number(src.target_pct || 0) * 100
+  const hiRaw = src.target_pct_max
+  const hi = hiRaw == null || hiRaw === '' ? lo : Number(hiRaw) * 100
+  if (!Number.isFinite(lo)) return '-'
+  if (!Number.isFinite(hi) || Math.abs(hi - lo) < 1e-6) return `${lo.toFixed(1)}%`
+  return `${lo.toFixed(1)}%～${hi.toFixed(1)}%`
+}
+
+const targetRangeOpen = computed(() => {
+  const s = task.value?.summary || task.value?.config
+  if (!s) return false
+  const lo = Number(s.target_pct || 0)
+  const hi = s.target_pct_max == null || s.target_pct_max === '' ? lo : Number(s.target_pct_max)
+  return Number.isFinite(hi) && Math.abs(hi - lo) > 1e-9
 })
 
 function pct(v: any) {

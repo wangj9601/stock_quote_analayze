@@ -49,6 +49,10 @@ class BacktestCreateBody(BaseModel):
     task_name: Optional[str] = None
     strategy_config_id: Optional[int] = None
     target_pct: float = 0.10
+    target_pct_max: Optional[float] = Field(
+        None,
+        description="目标涨幅上限（小数）。缺省等于 target_pct；如 0.05 与 0.08 表示 5%～8%",
+    )
     horizon_days: int = 10
     min_score: Optional[float] = None
     use_trace: bool = True
@@ -180,6 +184,7 @@ def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any
         min_score = strategy_cfg.get("min_score")
     meta = build_urt_trade_meta(
         target_pct=float(config.get("target_pct", 0.10)),
+        target_pct_max=config.get("target_pct_max"),
         horizon_days=int(config.get("horizon_days", 10)),
         min_score=min_score,
         use_trace=bool(config.get("use_trace", True)),
@@ -196,8 +201,11 @@ def _attach_urt_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any
 
 
 def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, Any]:
+    from backend_core.strategies.urt.backtest_runner import resolve_target_pct_range
+
     mode = (body.stock_pool_mode or "all").strip() or "all"
     cn_seg = _normalize_cn_board_segment(body.cn_board_segment)
+    target_lo, target_hi = resolve_target_pct_range(body.target_pct, body.target_pct_max)
 
     mgr = URTConfigManager()
     mgr.ensure_default_row(db)
@@ -255,7 +263,8 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         "min_score_override": min_score_override is not None,
         "params_diverged": params_diverged,
         "diverge_reasons": diverge_reasons,
-        "target_pct": body.target_pct,
+        "target_pct": target_lo,
+        "target_pct_max": target_hi,
         "horizon_days": body.horizon_days,
         "use_trace": body.use_trace,
         "exit_mode": (

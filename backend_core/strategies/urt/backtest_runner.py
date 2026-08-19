@@ -33,6 +33,67 @@ from .trace_store import (
 logger = logging.getLogger(__name__)
 
 
+def resolve_target_pct_range(
+    target_pct: Any = 0.10,
+    target_pct_max: Any = None,
+) -> tuple[float, float]:
+    """目标涨幅区间（小数）。缺省上限=下限；裁剪到 0.1%～100%；上下限颠倒则交换。"""
+
+    def _one(v: Any, default: float) -> float:
+        try:
+            x = float(v)
+        except (TypeError, ValueError):
+            return default
+        if x != x:
+            return default
+        return min(1.0, max(0.001, x))
+
+    lo = _one(target_pct, 0.10)
+    if target_pct_max is None:
+        hi = lo
+    else:
+        hi = _one(target_pct_max, lo)
+    if hi < lo:
+        lo, hi = hi, lo
+    return lo, hi
+
+
+def format_target_pct_range_label(target_lo: float, target_hi: float) -> str:
+    lo, hi = float(target_lo), float(target_hi)
+    if abs(hi - lo) < 1e-12:
+        return f"{lo * 100:.1f}%"
+    return f"{lo * 100:.1f}%～{hi * 100:.1f}%"
+
+
+def classify_target_hits(
+    *,
+    entry_price: float,
+    max_high: float,
+    target_lo: float,
+    target_hi: float,
+) -> Dict[str, bool]:
+    """观察期最高价：点目标=至少达到；开区间=最大涨幅落在 [下限, 上限]。"""
+    if entry_price is None or float(entry_price) <= 0:
+        return {"hit_target": False, "hit_target_upper": False, "hit_in_band": False}
+    entry = float(entry_price)
+    high = float(max_high)
+    gain = high / entry - 1.0
+    lo, hi = float(target_lo), float(target_hi)
+    hit_lo = high + 1e-12 >= entry * (1.0 + lo)
+    hit_hi = high + 1e-12 >= entry * (1.0 + hi)
+    if abs(hi - lo) < 1e-12:
+        in_band = hit_lo
+        hit_target = hit_lo
+    else:
+        in_band = gain + 1e-12 >= lo and gain <= hi + 1e-12
+        hit_target = in_band
+    return {
+        "hit_target": bool(hit_target),
+        "hit_target_upper": bool(hit_hi),
+        "hit_in_band": bool(in_band),
+    }
+
+
 def _ensure_trace_for_backtest_range(
     db: Session,
     *,
@@ -143,6 +204,7 @@ def _ensure_trace_for_backtest_range(
 def build_urt_trade_meta(
     *,
     target_pct: float = 0.10,
+    target_pct_max: Optional[float] = None,
     horizon_days: int = 10,
     min_score: Optional[float] = None,
     use_trace: bool = True,
@@ -168,7 +230,23 @@ def build_urt_trade_meta(
     except (TypeError, ValueError):
         time_stop_min_loss = 4.0
     ms = float(min_score) if min_score is not None else 70.0
-    tp = float(target_pct) * 100.0
+    target_lo, target_hi = resolve_target_pct_range(target_pct, target_pct_max)
+    tp_label = format_target_pct_range_label(target_lo, target_hi)
+    tp = float(target_lo) * 100.0
+    range_open = abs(float(target_hi) - float(target_lo)) >= 1e-12
+    if range_open:
+        hit_stat_rule = (
+            f"观察期最大涨幅落在 {tp_label} 内则 hit_target=是；"
+            f"触及上限 +{target_hi * 100:.1f}% 则 hit_target_upper=是（冲过上限不算命中）"
+        )
+        hit_stat_short = f"目标涨幅区间 {tp_label}（命中=落在区间内）"
+        hit_priority_desc = (
+            f"观察期最大涨幅落在 {tp_label} 内（触及上限另计 hit_target_upper）"
+        )
+    else:
+        hit_stat_rule = f"观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是"
+        hit_stat_short = f"目标涨幅 {tp_label}"
+        hit_priority_desc = f"观察期内最高价触及 +{tp:.1f}%"
     hz = int(horizon_days)
     mode = (exit_mode or "hit_rate").strip().lower()
     if mode not in ("hit_rate", "risk_exit", "structure_exit"):
@@ -241,8 +319,8 @@ def build_urt_trade_meta(
             "summary": (
                 f"URT 交易回测（结构出场 structure_exit）：信号次日开盘入场；最长观察期 {hz} 个交易日；"
                 f"止损=信号日最近支撑下移 {stop_buf * 100:.0f}%；"
-                f"止盈=最近阻力（上行≥{exit_min_up * 100:.1f}% 且可分批）或目标 {tp:.1f}% 跟踪；"
-                f"全路径浮盈保本/回撤；结构缺失回退止损 −{fb_stop:.0f}%；同时统计 hit_target；最低得分 {ms:.0f}。"
+                f"止盈=最近阻力（上行≥{exit_min_up * 100:.1f}% 且可分批）或目标下限 {tp:.1f}% 跟踪；"
+                f"全路径浮盈保本/回撤；结构缺失回退止损 −{fb_stop:.0f}%；同时统计 {hit_stat_short}；最低得分 {ms:.0f}。"
             ),
             "rules": [
                 (
@@ -274,7 +352,7 @@ def build_urt_trade_meta(
                     f"峰值回撤约 {fb_trail * 100:.1f}%→breakeven_stop / fallback_trail；"
                     f"百分比目标触及后默认跟踪而非全仓硬平。"
                 ),
-                f"目标统计：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是（独立统计）。",
+                f"目标统计：{hit_stat_rule}（独立统计）。",
                 f"到期平仓：未触发结构纪律则满 {hz} 日以收盘价出场（horizon_end）。",
                 "同标的去重：上一笔出场日之前不再接受新信号开仓。",
                 "说明：结构位与个股关键价位同口径（结构锚窗 KDE + confluence）；持仓期不重算。",
@@ -321,7 +399,7 @@ def build_urt_trade_meta(
         trade_logic = {
             "summary": (
                 f"URT 交易回测（纪律出场 risk_exit）：信号次日开盘入场；最长观察期 {hz} 个交易日；"
-                f"持仓期按止损/连跌/回撤止盈离场；同时统计观察期内是否触及目标涨幅 {tp:.1f}%；最低得分 {ms:.0f}。"
+                f"持仓期按止损/连跌/回撤止盈离场；同时统计 {hit_stat_short}；最低得分 {ms:.0f}。"
             ),
             "rules": [
                 (
@@ -336,7 +414,7 @@ def build_urt_trade_meta(
                     f"连跌 {time_stop_days} 日且浮亏≥{time_stop_min_loss:.0f}%→time_stop；"
                     f"涨幅达警惕区 {alert_min:.0f}%–{alert_max:.0f}% 后自高点回撤 {trail:.0f}%→trailing_take_profit。"
                 ),
-                f"目标统计：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是（不必然立即平仓）。",
+                f"目标统计：{hit_stat_rule}（不必然立即平仓）。",
                 f"到期平仓：未触发纪律则满 {hz} 日以收盘价出场（horizon_end）。",
                 "同标的去重：上一笔出场日之前不再接受新信号开仓。",
             ],
@@ -359,7 +437,7 @@ def build_urt_trade_meta(
         trade_logic = {
             "summary": (
                 f"URT 交易回测（对齐 GMS 命中率）：信号次日开盘入场；观察期 {hz} 个交易日；"
-                f"以观察期内最高价判定是否达到目标涨幅 {tp:.1f}%；不止损；最低得分 {ms:.0f}。"
+                f"以观察期内最高价判定{hit_stat_short}；不止损；最低得分 {ms:.0f}。"
             ),
             "rules": [
                 (
@@ -370,7 +448,7 @@ def build_urt_trade_meta(
                 "入场：信号日之后下一交易日开盘价买入；开盘价无效则跳过。",
                 f"观察期：自入场日起共 {hz} 根交易日 K 线（默认 10，短线定位）。",
                 (
-                    f"目标命中（不止损）：观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是；"
+                    f"目标命中（不止损）：{hit_stat_rule}；"
                     "同时记录观察期最高价与最大涨幅；不因浮亏/连跌/回撤提前离场。"
                 ),
                 f"到期平仓：持有满观察期，以最后一根 K 线收盘价作为参考出场价（horizon_end）。",
@@ -387,7 +465,7 @@ def build_urt_trade_meta(
                 {
                     "code": "target_hit",
                     "label": "触及目标（统计）",
-                    "desc": f"观察期内最高价触及 +{tp:.1f}%（不止损、不提前平仓）",
+                    "desc": f"{hit_priority_desc}（不止损、不提前平仓）",
                 },
                 {
                     "code": "horizon_end",
@@ -508,6 +586,7 @@ def run_urt_backtest(
     end_date: str,
     strategy_config_id: Optional[int] = None,
     target_pct: float = 0.10,
+    target_pct_max: Optional[float] = None,
     horizon_days: int = 10,
     min_score: Optional[float] = None,
     use_trace: bool = True,
@@ -529,6 +608,7 @@ def run_urt_backtest(
     mode = (exit_mode or "hit_rate").strip().lower()
     if mode not in ("hit_rate", "risk_exit", "structure_exit"):
         mode = "hit_rate"
+    target_lo, target_hi = resolve_target_pct_range(target_pct, target_pct_max)
 
     cm = URTConfigManager()
     cm.ensure_default_row(db)
@@ -684,11 +764,14 @@ def run_urt_backtest(
                 continue
             entry_date = future[0]["date"]
             entry_price = float(future[0]["open"])
-            target = entry_price * (1.0 + float(target_pct))
+            target_lo_px = entry_price * (1.0 + float(target_lo))
+            target_hi_px = entry_price * (1.0 + float(target_hi))
 
             max_high = entry_price
             hit = False
             hit_date = None
+            hit_upper = False
+            hit_upper_date = None
             for bar in future:
                 hi = bar.get("high")
                 if hi is None:
@@ -697,11 +780,25 @@ def run_urt_backtest(
                 hi_f = float(hi)
                 if hi_f > max_high:
                     max_high = hi_f
-                if (not hit) and hi_f >= target:
+                if (not hit) and hi_f >= target_lo_px:
                     hit = True
                     hit_date = bar.get("date")
+                if (not hit_upper) and hi_f >= target_hi_px:
+                    hit_upper = True
+                    hit_upper_date = bar.get("date")
 
             max_gain = (max_high / entry_price - 1.0) if entry_price else 0.0
+            band = classify_target_hits(
+                entry_price=entry_price,
+                max_high=max_high,
+                target_lo=target_lo,
+                target_hi=target_hi,
+            )
+            hit = bool(band["hit_target"])
+            hit_upper = bool(band["hit_target_upper"])
+            hit_in_band = bool(band["hit_in_band"])
+            if not hit:
+                hit_date = None
             struct_levels: Dict[str, Any] = {}
             if mode == "structure_exit":
                 sig_st = extract_signal_structure_levels(sig)
@@ -774,7 +871,7 @@ def run_urt_backtest(
                     nearest_support=sig_st.get("nearest_support"),
                     nearest_resistance=sig_st.get("nearest_resistance"),
                     cfg=cfg,
-                    target_pct=float(target_pct),
+                    target_pct=float(target_lo),
                     structure_source=structure_source,
                 )
                 struct_levels["kde_ok"] = sig_st.get("kde_ok")
@@ -1020,6 +1117,9 @@ def run_urt_backtest(
                 "exit_reason": exit_reason,
                 "hit_target": hit,
                 "hit_date": hit_date,
+                "hit_target_upper": hit_upper,
+                "hit_date_upper": hit_upper_date,
+                "hit_in_band": hit_in_band,
                 "max_high": round(max_high, 4),
                 "max_gain_pct": round(max_gain * 100.0, 2),
                 "pnl_pct": round(pnl_pct, 2),
@@ -1054,6 +1154,8 @@ def run_urt_backtest(
 
     total = len(details)
     hits = sum(1 for r in details if r.get("hit_target"))
+    hits_upper = sum(1 for r in details if r.get("hit_target_upper"))
+    in_band_n = sum(1 for r in details if r.get("hit_in_band"))
     wins = sum(1 for r in details if float(r.get("pnl_pct") or 0) > 0)
     avg_pnl = sum(float(r.get("pnl_pct") or 0) for r in details) / total if total else 0.0
     avg_max_gain = (
@@ -1133,7 +1235,8 @@ def run_urt_backtest(
     avg_bars = sum(int(r.get("bars_held") or 0) for r in details) / total if total else 0.0
 
     trade_meta = build_urt_trade_meta(
-        target_pct=float(target_pct),
+        target_pct=float(target_lo),
+        target_pct_max=float(target_hi),
         horizon_days=int(horizon_days),
         min_score=cfg.get("min_score"),
         use_trace=bool(use_trace),
@@ -1149,12 +1252,17 @@ def run_urt_backtest(
         "target_hits": hits,
         "hit_count": hits,
         "hit_rate": round(hits / total, 4) if total else 0.0,
+        "target_hits_upper": hits_upper,
+        "hit_rate_upper": round(hits_upper / total, 4) if total else 0.0,
+        "in_band_count": in_band_n,
+        "in_band_rate": round(in_band_n / total, 4) if total else 0.0,
         "win_count": wins,
         "win_rate": round(wins / total, 4) if total else 0.0,
         "avg_pnl_pct": round(avg_pnl, 2),
         "avg_max_gain_pct": round(avg_max_gain, 2),
         "avg_bars_held": round(avg_bars, 2),
-        "target_pct": target_pct,
+        "target_pct": target_lo,
+        "target_pct_max": target_hi,
         "horizon_days": horizon_days,
         "backtest_mode": (
             "structure_exit"

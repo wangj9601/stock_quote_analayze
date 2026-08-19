@@ -32,16 +32,17 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | 参数 | 含义 | 默认 | 说明 |
 |------|------|------|------|
 | `start_date` / `end_date` | 信号扫描区间 | 必填 | 按区间内交易日逐日扫描 |
-| `target_pct` | 目标涨幅 | **0.10（10%）** | 入场价 × (1 + target_pct) 为目标价 |
+| `target_pct` | 目标涨幅下限 | **0.10（10%）** | 入场价 × (1 + 下限) 为命中价；与上限相等时等同原单值 |
+| `target_pct_max` | 目标涨幅上限 | **等于下限（缺省 10%～10%）** | 如 0.05～0.08 表示 5%～8% 区间判断；命中=最大涨幅落在区间内 |
 | `horizon_days` | 观察期交易日数 | **10** | 入场日后最多取 N 根 K 线（短线默认；可对照 5/15） |
 | `min_score` | 最低得分 | 策略配置（常为 70） | 过滤买点；可任务级覆盖 |
 | `use_trace` | 优先读缓存 | `true` | 优先 `urt_signal_trace`；无则实时引擎 |
 | `exit_mode` | 出场模式 | `hit_rate` | `hit_rate` / `risk_exit` |
 | `strategy_config_id` | 参数版本 | 默认版本 | 含硬筛、得分、`risk` 风控 |
-
-创建时固化 `strategy_config_id`（默认绑生效/`is_default` 版本）。**改参不会改写已完成任务**；若 `use_trace=true` 重跑，读的是该 id **当前** trace（可能已按新参重算）。任务级覆盖 `min_score` 或选用非生效版本会标 `params_diverged`。
 | `stock_pool_mode` | 股票池 | `all` | 全市场 / 自选 / 行业 / 概念 / 单股 / 自定义 |
 | `cn_board_segment` | A 股板块 | 全部 | MAIN / CYB / SZ_SME / KCB / BJ |
+
+创建时固化 `strategy_config_id`（默认绑生效/`is_default` 版本）。**改参不会改写已完成任务**；若 `use_trace=true` 重跑，读的是该 id **当前** trace（可能已按新参重算）。任务级覆盖 `min_score` 或选用非生效版本会标 `params_diverged`。
 
 任务创建时会把 **交易逻辑说明（`trade_logic`）** 与 **风控快照（`risk_params`）** 写入任务 `config`；回测完成后亦写入 `summary`，在「任务详情」中展示。旧任务打开详情时由 API 按策略参数补齐。
 
@@ -52,7 +53,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 ### 2.1 信号来源
 
 1. **优先**（`use_trace=true` 且有配置 ID）：读当日 `urt_signal_trace`，且 `score ≥ min_score`。
-2. **区间补齐**：回测开始时检查时间范围内各交易日是否已具备**全市场/股票池级**预计算（仅有个股强制重算的零星 trace **不算**覆盖）。未覆盖日对全市场（或任务股票池）**一次拉齐区间行情、内存按日评买点**并写入 `urt_signal_trace`，打上 `__URT_SCANNED__` 扫描占位，再进入交易模拟。不要按每个交易日重复拉取全市场 K 线。
+2. **区间补齐**：回测开始时检查时间范围内各交易日是否已具备**全市场/股票池级**预计算（仅有个股强制重算的零星 trace **不算**覆盖；**股票池扫描占位 `scope=pool` 也不能冒充全市场已覆盖**）。未覆盖日对全市场（或任务股票池）**一次拉齐区间行情、内存按日评买点**并写入 `urt_signal_trace`，打上 `__URT_SCANNED__` 扫描占位，再进入交易模拟。不要按每个交易日重复拉取全市场 K 线。
 3. **关闭缓存**（`use_trace=false`）：同样走区间一次扫描（内存出信号），不再逐日 `screen_universe`。全市场务必打开「优先读缓存」：结果可复用，且命中率对照不必再扫一遍。
 
 买点判定（硬筛 + 得分）与选股一致，详见设计文档 §1 / §6。  
@@ -77,7 +78,9 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 
 | 规则项 | 说明 |
 |--------|------|
-| 目标命中 | 观察期内 **最高价 ≥ 入场价 × (1 + target_pct)** → `hit_target=true` |
+| 目标命中 | **上下限相等**（缺省 10%～10%）：观察期内最高价 ≥ 入场价 × (1 + 下限)，与原先单值一致。<br>**上下限不等**（如 5%～8%）：最大涨幅落在 [下限, 上限] 才 `hit_target=true`（冲过上限不算命中） |
+| 上限命中 | 当 `target_pct_max` > 下限时，最高价 ≥ 入场价 × (1 + 上限) → `hit_target_upper=true` |
+| 区间内 | `hit_in_band` 与区间模式下的 `hit_target` 相同；点目标时与 `hit_target` 相同 |
 | 最高价 / 最大涨幅 | 输出 `max_high`、`max_gain_pct`（相对入场价） |
 | 止损 | **不启用**价格止损 / 连跌离场 / 回撤止盈 |
 | 参考出场 | 持有满观察期，以最后一根收盘价记 `exit_price`（`horizon_end`） |
@@ -129,7 +132,9 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 |------|------|
 | `max_high` | 观察期内最高价 |
 | `max_gain_pct` | `(max_high - entry_price) / entry_price × 100` |
-| `hit_target` / `hit_date` | 是否触及目标及首次触及日（相对 `target_pct`，独立统计） |
+| `hit_target` / `hit_date` | 是否触及下限目标及首次触及日（相对 `target_pct`，独立统计） |
+| `hit_target_upper` / `hit_date_upper` | 是否触及上限及首次触及日（相对 `target_pct_max`） |
+| `hit_in_band` | 最大涨幅是否落在 [下限, 上限]；上下限相等时与 `hit_target` 相同 |
 | `pnl_pct` | 出场价相对入场价盈亏 |
 | `bars_held` | 实际持有 K 线根数 |
 | `stop_price` / `target_price` | （`structure_exit`）结构或回退止损/止盈价 |

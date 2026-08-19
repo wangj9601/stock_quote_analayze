@@ -533,7 +533,10 @@ class URTStockBacktestBody(BaseModel):
     code: str = Field(..., description="股票代码")
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
-    target_pct: float = Field(0.10, description="目标涨幅，如 0.10 表示 10%")
+    target_pct: float = Field(0.10, description="目标涨幅下限，如 0.10 表示 10%")
+    target_pct_max: Optional[float] = Field(
+        None, description="目标涨幅上限，缺省等于 target_pct；如 0.05～0.08 表示 5%～8%"
+    )
     horizon_days: int = Field(10, ge=10, le=30, description="持有窗口交易日数（短线默认 10）")
     min_score: Optional[float] = Field(None, ge=0, le=100, description="最低得分")
     use_trace: bool = Field(True, description="是否优先读信号追溯表")
@@ -556,6 +559,7 @@ async def create_urt_stock_backtest(body: URTStockBacktestBody, db: Session = De
             end_date=str(body.end_date).strip()[:10],
             strategy_config_id=body.strategy_config_id,
             target_pct=float(body.target_pct),
+            target_pct_max=body.target_pct_max,
             horizon_days=int(body.horizon_days),
             min_score=body.min_score,
             use_trace=bool(body.use_trace),

@@ -460,12 +460,15 @@
                 alert('请填写回测区间的开始日期与结束日期');
                 return;
             }
-            const pctRaw = parseFloat(String(document.getElementById('btTargetPct')?.value || '10'), 10);
-            if (Number.isNaN(pctRaw) || pctRaw < 0.1 || pctRaw > 100) {
+            const pctMinRaw = parseFloat(String(document.getElementById('btTargetPctMin')?.value || document.getElementById('btTargetPct')?.value || '10'), 10);
+            const pctMaxRaw = parseFloat(String(document.getElementById('btTargetPctMax')?.value || pctMinRaw), 10);
+            if (Number.isNaN(pctMinRaw) || pctMinRaw < 0.1 || pctMinRaw > 100
+                || Number.isNaN(pctMaxRaw) || pctMaxRaw < 0.1 || pctMaxRaw > 100) {
                 alert('目标涨幅请在 0.1%～100% 之间');
                 return;
             }
-            const targetPct = pctRaw / 100;
+            const targetPct = Math.min(pctMinRaw, pctMaxRaw) / 100;
+            const targetPctMax = Math.max(pctMinRaw, pctMaxRaw) / 100;
             const horizon = parseInt(document.getElementById('btHorizon')?.value || '10', 10);
             const minScoreRaw = document.getElementById('btMinScore')?.value;
             const minScore = minScoreRaw !== '' && minScoreRaw != null ? parseFloat(minScoreRaw) : null;
@@ -490,6 +493,7 @@
                 start_date: startDate,
                 end_date: endDate,
                 target_pct: targetPct,
+                target_pct_max: targetPctMax,
                 horizon_days: horizon,
                 strategy_config_id: this.configId,
             };
@@ -592,14 +596,26 @@
             const hr = summary.hit_rate != null ? (Number(summary.hit_rate) * 100).toFixed(2) + '%' : '--';
             const samples = summary.total_samples != null ? String(summary.total_samples) : '--';
             const hits = summary.hit_count != null ? String(summary.hit_count) : '--';
-            const tp = cfg.target_pct != null ? (Number(cfg.target_pct) * 100).toFixed(1) : '--';
+            const lo = cfg.target_pct != null ? Number(cfg.target_pct) * 100 : (summary.target_pct != null ? Number(summary.target_pct) * 100 : null);
+            const hiRaw = cfg.target_pct_max != null ? cfg.target_pct_max : summary.target_pct_max;
+            const hi = hiRaw != null ? Number(hiRaw) * 100 : lo;
+            let tp = '--';
+            if (lo != null && Number.isFinite(lo)) {
+                tp = (hi != null && Number.isFinite(hi) && Math.abs(hi - lo) > 1e-6)
+                    ? `${lo.toFixed(1)}%～${hi.toFixed(1)}%`
+                    : `${lo.toFixed(1)}%`;
+            }
             const hz = cfg.horizon_days != null ? String(cfg.horizon_days) : '--';
             let html = '<h4>回测报告</h4>';
-            html += `<p>区间 ${escapeHtml(String(cfg.start_date || ''))} ～ ${escapeHtml(String(cfg.end_date || ''))} · 目标 ${tp}% · 窗口 ${hz} 日</p>`;
+            html += `<p>区间 ${escapeHtml(String(cfg.start_date || ''))} ～ ${escapeHtml(String(cfg.end_date || ''))} · 目标 ${escapeHtml(tp)} · 窗口 ${hz} 日</p>`;
             html += '<div class="gms-backtest-summary-grid">';
             html += `<div class="gms-backtest-summary-item"><strong>命中率</strong><span>${hr}</span></div>`;
             html += `<div class="gms-backtest-summary-item"><strong>样本数</strong><span>${escapeHtml(samples)}</span></div>`;
             html += `<div class="gms-backtest-summary-item"><strong>命中次数</strong><span>${escapeHtml(hits)}</span></div>`;
+            if (lo != null && hi != null && Math.abs(hi - lo) > 1e-6) {
+                const hrU = summary.hit_rate_upper != null ? (Number(summary.hit_rate_upper) * 100).toFixed(2) + '%' : '--';
+                html += `<div class="gms-backtest-summary-item"><strong>上限触及率</strong><span>${hrU}</span></div>`;
+            }
             html += '</div>';
             const tid = task.task_id;
             if (tid) {

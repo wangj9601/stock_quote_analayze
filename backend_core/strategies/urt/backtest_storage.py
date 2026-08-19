@@ -30,6 +30,9 @@ _URT_DETAIL_FIELDS: List[str] = [
     "max_gain_pct",
     "hit_target",
     "hit_date",
+    "hit_target_upper",
+    "hit_date_upper",
+    "hit_in_band",
     "exit_date",
     "exit_price",
     "exit_reason",
@@ -85,6 +88,9 @@ _URT_DETAIL_HEADER_ZH: Dict[str, str] = {
     "max_gain_pct": "观察期最大涨幅(%)",
     "hit_target": "是否命中目标",
     "hit_date": "命中日期",
+    "hit_target_upper": "是否触及上限",
+    "hit_date_upper": "触及上限日期",
+    "hit_in_band": "涨幅落在区间内",
     "exit_date": "出场日期",
     "exit_price": "出场价(期末收盘)",
     "exit_reason": "出场原因",
@@ -307,7 +313,7 @@ def _normalize_export_stock_code(value: Any) -> str:
 
 
 def _format_urt_detail_cell(key: str, value: Any) -> Any:
-    if key == "hit_target":
+    if key in ("hit_target", "hit_target_upper", "hit_in_band"):
         if value is True or value == 1 or str(value).lower() in ("true", "1", "yes"):
             return "是"
         if value is False or value == 0 or str(value).lower() in ("false", "0", "no"):

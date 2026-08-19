@@ -72,6 +72,40 @@ def _num(v: Any) -> str:
         return "-"
 
 
+def _format_target_pct_range(src: Optional[Dict[str, Any]]) -> str:
+    src = src or {}
+    try:
+        lo = float(src.get("target_pct") or 0)
+    except (TypeError, ValueError):
+        lo = 0.0
+    hi_raw = src.get("target_pct_max")
+    if hi_raw is None:
+        return f"{lo * 100:.1f}%"
+    try:
+        hi = float(hi_raw)
+    except (TypeError, ValueError):
+        return f"{lo * 100:.1f}%"
+    if abs(hi - lo) < 1e-12:
+        return f"{lo * 100:.1f}%"
+    return f"{lo * 100:.1f}%～{hi * 100:.1f}%"
+
+
+def _target_range_open(src: Optional[Dict[str, Any]]) -> bool:
+    src = src or {}
+    try:
+        lo = float(src.get("target_pct") or 0)
+    except (TypeError, ValueError):
+        return False
+    hi_raw = src.get("target_pct_max")
+    if hi_raw is None:
+        return False
+    try:
+        hi = float(hi_raw)
+    except (TypeError, ValueError):
+        return False
+    return abs(hi - lo) > 1e-9
+
+
 def resolve_exit_mode(task: Dict[str, Any]) -> str:
     summary = task.get("summary") if isinstance(task.get("summary"), dict) else {}
     config = task.get("config") if isinstance(task.get("config"), dict) else {}
@@ -191,7 +225,7 @@ def build_backtest_detail_html(
         basic.extend(
             [
                 ("日期范围", f"{config.get('start_date') or '-'} ~ {config.get('end_date') or '-'}"),
-                ("目标涨幅", f"{float(config.get('target_pct') or 0) * 100:.1f}%"),
+                ("目标涨幅", _format_target_pct_range(config)),
                 ("观察期", f"{config.get('horizon_days') if config.get('horizon_days') is not None else 10} 个交易日"),
                 ("最低得分", str(config.get("min_score") if config.get("min_score") is not None else summary.get("min_score") or "-")),
                 ("优先读缓存", "是" if config.get("use_trace") else "否"),
@@ -274,9 +308,13 @@ def build_backtest_detail_html(
             ("胜率", _pct(summary.get("win_rate"))),
             ("均盈亏(期末)", f"{summary.get('avg_pnl_pct') if summary.get('avg_pnl_pct') is not None else '-'}%"),
             ("均最大涨幅", f"{summary.get('avg_max_gain_pct') if summary.get('avg_max_gain_pct') is not None else '-'}%"),
-            ("目标涨幅", f"{float(summary.get('target_pct') or 0) * 100:.1f}%"),
+            ("目标涨幅", _format_target_pct_range(summary)),
             ("出场模式", mode_label),
         ]
+        if _target_range_open(summary):
+            s_rows[3:3] = [
+                ("上限触及率", _pct(summary.get("hit_rate_upper"))),
+            ]
         if summary.get("avg_bars_held") is not None:
             s_rows.append(("均持有天数", str(summary.get("avg_bars_held"))))
         summary_html = _kv_table(s_rows)

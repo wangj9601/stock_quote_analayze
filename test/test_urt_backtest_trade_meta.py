@@ -40,3 +40,11 @@ def test_build_urt_trade_meta_custom_risk():
     assert "30" in meta["trade_logic"]["summary"]
     assert "80" in meta["trade_logic"]["summary"]
     assert any("8%" in r for r in meta["trade_logic"]["rules"])
+
+
+def test_build_urt_trade_meta_target_range():
+    meta = build_urt_trade_meta(target_pct=0.05, target_pct_max=0.08, horizon_days=10)
+    summary = meta["trade_logic"]["summary"]
+    assert "5.0%～8.0%" in summary
+    joined = " ".join(meta["trade_logic"]["rules"])
+    assert "5.0%～8.0%" in joined

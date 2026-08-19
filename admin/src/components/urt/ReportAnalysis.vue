@@ -43,9 +43,10 @@
                 <el-descriptions-item label="信号数">{{ currentReport.summary.total_signals ?? currentReport.summary.total_samples }}</el-descriptions-item>
                 <el-descriptions-item label="命中数">{{ currentReport.summary.target_hits ?? currentReport.summary.hit_count }}</el-descriptions-item>
                 <el-descriptions-item label="命中率">{{ formatPct(currentReport.summary.hit_rate) }}</el-descriptions-item>
+                <el-descriptions-item v-if="reportTargetRangeOpen" label="上限触及率">{{ formatPct(currentReport.summary.hit_rate_upper) }}</el-descriptions-item>
                 <el-descriptions-item label="胜率">{{ formatPct(currentReport.summary.win_rate) }}</el-descriptions-item>
                 <el-descriptions-item label="均盈亏">{{ currentReport.summary.avg_pnl_pct }}%</el-descriptions-item>
-                <el-descriptions-item label="目标涨幅">{{ ((currentReport.summary.target_pct || 0) * 100).toFixed(1) }}%</el-descriptions-item>
+                <el-descriptions-item label="目标涨幅">{{ formatTargetPctRange(currentReport.summary) }}</el-descriptions-item>
                 <el-descriptions-item label="观察日数">{{ currentReport.summary.horizon_days }}</el-descriptions-item>
                 <el-descriptions-item label="日期区间">
                   {{ currentReport.summary.start_date }} ~ {{ currentReport.summary.end_date }}
@@ -149,6 +150,24 @@ function formatPct(v: unknown) {
   if (Number.isNaN(n)) return '-'
   return `${(n * 100).toFixed(2)}%`
 }
+
+function formatTargetPctRange(src: any) {
+  if (!src) return '-'
+  const lo = Number(src.target_pct || 0) * 100
+  const hiRaw = src.target_pct_max
+  const hi = hiRaw == null || hiRaw === '' ? lo : Number(hiRaw) * 100
+  if (!Number.isFinite(lo)) return '-'
+  if (!Number.isFinite(hi) || Math.abs(hi - lo) < 1e-6) return `${lo.toFixed(1)}%`
+  return `${lo.toFixed(1)}%～${hi.toFixed(1)}%`
+}
+
+const reportTargetRangeOpen = computed(() => {
+  const s = currentReport.value?.summary
+  if (!s) return false
+  const lo = Number(s.target_pct || 0)
+  const hi = s.target_pct_max == null || s.target_pct_max === '' ? lo : Number(s.target_pct_max)
+  return Number.isFinite(hi) && Math.abs(hi - lo) > 1e-9
+})
 
 async function refresh() {
   if (!urtApi) return

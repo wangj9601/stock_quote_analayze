@@ -40,17 +40,25 @@
           </el-col>
         </el-row>
         <el-row :gutter="16">
-          <el-col :span="8">
-            <el-form-item label="目标涨幅(%)">
-              <el-input-number v-model="targetPctPercent" :min="0.1" :max="100" :step="0.5" :precision="2" class="w-full" />
+          <el-col :span="12">
+            <el-form-item label="目标涨幅下限(%)">
+              <el-input-number v-model="targetPctMinPercent" :min="0.1" :max="100" :step="0.5" :precision="2" class="w-full" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="12">
+            <el-form-item label="目标涨幅上限(%)">
+              <el-input-number v-model="targetPctMaxPercent" :min="0.1" :max="100" :step="0.5" :precision="2" class="w-full" />
+              <span class="hint">缺省 10%～10%。相等=至少达到该值；5%～8% 表示最大涨幅落在区间内才算命中</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
             <el-form-item label="观察日数">
               <el-input-number v-model="form.horizon_days" :min="1" :max="120" class="w-full" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="12">
             <el-form-item label="最低得分">
               <el-input-number
                 v-model="form.min_score"
@@ -329,6 +337,7 @@ const form = reactive({
   start_date: '',
   end_date: '',
   target_pct: 0.1,
+  target_pct_max: 0.1,
   horizon_days: 10,
   min_score: undefined as number | undefined,
   strategy_config_id: undefined as number | undefined,
@@ -340,11 +349,29 @@ const form = reactive({
   stock_list: '',
 })
 
-const targetPctPercent = computed({
+function clampPctDecimal(v: number) {
+  return Math.min(1, Math.max(0.001, Number(v)))
+}
+
+const targetPctMinPercent = computed({
   get: () => Math.round(form.target_pct * 10000) / 100,
   set: (v: number | undefined) => {
     if (v == null) return
-    form.target_pct = Math.min(1, Math.max(0.001, Number(v) / 100))
+    form.target_pct = clampPctDecimal(Number(v) / 100)
+    if (form.target_pct > form.target_pct_max) {
+      form.target_pct_max = form.target_pct
+    }
+  },
+})
+
+const targetPctMaxPercent = computed({
+  get: () => Math.round(form.target_pct_max * 10000) / 100,
+  set: (v: number | undefined) => {
+    if (v == null) return
+    form.target_pct_max = clampPctDecimal(Number(v) / 100)
+    if (form.target_pct_max < form.target_pct) {
+      form.target_pct = form.target_pct_max
+    }
   },
 })
 
@@ -591,6 +618,7 @@ async function createTask() {
       end_date: form.end_date,
       task_name: form.task_name || undefined,
       target_pct: form.target_pct,
+      target_pct_max: form.target_pct_max,
       horizon_days: form.horizon_days,
       strategy_config_id: form.strategy_config_id,
       use_trace: form.use_trace,

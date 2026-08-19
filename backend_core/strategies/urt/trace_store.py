@@ -319,6 +319,40 @@ def dates_with_trace_coverage(
     return {str(r[0])[:10] for r in rows if r[0]}
 
 
+def marker_covers_universe_request(
+    extra: Optional[Dict[str, Any]],
+    *,
+    want_pool: bool,
+    pool_need: int = 1,
+    min_full_market_codes: int = 500,
+) -> bool:
+    """``__URT_SCANNED__`` 占位是否覆盖当前回测范围。
+
+    股票池扫描（scope=pool、candidates 约百只）不得冒充全市场已覆盖。
+    """
+    extra = extra if isinstance(extra, dict) else {}
+    scope = str(extra.get("scope") or "").strip().lower()
+    try:
+        candidates = extra.get("candidates")
+        cand_n = int(candidates) if candidates is not None else None
+    except (TypeError, ValueError):
+        cand_n = None
+    threshold = max(1, int(min_full_market_codes))
+    if not want_pool:
+        if scope == "pool":
+            return False
+        if cand_n is not None and cand_n < threshold:
+            return False
+        if scope == "full_market":
+            return True
+        return cand_n is not None and cand_n >= threshold
+    if scope == "full_market":
+        return True
+    if scope == "pool":
+        return cand_n is not None and cand_n >= max(1, int(pool_need))
+    return False
+
+
 def dates_ready_for_universe_backtest(
     db: Session,
     *,
@@ -331,7 +365,8 @@ def dates_ready_for_universe_backtest(
     判断回测区间内哪些交易日已具备「全市场/股票池」级预计算，而非仅有零星个股 trace。
 
     就绪条件（满足其一即可）：
-    1. 存在扫描占位 ``__URT_SCANNED__``（表示当日已做过全量扫描）；
+    1. 存在扫描占位 ``__URT_SCANNED__``，且占位范围覆盖本次请求
+       （全市场任务不认 ``scope=pool`` 的小池占位）；
     2. 全市场：当日去重股票数 ≥ min_full_market_codes（默认 500，可用环境变量
        URT_FULL_MARKET_TRACE_MIN_CODES 覆盖）；
     3. 指定股票池：当日覆盖池内代码数 ≥ max(1, ceil(0.8 * len(pool)))。
@@ -344,19 +379,44 @@ def dates_ready_for_universe_backtest(
         return set()
     date_list = [str(d)[:10] for d in dates]
     cid = int(config_id)
+    if min_full_market_codes is None:
+        env_raw = (os.getenv("URT_FULL_MARKET_TRACE_MIN_CODES") or "").strip()
+        min_full_market_codes = int(env_raw) if env_raw.isdigit() else 500
+    threshold = max(1, int(min_full_market_codes))
+    want_pool = bool(stock_pool)
+    pool_need = 1
+    if want_pool:
+        pool_n = len(
+            {
+                str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip()
+                for c in stock_pool
+                if str(c).strip()
+            }
+        )
+        pool_need = max(1, int((pool_n * 4 + 4) // 5))
 
-    # 1) 扫描占位
+    # 1) 扫描占位（按 scope/candidates 过滤，避免小池占位冒充全市场）
     marker_rows = (
-        db.query(URTSignalTrace.date)
+        db.query(URTSignalTrace.date, URTSignalTrace.score_detail)
         .filter(
             URTSignalTrace.config_id == cid,
             URTSignalTrace.code == URT_TRACE_SCANNED_MARKER,
             URTSignalTrace.date.in_(date_list),
         )
-        .distinct()
         .all()
     )
-    ready = {str(r[0])[:10] for r in marker_rows if r[0]}
+    ready = set()
+    for r in marker_rows:
+        d = str(r[0])[:10] if r[0] else ""
+        if not d:
+            continue
+        if marker_covers_universe_request(
+            r[1] if isinstance(r[1], dict) else {},
+            want_pool=want_pool,
+            pool_need=pool_need,
+            min_full_market_codes=threshold,
+        ):
+            ready.add(d)
 
     pending = [d for d in date_list if d not in ready]
     if not pending:
