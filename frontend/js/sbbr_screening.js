@@ -66,6 +66,24 @@
     return !(window.Permission && typeof window.Permission.has === 'function') || window.Permission.has(code);
   }
 
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** 代码列 → 智能分析「个股分析」页（与 URT / 龙头中军同口径） */
+  function stockAnalysisHref(code, name) {
+    const q = new URLSearchParams({ tab: 'stock-ai' });
+    const c = String(code || '').trim();
+    const n = String(name || '').trim();
+    if (c) q.set('code', c);
+    if (n) q.set('name', n);
+    return `analysis.html?${q.toString()}`;
+  }
+
   let lastSignalRows = [];
 
   function renderSignalRows(rows) {
@@ -107,8 +125,12 @@
           r.size_ok === false
             ? '<span class="gms-role-tag" title="未通过做小（市值/流通股）过滤">未过做小</span>'
             : '';
+        const analysisHref = stockAnalysisHref(r.code, r.name);
+        const codeCell = r.code
+          ? `<a class="stock-code gms-stock-code-link" href="${esc(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${esc(r.code)}</a>`
+          : '';
         return `<tr data-sbbr-row="${index}">
-            <td>${r.code || ''}</td>
+            <td class="gms-col-code">${codeCell}</td>
             <td>${r.name || ''}${roleHtml ? ` ${roleHtml}` : ''}${sizeTag ? ` ${sizeTag}` : ''}</td>
             <td>${fmt(r.total_mv)}</td>
             <td>${fmt(r.circ_shares_yi)}</td>
