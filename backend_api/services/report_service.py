@@ -1140,10 +1140,97 @@ class ReportService:
         return y4 >= 3 or y5 >= 4
 
     @staticmethod
+    def _urt_pick_structure(row: Dict[str, Any]) -> Dict[str, Any]:
+        """从选股结果行提取 structure 子对象。"""
+        sd = row.get("score_detail") if isinstance(row.get("score_detail"), dict) else {}
+        st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+        return st if isinstance(st, dict) else {}
+
+    @staticmethod
+    def _urt_pick_support(row: Dict[str, Any]) -> Any:
+        st = ReportService._urt_pick_structure(row)
+        if row.get("nearest_support") is not None:
+            return row.get("nearest_support")
+        levels = row.get("support_levels")
+        if isinstance(levels, list) and levels:
+            return levels[0]
+        if st.get("nearest_support") is not None:
+            return st.get("nearest_support")
+        st_levels = st.get("support_levels")
+        if isinstance(st_levels, list) and st_levels:
+            return st_levels[0]
+        return None
+
+    @staticmethod
+    def _urt_pick_resistance(row: Dict[str, Any]) -> Any:
+        st = ReportService._urt_pick_structure(row)
+        if row.get("nearest_resistance") is not None:
+            return row.get("nearest_resistance")
+        levels = row.get("resistance_levels")
+        if isinstance(levels, list) and levels:
+            return levels[0]
+        if st.get("nearest_resistance") is not None:
+            return st.get("nearest_resistance")
+        st_levels = st.get("resistance_levels")
+        if isinstance(st_levels, list) and st_levels:
+            return st_levels[0]
+        return None
+
+    @staticmethod
+    def _urt_pick_structure_rr(row: Dict[str, Any]) -> Any:
+        st = ReportService._urt_pick_structure(row)
+        if row.get("structure_rr") is not None:
+            return row.get("structure_rr")
+        if st.get("rr") is not None:
+            return st.get("rr")
+        return None
+
+    @staticmethod
+    def _urt_format_risk_tags(row: Dict[str, Any]) -> str:
+        sd = row.get("score_detail") if isinstance(row.get("score_detail"), dict) else {}
+        tags = row.get("risk_tags") if isinstance(row.get("risk_tags"), list) else None
+        if not tags:
+            tags = sd.get("risk_tags") if isinstance(sd.get("risk_tags"), list) else []
+        labels: List[str] = []
+        for t in tags or []:
+            if isinstance(t, dict):
+                lab = str(t.get("label") or "").strip()
+                if lab:
+                    labels.append(lab)
+            elif t:
+                labels.append(str(t).strip())
+        # 去重保序
+        seen = set()
+        out: List[str] = []
+        for lab in labels:
+            if lab in seen:
+                continue
+            seen.add(lab)
+            out.append(lab)
+        return "；".join(out)
+
+    @staticmethod
+    def _urt_format_trade_advice(row: Dict[str, Any]) -> str:
+        sd = row.get("score_detail") if isinstance(row.get("score_detail"), dict) else {}
+        advice = row.get("trade_advice") if isinstance(row.get("trade_advice"), dict) else None
+        if not advice:
+            advice = sd.get("trade_advice") if isinstance(sd.get("trade_advice"), dict) else {}
+        if not isinstance(advice, dict) or not advice:
+            return ""
+        parts: List[str] = []
+        action = str(advice.get("action") or "").strip()
+        if action:
+            parts.append(action)
+        summary = str(advice.get("summary") or "").strip()
+        if summary:
+            parts.append(summary[:120])
+        return "；".join(parts)
+
+    @staticmethod
     def _urt_report_field_legend_rows() -> List[Dict[str, str]]:
         """
         URT 推送 Excel「字段说明」sheet 行数据。
-        与 indicators / scoring / signal_detector / 本文件收录过滤逻辑一致。
+        与 indicators / scoring / signal_detector / 选股页 / 本文件收录过滤逻辑一致。
         """
         return [
             {
@@ -1200,11 +1287,36 @@ class ReportService:
                 ),
             },
             {
+                "字段名": "10日阳",
+                "含义": "近 10 个交易日阳线根数",
+                "计算/取值规则": (
+                    "中期阳线硬筛窗口之一；默认阈值 ≥6（use_yang_medium=true 时须与 15/20 日窗口一并满足）。"
+                ),
+            },
+            {
+                "字段名": "15日阳",
+                "含义": "近 15 个交易日阳线根数",
+                "计算/取值规则": "中期阳线硬筛窗口之一；默认阈值 ≥8。",
+            },
+            {
+                "字段名": "20日阳",
+                "含义": "近 20 个交易日阳线根数",
+                "计算/取值规则": "中期阳线硬筛窗口之一；默认阈值 ≥10。",
+            },
+            {
+                "字段名": "多头",
+                "含义": "短中期均线是否多头排列",
+                "计算/取值规则": (
+                    "是=MA5>MA10>MA20；缺省 require_ma_bull=true 时作为硬筛条件；"
+                    "空头排列另以风险标签提示。"
+                ),
+            },
+            {
                 "字段名": "量能倍数",
                 "含义": "当日成交量相对近均量的倍数",
                 "计算/取值规则": (
                     "当日成交量 / 过去 volume_lookback（默认 20）日均量（不含当日）；"
-                    "硬筛默认要求 ≥ volume_multiple（默认 2.5）。"
+                    "硬筛默认要求 ≥ volume_multiple（缺省 3.0）；打分约在 4.0 倍附近拉满分项。"
                 ),
             },
             {
@@ -1219,35 +1331,74 @@ class ReportService:
                 "字段名": "换手%",
                 "含义": "信号日换手率（%）",
                 "计算/取值规则": (
-                    "取行情库当日 turnover_rate；默认不参与硬筛与加分"
-                    "（use_turnover=false）；开启后须 ≥ min_turnover。"
+                    "取行情库当日 turnover_rate；缺省硬筛 ≥ min_turnover（默认 3%）；"
+                    "积分按相对近 20 日中位甜区加分，过高则减分并可能打风险标签。"
+                ),
+            },
+            {
+                "字段名": "支撑",
+                "含义": "信号日最近结构支撑价",
+                "计算/取值规则": (
+                    "与个股关键价位同口径（结构窗 KDE + 共振）；取 nearest_support；"
+                    "用于结构硬闸与结构出场止损参考。"
+                ),
+            },
+            {
+                "字段名": "阻力",
+                "含义": "信号日最近结构阻力价",
+                "计算/取值规则": (
+                    "同口径取 nearest_resistance；贴/超阻力或上行空间不足（缺省 <3%）可硬闸否决买点。"
+                ),
+            },
+            {
+                "字段名": "结构盈亏比",
+                "含义": "结构上行空间 / 下行风险（无量纲 RR）",
+                "计算/取值规则": (
+                    "RR=上行/max(价−支撑, 现价×下限%, k×ATR)；偏低时仅软提示，不单独否决买点；"
+                    "参与位置与 RR 得分分项。"
+                ),
+            },
+            {
+                "字段名": "风险",
+                "含义": "结构/趋势/过热/换手等风险标签",
+                "计算/取值规则": (
+                    "多标签以「；」拼接，如：破位支撑、贴/超阻力、上行空间不足、悬空离支撑、"
+                    "结构盈亏比偏低、近期涨幅偏大/过大、均线乖离偏大/过大、空头趋势、换手过高等。"
+                    "其中破位/贴阻力/上行不足/悬空/涨幅过大/乖离过大等可构成硬闸否决正式买点。"
                 ),
             },
             {
                 "字段名": "得分",
                 "含义": "URT 综合得分（上限 100）",
                 "计算/取值规则": (
-                    "分项合计后封顶 100："
-                    "站上 MA20 得 10；连阳强度最高 40（5日≥5→40，≥4→36，4日≥4→34，≥3→30，否则 4日阳×8）；"
-                    "量能最高约 34；中期阳线（10/15/20）最高约 6；均线多头（MA5>MA10>MA20）最高约 4；"
-                    "可选换手/量比各最多 5（须配置开启）。买点另要求得分 ≥ min_score（默认 70）。"
-                    "中期阳线/多头默认不硬筛，可在配置开启。"
+                    "分项合计后封顶 100（约）：MA20 趋势≤10；连阳天数≤20；K 线实体质量≤10；"
+                    "量能倍数≤25；中期阳线≤5；均线多头 +0～8 / 空头 −8；筹码位置与 RR≤15；"
+                    "换手 +8/−8；可选量比≤5；过热扣分约 −10～0。"
+                    "正式买点另要求得分 ≥ min_score（默认 70）。满分≠已贴近最优买点。"
                 ),
             },
             {
                 "字段名": "是否买点",
                 "含义": "当日是否发出 URT 正式买点",
                 "计算/取值规则": (
-                    "是=硬筛全部通过 且 得分≥min_score；"
-                    "硬筛默认：站上 MA20 ∧ 连阳(4日≥3或5日≥4) ∧ 量能倍数≥阈值"
-                    "（可选换手/量比/中期阳线/多头）。否=未达买点但仍可能因短连阳条件被本表收录。"
+                    "是=硬筛全部通过 ∧ 结构硬闸通过 ∧ 过热硬闸通过 ∧ 得分≥min_score；"
+                    "硬筛缺省：站上 MA20 ∧ 连阳(4日≥3或5日≥4) ∧ 量能倍数≥阈值 ∧ 中期阳线 ∧ 多头 ∧ 换手≥3%。"
+                    "否=未达正式买点，但仍可能因连阳条件被本表收录（观察补充，不可作回测入场）。"
+                ),
+            },
+            {
+                "字段名": "买点建议",
+                "含义": "基于结构位的短线执行提示摘要",
+                "计算/取值规则": (
+                    "来自 trade_advice：动作 + summary 摘要（截断）；"
+                    "正式买点可提示现价跟进或回踩承接；未达买点多为观察类文案。"
                 ),
             },
         ]
 
     @staticmethod
     def _urt_report_excel_row(r: Dict[str, Any], *, report_date: str, code_to_name: Dict[str, str]) -> Dict[str, Any]:
-        """对齐选股页导出列：代码/名称/信号日/收盘/MA20/4日阳/5日阳/量能倍数/量比/换手%/得分。"""
+        """对齐选股页列 + 正式买点/建议：中期阳线、多头、支撑/阻力、RR、风险等。"""
         code = str(r.get("code") or "").strip()
         if code.isdigit():
             code = code.zfill(6)
@@ -1270,6 +1421,14 @@ class ReportService:
             except (TypeError, ValueError):
                 return ""
 
+        ma_bull = r.get("ma_bull_ok")
+        if ma_bull is True:
+            ma_bull_txt = "是"
+        elif ma_bull is False:
+            ma_bull_txt = "否"
+        else:
+            ma_bull_txt = ""
+
         return {
             "股票代码": "\u2060" + str(code),
             "股票名称": name,
@@ -1278,11 +1437,20 @@ class ReportService:
             "MA20": _round(r.get("ma20"), 2),
             "4日阳": _int_or_blank(r.get("yang_count_4")),
             "5日阳": _int_or_blank(r.get("yang_count_5")),
+            "10日阳": _int_or_blank(r.get("yang_count_10")),
+            "15日阳": _int_or_blank(r.get("yang_count_15")),
+            "20日阳": _int_or_blank(r.get("yang_count_20")),
+            "多头": ma_bull_txt,
             "量能倍数": _round(r.get("volume_multiple"), 2),
             "量比": _round(r.get("volume_ratio"), 2),
             "换手%": _round(r.get("turnover_rate"), 2),
+            "支撑": _round(ReportService._urt_pick_support(r), 2),
+            "阻力": _round(ReportService._urt_pick_resistance(r), 2),
+            "结构盈亏比": _round(ReportService._urt_pick_structure_rr(r), 2),
+            "风险": ReportService._urt_format_risk_tags(r),
             "得分": _round(r.get("score"), 1),
             "是否买点": "是" if bool(r.get("buy_signal")) else "否",
+            "买点建议": ReportService._urt_format_trade_advice(r),
         }
 
     def _generate_urt_report_for_user(
@@ -1294,7 +1462,7 @@ class ReportService:
         收录：
         1) 当日买点；
         2) 无买点但满足连阳硬筛（4日≥3阳 或 5日≥4阳）的自选股。
-        列对齐选股页：代码/名称/信号日/收盘/MA20/4日阳/5日阳/量能倍数/量比/换手%/得分。
+        列对齐选股页：代码/名称/信号日/收盘/MA20/4～20日阳/多头/量能倍数/量比/换手%/支撑/阻力/结构盈亏比/风险/得分/是否买点/买点建议。
 
         stock_codes: 推送任务可选子集；None 表示该用户全部自选股。
         """
@@ -1477,17 +1645,26 @@ class ReportService:
                     title_to_col[str(cell.value).strip()] = cell.column
             desired = {
                 "股票代码": 12,
-                "股票名称": 16,
-                "信号日": 13,
-                "收盘": 10,
-                "MA20": 10,
+                "股票名称": 14,
+                "信号日": 12,
+                "收盘": 9,
+                "MA20": 9,
                 "4日阳": 8,
                 "5日阳": 8,
+                "10日阳": 8,
+                "15日阳": 8,
+                "20日阳": 8,
+                "多头": 6,
                 "量能倍数": 10,
-                "量比": 10,
-                "换手%": 10,
-                "得分": 10,
+                "量比": 8,
+                "换手%": 8,
+                "支撑": 9,
+                "阻力": 9,
+                "结构盈亏比": 10,
+                "风险": 28,
+                "得分": 8,
                 "是否买点": 10,
+                "买点建议": 36,
             }
             for title, width in desired.items():
                 col_idx = title_to_col.get(title)

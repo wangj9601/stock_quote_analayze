@@ -295,11 +295,19 @@
     panel.style.display = visible ? 'block' : 'none';
     if (!visible) {
       panel.innerHTML = '';
+      panel._lastRolesPayloads = [];
+      panel._lastRolesMeta = null;
       return;
     }
     if (opts.data && typeof opts.data === 'object') {
       const data = Object.assign({}, opts.data);
       if (!data.board_name && !data.board_code && codes[0]) data.board_code = codes[0];
+      panel._lastRolesPayloads = [data];
+      panel._lastRolesMeta = {
+        boardType: opts.boardType,
+        boardCodeSource: opts.boardCodeSource || 'tonghuashun',
+        fetchedAt: new Date().toISOString(),
+      };
       panel.innerHTML =
         variant === 'shortline' ? renderShortlineRoles(data, actionOpts) : renderBoardBlock(data);
       if (actionOpts.showGmsWatchlistActions) {
@@ -319,11 +327,13 @@
     const MAX_BOARD_ROLES = 200;
     const displayCodes = codes.slice(0, MAX_BOARD_ROLES);
     const parts = [];
+    const fetched = [];
     for (const code of displayCodes) {
       try {
         const data = await fetchBoardRoles(opts.boardType, code, source);
         if (!data.board_code) data.board_code = code;
         if (!data.board_name) data.board_name = code;
+        fetched.push(data);
         parts.push(
           variant === 'shortline' ? renderShortlineRoles(data, actionOpts) : renderBoardBlock(data)
         );
@@ -336,6 +346,12 @@
         );
       }
     }
+    panel._lastRolesPayloads = fetched;
+    panel._lastRolesMeta = {
+      boardType: opts.boardType,
+      boardCodeSource: source,
+      fetchedAt: new Date().toISOString(),
+    };
     if (codes.length > MAX_BOARD_ROLES) {
       parts.push(
         `<div class="gms-muted">已选 ${codes.length} 个板块，仅展示前 ${MAX_BOARD_ROLES} 个的龙头/中军</div>`
@@ -359,5 +375,13 @@
     fetchBoardRoles,
     renderShortlineRoles,
     addToGmsStrategyWatchlist,
+    getLastRolesPayloads(panelId) {
+      const panel = document.getElementById(panelId || 'lmRolesHost');
+      if (!panel) return { payloads: [], meta: null };
+      return {
+        payloads: Array.isArray(panel._lastRolesPayloads) ? panel._lastRolesPayloads : [],
+        meta: panel._lastRolesMeta || null,
+      };
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

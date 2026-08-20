@@ -11,6 +11,31 @@ import pandas as pd
 from backend_api.services.report_service import ReportService
 
 
+URT_EXCEL_COLUMNS = [
+    "股票代码",
+    "股票名称",
+    "信号日",
+    "收盘",
+    "MA20",
+    "4日阳",
+    "5日阳",
+    "10日阳",
+    "15日阳",
+    "20日阳",
+    "多头",
+    "量能倍数",
+    "量比",
+    "换手%",
+    "支撑",
+    "阻力",
+    "结构盈亏比",
+    "风险",
+    "得分",
+    "是否买点",
+    "买点建议",
+]
+
+
 def test_urt_row_meets_report_filter_buy_or_yang():
     assert ReportService._urt_row_meets_report_filter({"buy_signal": True, "yang_count_4": 0, "yang_count_5": 0})
     assert ReportService._urt_row_meets_report_filter({"buy_signal": False, "yang_count_4": 3, "yang_count_5": 1})
@@ -30,32 +55,69 @@ def test_urt_report_excel_row_columns_match_screening():
             "ma20": 6.74,
             "yang_count_4": 3,
             "yang_count_5": 3,
+            "yang_count_10": 7,
+            "yang_count_15": 9,
+            "yang_count_20": 12,
+            "ma_bull_ok": True,
             "volume_multiple": 8.91,
             "volume_ratio": 2.18,
             "turnover_rate": 9.19,
+            "nearest_support": 7.80,
+            "nearest_resistance": 8.90,
+            "structure_rr": 2.35,
+            "risk_tags": [{"label": "结构盈亏比偏低"}, {"label": "近期涨幅偏大"}],
             "score": 80.0,
             "buy_signal": True,
+            "trade_advice": {"action": "回踩承接", "summary": "贴近支撑可关注"},
         },
         report_date="2026-07-27",
         code_to_name={},
     )
-    assert list(row.keys()) == [
-        "股票代码",
-        "股票名称",
-        "信号日",
-        "收盘",
-        "MA20",
-        "4日阳",
-        "5日阳",
-        "量能倍数",
-        "量比",
-        "换手%",
-        "得分",
-        "是否买点",
-    ]
+    assert list(row.keys()) == URT_EXCEL_COLUMNS
     assert row["股票代码"].endswith("000011")
     assert row["4日阳"] == 3
+    assert row["10日阳"] == 7
+    assert row["多头"] == "是"
+    assert row["支撑"] == 7.8
+    assert row["阻力"] == 8.9
+    assert row["结构盈亏比"] == 2.35
+    assert "结构盈亏比偏低" in row["风险"]
     assert row["是否买点"] == "是"
+    assert "回踩承接" in row["买点建议"]
+
+
+def test_urt_report_excel_row_reads_nested_score_detail():
+    row = ReportService._urt_report_excel_row(
+        {
+            "code": "000001",
+            "name": "平安银行",
+            "signal_date": "2026-08-19",
+            "close": 10.0,
+            "ma20": 9.5,
+            "yang_count_4": 3,
+            "yang_count_5": 4,
+            "volume_multiple": 3.2,
+            "score": 72.0,
+            "buy_signal": False,
+            "score_detail": {
+                "structure": {
+                    "nearest_support": 9.2,
+                    "nearest_resistance": 10.8,
+                    "rr": 1.8,
+                },
+                "risk_tags": [{"label": "上行空间不足"}],
+                "trade_advice": {"action": "仅观察", "summary": "未达正式买点"},
+            },
+        },
+        report_date="2026-08-19",
+        code_to_name={},
+    )
+    assert row["支撑"] == 9.2
+    assert row["阻力"] == 10.8
+    assert row["结构盈亏比"] == 1.8
+    assert row["风险"] == "上行空间不足"
+    assert row["是否买点"] == "否"
+    assert "仅观察" in row["买点建议"]
 
 
 def test_urt_report_field_legend_covers_excel_columns():
@@ -65,26 +127,14 @@ def test_urt_report_field_legend_covers_excel_columns():
     assert list(legend[0].keys()) == ["字段名", "含义", "计算/取值规则"]
     names = [r["字段名"] for r in legend]
     assert "（列表收录）" in names
-    for col in (
-        "股票代码",
-        "股票名称",
-        "信号日",
-        "收盘",
-        "MA20",
-        "4日阳",
-        "5日阳",
-        "量能倍数",
-        "量比",
-        "换手%",
-        "得分",
-        "是否买点",
-    ):
+    for col in URT_EXCEL_COLUMNS:
         assert col in names
-    # 关键计算口径应出现在说明文案中
     text = "\n".join(f"{r['含义']}|{r['计算/取值规则']}" for r in legend)
     assert "close>open" in text
     assert "volume_lookback" in text
     assert "min_score" in text
+    assert "结构硬闸" in text or "过热硬闸" in text
+    assert "3.0" in text
     assert "4日阳≥3" in text or "4日≥3" in text
 
 
@@ -112,11 +162,20 @@ def test_generate_urt_report_includes_non_buy_yang_watchlist(tmp_path):
                 "ma20": 6.74,
                 "yang_count_4": 3,
                 "yang_count_5": 3,
+                "yang_count_10": 7,
+                "yang_count_15": 9,
+                "yang_count_20": 12,
+                "ma_bull_ok": True,
                 "volume_multiple": 8.91,
                 "volume_ratio": 2.18,
                 "turnover_rate": 9.19,
+                "nearest_support": 7.8,
+                "nearest_resistance": 8.9,
+                "structure_rr": 2.5,
+                "risk_tags": [],
                 "score": 80.0,
                 "buy_signal": True,
+                "trade_advice": {"action": "现价附近可跟", "summary": "正式买点"},
             },
             {
                 "code": "000533",
@@ -126,6 +185,10 @@ def test_generate_urt_report_includes_non_buy_yang_watchlist(tmp_path):
                 "ma20": 8.80,
                 "yang_count_4": 3,
                 "yang_count_5": 4,
+                "yang_count_10": 6,
+                "yang_count_15": 8,
+                "yang_count_20": 10,
+                "ma_bull_ok": True,
                 "volume_multiple": 3.05,
                 "volume_ratio": 7.87,
                 "turnover_rate": 9.51,
@@ -133,6 +196,10 @@ def test_generate_urt_report_includes_non_buy_yang_watchlist(tmp_path):
                 "buy_signal": False,  # 无买点，但满足 5日≥4阳，应收录
                 "rule_a_ok": True,
                 "rule_b_ok": True,
+                "score_detail": {
+                    "structure": {"nearest_support": 9.9, "nearest_resistance": 11.2, "rr": 1.2},
+                    "risk_tags": [{"label": "结构盈亏比偏低"}],
+                },
             },
             {
                 "code": "000001",
@@ -160,30 +227,18 @@ def test_generate_urt_report_includes_non_buy_yang_watchlist(tmp_path):
     assert result.file_path
     assert result.report_info and result.report_info.stock_count == 2
     df = pd.read_excel(result.file_path, sheet_name="URT策略信号列表")
-    assert list(df.columns)[:11] == [
-        "股票代码",
-        "股票名称",
-        "信号日",
-        "收盘",
-        "MA20",
-        "4日阳",
-        "5日阳",
-        "量能倍数",
-        "量比",
-        "换手%",
-        "得分",
-    ]
-    assert "是否买点" in df.columns
+    assert list(df.columns) == URT_EXCEL_COLUMNS
     codes = [str(c).replace("\u2060", "").zfill(6) for c in df["股票代码"].tolist()]
     assert codes == ["000011", "000533"]
     assert df["是否买点"].tolist() == ["是", "否"]
+    assert float(df.loc[0, "支撑"]) == 7.8
+    assert "结构盈亏比偏低" in str(df.loc[1, "风险"])
 
     legend = pd.read_excel(result.file_path, sheet_name="字段说明")
     assert list(legend.columns) == ["字段名", "含义", "计算/取值规则"]
     legend_names = legend["字段名"].astype(str).tolist()
-    assert "是否买点" in legend_names
-    assert "量能倍数" in legend_names
-    assert "得分" in legend_names
+    for col in ("是否买点", "量能倍数", "得分", "支撑", "阻力", "结构盈亏比", "风险", "买点建议"):
+        assert col in legend_names
     assert any("收录" in n for n in legend_names)
 
 

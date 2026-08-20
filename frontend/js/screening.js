@@ -6415,7 +6415,7 @@ const ScreeningPage = {
             headers = [
                 '股票代码', '股票名称', '信号日', '收盘', 'MA20', '4日阳', '5日阳',
                 '10日阳', '15日阳', '20日阳', '多头',
-                '量能倍数', '量比', '换手%', '支撑', '阻力', '得分',
+                '量能倍数', '量比', '换手%', '支撑', '阻力', '结构盈亏比', '风险', '得分', '是否买点', '买点建议',
             ];
             rows = data.map((stock) => {
                 const sd = stock.score_detail && typeof stock.score_detail === 'object' ? stock.score_detail : {};
@@ -6430,6 +6430,15 @@ const ScreeningPage = {
                     : (Array.isArray(stock.resistance_levels) && stock.resistance_levels.length
                         ? stock.resistance_levels[0]
                         : st.nearest_resistance);
+                const rr = stock.structure_rr != null ? stock.structure_rr : st.rr;
+                const riskTags = Array.isArray(stock.risk_tags) && stock.risk_tags.length
+                    ? stock.risk_tags
+                    : (Array.isArray(sd.risk_tags) ? sd.risk_tags : []);
+                const riskText = riskTags.map((t) => (t && typeof t === 'object' ? (t.label || '') : String(t || ''))).filter(Boolean).join('；');
+                const advice = (stock.trade_advice && typeof stock.trade_advice === 'object')
+                    ? stock.trade_advice
+                    : ((sd.trade_advice && typeof sd.trade_advice === 'object') ? sd.trade_advice : {});
+                const adviceText = [advice.action, advice.summary].filter(Boolean).join('；');
                 return [
                 `\u2060${stock.code}`,
                 stock.name,
@@ -6447,7 +6456,11 @@ const ScreeningPage = {
                 stock.turnover_rate != null ? Number(stock.turnover_rate).toFixed(2) : '',
                 support != null && Number.isFinite(Number(support)) ? Number(support).toFixed(2) : '',
                 resist != null && Number.isFinite(Number(resist)) ? Number(resist).toFixed(2) : '',
+                rr != null && Number.isFinite(Number(rr)) ? Number(rr).toFixed(2) : '',
+                riskText,
                 stock.score != null ? Number(stock.score).toFixed(1) : '',
+                stock.buy_signal === true ? '是' : (stock.buy_signal === false ? '否' : ''),
+                adviceText,
                 ];
             });
             filename = `上升趋势策略筛选结果_${new Date().toISOString().split('T')[0]}.csv`;

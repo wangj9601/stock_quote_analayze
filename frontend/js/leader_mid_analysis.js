@@ -36,6 +36,7 @@ const LeaderMidAnalysis = {
           b.classList.toggle('active', b === btn);
         });
         this.selectedBoardCodes = [];
+        this.lastResult = null;
         this.clearMeta();
         this.updateBoardSummary();
         const host = document.getElementById('lmResults');
@@ -52,6 +53,10 @@ const LeaderMidAnalysis = {
     const runBtn = document.getElementById('lmRunBtn');
     if (runBtn) {
       runBtn.addEventListener('click', () => this.runQuery());
+    }
+    const exportBtn = document.getElementById('lmExportExcelBtn');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => this.exportExcel());
     }
 
     const overlay = document.getElementById('lmBoardPickerModal');
@@ -245,6 +250,7 @@ const LeaderMidAnalysis = {
 
   confirmBoardPicker() {
     this.selectedBoardCodes = Array.from(this._pickerDraft);
+    this.lastResult = null;
     this.updateBoardSummary();
     this.hideBoardPicker();
     this.clearMeta();
@@ -565,6 +571,412 @@ const LeaderMidAnalysis = {
       return `<td><span class="lm-hit lm-hit--yes" title="${this.escAttr(c.label || '命中')}">${this.esc(c.label || '命中')}</span></td>`;
     }
     return '<td><span class="lm-hit lm-hit--no">--</span></td>';
+  },
+
+  /** ---------- Excel 导出（业界扁平明细 + 板块汇总 + 字段说明） ---------- */
+
+  toast(msg, type) {
+    if (window.CommonUtils) CommonUtils.showToast(msg, type || 'info');
+    else if (type === 'error' || type === 'warning') alert(msg);
+  },
+
+  fmtPctNum(v) {
+    if (v == null || v === '' || !Number.isFinite(Number(v))) return '';
+    return Math.round(Number(v) * 100) / 100;
+  },
+
+  fmtPctText(v) {
+    if (v == null || v === '' || !Number.isFinite(Number(v))) return '';
+    const n = Number(v);
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${n.toFixed(2)}%`;
+  },
+
+  hitLabel(cell) {
+    const c = cell && typeof cell === 'object' ? cell : {};
+    if (c.hit) return c.label || '命中';
+    return '';
+  },
+
+  /** 从角色面板缓存构建明细行 */
+  buildRowsFromRolesPanel() {
+    if (!window.BoardRolesPanel || typeof BoardRolesPanel.getLastRolesPayloads !== 'function') {
+      return { rows: [], boards: [], kindLabel: this.boardKind === 'concept' ? '概念' : '行业' };
+    }
+    const { payloads } = BoardRolesPanel.getLastRolesPayloads('lmRolesHost');
+    const kindLabel = this.boardKind === 'concept' ? '概念' : '行业';
+    const rows = [];
+    const boards = [];
+    (payloads || []).forEach((data) => {
+      const boardCode = String(data.board_code || '').trim();
+      const boardName = String(data.board_name || boardCode).trim();
+      const boardChg = data.board_change_percent_est;
+      const leaders = Array.isArray(data.leaders)
+        ? data.leaders
+        : data.leader
+          ? [data.leader]
+          : [];
+      const mids = Array.isArray(data.mids) ? data.mids : data.mid ? [data.mid] : [];
+      boards.push({
+        board_code: boardCode,
+        board_name: boardName,
+        board_change_percent_est: boardChg,
+        leader_count: leaders.length,
+        mid_count: mids.length,
+        stock_count: leaders.length + mids.length,
+      });
+      const pushStock = (s, role, roleLabel) => {
+        const code = String(s.code || s.stock_code || '').trim();
+        if (!code) return;
+        rows.push({
+          board_kind: kindLabel,
+          board_code: boardCode,
+          board_name: boardName,
+          board_change_percent_est: boardChg,
+          board_role: role,
+          board_role_label: roleLabel,
+          code,
+          name: s.name || s.stock_name || '',
+          change_percent: s.change_percent,
+          role_reason: s.role_reason || '',
+          board_role_score: s.role_score != null ? s.role_score : s.board_role_score,
+          any_hit: false,
+          hit_count: '',
+          hits: {},
+        });
+      };
+      leaders.forEach((s) => pushStock(s, 'leader', '龙头'));
+      mids.forEach((s) => pushStock(s, 'mid', '中军'));
+    });
+    return { rows, boards, kindLabel };
+  },
+
+  /** 从「查询命中」结果构建明细行（含策略命中） */
+  buildRowsFromHitResult() {
+    const data = this.lastResult;
+    if (!data || !Array.isArray(data.items) || !data.items.length) {
+      return null;
+    }
+    const board = data.board || {};
+    const kindLabel = board.board_kind === 'concept' ? '概念' : '行业';
+    const multi = !!(board.multi_boards || board.all_boards);
+    const rows = data.items.map((row) => {
+      const hits = row.hits || {};
+      return {
+        board_kind: kindLabel,
+        board_code: multi
+          ? String(row.board_codes || row.board_code || '').trim()
+          : String(board.board_code || row.board_code || '').trim(),
+        board_name: multi
+          ? String(row.board_labels || row.board_name || '').trim()
+          : String(board.board_name || row.board_name || '').trim(),
+        board_change_percent_est: multi ? null : board.board_change_percent_est,
+        board_role: row.board_role,
+        board_role_label: row.board_role_label || row.board_role || '',
+        code: String(row.code || '').trim(),
+        name: row.name || '',
+        change_percent: row.change_percent,
+        last_close: row.last_close,
+        kde_support: row.kde_support,
+        kde_resistance: row.kde_resistance,
+        role_reason: row.role_reason || '',
+        board_role_score: row.board_role_score,
+        any_hit: !!row.any_hit,
+        hit_count: row.hit_count != null ? row.hit_count : 0,
+        hits,
+        asof: data.asof || '',
+      };
+    });
+    // 按板块汇总
+    const boardMap = new Map();
+    rows.forEach((r) => {
+      const key = `${r.board_code}|${r.board_name}`;
+      if (!boardMap.has(key)) {
+        boardMap.set(key, {
+          board_code: r.board_code,
+          board_name: r.board_name,
+          board_change_percent_est: r.board_change_percent_est,
+          leader_count: 0,
+          mid_count: 0,
+          stock_count: 0,
+          hit_stock_count: 0,
+        });
+      }
+      const b = boardMap.get(key);
+      b.stock_count += 1;
+      if (String(r.board_role).toLowerCase() === 'leader') b.leader_count += 1;
+      else b.mid_count += 1;
+      if (r.any_hit) b.hit_stock_count += 1;
+    });
+    return {
+      rows,
+      boards: Array.from(boardMap.values()),
+      kindLabel,
+      withHits: true,
+      asof: data.asof || '',
+      meta: {
+        leader_count: data.leader_count,
+        mid_count: data.mid_count,
+        role_count: data.role_count,
+        board_name: board.board_name,
+        board_count: board.board_count,
+      },
+    };
+  },
+
+  sortExportRows(rows) {
+    return rows.slice().sort((a, b) => {
+      const bn = String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh');
+      if (bn !== 0) return bn;
+      const ra = String(a.board_role).toLowerCase() === 'leader' ? 0 : 1;
+      const rb = String(b.board_role).toLowerCase() === 'leader' ? 0 : 1;
+      if (ra !== rb) return ra - rb;
+      const ca = Number(a.change_percent);
+      const cb = Number(b.change_percent);
+      const na = Number.isFinite(ca) ? ca : -Infinity;
+      const nb = Number.isFinite(cb) ? cb : -Infinity;
+      if (nb !== na) return nb - na;
+      return String(a.code || '').localeCompare(String(b.code || ''));
+    });
+  },
+
+  setSheetCols(ws, widths) {
+    ws['!cols'] = widths.map((w) => ({ wch: w }));
+  },
+
+  freezeHeader(ws) {
+    ws['!views'] = [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', workbookViewId: 0 }];
+  },
+
+  async exportExcel() {
+    let pack = this.buildRowsFromHitResult();
+    let source = 'hit';
+    if (!pack || !pack.rows.length) {
+      pack = this.buildRowsFromRolesPanel();
+      source = 'roles';
+    }
+    if (!pack.rows.length) {
+      this.toast('暂无可导出的龙头/中军，请先选择板块加载角色，或点击「查询命中」', 'warning');
+      return;
+    }
+
+    const btn = document.getElementById('lmExportExcelBtn');
+    const prevText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '导出中…';
+    }
+
+    try {
+      if (typeof window.ensureSheetJsLoaded === 'function') {
+        await window.ensureSheetJsLoaded();
+      }
+      if (typeof XLSX === 'undefined') {
+        throw new Error('Excel 组件未加载，请刷新页面后重试');
+      }
+
+      const rows = this.sortExportRows(pack.rows);
+      const withHits = !!pack.withHits;
+      const kindLabel = pack.kindLabel || (this.boardKind === 'concept' ? '概念' : '行业');
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(today.getHours()).padStart(2, '0')}${String(today.getMinutes()).padStart(2, '0')}`;
+
+      const leaderN = rows.filter((r) => String(r.board_role).toLowerCase() === 'leader').length;
+      const midN = rows.length - leaderN;
+      const boardN = pack.boards.length;
+
+      // ---- Sheet1: 概览 ----
+      const overview = [
+        ['龙头中军导出报告'],
+        [],
+        ['导出时间', `${dateStr} ${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`],
+        ['板块类型', kindLabel === '概念' ? '概念板块' : '行业板块'],
+        ['数据来源', source === 'hit' ? '查询命中结果（含策略命中）' : '短线角色面板（龙头/中军）'],
+        ['基准日', pack.asof || ''],
+        ['板块数', boardN],
+        ['股票数（去重前明细行）', rows.length],
+        ['其中龙头', leaderN],
+        ['其中中军', midN],
+        [],
+        ['说明', '「明细」按板块→角色（龙头优先）→涨跌幅降序排列；「板块汇总」按板块汇总龙头/中军数量。'],
+      ];
+      const wsOverview = XLSX.utils.aoa_to_sheet(overview);
+      this.setSheetCols(wsOverview, [18, 48]);
+
+      // ---- Sheet2: 明细 ----
+      const detailHeaders = withHits
+        ? [
+            '序号',
+            '板块类型',
+            '板块名称',
+            '板块代码',
+            '角色',
+            '股票代码',
+            '股票名称',
+            '涨跌幅(%)',
+            '收盘价',
+            'KDE支撑',
+            'KDE压力',
+            'GMS',
+            'URT',
+            'SBBR',
+            'RPE',
+            '命中数',
+            '角色说明',
+          ]
+        : [
+            '序号',
+            '板块类型',
+            '板块名称',
+            '板块代码',
+            '角色',
+            '股票代码',
+            '股票名称',
+            '涨跌幅(%)',
+            '板涨跌估(%)',
+            '角色说明',
+          ];
+      const detailAoa = [detailHeaders];
+      rows.forEach((r, idx) => {
+        const codeCell = '\u2060' + String(r.code || '');
+        if (withHits) {
+          const hits = r.hits || {};
+          detailAoa.push([
+            idx + 1,
+            r.board_kind || kindLabel,
+            r.board_name || '',
+            r.board_code || '',
+            r.board_role_label || (String(r.board_role).toLowerCase() === 'leader' ? '龙头' : '中军'),
+            codeCell,
+            r.name || '',
+            this.fmtPctNum(r.change_percent),
+            r.last_close != null && Number.isFinite(Number(r.last_close))
+              ? Math.round(Number(r.last_close) * 100) / 100
+              : '',
+            r.kde_support != null && Number.isFinite(Number(r.kde_support))
+              ? Math.round(Number(r.kde_support) * 100) / 100
+              : '',
+            r.kde_resistance != null && Number.isFinite(Number(r.kde_resistance))
+              ? Math.round(Number(r.kde_resistance) * 100) / 100
+              : '',
+            this.hitLabel(hits.gms),
+            this.hitLabel(hits.urt),
+            this.hitLabel(hits.sbbr),
+            this.hitLabel(hits.rpe),
+            r.hit_count !== '' && r.hit_count != null ? r.hit_count : 0,
+            r.role_reason || '',
+          ]);
+        } else {
+          detailAoa.push([
+            idx + 1,
+            r.board_kind || kindLabel,
+            r.board_name || '',
+            r.board_code || '',
+            r.board_role_label || (String(r.board_role).toLowerCase() === 'leader' ? '龙头' : '中军'),
+            codeCell,
+            r.name || '',
+            this.fmtPctNum(r.change_percent),
+            this.fmtPctNum(r.board_change_percent_est),
+            r.role_reason || '',
+          ]);
+        }
+      });
+      const wsDetail = XLSX.utils.aoa_to_sheet(detailAoa);
+      this.freezeHeader(wsDetail);
+      this.setSheetCols(
+        wsDetail,
+        withHits
+          ? [6, 10, 18, 12, 8, 12, 12, 10, 10, 10, 10, 10, 10, 10, 10, 8, 28]
+          : [6, 10, 18, 12, 8, 12, 12, 10, 12, 28]
+      );
+
+      // ---- Sheet3: 板块汇总 ----
+      const sumHeaders = withHits
+        ? ['序号', '板块名称', '板块代码', '龙头数', '中军数', '合计', '命中策略股数', '板涨跌估(%)']
+        : ['序号', '板块名称', '板块代码', '龙头数', '中军数', '合计', '板涨跌估(%)'];
+      const sumAoa = [sumHeaders];
+      const boardsSorted = (pack.boards || []).slice().sort((a, b) =>
+        String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh')
+      );
+      boardsSorted.forEach((b, idx) => {
+        if (withHits) {
+          sumAoa.push([
+            idx + 1,
+            b.board_name || '',
+            b.board_code || '',
+            b.leader_count || 0,
+            b.mid_count || 0,
+            b.stock_count || 0,
+            b.hit_stock_count || 0,
+            this.fmtPctNum(b.board_change_percent_est),
+          ]);
+        } else {
+          sumAoa.push([
+            idx + 1,
+            b.board_name || '',
+            b.board_code || '',
+            b.leader_count || 0,
+            b.mid_count || 0,
+            b.stock_count || 0,
+            this.fmtPctNum(b.board_change_percent_est),
+          ]);
+        }
+      });
+      // 合计行
+      const totL = boardsSorted.reduce((s, b) => s + (b.leader_count || 0), 0);
+      const totM = boardsSorted.reduce((s, b) => s + (b.mid_count || 0), 0);
+      const totH = boardsSorted.reduce((s, b) => s + (b.hit_stock_count || 0), 0);
+      if (withHits) {
+        sumAoa.push(['合计', '', '', totL, totM, totL + totM, totH, '']);
+      } else {
+        sumAoa.push(['合计', '', '', totL, totM, totL + totM, '']);
+      }
+      const wsSum = XLSX.utils.aoa_to_sheet(sumAoa);
+      this.freezeHeader(wsSum);
+      this.setSheetCols(wsSum, withHits ? [6, 20, 14, 8, 8, 8, 12, 12] : [6, 20, 14, 8, 8, 8, 12]);
+
+      // ---- Sheet4: 字段说明 ----
+      const legend = [
+        ['字段名', '说明'],
+        ['板块类型', '行业板块或概念板块'],
+        ['板块名称 / 板块代码', '同花顺口径板块标识'],
+        ['角色', '龙头=板块短线领涨核心；中军=板块核心跟涨力量'],
+        ['股票代码', 'A 股六位代码（文本格式，保留前导零）'],
+        ['涨跌幅(%)', '相对前收盘涨跌幅，数值列便于筛选排序'],
+        ['板涨跌估(%)', '板块强度估算（成分涨跌加权近似）'],
+        ['收盘价 / KDE支撑 / KDE压力', '仅「查询命中」导出时提供；结构位与分析页同口径'],
+        ['GMS / URT / SBBR / RPE', '仅「查询命中」导出时提供；空=未命中，有文案=命中标签'],
+        ['命中数', '上述四策略命中个数合计'],
+        ['角色说明', '角色识别原因摘要（若有）'],
+        ['排列规则', '明细按：板块名称 → 角色（龙头优先）→ 涨跌幅降序 → 代码'],
+      ];
+      const wsLegend = XLSX.utils.aoa_to_sheet(legend);
+      this.freezeHeader(wsLegend);
+      this.setSheetCols(wsLegend, [22, 56]);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsOverview, '概览');
+      XLSX.utils.book_append_sheet(wb, wsDetail, '明细');
+      XLSX.utils.book_append_sheet(wb, wsSum, '板块汇总');
+      XLSX.utils.book_append_sheet(wb, wsLegend, '字段说明');
+
+      const kindTag = kindLabel === '概念' ? '概念' : '行业';
+      const filename = `龙头中军_${kindTag}_${dateStr}_${timeStr}.xlsx`;
+      XLSX.writeFile(wb, filename);
+      this.toast(
+        `已导出 ${rows.length} 条明细 / ${boardN} 个板块（${source === 'hit' ? '含策略命中' : '角色列表'}）`,
+        'success'
+      );
+    } catch (e) {
+      console.error(e);
+      this.toast((e && e.message) || '导出失败', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prevText || '导出 Excel';
+      }
+    }
   },
 
   esc(s) {
