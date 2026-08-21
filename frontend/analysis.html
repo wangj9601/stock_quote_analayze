@@ -43,6 +43,7 @@
                             </div>
                             <div class="lm-board-picker-row">
                                 <button type="button" class="btn btn-secondary" id="baBoardPickBtn">选择板块</button>
+                                <button type="button" class="btn btn-secondary" id="baSelectStrongBtn" title="按当前行业/概念自动勾选全部走强板块（不自动开始分析）">选中走强板块</button>
                                 <span id="baBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
                             </div>
                             <div class="ba-strategies">
@@ -73,6 +74,7 @@
                         <div class="lm-toolbar">
                             <div class="lm-board-picker-row">
                                 <button type="button" class="btn btn-secondary" id="lmBoardPickBtn">选择板块</button>
+                                <button type="button" class="btn btn-secondary" id="lmSelectStrongBtn" title="按当前行业/概念自动勾选全部走强板块（不自动查询命中）">选中走强板块</button>
                                 <span id="lmBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
                             </div>
                             <button type="button" class="btn btn-primary" id="lmRunBtn" data-perm="channel.analyze.tab.leader_mid.btn.run">查询命中</button>
@@ -924,8 +926,12 @@
             </div>
             <div class="lm-board-picker-toolbar">
                 <input type="search" id="baBoardPickerSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
+                <label class="lm-board-picker-filter" title="仅显示板环境为走强的板块">
+                    <input type="checkbox" id="baBoardPickerStrongOnly"> 仅看走强
+                </label>
                 <span id="baBoardPickerCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerSelectAll">全选当前</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerSelectStrong" title="勾选当前列表中的走强项">全选走强</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerClear">清空当前</button>
             </div>
             <div id="baBoardPickerList" class="lm-board-picker-list"></div>
@@ -945,8 +951,12 @@
             </div>
             <div class="lm-board-picker-toolbar">
                 <input type="search" id="lmBoardPickerSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
+                <label class="lm-board-picker-filter" title="仅显示板环境为走强的板块">
+                    <input type="checkbox" id="lmBoardPickerStrongOnly"> 仅看走强
+                </label>
                 <span id="lmBoardPickerCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerSelectAll">全选当前</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerSelectStrong" title="勾选当前列表中的走强项">全选走强</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerClear">清空当前</button>
             </div>
             <div id="lmBoardPickerList" class="lm-board-picker-list"></div>
@@ -969,6 +979,7 @@
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script src="js/board_roles_panel.js"></script>
+    <script src="js/board_picker_strong.js"></script>
     <script src="js/board_analysis_pdf.js"></script>
     <script src="js/board_analysis.js"></script>
     <script src="js/leader_mid_analysis.js"></script>

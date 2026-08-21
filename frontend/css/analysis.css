@@ -834,6 +834,16 @@
 .ba-select { min-width: 220px; max-width: 360px; padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px; }
 .ba-meta-card { display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: baseline; padding: .75rem 1rem; background: #f8fafc; border-radius: 6px; margin-bottom: .75rem; font-size: .9rem; }
 .ba-muted { color: #94a3b8; font-size: .85rem; }
+a.ba-stock-code-link {
+  color: #2563eb;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.ba-stock-code-link:hover,
+a.ba-stock-code-link:focus {
+  color: #1d4ed8;
+  text-decoration: none;
+}
 .ba-boards {
   max-width: 220px;
   font-size: 0.8rem;
@@ -1013,6 +1023,50 @@
   gap: 0.75rem 1rem;
   align-items: center;
   margin-bottom: 1rem;
+}
+.lm-board-picker-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  color: #475569;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.lm-board-picker-filter input {
+  margin: 0;
+}
+.lm-board-picker-slope {
+  margin-left: 0.45rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #64748b;
+}
+.ba-env-chip {
+  display: inline-block;
+  margin-left: 0.45rem;
+  padding: 1px 7px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.ba-env-chip.weak {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+.ba-env-chip.ok {
+  color: #047857;
+  background: #d1fae5;
+}
+.ba-env-chip.strong {
+  color: #b45309;
+  background: #ffedd5;
+}
+.ba-env-chip.unknown {
+  color: #92400e;
+  background: #fef3c7;
 }
 .lm-board-picker-row {
   display: flex;

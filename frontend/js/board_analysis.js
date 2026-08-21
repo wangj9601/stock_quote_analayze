@@ -14,10 +14,15 @@ const BoardAnalysis = {
   running: false,
   catalogsLoaded: false,
   _pickerDraft: new Set(),
+  _pickerStrongOnly: false,
 
   init() {
     this.bindEvents();
     this.loadCatalogs();
+  },
+
+  strongHelper() {
+    return typeof BoardPickerStrong !== 'undefined' ? BoardPickerStrong : null;
   },
 
   /**
@@ -56,6 +61,9 @@ const BoardAnalysis = {
       el.addEventListener('change', () => {
         this.boardKind = el.value === 'concept' ? 'concept' : 'industry';
         this.selectedBoardCodes = [];
+        this._pickerStrongOnly = false;
+        const strongOnly = document.getElementById('baBoardPickerStrongOnly');
+        if (strongOnly) strongOnly.checked = false;
         this.updateBoardSummary();
         this.clearMeta();
       });
@@ -63,6 +71,10 @@ const BoardAnalysis = {
     const pickBtn = document.getElementById('baBoardPickBtn');
     if (pickBtn) {
       pickBtn.addEventListener('click', () => this.openBoardPicker());
+    }
+    const strongBtn = document.getElementById('baSelectStrongBtn');
+    if (strongBtn) {
+      strongBtn.addEventListener('click', () => this.selectStrongBoards());
     }
     const runBtn = document.getElementById('baRunBtn');
     if (runBtn) {
@@ -87,9 +99,20 @@ const BoardAnalysis = {
     if (searchEl) {
       searchEl.addEventListener('input', () => this.renderBoardPickerList());
     }
+    const strongOnly = document.getElementById('baBoardPickerStrongOnly');
+    if (strongOnly) {
+      strongOnly.addEventListener('change', () => {
+        this._pickerStrongOnly = !!strongOnly.checked;
+        this.renderBoardPickerList();
+      });
+    }
     const selAll = document.getElementById('baBoardPickerSelectAll');
     if (selAll) {
       selAll.addEventListener('click', () => this.pickerSelectAllVisible());
+    }
+    const selStrong = document.getElementById('baBoardPickerSelectStrong');
+    if (selStrong) {
+      selStrong.addEventListener('click', () => this.pickerSelectStrongVisible());
     }
     const clearBtn = document.getElementById('baBoardPickerClear');
     if (clearBtn) {
@@ -116,7 +139,7 @@ const BoardAnalysis = {
     const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
     try {
       const [indRes, conRes] = await Promise.all([
-        fetchFn(`${this.API_BASE_URL}/api/market/industry_board/catalog?board_code_source=tonghuashun`),
+        fetchFn(`${this.API_BASE_URL}/api/market/industry_board/list?board_code_source=tonghuashun`),
         fetchFn(`${this.API_BASE_URL}/api/market/concept_board/list?board_code_source=tonghuashun`),
       ]);
       const ind = await indRes.json().catch(() => ({}));
@@ -174,6 +197,10 @@ const BoardAnalysis = {
     }
     const searchEl = document.getElementById('baBoardPickerSearch');
     if (searchEl) searchEl.value = '';
+    const strongOnly = document.getElementById('baBoardPickerStrongOnly');
+    if (strongOnly) {
+      strongOnly.checked = !!this._pickerStrongOnly;
+    }
     this.renderBoardPickerList();
     const overlay = document.getElementById('baBoardPickerModal');
     if (overlay) {
@@ -198,13 +225,13 @@ const BoardAnalysis = {
       : `共 ${total} 个可选`;
   },
 
-  renderBoardPickerList() {
-    const listEl = document.getElementById('baBoardPickerList');
-    if (!listEl) return;
+  visiblePickerBoards() {
     const q = (document.getElementById('baBoardPickerSearch')?.value || '').trim().toLowerCase();
-    const all = this.catalog().slice();
-    const total = all.length;
-    let list = all;
+    const helper = this.strongHelper();
+    let list = this.catalog().slice();
+    if (this._pickerStrongOnly && helper) {
+      list = helper.filterStrong(list);
+    }
     if (q) {
       list = list.filter((b) => {
         const name = String(b.board_name || '').toLowerCase();
@@ -212,10 +239,27 @@ const BoardAnalysis = {
         return name.includes(q) || code.includes(q);
       });
     }
-    this.updateBoardPickerCount(total, list.length, !!q);
-    list.sort((a, b) =>
-      String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh')
-    );
+    if (helper) {
+      list = helper.sortByStrongThenSlope(list);
+    } else {
+      list.sort((a, b) =>
+        String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh')
+      );
+    }
+    return list;
+  },
+
+  renderBoardPickerList() {
+    const listEl = document.getElementById('baBoardPickerList');
+    if (!listEl) return;
+    const helper = this.strongHelper();
+    const all = this.catalog().slice();
+    const total = all.length;
+    const list = this.visiblePickerBoards();
+    const hasFilter =
+      !!((document.getElementById('baBoardPickerSearch')?.value || '').trim()) ||
+      !!this._pickerStrongOnly;
+    this.updateBoardPickerCount(total, list.length, hasFilter);
     if (!list.length) {
       listEl.innerHTML = '<div class="lm-board-picker-empty">无匹配板块</div>';
       return;
@@ -228,11 +272,19 @@ const BoardAnalysis = {
         const n = b.stock_count != null ? b.stock_count : b.member_count;
         const countTxt = n != null ? `${n}只` : '';
         const checked = draft.has(code) ? ' checked' : '';
-        const title = countTxt ? `${name} · ${countTxt} · ${code}` : `${name} · ${code}`;
+        const envLabel = helper ? helper.formatEnvLabel(b) : '--';
+        const envClass = helper ? helper.envChipClass(b) : 'unknown';
+        const slopeTxt = helper ? helper.formatSlope(b) : '--';
+        const title = countTxt
+          ? `${name} · ${countTxt} · ${code} · ${envLabel} · 斜率${slopeTxt}`
+          : `${name} · ${code} · ${envLabel} · 斜率${slopeTxt}`;
         return `<label class="lm-board-picker-item" title="${this.escAttr(title)}">
           <input type="checkbox" value="${this.escAttr(code)}"${checked}>
           <span class="lm-board-picker-item-text">
-            <span class="lm-board-picker-name">${this.esc(name)}${n != null ? ` (${n})` : ''}</span>
+            <span class="lm-board-picker-name">${this.esc(name)}${n != null ? ` (${n})` : ''}
+              <span class="ba-env-chip ${this.escAttr(envClass)}">${this.esc(envLabel)}</span>
+              <span class="lm-board-picker-slope">斜率 ${this.esc(slopeTxt)}</span>
+            </span>
             <span class="lm-board-picker-code">${this.esc(code)}${countTxt ? ` · ${this.esc(countTxt)}` : ''}</span>
           </span>
         </label>`;
@@ -250,6 +302,24 @@ const BoardAnalysis = {
     });
   },
 
+  pickerSelectStrongVisible() {
+    const helper = this.strongHelper();
+    if (!helper) return;
+    const byCode = new Map(
+      this.visiblePickerBoards().map((b) => [String(b.board_code || '').trim(), b])
+    );
+    const listEl = document.getElementById('baBoardPickerList');
+    if (!listEl) return;
+    listEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+      const code = String(cb.value || '').trim();
+      const row = byCode.get(code);
+      if (row && helper.isStrongBoard(row)) {
+        cb.checked = true;
+        this._pickerDraft.add(code);
+      }
+    });
+  },
+
   pickerClearVisible() {
     const listEl = document.getElementById('baBoardPickerList');
     if (!listEl) return;
@@ -260,10 +330,10 @@ const BoardAnalysis = {
     });
   },
 
-  confirmBoardPicker() {
-    this.selectedBoardCodes = Array.from(this._pickerDraft);
+  applySelectedBoardCodes(codes) {
+    this.selectedBoardCodes = Array.isArray(codes) ? codes.slice() : [];
+    this.lastResult = null;
     this.updateBoardSummary();
-    this.hideBoardPicker();
     this.clearMeta();
     if (this.selectedBoardCodes.length && window.BoardRolesPanel) {
       BoardRolesPanel.refresh({
@@ -277,6 +347,33 @@ const BoardAnalysis = {
         gmsWatchlistPerm: 'channel.analyze.tab.board.btn.gms_watchlist',
       });
     }
+  },
+
+  async selectStrongBoards() {
+    if (!this.catalogsLoaded) {
+      await this.loadCatalogs();
+    }
+    const helper = this.strongHelper();
+    if (!helper) {
+      if (window.CommonUtils) CommonUtils.showToast('走强选板模块未加载', 'error');
+      return;
+    }
+    const codes = helper.strongCodes(this.catalog());
+    if (!codes.length) {
+      if (window.CommonUtils) {
+        CommonUtils.showToast('当前暂无走强板块（需行情页已刷新斜率）', 'warning');
+      }
+      return;
+    }
+    this.applySelectedBoardCodes(codes);
+    if (window.CommonUtils) {
+      CommonUtils.showToast(`已选中 ${codes.length} 个走强板块`, 'success');
+    }
+  },
+
+  confirmBoardPicker() {
+    this.applySelectedBoardCodes(Array.from(this._pickerDraft));
+    this.hideBoardPicker();
   },
 
   clearMeta() {
@@ -521,8 +618,9 @@ const BoardAnalysis = {
           scoreDisp && scoreDisp !== '--'
             ? `<span class="ba-hit-score">${this.esc(scoreDisp)}</span>`
             : '';
+        const analysisHref = `analysis.html?tab=stock-ai&code=${encodeURIComponent(code)}${name ? `&name=${encodeURIComponent(name)}` : ''}`;
         return `<tr title="${this.escAttr(scoreTip)}">
-          <td><a href="stock.html?code=${encodeURIComponent(code)}">${this.esc(code)}</a><div class="ba-muted">${this.esc(name)}</div></td>
+          <td><a class="ba-stock-code-link" href="${this.escAttr(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${this.esc(code)}</a><div class="ba-muted">${this.esc(name)}</div></td>
           <td class="ba-boards" title="${this.escAttr(boardName)}">${this.esc(boardName || '--')}</td>
           <td class="ba-num">${lastClose}</td>
           <td class="ba-role-cell">${roles}</td>
