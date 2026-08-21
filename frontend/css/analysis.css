@@ -1565,6 +1565,60 @@
 }
 .ms-zigzag-svg { width: 100%; max-width: 560px; height: auto; display: block; }
 .ms-chart-hint { margin: 4px 0 0; font-size: 11px; }
+
+/* 江恩趋势预测 */
+.ssa-gann-host .gann-result-wrap {
+    font-size: 12px;
+    color: #334155;
+}
+.gann-meta { color: #64748b; margin-bottom: 6px; font-size: 11px; }
+.gann-verdict {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: baseline;
+    margin: 6px 0 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+}
+.gann-verdict-label { font-weight: 700; font-size: 13px; }
+.gann-verdict-summary { color: #475569; line-height: 1.45; }
+.gann-bias--bull { border-color: #86efac; background: #f0fdf4; }
+.gann-bias--bull .gann-verdict-label { color: #166534; }
+.gann-bias--bear { border-color: #fca5a5; background: #fef2f2; }
+.gann-bias--bear .gann-verdict-label { color: #b91c1c; }
+.gann-bias--near { border-color: #fde68a; background: #fffbeb; }
+.gann-bias--near .gann-verdict-label { color: #a16207; }
+.gann-bias--na .gann-verdict-label { color: #64748b; }
+.gann-anchor-line { margin: 4px 0 8px; color: #475569; font-size: 12px; }
+.gann-fan-wrap {
+    margin: 8px 0 4px;
+    padding: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow-x: auto;
+}
+.gann-fan-svg { width: 100%; max-width: 580px; height: auto; display: block; }
+.gann-chart-hint { margin: 4px 0 0; font-size: 11px; color: #94a3b8; }
+.gann-subtitle { margin: 10px 0 4px; font-size: 12px; color: #334155; }
+.gann-table {
+    width: 100%;
+    max-width: 520px;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin: 4px 0 8px;
+}
+.gann-table th, .gann-table td {
+    border: 1px solid #e2e8f0;
+    padding: 4px 8px;
+    text-align: left;
+}
+.gann-table th { background: #f8fafc; }
+.gann-disclaimer { margin-top: 8px; font-size: 11px; color: #94a3b8; }
+.gann-empty { color: #94a3b8; }
 .ms-analysis {
     margin: 10px 0 8px;
     padding: 10px 12px;

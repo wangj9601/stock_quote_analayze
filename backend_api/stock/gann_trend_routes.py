@@ -1,0 +1,127 @@
+# -*- coding: utf-8 -*-
+"""分析页 · 江恩趋势预测 API。"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from backend_api.database import get_db
+from backend_api.permissions import require_permission
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/analysis/gann-trend", tags=["江恩趋势"])
+
+
+@router.get("/{code}")
+async def gann_trend_for_stock(
+    code: str,
+    asof: Optional[str] = Query(None),
+    lookback: int = Query(180, ge=60, le=400),
+    adjust: str = Query("none", description="价格口径：none=不复权，qfq=前复权现算"),
+    refresh_factor: bool = Query(False),
+    factor_source: str = Query("auto"),
+    scale: Optional[float] = Query(
+        None, gt=0, description="可选覆盖 1×1 每交易日价格单位"
+    ),
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    from backend_api.stock.stock_analysis_routes import resolve_levels_stock_identifier
+    from backend_core.analysis.chart_patterns.scanner import (
+        apply_qfq_to_code_bars,
+        normalize_price_adjust,
+    )
+    from backend_core.analysis.gann_trend import analyze_gann_trend
+    from backend_core.analysis.swing_zigzag import (
+        DEFAULT_FRACTAL,
+        DEFAULT_MIN_SWING_BARS,
+    )
+    from backend_core.strategies.double_bottom.data_loader import (
+        batch_load_ohlc_asc,
+        load_names,
+        resolve_effective_trade_date,
+    )
+
+    try:
+        from backend_api.utils.adj_quotes import AdjQuotesError
+    except ImportError:
+        from utils.adj_quotes import AdjQuotesError  # type: ignore
+    try:
+        from backend_api.utils.equity_code import (
+            infer_market_type,
+            normalize_equity_code,
+        )
+    except ImportError:
+        from utils.equity_code import (  # type: ignore
+            infer_market_type,
+            normalize_equity_code,
+        )
+
+    try:
+        adjust_n = normalize_price_adjust(adjust)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    resolved = resolve_levels_stock_identifier(db, code)
+    status = resolved.get("status")
+    if status == "ambiguous":
+        raise HTTPException(status_code=400, detail={"message": "代码不唯一", **resolved})
+    if status == "not_found":
+        raise HTTPException(status_code=404, detail=resolved.get("message") or "未找到股票")
+    stock_code = normalize_equity_code(resolved.get("code") or code)
+    if not stock_code or (
+        stock_code.isdigit() and len(stock_code) not in (5, 6)
+    ):
+        raise HTTPException(status_code=400, detail="无效股票代码（A股6位，港股5位）")
+
+    market = infer_market_type(stock_code) or "CN"
+    asof_s = resolve_effective_trade_date(db, asof, market=market)
+    bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=int(lookback), asof=asof_s)
+    bars = bars_map.get(stock_code) or []
+    adj_meta: Optional[Dict[str, Any]] = None
+    if adjust_n == "qfq":
+        try:
+            bars, adj_meta = apply_qfq_to_code_bars(
+                db,
+                stock_code,
+                bars,
+                refresh_factor=refresh_factor,
+                factor_source=factor_source or "auto",
+            )
+        except AdjQuotesError as e:
+            raise HTTPException(status_code=400, detail=e.message) from e
+        except Exception as e:
+            logger.exception("江恩趋势前复权失败 code=%s", stock_code)
+            raise HTTPException(status_code=500, detail=f"前复权处理失败: {e}") from e
+
+    daily_bars = bars[-int(lookback) :] if len(bars) > int(lookback) else bars
+    names = load_names(db, [stock_code])
+    gann = analyze_gann_trend(
+        daily_bars,
+        max_bars=lookback,
+        fractal_left=DEFAULT_FRACTAL,
+        fractal_right=DEFAULT_FRACTAL,
+        min_swing_bars=DEFAULT_MIN_SWING_BARS,
+        scale_override=float(scale) if scale is not None else None,
+    )
+
+    price_adjust = {
+        "mode": adjust_n,
+        "applied": bool(adjust_n == "qfq"),
+    }
+    if isinstance(adj_meta, dict):
+        price_adjust.update(adj_meta)
+
+    return {
+        "success": True,
+        "code": stock_code,
+        "name": names.get(stock_code) or resolved.get("name") or "",
+        "asof": gann.get("asof") or asof_s,
+        "price_adjust": price_adjust,
+        "gann_trend": gann,
+    }

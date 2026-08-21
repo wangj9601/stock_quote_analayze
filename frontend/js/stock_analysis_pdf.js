@@ -1,6 +1,6 @@
 /**
  * 个股分析 · 数据驱动 PDF 导出（复用 BoardAnalysisPdf 的 jsPDF / 中文字体封装）
- * 覆盖：策略分析 + 阻力支撑位 + 形态识别 + 波段与趋势
+ * 覆盖：策略分析 + 阻力支撑位 + 形态识别 + 波段与趋势 + 江恩趋势
  */
 (function (global) {
   function cell(v) {
@@ -448,6 +448,51 @@
     };
   }
 
+  function gannBody(host) {
+    const pack = host.lastGann;
+    if (!pack) return { error: null, text: '', angleRows: null, twRows: null, bias: '' };
+    if (pack.error && !pack.data) {
+      return { error: pack.error, text: '', angleRows: null, twRows: null, bias: '' };
+    }
+    const data = pack.data || {};
+    const g = data.gann_trend || data;
+    const GT = global.GannTrendTool;
+    let text = '';
+    if (GT && typeof GT.formatPlainText === 'function') {
+      text = GT.formatPlainText(g, {
+        code: pack.code || data.code,
+        name: pack.name || data.name,
+      });
+    }
+    if (!text) {
+      text = plainFromEl(document.querySelector('#ssaGannHost .gann-result-wrap'));
+    }
+    const angleRows = (g.angles || []).map((a) => [
+      cell(a.name),
+      a.price_at_asof != null ? Number(a.price_at_asof).toFixed(2) : '--',
+      a.slope_per_bar != null ? Number(a.slope_per_bar).toFixed(4) : '--',
+    ]);
+    const twRows = (g.time_windows || []).map((t) => [
+      `+${t.bars}`,
+      cell(t.status_label || t.status),
+      cell(t.target_date || '—'),
+      t.bars_from_asof != null ? String(t.bars_from_asof) : '--',
+    ]);
+    const v = g.verdict || {};
+    return {
+      error: pack.error || null,
+      text,
+      angleRows: angleRows.length ? angleRows : null,
+      twRows: twRows.length ? twRows : null,
+      bias: v.bias_label || v.bias || '',
+      summary: v.summary || '',
+      scale: g.scale,
+      scaleNote: g.scale_note || '',
+      disclaimer: g.disclaimer || '几何参考，非投资建议。',
+      ok: !!g.ok,
+    };
+  }
+
   /**
    * @param {object} host StockMultiStrategy
    * @returns {Promise<string>} 文件名
@@ -646,6 +691,60 @@
       if (sw.error) {
         y += 2;
         drawWrapped(`提示：${sw.error}`, 8.5, 4);
+      }
+    }
+
+    // —— 江恩趋势预测 ——
+    drawTitle('五、江恩趋势预测', 12, [30, 64, 175]);
+    const gn = gannBody(host);
+    if (!host.lastGann) {
+      drawWrapped('本报告未包含江恩趋势结果', 9, 4.2);
+    } else if (gn.error && !gn.text && !gn.angleRows) {
+      drawWrapped(`江恩趋势分析失败：${gn.error}`, 9, 4.2);
+    } else {
+      if (gn.bias) {
+        drawWrapped(`结论：${gn.bias}${gn.summary ? ` — ${gn.summary}` : ''}`, 9, 4.2);
+      }
+      if (gn.scale != null) {
+        drawWrapped(
+          `1×1 单位(scale)=${gn.scale}；${gn.scaleNote || '1×1 为自适应价格单位，非屏幕45°'}`,
+          8.5,
+          4
+        );
+      }
+      if (gn.text) {
+        y += 1;
+        drawWrapped(gn.text, 8.5, 4);
+      }
+      if (gn.angleRows) {
+        drawTitle('角度线（基准日理论价）', 10, [71, 85, 105]);
+        drawTable(
+          [['角度', '理论价', '斜率/根']],
+          gn.angleRows,
+          { 0: { cellWidth: 22 }, 1: { cellWidth: 28 }, 2: { cellWidth: 28 } }
+        );
+      }
+      if (gn.twRows) {
+        drawTitle('时间窗口（交易日）', 10, [71, 85, 105]);
+        drawTable(
+          [['窗口', '状态', '目标日', '相对基准']],
+          gn.twRows,
+          {
+            0: { cellWidth: 18 },
+            1: { cellWidth: 18 },
+            2: { cellWidth: 28 },
+            3: { cellWidth: 22 },
+          }
+        );
+      }
+      drawWrapped(
+        `${gn.disclaimer || '几何参考，非投资建议。'} 扇形为价-时间示意（非蜡烛图）；页面可查看 SVG 扇形。`,
+        8,
+        3.8
+      );
+      if (gn.error) {
+        y += 2;
+        drawWrapped(`提示：${gn.error}`, 8.5, 4);
       }
     }
 

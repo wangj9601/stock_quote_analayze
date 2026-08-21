@@ -1,5 +1,5 @@
 /**
- * 分析频道 · 个股综合分析（RPE / SBBR / GMS / URT + 阻力支撑 + 形态 + 波段趋势）
+ * 分析频道 · 个股综合分析（RPE / SBBR / GMS / URT + 阻力支撑 + 形态 + 波段趋势 + 江恩）
  */
 const StockMultiStrategy = {
     API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
@@ -13,6 +13,7 @@ const StockMultiStrategy = {
     lastLevels: null,
     lastPattern: null,
     lastSwing: null,
+    lastGann: null,
 
     init() {
         const btn = document.getElementById('ssaAnalyzeBtn');
@@ -190,6 +191,7 @@ const StockMultiStrategy = {
         this.lastLevels = null;
         this.lastPattern = null;
         this.lastSwing = null;
+        this.lastGann = null;
         const observeBtn = document.getElementById('ssaTradeObserveBtn');
         if (observeBtn) {
             observeBtn.classList.remove('is-added');
@@ -201,7 +203,14 @@ const StockMultiStrategy = {
     },
 
     hasExportableResult() {
-        return !!(this.lastStrategy || this.lastLevels || this.lastPattern || this.lastSwing || this.lastStrategyError);
+        return !!(
+            this.lastStrategy ||
+            this.lastLevels ||
+            this.lastPattern ||
+            this.lastSwing ||
+            this.lastGann ||
+            this.lastStrategyError
+        );
     },
 
     updateExportBtn() {
@@ -402,20 +411,23 @@ const StockMultiStrategy = {
     },
 
     hideResultBlocks() {
-        ['ssaStrategyBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock'].forEach((id) => {
+        ['ssaStrategyBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
         const levelsHost = document.getElementById('ssaLevelsHost');
         const patternHost = document.getElementById('ssaPatternHost');
         const swingHost = document.getElementById('ssaSwingHost');
+        const gannHost = document.getElementById('ssaGannHost');
         if (levelsHost) levelsHost.innerHTML = '';
         if (patternHost) patternHost.innerHTML = '';
         if (swingHost) swingHost.innerHTML = '';
+        if (gannHost) gannHost.innerHTML = '';
         const levelsStatus = document.getElementById('ssaLevelsStatus');
         const patternStatus = document.getElementById('ssaPatternStatus');
         const swingStatus = document.getElementById('ssaSwingStatus');
-        [levelsStatus, patternStatus, swingStatus].forEach((status) => {
+        const gannStatus = document.getElementById('ssaGannStatus');
+        [levelsStatus, patternStatus, swingStatus, gannStatus].forEach((status) => {
             if (status) {
                 status.textContent = '';
                 status.hidden = false;
@@ -543,13 +555,14 @@ const StockMultiStrategy = {
             this.renderStrategyResult(data);
             if (empty) empty.hidden = true;
 
-            // 策略成功后并行拉取阻力支撑、形态、波段趋势（失败互不影响）
+            // 策略成功后并行拉取阻力支撑、形态、波段趋势、江恩（失败互不影响）
             const resolvedCode = stock.code || query;
             const tradeDate = data.trade_date || asof || '';
             await Promise.all([
                 this.loadLevelsSection(resolvedCode),
                 this.loadPatternSection(resolvedCode, tradeDate),
                 this.loadSwingSection(resolvedCode, tradeDate),
+                this.loadGannSection(resolvedCode, tradeDate),
             ]);
             this.updateExportBtn();
 
@@ -587,9 +600,10 @@ const StockMultiStrategy = {
                     this.loadLevelsSection(firstToken),
                     this.loadPatternSection(firstToken, asofFallback),
                     this.loadSwingSection(firstToken, asofFallback),
+                    this.loadGannSection(firstToken, asofFallback),
                 ]);
                 this.updateExportBtn();
-                CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑、形态与波段趋势', 'warning');
+                CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑、形态、波段与江恩', 'warning');
             } else {
                 if (empty) {
                     empty.hidden = false;
@@ -805,6 +819,48 @@ const StockMultiStrategy = {
         this.updateExportBtn();
     },
 
+    async loadGannSection(code, asof) {
+        const block = document.getElementById('ssaGannBlock');
+        const host = document.getElementById('ssaGannHost');
+        if (!block || !host) return;
+        this.setBlockLoading('ssaGannBlock', 'ssaGannStatus', '正在计算江恩趋势…');
+        try {
+            if (typeof GannTrendTool === 'undefined' || typeof GannTrendTool.fetchGann !== 'function') {
+                throw new Error('江恩趋势模块未加载');
+            }
+            const fetched = await GannTrendTool.fetchGann(code, {
+                adjust: 'qfq',
+                asof: asof || undefined,
+            });
+            GannTrendTool.renderEmbedded(host, fetched);
+            const g = fetched.gann_trend || {};
+            this.lastGann = {
+                ok: !!g.ok,
+                data: fetched,
+                code: fetched.code || code,
+                name: fetched.name || '',
+                asof: fetched.asof || asof || '',
+                error: null,
+            };
+            this.setBlockOk('ssaGannStatus', '');
+            const st = document.getElementById('ssaGannStatus');
+            if (st) st.hidden = true;
+        } catch (e) {
+            console.warn('个股分析·江恩趋势失败', e);
+            host.innerHTML = '';
+            this.lastGann = {
+                ok: false,
+                data: null,
+                code,
+                name: '',
+                asof: asof || '',
+                error: e.message || '江恩趋势分析失败',
+            };
+            this.setBlockError('ssaGannStatus', e.message || '江恩趋势分析失败，可稍后重试');
+        }
+        this.updateExportBtn();
+    },
+
     renderStrategyResult(data) {
         const empty = document.getElementById('ssaEmpty');
         const meta = document.getElementById('ssaMeta');
@@ -924,6 +980,8 @@ const StockMultiStrategy = {
         const patternStatus = document.getElementById('ssaPatternStatus');
         const swingHost = document.getElementById('ssaSwingHost');
         const swingStatus = document.getElementById('ssaSwingStatus');
+        const gannHost = document.getElementById('ssaGannHost');
+        const gannStatus = document.getElementById('ssaGannStatus');
 
         const cloneClean = (el) => {
             if (!el) return '';
@@ -991,6 +1049,20 @@ const StockMultiStrategy = {
             swingHtml = '<p class="ssa-pdf-empty">暂无波段趋势结果</p>';
         }
 
+        let gannHtml = '';
+        if (this.lastGann && this.lastGann.error && !this.lastGann.data) {
+            gannHtml = `<p class="ssa-pdf-err">${this.esc(this.lastGann.error)}</p>`;
+        } else if (gannHost && gannHost.innerHTML.trim()) {
+            gannHtml = cloneClean(gannHost);
+            if (gannStatus && gannStatus.classList.contains('is-error') && gannStatus.textContent) {
+                gannHtml += `<p class="ssa-pdf-err">${this.esc(gannStatus.textContent)}</p>`;
+            }
+        } else if (this.lastGann && this.lastGann.error) {
+            gannHtml = `<p class="ssa-pdf-err">${this.esc(this.lastGann.error)}</p>`;
+        } else {
+            gannHtml = '<p class="ssa-pdf-empty">暂无江恩趋势结果</p>';
+        }
+
         const metaHtml = meta && !meta.hidden && meta.innerHTML.trim()
             ? meta.innerHTML
             : `<div>${this.esc(stock.code || '')} ${this.esc(stock.name || '')}</div>`;
@@ -1033,7 +1105,7 @@ const StockMultiStrategy = {
   .kde-levels-card { border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; page-break-inside: avoid; }
   .kde-levels-subtitle { margin: 12px 0 6px; font-size: 13px; color: #334155; }
   .pattern-expert-analysis { margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 6px; }
-  .ms-zigzag-svg { max-width: 100%; }
+  .ms-zigzag-svg, .gann-fan-svg { max-width: 100%; }
   @media print {
     body { padding: 0; }
     .print-hint { display: none !important; }
@@ -1050,6 +1122,8 @@ const StockMultiStrategy = {
   ${patternHtml}
   <h2>波段与趋势</h2>
   ${swingHtml}
+  <h2>江恩趋势预测</h2>
+  ${gannHtml}
 </body></html>`;
     },
 
