@@ -6,6 +6,7 @@ const StockMultiStrategy = {
     running: false,
     exporting: false,
     observing: false,
+    gannObserving: false,
     lastStrategy: null,
     lastStrategyError: null,
     lastStock: null,
@@ -28,6 +29,10 @@ const StockMultiStrategy = {
         if (observeBtn) {
             observeBtn.addEventListener('click', () => this.addTradeObserve());
         }
+        const gannObserveBtn = document.getElementById('ssaGannTradeObserveBtn');
+        if (gannObserveBtn) {
+            gannObserveBtn.addEventListener('click', () => this.addGannTradeObserve());
+        }
         const codeInput = document.getElementById('ssaStockCode');
         if (codeInput) {
             codeInput.addEventListener('keydown', (e) => {
@@ -36,7 +41,10 @@ const StockMultiStrategy = {
                     this.analyze();
                 }
             });
-            codeInput.addEventListener('input', () => this.updateTradeObserveBtn());
+            codeInput.addEventListener('input', () => {
+                this.updateTradeObserveBtn();
+                this.updateGannTradeObserveBtn();
+            });
         }
         const watchSelect = document.getElementById('ssaWatchlist');
         if (watchSelect) {
@@ -198,6 +206,7 @@ const StockMultiStrategy = {
             delete observeBtn.dataset.observeCode;
             observeBtn.textContent = '交易观察';
         }
+        this.resetGannTradeObserveBtn();
         this.updateExportBtn();
         this.updateTradeObserveBtn();
     },
@@ -278,7 +287,11 @@ const StockMultiStrategy = {
         const swingAsof = this.lastSwing && this.lastSwing.asof
             ? String(this.lastSwing.asof).slice(0, 10)
             : '';
-        return swingAsof || '';
+        if (swingAsof) return swingAsof;
+        const gannAsof = this.lastGann && this.lastGann.asof
+            ? String(this.lastGann.asof).slice(0, 10)
+            : '';
+        return gannAsof || '';
     },
 
     updateTradeObserveBtn() {
@@ -305,6 +318,153 @@ const StockMultiStrategy = {
         }
         btn.disabled = !ok;
         btn.textContent = '交易观察';
+    },
+
+    updateGannTradeObserveBtn() {
+        const btn = document.getElementById('ssaGannTradeObserveBtn');
+        if (!btn) return;
+        if (this.gannObserving) {
+            btn.disabled = true;
+            return;
+        }
+        const stock = this.resolveObserveStock();
+        const gannOk = !!(this.lastGann && this.lastGann.ok && !this.lastGann.error);
+        const ok = !!(stock && stock.code && gannOk);
+        const markedCode = btn.dataset.observeCode || '';
+        if (btn.classList.contains('is-added')) {
+            if (stock && stock.code && markedCode && markedCode !== stock.code) {
+                btn.classList.remove('is-added');
+                delete btn.dataset.observeCode;
+                btn.textContent = '交易观察';
+                btn.disabled = !ok;
+                return;
+            }
+            btn.disabled = true;
+            btn.textContent = '已观察';
+            return;
+        }
+        btn.disabled = !ok;
+        btn.textContent = '交易观察';
+    },
+
+    resetGannTradeObserveBtn() {
+        const btn = document.getElementById('ssaGannTradeObserveBtn');
+        if (!btn) return;
+        btn.classList.remove('is-added');
+        delete btn.dataset.observeCode;
+        btn.textContent = '交易观察';
+        btn.disabled = true;
+    },
+
+    async addGannTradeObserve() {
+        if (this.gannObserving) return;
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        const stock = this.resolveObserveStock();
+        if (!stock || !stock.code) {
+            CommonUtils.showToast('请先输入有效的股票代码并完成分析', 'warning');
+            return;
+        }
+        if (!this.lastGann || !this.lastGann.ok || this.lastGann.error) {
+            CommonUtils.showToast('请先完成江恩趋势预测后再加入观察', 'warning');
+            return;
+        }
+        const signalDate = this.resolveObserveSignalDate();
+        if (!signalDate) {
+            CommonUtils.showToast('请先指定基准日，或先点击「分析」以确定交易日', 'warning');
+            const dateEl = document.getElementById('ssaTradeDate');
+            if (dateEl) dateEl.focus();
+            return;
+        }
+
+        const btn = document.getElementById('ssaGannTradeObserveBtn');
+        const key = this._urtObserveKey(stock.market, stock.code);
+        this.gannObserving = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '加入中…';
+            btn.classList.remove('is-added');
+            delete btn.dataset.observeCode;
+        }
+
+        try {
+            const [obsRes, formalRes] = await Promise.all([
+                authFetch(`${this.API_BASE_URL}/api/stock/trade-observe/codes?source=gann_trend`),
+                authFetch(`${this.API_BASE_URL}/api/stock/formal-trade/codes`),
+            ]);
+            const obsCodes = obsRes.ok ? await obsRes.json().catch(() => []) : [];
+            const formalCodes = formalRes.ok ? await formalRes.json().catch(() => []) : [];
+            const obsSet = new Set(Array.isArray(obsCodes) ? obsCodes : []);
+            const formalSet = new Set(Array.isArray(formalCodes) ? formalCodes : []);
+            if (formalSet.has(key)) {
+                CommonUtils.showToast('该股票已在正式交易中', 'info');
+                if (btn) {
+                    btn.textContent = '已观察';
+                    btn.classList.add('is-added');
+                    btn.dataset.observeCode = stock.code;
+                    btn.disabled = true;
+                }
+                return;
+            }
+            if (obsSet.has(key)) {
+                CommonUtils.showToast('已在江恩趋势交易观察列表中', 'info');
+                if (btn) {
+                    btn.textContent = '已观察';
+                    btn.classList.add('is-added');
+                    btn.dataset.observeCode = stock.code;
+                    btn.disabled = true;
+                }
+                return;
+            }
+
+            const g = (this.lastGann.data && this.lastGann.data.gann_trend) || {};
+            const verdict = g.verdict || {};
+            const res = await authFetch(`${this.API_BASE_URL}/api/stock/trade-observe/add`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: stock.code,
+                    market: stock.market,
+                    name: stock.name || stock.code,
+                    signal_date: signalDate,
+                    source: 'gann_trend',
+                    snapshot: {
+                        source: 'gann_trend',
+                        code: stock.code,
+                        name: stock.name || stock.code,
+                        signal_date: signalDate,
+                        trade_date: signalDate,
+                        bias: verdict.bias || g.bias || null,
+                        bias_label: verdict.bias_label || null,
+                        summary: verdict.summary || null,
+                        asof: this.lastGann.asof || signalDate,
+                    },
+                }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                const msg = data.detail || data.message || `加入失败(${res.status})`;
+                throw new Error(typeof msg === 'string' ? msg : JSON.stringify(msg));
+            }
+            CommonUtils.showToast(`已加入交易观察（江恩趋势）：${stock.name || stock.code}`, 'success');
+            if (btn) {
+                btn.textContent = '已观察';
+                btn.classList.add('is-added');
+                btn.dataset.observeCode = stock.code;
+                btn.disabled = true;
+            }
+        } catch (e) {
+            CommonUtils.showToast(e.message || '加入交易观察失败', 'error');
+            if (btn) {
+                btn.textContent = '交易观察';
+                btn.classList.remove('is-added');
+                delete btn.dataset.observeCode;
+            }
+        } finally {
+            this.gannObserving = false;
+            if (btn && !btn.classList.contains('is-added')) {
+                this.updateGannTradeObserveBtn();
+            }
+        }
     },
 
     async addTradeObserve() {
@@ -592,6 +752,7 @@ const StockMultiStrategy = {
                     delete observeBtn.dataset.observeCode;
                     observeBtn.textContent = '交易观察';
                 }
+                this.resetGannTradeObserveBtn();
                 if (strategyBlock && strategyHost) {
                     strategyBlock.hidden = false;
                     strategyHost.innerHTML = `<div class="ssa-block-status is-error">${this.esc(e.message || '策略分析失败')}</div>`;
@@ -859,6 +1020,7 @@ const StockMultiStrategy = {
             this.setBlockError('ssaGannStatus', e.message || '江恩趋势分析失败，可稍后重试');
         }
         this.updateExportBtn();
+        this.updateGannTradeObserveBtn();
     },
 
     renderStrategyResult(data) {
@@ -878,6 +1040,7 @@ const StockMultiStrategy = {
             delete observeBtn.dataset.observeCode;
             observeBtn.textContent = '交易观察';
         }
+        this.resetGannTradeObserveBtn();
         if (meta) {
             meta.hidden = false;
             meta.innerHTML = `

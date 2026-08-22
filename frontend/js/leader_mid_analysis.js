@@ -24,6 +24,14 @@ const LeaderMidAnalysis = {
     return typeof BoardPickerStrong !== 'undefined' ? BoardPickerStrong : null;
   },
 
+  includeNeutralSelected() {
+    return !!document.getElementById('lmIncludeNeutral')?.checked;
+  },
+
+  selectOpts() {
+    return { includeNeutral: this.includeNeutralSelected() };
+  },
+
   ensureCatalogs() {
     if (!this.catalogsLoaded) {
       this.loadCatalogs();
@@ -61,6 +69,12 @@ const LeaderMidAnalysis = {
     const strongBtn = document.getElementById('lmSelectStrongBtn');
     if (strongBtn) {
       strongBtn.addEventListener('click', () => this.selectStrongBoards());
+    }
+    const includeNeutral = document.getElementById('lmIncludeNeutral');
+    if (includeNeutral) {
+      includeNeutral.addEventListener('change', () => {
+        if (this._pickerStrongOnly) this.renderBoardPickerList();
+      });
     }
     const runBtn = document.getElementById('lmRunBtn');
     if (runBtn) {
@@ -218,7 +232,7 @@ const LeaderMidAnalysis = {
     const helper = this.strongHelper();
     let list = this.catalog().slice();
     if (this._pickerStrongOnly && helper) {
-      list = helper.filterStrong(list);
+      list = helper.filterSelectable(list, this.selectOpts());
     }
     if (q) {
       list = list.filter((b) => {
@@ -293,6 +307,7 @@ const LeaderMidAnalysis = {
   pickerSelectStrongVisible() {
     const helper = this.strongHelper();
     if (!helper) return;
+    const opts = this.selectOpts();
     const byCode = new Map(
       this.visiblePickerBoards().map((b) => [String(b.board_code || '').trim(), b])
     );
@@ -301,7 +316,7 @@ const LeaderMidAnalysis = {
     listEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
       const code = String(cb.value || '').trim();
       const row = byCode.get(code);
-      if (row && helper.isStrongBoard(row)) {
+      if (row && helper.isSelectableBoard(row, opts)) {
         cb.checked = true;
         this._pickerDraft.add(code);
       }
@@ -350,16 +365,21 @@ const LeaderMidAnalysis = {
       if (window.CommonUtils) CommonUtils.showToast('走强选板模块未加载', 'error');
       return;
     }
-    const codes = helper.strongCodes(this.catalog());
+    const opts = this.selectOpts();
+    const codes = helper.selectableCodes(this.catalog(), opts);
+    const label = helper.selectLabel(opts);
     if (!codes.length) {
       if (window.CommonUtils) {
-        CommonUtils.showToast('当前暂无走强板块（需行情页已刷新斜率）', 'warning');
+        CommonUtils.showToast(
+          `当前暂无${label}板块（需行情页已刷新斜率）`,
+          'warning'
+        );
       }
       return;
     }
     this.applySelectedBoardCodes(codes);
     if (window.CommonUtils) {
-      CommonUtils.showToast(`已选中 ${codes.length} 个走强板块`, 'success');
+      CommonUtils.showToast(`已选中 ${codes.length} 个${label}板块`, 'success');
     }
   },
 

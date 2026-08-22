@@ -10,6 +10,7 @@ const UnifiedTradeObserve = {
         rpe: 'RPE',
         triple_volume: '3倍量',
         stock_analysis: '个股分析',
+        gann_trend: '江恩趋势',
     },
     FORMAL_SOURCES: new Set(['gms', 'urt', 'sbbr', 'rpe']),
 

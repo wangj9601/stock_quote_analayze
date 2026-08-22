@@ -43,7 +43,10 @@
                             </div>
                             <div class="lm-board-picker-row">
                                 <button type="button" class="btn btn-secondary" id="baBoardPickBtn">选择板块</button>
-                                <button type="button" class="btn btn-secondary" id="baSelectStrongBtn" title="按当前行业/概念自动勾选全部走强板块（不自动开始分析）">选中走强板块</button>
+                                <button type="button" class="btn btn-secondary" id="baSelectStrongBtn" title="按当前行业/概念自动勾选走强板块；勾选「含正常」时一并纳入板环境正常的板块（不自动开始分析）">选中走强板块</button>
+                                <label class="lm-board-picker-filter" title="勾选后，「选中走强板块」与弹窗「仅看走强」会同时纳入板环境为正常的板块">
+                                    <input type="checkbox" id="baIncludeNeutral"> 含正常
+                                </label>
                                 <span id="baBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
                             </div>
                             <div class="ba-strategies">
@@ -74,7 +77,10 @@
                         <div class="lm-toolbar">
                             <div class="lm-board-picker-row">
                                 <button type="button" class="btn btn-secondary" id="lmBoardPickBtn">选择板块</button>
-                                <button type="button" class="btn btn-secondary" id="lmSelectStrongBtn" title="按当前行业/概念自动勾选全部走强板块（不自动查询命中）">选中走强板块</button>
+                                <button type="button" class="btn btn-secondary" id="lmSelectStrongBtn" title="按当前行业/概念自动勾选走强板块；勾选「含正常」时一并纳入板环境正常的板块（不自动查询命中）">选中走强板块</button>
+                                <label class="lm-board-picker-filter" title="勾选后，「选中走强板块」与弹窗「仅看走强」会同时纳入板环境为正常的板块">
+                                    <input type="checkbox" id="lmIncludeNeutral"> 含正常
+                                </label>
                                 <span id="lmBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
                             </div>
                             <button type="button" class="btn btn-primary" id="lmRunBtn" data-perm="channel.analyze.tab.leader_mid.btn.run">查询命中</button>
@@ -165,7 +171,13 @@
                         </section>
 
                         <section class="ssa-block" id="ssaGannBlock" hidden>
-                            <h4 class="ssa-block-title">江恩趋势预测</h4>
+                            <div class="ssa-block-header">
+                                <h4 class="ssa-block-title">江恩趋势预测</h4>
+                                <button type="button" class="btn btn-secondary btn-sm" id="ssaGannTradeObserveBtn"
+                                    data-perm="channel.analyze.tab.trade_observe"
+                                    title="将当前股票加入统一交易观察（来源：江恩趋势）"
+                                    disabled>交易观察</button>
+                            </div>
                             <div class="ssa-block-status" id="ssaGannStatus"></div>
                             <div class="ssa-gann-host" id="ssaGannHost"></div>
                         </section>
@@ -198,6 +210,7 @@
                                         <option value="rpe">RPE</option>
                                         <option value="triple_volume">3倍量</option>
                                         <option value="stock_analysis">个股分析</option>
+                                        <option value="gann_trend">江恩趋势</option>
                                     </select>
                                 </label>
                                 <button type="button" class="btn btn-primary uto-refresh-btn" id="utoRefreshBtn">刷新</button>
@@ -926,12 +939,12 @@
             </div>
             <div class="lm-board-picker-toolbar">
                 <input type="search" id="baBoardPickerSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
-                <label class="lm-board-picker-filter" title="仅显示板环境为走强的板块">
+                <label class="lm-board-picker-filter" title="仅显示走强板块；若工具栏勾选「含正常」则同时显示正常">
                     <input type="checkbox" id="baBoardPickerStrongOnly"> 仅看走强
                 </label>
                 <span id="baBoardPickerCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerSelectAll">全选当前</button>
-                <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerSelectStrong" title="勾选当前列表中的走强项">全选走强</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerSelectStrong" title="勾选当前列表中的走强项（含正常时一并勾选正常）">全选走强</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="baBoardPickerClear">清空当前</button>
             </div>
             <div id="baBoardPickerList" class="lm-board-picker-list"></div>
@@ -951,12 +964,12 @@
             </div>
             <div class="lm-board-picker-toolbar">
                 <input type="search" id="lmBoardPickerSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
-                <label class="lm-board-picker-filter" title="仅显示板环境为走强的板块">
+                <label class="lm-board-picker-filter" title="仅显示走强板块；若工具栏勾选「含正常」则同时显示正常">
                     <input type="checkbox" id="lmBoardPickerStrongOnly"> 仅看走强
                 </label>
                 <span id="lmBoardPickerCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
                 <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerSelectAll">全选当前</button>
-                <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerSelectStrong" title="勾选当前列表中的走强项">全选走强</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerSelectStrong" title="勾选当前列表中的走强项（含正常时一并勾选正常）">全选走强</button>
                 <button type="button" class="btn btn-secondary btn-sm" id="lmBoardPickerClear">清空当前</button>
             </div>
             <div id="lmBoardPickerList" class="lm-board-picker-list"></div>

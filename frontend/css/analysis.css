@@ -1483,6 +1483,20 @@ a.ba-stock-code-link:focus {
     color: #0f172a;
     font-weight: 600;
 }
+.ssa-block-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.ssa-block-header .ssa-block-title {
+    margin: 0;
+}
+.ssa-block-header .btn {
+    flex-shrink: 0;
+}
 .ssa-block-status {
     margin-bottom: 0.75rem;
     font-size: 0.9rem;

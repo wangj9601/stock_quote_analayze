@@ -63,4 +63,28 @@ assertDeepEq(
 
 assertDeepEq(BoardPickerStrong.strongCodes(rows), ['B', 'C'], 'strongCodes');
 
+assertDeepEq(
+  BoardPickerStrong.selectableCodes(rows, { includeNeutral: false }),
+  ['B', 'C'],
+  'selectable without neutral'
+);
+assertDeepEq(
+  BoardPickerStrong.selectableCodes(rows, { includeNeutral: true }),
+  ['B', 'C', 'D'],
+  'selectable with neutral'
+);
+assertEq(BoardPickerStrong.isNeutralBoard({ board_env: 'neutral' }), true, 'isNeutral');
+assertEq(
+  BoardPickerStrong.isSelectableBoard({ board_env: 'neutral' }, { includeNeutral: true }),
+  true,
+  'selectable neutral'
+);
+assertEq(
+  BoardPickerStrong.isSelectableBoard({ board_env: 'neutral' }, { includeNeutral: false }),
+  false,
+  'not selectable neutral'
+);
+assertEq(BoardPickerStrong.selectLabel({ includeNeutral: true }), '走强+正常', 'label+');
+assertEq(BoardPickerStrong.selectLabel({}), '走强', 'label');
+
 console.log('test_board_picker_strong.js: all passed');

@@ -1,5 +1,5 @@
 /**
- * 分析频道选板：走强判定 / 过滤 / 排序（与行情页 board_env 口径一致）
+ * 分析频道选板：走强/正常判定 / 过滤 / 排序（与行情页 board_env 口径一致）
  */
 (function (root) {
   'use strict';
@@ -18,9 +18,25 @@
     return !!(row && row.board_strong);
   }
 
+  function isNeutralBoard(row) {
+    return boardEnv(row) === 'neutral';
+  }
+
+  /** 走强；若 includeNeutral 则含正常（不含走弱/未知） */
+  function isSelectableBoard(row, opts) {
+    if (isStrongBoard(row)) return true;
+    if (opts && opts.includeNeutral && isNeutralBoard(row)) return true;
+    return false;
+  }
+
   function filterStrong(rows) {
     const list = Array.isArray(rows) ? rows : [];
     return list.filter((r) => isStrongBoard(r));
+  }
+
+  function filterSelectable(rows, opts) {
+    const list = Array.isArray(rows) ? rows : [];
+    return list.filter((r) => isSelectableBoard(r, opts));
   }
 
   function envSortRank(row) {
@@ -89,15 +105,30 @@
       .filter(Boolean);
   }
 
+  function selectableCodes(rows, opts) {
+    return filterSelectable(rows, opts)
+      .map((r) => String(r.board_code || '').trim())
+      .filter(Boolean);
+  }
+
+  function selectLabel(opts) {
+    return opts && opts.includeNeutral ? '走强+正常' : '走强';
+  }
+
   const BoardPickerStrong = {
     boardEnv,
     isStrongBoard,
+    isNeutralBoard,
+    isSelectableBoard,
     filterStrong,
+    filterSelectable,
     sortByStrongThenSlope,
     formatEnvLabel,
     envChipClass,
     formatSlope,
     strongCodes,
+    selectableCodes,
+    selectLabel,
   };
 
   if (typeof module !== 'undefined' && module.exports) {

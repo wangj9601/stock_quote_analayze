@@ -114,6 +114,33 @@ def test_add_list_filter_source_and_codes(client):
     assert "CN:600000" in codes.json()
 
 
+def test_add_gann_trend_source(client):
+    r = client.post(
+        "/api/stock/trade-observe/add",
+        json={
+            "source": "gann_trend",
+            "code": "600562",
+            "market": "CN",
+            "name": "国睿科技",
+            "signal_date": "2026-08-21",
+            "snapshot": {"bias": "bearish", "summary": "偏空"},
+        },
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["source"] == "gann_trend"
+    assert body["code"] == "600562"
+
+    filtered = client.get("/api/stock/trade-observe/list?source=gann_trend")
+    assert filtered.status_code == 200
+    assert filtered.json()["total"] == 1
+    assert filtered.json()["items"][0]["source"] == "gann_trend"
+
+    codes = client.get("/api/stock/trade-observe/codes?source=gann_trend")
+    assert codes.status_code == 200
+    assert "CN:600562" in codes.json()
+
+
 def test_from_observe_and_duplicate_open(client):
     obs = client.post(
         "/api/stock/trade-observe/add",
