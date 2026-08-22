@@ -10,6 +10,7 @@ const AnalysisPage = {
         if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();
         if (window.KdeLevelsTool) KdeLevelsTool.init();
         if (window.StockMultiStrategy) StockMultiStrategy.init();
+        this.applyPopupWindowMode();
         const initialTab = this.resolveInitialTab();
         if (initialTab && initialTab !== this.currentTab) {
             const tabBtn = document.querySelector(`.analysis-tab[data-tab="${initialTab}"]`);
@@ -30,6 +31,16 @@ const AnalysisPage = {
         if (searchModal) {
             searchModal.classList.remove('show');
         }
+    },
+
+    applyPopupWindowMode() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            if (params.get('popup') === '1') {
+                document.documentElement.classList.add('analysis-popup-window');
+                document.body.classList.add('analysis-popup-window');
+            }
+        } catch (e) { /* ignore */ }
     },
 
     resolveInitialTab() {

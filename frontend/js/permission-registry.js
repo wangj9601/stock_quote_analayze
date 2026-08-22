@@ -42,7 +42,7 @@ window.PERMISSION_REGISTRY = [
 
   { code: 'channel.analyze.tab.board', name: '板块分析', level: 2, parent_code: 'channel.analyze', channel_code: 'analyze', sort_order: 5 },
   { code: 'channel.analyze.tab.board.btn.run', name: '开始板块分析', level: 3, parent_code: 'channel.analyze.tab.board', channel_code: 'analyze', sort_order: 10 },
-  { code: 'channel.analyze.tab.board.btn.export', name: '导出板块分析PDF', level: 3, parent_code: 'channel.analyze.tab.board', channel_code: 'analyze', sort_order: 15 },
+  { code: 'channel.analyze.tab.board.btn.export', name: '导出板块分析', level: 3, parent_code: 'channel.analyze.tab.board', channel_code: 'analyze', sort_order: 15 },
   { code: 'channel.analyze.tab.board.btn.observe', name: '加入交易观察', level: 3, parent_code: 'channel.analyze.tab.board', channel_code: 'analyze', sort_order: 20 },
   { code: 'channel.analyze.tab.board.btn.gms_watchlist', name: '加入GMS策略观察股', level: 3, parent_code: 'channel.analyze.tab.board', channel_code: 'analyze', sort_order: 25 },
   { code: 'channel.analyze.tab.leader_mid', name: '龙头中军', level: 2, parent_code: 'channel.analyze', channel_code: 'analyze', sort_order: 6 },

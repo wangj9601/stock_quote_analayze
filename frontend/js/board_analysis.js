@@ -98,6 +98,10 @@ const BoardAnalysis = {
     if (exportBtn) {
       exportBtn.addEventListener('click', () => this.exportPdf());
     }
+    const exportExcelBtn = document.getElementById('baExportExcelBtn');
+    if (exportExcelBtn) {
+      exportExcelBtn.addEventListener('click', () => this.exportExcel());
+    }
 
     const overlay = document.getElementById('baBoardPickerModal');
     ['baBoardPickerClose', 'baBoardPickerCancel'].forEach((id) => {
@@ -1114,6 +1118,346 @@ const BoardAnalysis = {
         btn.disabled = false;
         btn.classList.remove('ba-exporting');
         btn.textContent = '导出 PDF';
+      }
+    }
+  },
+
+  excelFilename() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    const kindTag = this.boardKind === 'concept' ? '概念' : '行业';
+    return `板块分析_${kindTag}_${y}-${m}-${day}_${hh}${mm}.xlsx`;
+  },
+
+  excelNum(v) {
+    if (v == null || v === '' || isNaN(Number(v))) return '';
+    return Math.round(Number(v) * 100) / 100;
+  },
+
+  excelCode(code) {
+    return '\u2060' + String(code || '');
+  },
+
+  setSheetCols(ws, widths) {
+    ws['!cols'] = widths.map((w) => ({ wch: w }));
+  },
+
+  freezeHeader(ws) {
+    ws['!views'] = [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', workbookViewId: 0 }];
+  },
+
+  flattenExportRow(strategy, row, listType, boardFallback) {
+    const code = row.code || row.stock_code || '';
+    const name = row.name || row.stock_name || '';
+    const advice = row.trade_advice || {};
+    const ref = advice.reference_levels || {};
+    const st = row.structure && typeof row.structure === 'object' ? row.structure : {};
+    const vp = ref.volume_profile && typeof ref.volume_profile === 'object' ? ref.volume_profile : {};
+    const conf = ref.confluence_zones && typeof ref.confluence_zones === 'object' ? ref.confluence_zones : {};
+    const boards = Array.isArray(row.boards) ? row.boards : [];
+    const score = this.pickScore(strategy, row);
+    const labels = { gms: 'GMS', urt: 'URT', sbbr: 'SBBR', rpe: 'RPE' };
+    return {
+      strategy,
+      strategyLabel: labels[strategy] || String(strategy).toUpperCase(),
+      listType,
+      code,
+      name,
+      board_name: this.boardLabelForRow(row, boardFallback),
+      boards,
+      last_close: this.excelNum(
+        row.last_close ?? row.close ?? ref.last_close ?? row.latest_price
+      ),
+      roles: this.roleTextForPdf(row),
+      hit: this.hitLabel(strategy, row),
+      score_text: this.scoreDisplay(strategy, row),
+      score: score != null ? Math.round(score * 100) / 100 : '',
+      buy: advice.buy_zone?.label || (advice.summary || '').split('；')[0] || '',
+      sell:
+        advice.stop_zone?.label ||
+        (advice.sell_triggers || []).map((x) => x.label).join('；') ||
+        '',
+      kde_s: this.excelNum(advice.kde_support ?? row.nearest_support ?? st.nearest_support),
+      kde_r: this.excelNum(advice.kde_resistance ?? row.nearest_resistance ?? st.nearest_resistance),
+      fib_s: this.excelNum(ref.nearest_fib_support),
+      fib_r: this.excelNum(ref.nearest_fib_resistance),
+      cam_s: this.excelNum(ref.nearest_cam_support ?? ref.camarilla?.nearest_support),
+      cam_r: this.excelNum(ref.nearest_cam_resistance ?? ref.camarilla?.nearest_resistance),
+      vp_s: this.excelNum(ref.nearest_vp_support ?? vp.nearest_support ?? vp.val),
+      vp_r: this.excelNum(ref.nearest_vp_resistance ?? vp.nearest_resistance ?? vp.vah),
+      conf_s: this.excelNum(ref.nearest_confluence_support ?? conf.nearest_support_zone?.center),
+      conf_r: this.excelNum(ref.nearest_confluence_resistance ?? conf.nearest_resistance_zone?.center),
+      summary: advice.summary || '',
+    };
+  },
+
+  collectExcelRows(payload) {
+    const strategies = (payload && payload.strategies) || {};
+    const boardFallback = this.defaultBoardLabel(payload);
+    const order = ['gms', 'urt', 'sbbr', 'rpe'];
+    const rows = [];
+    for (const key of order) {
+      if (!strategies[key]) continue;
+      const block = strategies[key];
+      (block.items || []).forEach((row) => {
+        rows.push(this.flattenExportRow(key, row, '命中', boardFallback));
+      });
+      if (key === 'sbbr') {
+        (block.watch_items || []).forEach((row) => {
+          rows.push(this.flattenExportRow(key, row, '筑底关注', boardFallback));
+        });
+      }
+    }
+    return rows;
+  },
+
+  excelDetailHeaders() {
+    return [
+      '序号',
+      '策略',
+      '名单类型',
+      '股票代码',
+      '股票名称',
+      '板块名',
+      '最新收盘',
+      '角色',
+      '命中',
+      '得分说明',
+      '得分数',
+      '买点建议',
+      '卖点/防守',
+      'KDE结构支撑',
+      'KDE结构阻力',
+      'Fib支撑',
+      'Fib阻力',
+      'Cam支撑',
+      'Cam阻力',
+      'VP支撑',
+      'VP阻力',
+      '共振支撑',
+      '共振阻力',
+      '建议摘要',
+    ];
+  },
+
+  excelDetailWidths() {
+    return [6, 8, 10, 12, 12, 22, 10, 10, 10, 18, 10, 22, 22, 12, 12, 10, 10, 10, 10, 10, 10, 10, 10, 36];
+  },
+
+  excelRowToAoa(r, idx) {
+    return [
+      idx + 1,
+      r.strategyLabel,
+      r.listType,
+      this.excelCode(r.code),
+      r.name || '',
+      r.board_name || '',
+      r.last_close,
+      r.roles && r.roles !== '--' ? r.roles : '',
+      r.hit && r.hit !== '--' ? r.hit : '',
+      r.score_text && r.score_text !== '--' ? r.score_text : '',
+      r.score,
+      r.buy || '',
+      r.sell || '',
+      r.kde_s,
+      r.kde_r,
+      r.fib_s,
+      r.fib_r,
+      r.cam_s,
+      r.cam_r,
+      r.vp_s,
+      r.vp_r,
+      r.conf_s,
+      r.conf_r,
+      r.summary || '',
+    ];
+  },
+
+  buildExcelBoardSummary(rows) {
+    const map = new Map();
+    const ensure = (code, name) => {
+      const key = String(code || name || '').trim() || '--';
+      if (!map.has(key)) {
+        map.set(key, {
+          board_code: code || '',
+          board_name: name || code || '',
+          gms: 0,
+          urt: 0,
+          sbbr: 0,
+          sbbr_watch: 0,
+          rpe: 0,
+        });
+      }
+      return map.get(key);
+    };
+    (this.selectedBoardCodes || []).forEach((c) => {
+      const b = this.boardByCode(c);
+      ensure(c, b ? b.board_name || c : c);
+    });
+    rows.forEach((r) => {
+      const boards = Array.isArray(r.boards) && r.boards.length
+        ? r.boards
+        : [{ board_name: r.board_name, board_code: '' }];
+      boards.forEach((b) => {
+        const rec = ensure(b.board_code || '', b.board_name || b.board_code || r.board_name || '');
+        if (r.listType === '筑底关注') rec.sbbr_watch += 1;
+        else if (r.strategy === 'gms') rec.gms += 1;
+        else if (r.strategy === 'urt') rec.urt += 1;
+        else if (r.strategy === 'sbbr') rec.sbbr += 1;
+        else if (r.strategy === 'rpe') rec.rpe += 1;
+      });
+    });
+    return [...map.values()].sort((a, b) =>
+      String(a.board_name || '').localeCompare(String(b.board_name || ''), 'zh')
+    );
+  },
+
+  async exportExcel() {
+    if (!this.lastResult || !this.lastResult.strategies) {
+      if (window.CommonUtils) CommonUtils.showToast('请先完成板块分析再导出', 'warning');
+      return;
+    }
+    const btn = document.getElementById('baExportExcelBtn');
+    const prevText = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.classList.add('ba-exporting');
+      btn.textContent = '导出中…';
+    }
+    try {
+      if (typeof window.ensureSheetJsLoaded === 'function') {
+        await window.ensureSheetJsLoaded();
+      }
+      if (typeof XLSX === 'undefined') {
+        throw new Error('Excel 组件未加载，请刷新页面后重试');
+      }
+
+      const payload = this.lastResult;
+      const board = payload.board || {};
+      const rows = this.collectExcelRows(payload);
+      const kindLabel = this.boardKind === 'concept' ? '概念板块' : '行业板块';
+      const today = new Date();
+      const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const timeStr = `${String(today.getHours()).padStart(2, '0')}:${String(today.getMinutes()).padStart(2, '0')}`;
+      const selectedNames = (this.selectedBoardCodes || [])
+        .map((c) => {
+          const b = this.boardByCode(c);
+          return b ? `${b.board_name || c}（${c}）` : c;
+        })
+        .join('、');
+      const memberN =
+        board.stock_count != null
+          ? board.stock_count
+          : payload.member_count != null
+            ? payload.member_count
+            : '';
+      const strategyCounts = ['gms', 'urt', 'sbbr', 'rpe']
+        .filter((k) => payload.strategies && payload.strategies[k])
+        .map((k) => {
+          const block = payload.strategies[k];
+          const n = (block.items || []).length;
+          const w = k === 'sbbr' ? (block.watch_items || []).length : 0;
+          return w ? `${k.toUpperCase()} ${n}（筑底关注 ${w}）` : `${k.toUpperCase()} ${n}`;
+        })
+        .join('；');
+
+      const overview = [
+        ['板块分析结果'],
+        [],
+        ['导出时间', `${dateStr} ${timeStr}`],
+        ['板块类型', kindLabel],
+        ['已选板块', selectedNames || board.board_name || ''],
+        ['板块数', board.board_count != null ? board.board_count : (this.selectedBoardCodes || []).length],
+        ['成分池', memberN],
+        ['板环境', board.board_env_label || ''],
+        ['分析时间', payload.asof || ''],
+        ['明细行数', rows.length],
+        ['各策略命中', strategyCounts],
+        [],
+        ['说明', '「明细」含已勾选策略的命中股；SBBR 筑底关注单独标注。价格与结构位与页面表格同口径，便于筛选排序。'],
+      ];
+      const wsOverview = XLSX.utils.aoa_to_sheet(overview);
+      this.setSheetCols(wsOverview, [16, 72]);
+
+      const detailAoa = [this.excelDetailHeaders()];
+      rows.forEach((r, idx) => detailAoa.push(this.excelRowToAoa(r, idx)));
+      const wsDetail = XLSX.utils.aoa_to_sheet(detailAoa);
+      this.freezeHeader(wsDetail);
+      this.setSheetCols(wsDetail, this.excelDetailWidths());
+
+      const boards = this.buildExcelBoardSummary(rows);
+      const sumAoa = [
+        ['序号', '板块名称', '板块代码', 'GMS命中', 'URT命中', 'SBBR命中', 'SBBR筑底关注', 'RPE命中', '合计'],
+      ];
+      let totG = 0;
+      let totU = 0;
+      let totS = 0;
+      let totW = 0;
+      let totR = 0;
+      boards.forEach((b, idx) => {
+        const hitSum = (b.gms || 0) + (b.urt || 0) + (b.sbbr || 0) + (b.rpe || 0);
+        totG += b.gms || 0;
+        totU += b.urt || 0;
+        totS += b.sbbr || 0;
+        totW += b.sbbr_watch || 0;
+        totR += b.rpe || 0;
+        sumAoa.push([
+          idx + 1,
+          b.board_name || '',
+          b.board_code || '',
+          b.gms || 0,
+          b.urt || 0,
+          b.sbbr || 0,
+          b.sbbr_watch || 0,
+          b.rpe || 0,
+          hitSum,
+        ]);
+      });
+      sumAoa.push(['合计', '', '', totG, totU, totS, totW, totR, totG + totU + totS + totR]);
+      const wsSum = XLSX.utils.aoa_to_sheet(sumAoa);
+      this.freezeHeader(wsSum);
+      this.setSheetCols(wsSum, [6, 20, 14, 10, 10, 10, 14, 10, 8]);
+
+      const legend = [
+        ['字段名', '说明'],
+        ['策略', 'GMS / URT / SBBR / RPE，与页面勾选及命中分区一致'],
+        ['名单类型', '命中=策略信号；筑底关注=SBBR 尚未入场的筑底观察'],
+        ['股票代码', 'A 股代码（文本格式，保留前导零）'],
+        ['板块名', '成分所属板块；多板并集时可能为多个名称'],
+        ['最新收盘 / 结构位 / 参考价', '与页面表格同口径；空表示当时无有效数值'],
+        ['角色', '短线龙头/中军等标签'],
+        ['命中 / 得分说明 / 得分数', '命中标签与页面一致；得分数便于排序（GMS/URT 为分，SBBR 为量比，RPE 为 Z）'],
+        ['买点建议 / 卖点/防守', '以策略与 KDE/箱体为主'],
+        ['Fib / Cam / VP / 共振', '参考价，不作为主买卖依据'],
+        ['板块汇总合计', '同一股票若同属多板，会在各板分别计数'],
+      ];
+      const wsLegend = XLSX.utils.aoa_to_sheet(legend);
+      this.freezeHeader(wsLegend);
+      this.setSheetCols(wsLegend, [22, 64]);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsOverview, '概览');
+      XLSX.utils.book_append_sheet(wb, wsDetail, '明细');
+      XLSX.utils.book_append_sheet(wb, wsSum, '板块汇总');
+      XLSX.utils.book_append_sheet(wb, wsLegend, '字段说明');
+
+      const filename = this.excelFilename();
+      XLSX.writeFile(wb, filename);
+      if (window.CommonUtils) {
+        CommonUtils.showToast(`已导出 ${rows.length} 条明细（${filename}）`, 'success');
+      }
+    } catch (e) {
+      console.error(e);
+      if (window.CommonUtils) CommonUtils.showToast((e && e.message) || '导出失败', 'error');
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.classList.remove('ba-exporting');
+        btn.textContent = prevText || '导出 Excel';
       }
     }
   },

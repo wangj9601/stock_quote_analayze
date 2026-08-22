@@ -131,13 +131,51 @@ const UnifiedTradeObserve = {
         return st || '—';
     },
 
-    analysisHref(code, name) {
+    analysisHref(code, name, popup) {
         const q = new URLSearchParams({
             tab: 'stock-ai',
             code: String(code || ''),
             name: String(name || ''),
         });
+        if (popup) q.set('popup', '1');
         return `analysis.html?${q.toString()}`;
+    },
+
+    /**
+     * 左键弹出个股分析窗口；Ctrl/Cmd/中键仍走浏览器默认（新标签）。
+     */
+    openAnalysisPopup(href, e) {
+        if (e) {
+            if (e.defaultPrevented) return;
+            if (e.button != null && e.button !== 0) return;
+            if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+        }
+        const url = (() => {
+            try {
+                const u = new URL(href, window.location.href);
+                u.searchParams.set('popup', '1');
+                return u.toString();
+            } catch (_) {
+                const sep = String(href || '').indexOf('?') >= 0 ? '&' : '?';
+                return `${href}${sep}popup=1`;
+            }
+        })();
+        const features = 'popup=yes,width=1280,height=860,left=72,top=48,scrollbars=yes,resizable=yes';
+        const w = window.open(url, 'uto_stock_ai', features);
+        if (!w) {
+            if (window.CommonUtils) {
+                CommonUtils.showToast('浏览器拦截了弹窗，请允许后重试，或按住 Ctrl 点击在新标签打开', 'warning');
+            }
+            return false;
+        }
+        try {
+            w.opener = null;
+        } catch (_) { /* ignore */ }
+        try {
+            w.focus();
+        } catch (_) { /* ignore */ }
+        return true;
     },
 
     async refresh() {
@@ -203,7 +241,7 @@ const UnifiedTradeObserve = {
                 const name = it.name || '';
                 const signalPrice = this.signalPriceFromItem(it);
                 return `<tr data-id="${it.id}" data-source="${this.esc(src)}">
-                    <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}">${this.esc(it.code)}</a></td>
+                    <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}" target="_blank" rel="noopener noreferrer" title="弹出个股分析">${this.esc(it.code)}</a></td>
                     <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(name)}">${this.esc(name)}</span></td>
                     <td class="uto-col-market">${this.esc(this.marketLabel(it.market))}</td>
                     <td class="uto-col-source">${this.esc(this.sourceLabel(src))}</td>
@@ -222,6 +260,11 @@ const UnifiedTradeObserve = {
     },
 
     async _onObserveClick(e) {
+        const link = e.target.closest('a.gms-stock-code-link, a.stock-code');
+        if (link) {
+            this.openAnalysisPopup(link.getAttribute('href'), e);
+            return;
+        }
         const rm = e.target.closest('.uto-remove');
         if (rm) {
             const id = parseInt(rm.getAttribute('data-id'), 10);
@@ -358,7 +401,7 @@ const UnifiedTradeObserve = {
                 }
                 const notesTitle = it.notes ? ` title="${this.esc(it.notes)}"` : '';
                 return `<tr data-id="${it.id}">
-                    <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}">${this.esc(it.code)}</a></td>
+                    <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}" target="_blank" rel="noopener noreferrer" title="弹出个股分析">${this.esc(it.code)}</a></td>
                     <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(name)}">${this.esc(name)}</span></td>
                     <td class="uto-col-source">${this.esc(this.sourceLabel(it.source))}</td>
                     <td class="uto-col-status"><span class="${stCls}"${notesTitle}>${this.esc(this.statusLabel(it.status))}</span></td>
@@ -379,6 +422,11 @@ const UnifiedTradeObserve = {
     },
 
     async _onFormalClick(e) {
+        const link = e.target.closest('a.gms-stock-code-link, a.stock-code');
+        if (link) {
+            this.openAnalysisPopup(link.getAttribute('href'), e);
+            return;
+        }
         const btn = e.target.closest('.uto-close-formal');
         if (!btn) return;
         const id = parseInt(btn.getAttribute('data-id'), 10);

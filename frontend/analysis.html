@@ -8,6 +8,15 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/analysis.css">
+    <script>
+        (function () {
+            try {
+                if (/(?:^|[?&])popup=1(?:&|$)/.test(String(location.search || ''))) {
+                    document.documentElement.classList.add('analysis-popup-window');
+                }
+            } catch (e) { /* ignore */ }
+        })();
+    </script>
 </head>
 
 <body data-channel="analyze">
@@ -57,6 +66,7 @@
                             </div>
                             <button type="button" class="btn btn-primary" id="baRunBtn" data-perm="channel.analyze.tab.board.btn.run">开始分析</button>
                             <button type="button" class="btn btn-secondary" id="baExportPdfBtn" data-perm="channel.analyze.tab.board.btn.run">导出 PDF</button>
+                            <button type="button" class="btn btn-secondary" id="baExportExcelBtn" data-perm="channel.analyze.tab.board.btn.run" title="导出当前板块分析结果为 Excel">导出 Excel</button>
                         </div>
                         <div id="baBoardMeta" class="ba-meta"></div>
                         <div id="baRolesHost" class="ba-roles"></div>
@@ -194,7 +204,7 @@
                 <!-- 统一交易观察 / 正式交易 -->
                 <div class="tab-panel" id="trade-observe">
                     <div class="uto-workbench" data-perm="channel.analyze.tab.trade_observe">
-                        <p class="uto-desc">汇总各策略与个股分析加入的交易观察 / 正式交易，可用来源筛选；股票代码点击进入个股分析。</p>
+                        <p class="uto-desc">汇总各策略与个股分析加入的交易观察 / 正式交易，可用来源筛选；股票代码点击弹出个股分析。</p>
                         <div class="uto-subtabs" role="tablist">
                             <button type="button" class="uto-subtab active" data-uto-sub="observe">观察列表</button>
                             <button type="button" class="uto-subtab" data-uto-sub="formal">正式交易</button>

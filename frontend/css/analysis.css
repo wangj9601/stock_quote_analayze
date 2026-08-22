@@ -2756,8 +2756,7 @@ a.ba-stock-code-link:focus {
 }
 
 /*
- * åå®½ç­ç¥ï¼fixed + colgroupï¼é¿å width:100% æ¶å¤ä½ç©ºç½å å°æä½åã
- * åç§°åå¸æ¶å©ä½å®½åº¦å¹¶çç¥ï¼æä½ååºå®è´´å³ã
+ * 列宽：fixed + colgroup。名称列按 4～6 字股票名收紧，剩余空白放在行尾操作列之后。
  */
 .uto-table {
   width: 100%;
@@ -2769,8 +2768,8 @@ a.ba-stock-code-link:focus {
 .uto-table--observe { min-width: 720px; }
 .uto-table--formal { min-width: 860px; }
 
-.uto-table .uto-cg-code { width: 5.25rem; }
-.uto-table .uto-cg-name { width: auto; }
+.uto-table .uto-cg-code { width: 5.5rem; }
+.uto-table .uto-cg-name { width: 7.5rem; }
 .uto-table .uto-cg-market { width: 3.25rem; }
 .uto-table .uto-cg-source { width: 4.75rem; }
 .uto-table .uto-cg-price { width: 4.5rem; }
@@ -2779,8 +2778,8 @@ a.ba-stock-code-link:focus {
 .uto-table .uto-cg-status { width: 4.25rem; }
 .uto-table .uto-cg-date { width: 6.25rem; }
 .uto-table .uto-cg-datetime { width: 8.75rem; }
-.uto-table .uto-cg-ops { width: 8.75rem; }
-.uto-table .uto-cg-ops-sm { width: 4.75rem; }
+.uto-table .uto-cg-ops { width: auto; min-width: 8.75rem; }
+.uto-table .uto-cg-ops-sm { width: auto; min-width: 4.75rem; }
 
 .uto-table th,
 .uto-table td {
@@ -2819,8 +2818,14 @@ a.ba-stock-code-link:focus {
   font-variant-numeric: tabular-nums;
 }
 
+.uto-table .uto-col-name {
+  width: 7.5rem;
+  max-width: 7.5rem;
+}
+
 .uto-table .uto-col-name .uto-name-text {
   display: block;
+  max-width: 7.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2851,7 +2856,7 @@ a.ba-stock-code-link:focus {
 .uto-table th.uto-col-ops,
 .uto-table td.uto-col-ops {
   white-space: nowrap;
-  text-align: center;
+  text-align: left;
   overflow: visible;
 }
 
@@ -2860,7 +2865,7 @@ a.ba-stock-code-link:focus {
   flex-wrap: nowrap;
   gap: 4px;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   max-width: none;
 }
 
@@ -2918,4 +2923,20 @@ a.ba-stock-code-link:focus {
 
 @media (max-width: 900px) {
   .uto-count { margin-left: 0; }
+}
+
+/* 个股分析弹出窗：隐藏站点导航，聚焦当前股票 */
+html.analysis-popup-window .header,
+html.analysis-popup-window .main-header,
+html.analysis-popup-window #main-header,
+html.analysis-popup-window .icp-footer,
+html.analysis-popup-window .analysis-tabs .tab-nav,
+html.analysis-popup-window .main-content > .container > h1 {
+  display: none !important;
+}
+html.analysis-popup-window .main-content {
+  padding-top: 12px;
+}
+html.analysis-popup-window .analysis-tabs {
+  margin-top: 0;
 }
