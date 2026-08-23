@@ -240,9 +240,17 @@ const UnifiedTradeObserve = {
                 const href = this.analysisHref(it.code, it.name);
                 const name = it.name || '';
                 const signalPrice = this.signalPriceFromItem(it);
+                const nameTitle = [
+                    name,
+                    this.marketLabel(it.market),
+                    this.sourceLabel(src),
+                    signalPrice != null ? `信号价 ${this.fmtPrice(signalPrice)}` : '',
+                    it.signal_date ? `信号日 ${it.signal_date}` : '',
+                    it.created_at ? `加入 ${this.fmtDt(it.created_at)}` : '',
+                ].filter(Boolean).join(' · ');
                 return `<tr data-id="${it.id}" data-source="${this.esc(src)}">
                     <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}" target="_blank" rel="noopener noreferrer" title="弹出个股分析">${this.esc(it.code)}</a></td>
-                    <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(name)}">${this.esc(name)}</span></td>
+                    <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(nameTitle)}">${this.esc(name)}</span></td>
                     <td class="uto-col-market">${this.esc(this.marketLabel(it.market))}</td>
                     <td class="uto-col-source">${this.esc(this.sourceLabel(src))}</td>
                     <td class="uto-col-num">${this.esc(this.fmtPrice(signalPrice))}</td>
@@ -393,6 +401,16 @@ const UnifiedTradeObserve = {
                 const name = it.name || '';
                 const open = String(it.status || '') === 'open';
                 const stCls = open ? 'uto-status-open' : 'uto-status-closed';
+                const nameTitle = [
+                    name,
+                    this.sourceLabel(it.source),
+                    this.statusLabel(it.status),
+                    it.entry_price != null ? `入场 ${this.fmtPrice(it.entry_price)}` : '',
+                    it.exit_price != null ? `出场 ${this.fmtPrice(it.exit_price)}` : '',
+                    it.pnl_percent != null ? `盈亏 ${Number(it.pnl_percent).toFixed(2)}%` : '',
+                    it.signal_date ? `信号日 ${it.signal_date}` : '',
+                    it.entry_at ? `入场 ${this.fmtDt(it.entry_at)}` : '',
+                ].filter(Boolean).join(' · ');
                 let pnlHtml = '—';
                 if (it.pnl_percent != null && it.pnl_percent !== '') {
                     const n = Number(it.pnl_percent);
@@ -402,7 +420,7 @@ const UnifiedTradeObserve = {
                 const notesTitle = it.notes ? ` title="${this.esc(it.notes)}"` : '';
                 return `<tr data-id="${it.id}">
                     <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}" target="_blank" rel="noopener noreferrer" title="弹出个股分析">${this.esc(it.code)}</a></td>
-                    <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(name)}">${this.esc(name)}</span></td>
+                    <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(nameTitle)}">${this.esc(name)}</span></td>
                     <td class="uto-col-source">${this.esc(this.sourceLabel(it.source))}</td>
                     <td class="uto-col-status"><span class="${stCls}"${notesTitle}>${this.esc(this.statusLabel(it.status))}</span></td>
                     <td class="uto-col-num">${this.esc(this.fmtPrice(it.entry_price))}</td>

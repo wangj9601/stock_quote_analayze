@@ -2756,7 +2756,7 @@ a.ba-stock-code-link:focus {
 }
 
 /*
- * 列宽：fixed + colgroup。名称列按 4～6 字股票名收紧，剩余空白放在行尾操作列之后。
+ * 列宽：table-layout:fixed + colgroup 百分比，宽屏按比例铺满，窄屏隐藏次要列并重分配。
  */
 .uto-table {
   width: 100%;
@@ -2765,21 +2765,53 @@ a.ba-stock-code-link:focus {
   font-size: 13px;
 }
 
-.uto-table--observe { min-width: 720px; }
-.uto-table--formal { min-width: 860px; }
+/* 观察列表：默认宽屏 8 列 */
+.uto-table--observe {
+  --uto-w-code: 8%;
+  --uto-w-name: 18%;
+  --uto-w-market: 6%;
+  --uto-w-source: 11%;
+  --uto-w-price: 9%;
+  --uto-w-date: 11%;
+  --uto-w-datetime: 16%;
+  --uto-w-ops: 21%;
+  min-width: 0;
+}
 
-.uto-table .uto-cg-code { width: 5.5rem; }
-.uto-table .uto-cg-name { width: 7.5rem; }
-.uto-table .uto-cg-market { width: 3.25rem; }
-.uto-table .uto-cg-source { width: 4.75rem; }
-.uto-table .uto-cg-price { width: 4.5rem; }
-.uto-table .uto-cg-lots { width: 3.5rem; }
-.uto-table .uto-cg-pnl { width: 4.25rem; }
-.uto-table .uto-cg-status { width: 4.25rem; }
-.uto-table .uto-cg-date { width: 6.25rem; }
-.uto-table .uto-cg-datetime { width: 8.75rem; }
-.uto-table .uto-cg-ops { width: auto; min-width: 8.75rem; }
-.uto-table .uto-cg-ops-sm { width: auto; min-width: 4.75rem; }
+.uto-table--observe .uto-cg-code { width: var(--uto-w-code); }
+.uto-table--observe .uto-cg-name { width: var(--uto-w-name); }
+.uto-table--observe .uto-cg-market { width: var(--uto-w-market); }
+.uto-table--observe .uto-cg-source { width: var(--uto-w-source); }
+.uto-table--observe .uto-cg-price { width: var(--uto-w-price); }
+.uto-table--observe .uto-cg-date { width: var(--uto-w-date); }
+.uto-table--observe .uto-cg-datetime { width: var(--uto-w-datetime); }
+.uto-table--observe .uto-cg-ops { width: var(--uto-w-ops); }
+
+/* 正式交易：默认宽屏 11 列 */
+.uto-table--formal {
+  --uto-w-code: 7%;
+  --uto-w-name: 14%;
+  --uto-w-source: 8%;
+  --uto-w-status: 7%;
+  --uto-w-price: 7%;
+  --uto-w-lots: 5%;
+  --uto-w-pnl: 7%;
+  --uto-w-date: 9%;
+  --uto-w-datetime: 13%;
+  --uto-w-ops: 23%;
+  min-width: 0;
+}
+
+.uto-table--formal .uto-cg-code { width: var(--uto-w-code); }
+.uto-table--formal .uto-cg-name { width: var(--uto-w-name); }
+.uto-table--formal .uto-cg-source { width: var(--uto-w-source); }
+.uto-table--formal .uto-cg-status { width: var(--uto-w-status); }
+.uto-table--formal .uto-cg-price { width: var(--uto-w-price); }
+.uto-table--formal .uto-cg-lots { width: var(--uto-w-lots); }
+.uto-table--formal .uto-cg-pnl { width: var(--uto-w-pnl); }
+.uto-table--formal .uto-cg-date { width: var(--uto-w-date); }
+.uto-table--formal .uto-cg-datetime { width: var(--uto-w-datetime); }
+.uto-table--formal .uto-cg-ops-sm { width: var(--uto-w-ops); }
 
 .uto-table th,
 .uto-table td {
@@ -2819,13 +2851,12 @@ a.ba-stock-code-link:focus {
 }
 
 .uto-table .uto-col-name {
-  width: 7.5rem;
-  max-width: 7.5rem;
+  min-width: 0;
 }
 
 .uto-table .uto-col-name .uto-name-text {
   display: block;
-  max-width: 7.5rem;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2919,6 +2950,157 @@ a.ba-stock-code-link:focus {
 .uto-table a.stock-code:hover {
   color: #0d47a1;
   text-decoration: none;
+}
+
+/* 观察列表：逐级隐藏次要列并重分配宽度 */
+@media (max-width: 1280px) {
+  .uto-table--observe {
+    --uto-w-code: 9%;
+    --uto-w-name: 22%;
+    --uto-w-source: 13%;
+    --uto-w-price: 10%;
+    --uto-w-date: 13%;
+    --uto-w-datetime: 18%;
+    --uto-w-ops: 15%;
+  }
+
+  .uto-table--observe .uto-col-market,
+  .uto-table--observe col.uto-cg-market {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .uto-table--observe {
+    --uto-w-code: 10%;
+    --uto-w-name: 26%;
+    --uto-w-source: 15%;
+    --uto-w-price: 11%;
+    --uto-w-date: 15%;
+    --uto-w-ops: 23%;
+  }
+
+  .uto-table--observe .uto-col-datetime,
+  .uto-table--observe col.uto-cg-datetime {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .uto-table--observe {
+    --uto-w-code: 11%;
+    --uto-w-name: 30%;
+    --uto-w-source: 17%;
+    --uto-w-date: 17%;
+    --uto-w-ops: 25%;
+    min-width: 520px;
+  }
+
+  .uto-table--observe thead th:nth-child(5),
+  .uto-table--observe tbody td:nth-child(5),
+  .uto-table--observe col.uto-cg-price {
+    display: none;
+  }
+
+  .uto-table th,
+  .uto-table td {
+    padding: 6px 6px;
+  }
+}
+
+@media (max-width: 560px) {
+  .uto-table--observe {
+    --uto-w-code: 14%;
+    --uto-w-name: 36%;
+    --uto-w-date: 20%;
+    --uto-w-ops: 30%;
+    min-width: 360px;
+  }
+
+  .uto-table--observe .uto-col-source,
+  .uto-table--observe col.uto-cg-source {
+    display: none;
+  }
+}
+
+/* 正式交易：逐级隐藏次要列 */
+@media (max-width: 1400px) {
+  .uto-table--formal {
+    --uto-w-code: 8%;
+    --uto-w-name: 16%;
+    --uto-w-source: 9%;
+    --uto-w-status: 8%;
+    --uto-w-price: 8%;
+    --uto-w-pnl: 8%;
+    --uto-w-date: 10%;
+    --uto-w-datetime: 15%;
+    --uto-w-ops: 18%;
+  }
+
+  .uto-table--formal thead th:nth-child(7),
+  .uto-table--formal tbody td:nth-child(7),
+  .uto-table--formal col:nth-child(7) {
+    display: none;
+  }
+}
+
+@media (max-width: 1200px) {
+  .uto-table--formal {
+    --uto-w-code: 9%;
+    --uto-w-name: 18%;
+    --uto-w-source: 10%;
+    --uto-w-status: 9%;
+    --uto-w-price: 9%;
+    --uto-w-pnl: 9%;
+    --uto-w-date: 11%;
+    --uto-w-ops: 25%;
+  }
+
+  .uto-table--formal thead th:nth-child(6),
+  .uto-table--formal tbody td:nth-child(6),
+  .uto-table--formal thead th:nth-child(10),
+  .uto-table--formal tbody td:nth-child(10),
+  .uto-table--formal col:nth-child(6),
+  .uto-table--formal col:nth-child(10) {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .uto-table--formal {
+    --uto-w-code: 10%;
+    --uto-w-name: 22%;
+    --uto-w-status: 10%;
+    --uto-w-price: 10%;
+    --uto-w-pnl: 10%;
+    --uto-w-ops: 28%;
+  }
+
+  .uto-table--formal thead th:nth-child(3),
+  .uto-table--formal tbody td:nth-child(3),
+  .uto-table--formal thead th:nth-child(9),
+  .uto-table--formal tbody td:nth-child(9),
+  .uto-table--formal col:nth-child(3),
+  .uto-table--formal col:nth-child(9) {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .uto-table--formal {
+    --uto-w-code: 12%;
+    --uto-w-name: 28%;
+    --uto-w-status: 12%;
+    --uto-w-price: 12%;
+    --uto-w-ops: 36%;
+    min-width: 400px;
+  }
+
+  .uto-table--formal thead th:nth-child(8),
+  .uto-table--formal tbody td:nth-child(8),
+  .uto-table--formal col:nth-child(8) {
+    display: none;
+  }
 }
 
 @media (max-width: 900px) {
