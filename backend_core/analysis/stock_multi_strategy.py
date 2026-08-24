@@ -306,7 +306,7 @@ def _resolve_trade_date(db: Session, raw: Optional[str]) -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _eval_gms(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+def _fetch_gms_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
     from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
 
     iface = GMSFrontendInterface(db)
@@ -316,21 +316,18 @@ def _eval_gms(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
     )
     if isinstance(rows, tuple):
         rows = rows[0]
-    row = None
     for r in rows or []:
         sym = _norm_code(r.get("symbol") or r.get("code"))
         if sym == code or sym.lstrip("0") == code.lstrip("0"):
-            row = r
-            break
-    if row is None and rows:
-        row = rows[0]
-    return summarize_strategy_check("gms", row, stock_code=code)
+            return dict(r)
+    if rows:
+        return dict(rows[0])
+    return None
 
 
-def _eval_urt(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+def _fetch_urt_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
     from backend_core.strategies.urt.frontend_interface import URTFrontendInterface
 
-    # 港股 5 位 / A 股 6 位
     market = "HK" if (code.isdigit() and len(code) <= 5) else "CN"
     result = URTFrontendInterface.screen(
         db,
@@ -344,32 +341,19 @@ def _eval_urt(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
         market=market,
     )
     rows = (result or {}).get("data") if isinstance(result, dict) else result
-    row = None
     for r in rows or []:
         if _norm_code(r.get("code") or r.get("symbol")) == code:
-            row = r
-            break
-    if row is None and rows:
-        row = list(rows)[0]
-    msg = (result or {}).get("message") if isinstance(result, dict) else None
-    hint = None
-    if isinstance(result, dict):
-        hint = (result.get("parameters") or {}).get("date_hint") or result.get("hint")
-    return summarize_strategy_check(
-        "urt", row, stock_code=code, message=hint or msg if not row else None
-    )
+            return dict(r)
+    if rows:
+        return dict(list(rows)[0])
+    return None
 
 
-def _eval_sbbr(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+def _fetch_sbbr_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+    if not (code.isdigit() and len(code) == 6):
+        return None
     from backend_core.strategies.sbbr.strategy_engine import SBBRStrategyEngine
 
-    if not (code.isdigit() and len(code) == 6):
-        return summarize_strategy_check(
-            "sbbr",
-            None,
-            stock_code=code,
-            message="SBBR 暂仅支持 A 股（6 位代码）",
-        )
     engine = SBBRStrategyEngine(db_session=db)
     rows = engine.screen(
         codes=[code],
@@ -379,20 +363,14 @@ def _eval_sbbr(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
         require_bottom=False,
         max_results=5,
     )
-    row = rows[0] if rows else None
-    return summarize_strategy_check("sbbr", row, stock_code=code)
+    return dict(rows[0]) if rows else None
 
 
-def _eval_rpe(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+def _fetch_rpe_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+    if not (code.isdigit() and len(code) == 6):
+        return None
     from backend_core.strategies.rpe.frontend_interface import RPEFrontendInterface
 
-    if not (code.isdigit() and len(code) == 6):
-        return summarize_strategy_check(
-            "rpe",
-            None,
-            stock_code=code,
-            message="RPE 暂仅支持 A 股（6 位代码）",
-        )
     result = RPEFrontendInterface.get_selection_results(
         db=db,
         date=trade_date,
@@ -404,17 +382,106 @@ def _eval_rpe(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
         adjust="none",
     )
     rows = (result or {}).get("data") if isinstance(result, dict) else result
-    row = None
     for r in rows or []:
         if _norm_code(r.get("code") or r.get("symbol")) == code:
-            row = r
-            break
-    if row is None and rows:
-        row = list(rows)[0]
-    msg = (result or {}).get("message") if isinstance(result, dict) else None
-    return summarize_strategy_check(
-        "rpe", row, stock_code=code, message=msg if not row else None
-    )
+            return dict(r)
+    if rows:
+        return dict(list(rows)[0])
+    return None
+
+
+def _eval_gms(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+    row = _fetch_gms_raw(db, code, trade_date)
+    return summarize_strategy_check("gms", row, stock_code=code)
+
+
+def _eval_urt(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+    row = _fetch_urt_raw(db, code, trade_date)
+    return summarize_strategy_check("urt", row, stock_code=code)
+
+
+def _eval_sbbr(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+    if not (code.isdigit() and len(code) == 6):
+        return summarize_strategy_check(
+            "sbbr",
+            None,
+            stock_code=code,
+            message="SBBR 暂仅支持 A 股（6 位代码）",
+        )
+    row = _fetch_sbbr_raw(db, code, trade_date)
+    return summarize_strategy_check("sbbr", row, stock_code=code)
+
+
+def _eval_rpe(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+    if not (code.isdigit() and len(code) == 6):
+        return summarize_strategy_check(
+            "rpe",
+            None,
+            stock_code=code,
+            message="RPE 暂仅支持 A 股（6 位代码）",
+        )
+    row = _fetch_rpe_raw(db, code, trade_date)
+    return summarize_strategy_check("rpe", row, stock_code=code)
+
+
+def collect_strategy_raw_rows(
+    db: Session,
+    *,
+    code: str,
+    date: Optional[str] = None,
+    strategies: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    """返回四策略完整原始行（供 trade_advice / 综合交易策略合成）。"""
+    code_n = _norm_code(code)
+    if code_n.isdigit():
+        if len(code_n) <= 5:
+            code_n = code_n.zfill(5)
+        elif len(code_n) == 6:
+            code_n = code_n.zfill(6)
+
+    wanted = [
+        s.strip().lower()
+        for s in (strategies or STRATEGY_KEYS)
+        if s and s.strip().lower() in STRATEGY_KEYS
+    ]
+    if not wanted:
+        wanted = list(STRATEGY_KEYS)
+
+    trade_date = _resolve_trade_date(db, date)
+    fetchers = {
+        "gms": _fetch_gms_raw,
+        "urt": _fetch_urt_raw,
+        "sbbr": _fetch_sbbr_raw,
+        "rpe": _fetch_rpe_raw,
+    }
+    rows: Dict[str, Optional[Dict[str, Any]]] = {}
+    summaries: Dict[str, Dict[str, Any]] = {}
+    errors: Dict[str, str] = {}
+    for key in wanted:
+        fn = fetchers[key]
+        try:
+            raw = fn(db, code_n, trade_date)
+            rows[key] = raw
+            summaries[key] = summarize_strategy_check(key, raw, stock_code=code_n)
+        except Exception as e:
+            logger.exception("raw strategy %s failed for %s", key, code_n)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            err = str(e)
+            errors[key] = err
+            rows[key] = None
+            summaries[key] = summarize_strategy_check(key, None, stock_code=code_n, error=err)
+
+    return {
+        "code": code_n,
+        "trade_date": trade_date,
+        "strategies": list(wanted),
+        "rows": rows,
+        "summaries": summaries,
+        "errors": errors,
+    }
 
 
 def _lookup_stock_name(db: Session, code: str) -> str:

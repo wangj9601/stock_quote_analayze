@@ -221,6 +221,93 @@ def get_multi_strategy_check(
         )
 
 
+class StockIntegratedTradePlanBody(BaseModel):
+    code: str = Field(..., min_length=1, max_length=32, description="股票代码")
+    date: Optional[str] = Field(None, description="基准日 YYYY-MM-DD")
+    snapshots: Optional[Dict[str, Any]] = Field(
+        None,
+        description="前端已拉取的分析快照：strategy/levels/pattern/swing/gann",
+    )
+
+
+@router.post("/stock-integrated-trade-plan")
+def post_stock_integrated_trade_plan(
+    body: StockIntegratedTradePlanBody,
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    """个股分析：整合四策略、结构位、形态、波段与江恩，输出短线/中长线交易策略。"""
+    raw = (body.code or "").strip()
+    if not raw:
+        return JSONResponse(
+            {"success": False, "message": "请提供股票代码"},
+            status_code=400,
+        )
+    try:
+        from backend_api.stock.stock_analysis_routes import resolve_levels_stock_identifier
+        from backend_core.analysis.integrated_trade_plan import build_integrated_trade_plan
+        from backend_core.analysis.stock_multi_strategy import collect_strategy_raw_rows
+
+        resolved = resolve_levels_stock_identifier(db, raw)
+        status = resolved.get("status")
+        if status == "ambiguous":
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "匹配到多只股票，请选择",
+                    "candidates": resolved.get("candidates") or [],
+                },
+                status_code=400,
+            )
+        if status == "not_found" or not resolved.get("code"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "未找到匹配股票",
+                },
+                status_code=404,
+            )
+        code_n = str(resolved["code"])
+        trade_date = (str(body.date).strip()[:10] if body.date else None)
+
+        snapshots = body.snapshots if isinstance(body.snapshots, dict) else {}
+        strategy_pack = snapshots.get("strategy")
+        if not isinstance(strategy_pack, dict) or not strategy_pack.get("summaries"):
+            strategy_pack = collect_strategy_raw_rows(db, code=code_n, date=trade_date)
+
+        ctx = {
+            "meta": {
+                "code": code_n,
+                "name": resolved.get("name") or "",
+                "trade_date": trade_date or strategy_pack.get("trade_date"),
+            },
+            "strategy_pack": strategy_pack,
+            "levels": snapshots.get("levels"),
+            "pattern": snapshots.get("pattern"),
+            "swing": snapshots.get("swing"),
+            "gann": snapshots.get("gann"),
+        }
+        plan = build_integrated_trade_plan(ctx)
+        return {
+            "success": True,
+            "data": {
+                "stock": {"code": code_n, "name": resolved.get("name") or ""},
+                "trade_date": ctx["meta"].get("trade_date"),
+                "plan": plan,
+            },
+        }
+    except Exception as e:
+        logger.exception("stock-integrated-trade-plan failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return JSONResponse(
+            {"success": False, "message": f"综合交易策略合成失败: {e}"},
+            status_code=500,
+        )
+
+
 @router.get("/leader-mid-signals")
 def get_leader_mid_signals(
     board_kind: str = Query(..., description="industry | concept"),

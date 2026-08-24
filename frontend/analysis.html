@@ -143,6 +143,10 @@
                                             data-perm="channel.analyze.tab.stock_ai.btn.analyze"
                                             title="将当前策略、阻力支撑、形态识别与波段趋势导出为 PDF"
                                             disabled>导出 PDF</button>
+                                        <button type="button" class="btn btn-secondary" id="ssaExportPngBtn"
+                                            data-perm="channel.analyze.tab.stock_ai.btn.analyze"
+                                            title="将当前分析结果（含图表）导出为 PNG 长图"
+                                            disabled>导出 PNG</button>
                                         <button type="button" class="btn btn-secondary" id="ssaTradeObserveBtn"
                                             data-perm="channel.analyze.tab.trade_observe"
                                             title="将当前分析股票加入统一交易观察（来源：个股分析）"
@@ -155,42 +159,50 @@
                             <div class="ssa-candidates-title">匹配到多只股票，请选择：</div>
                             <ul id="ssaCandidateList"></ul>
                         </div>
-                        <div class="ssa-meta" id="ssaMeta" hidden></div>
+                        <div id="ssaExportRoot" class="ssa-export-root">
+                            <div class="ssa-meta" id="ssaMeta" hidden></div>
 
-                        <section class="ssa-block" id="ssaStrategyBlock" hidden>
-                            <h4 class="ssa-block-title">策略分析</h4>
-                            <div class="ssa-results" id="ssaResults"></div>
-                        </section>
+                            <section class="ssa-block ssa-trade-plan-block" id="ssaTradePlanBlock" hidden>
+                                <h4 class="ssa-block-title">综合交易策略</h4>
+                                <div class="ssa-block-status" id="ssaTradePlanStatus"></div>
+                                <div id="ssaTradePlanHost"></div>
+                            </section>
 
-                        <section class="ssa-block" id="ssaLevelsBlock" hidden>
-                            <h4 class="ssa-block-title">阻力支撑位</h4>
-                            <div class="ssa-block-status" id="ssaLevelsStatus"></div>
-                            <div class="ssa-levels-host" id="ssaLevelsHost"></div>
-                        </section>
+                            <section class="ssa-block" id="ssaStrategyBlock" hidden>
+                                <h4 class="ssa-block-title">策略分析</h4>
+                                <div class="ssa-results" id="ssaResults"></div>
+                            </section>
 
-                        <section class="ssa-block" id="ssaPatternBlock" hidden>
-                            <h4 class="ssa-block-title">形态识别</h4>
-                            <div class="ssa-block-status" id="ssaPatternStatus"></div>
-                            <div class="ssa-pattern-host" id="ssaPatternHost"></div>
-                        </section>
+                            <section class="ssa-block" id="ssaLevelsBlock" hidden>
+                                <h4 class="ssa-block-title">阻力支撑位</h4>
+                                <div class="ssa-block-status" id="ssaLevelsStatus"></div>
+                                <div class="ssa-levels-host" id="ssaLevelsHost"></div>
+                            </section>
 
-                        <section class="ssa-block" id="ssaSwingBlock" hidden>
-                            <h4 class="ssa-block-title">波段与趋势</h4>
-                            <div class="ssa-block-status" id="ssaSwingStatus"></div>
-                            <div class="ssa-swing-host" id="ssaSwingHost"></div>
-                        </section>
+                            <section class="ssa-block" id="ssaPatternBlock" hidden>
+                                <h4 class="ssa-block-title">形态识别</h4>
+                                <div class="ssa-block-status" id="ssaPatternStatus"></div>
+                                <div class="ssa-pattern-host" id="ssaPatternHost"></div>
+                            </section>
 
-                        <section class="ssa-block" id="ssaGannBlock" hidden>
-                            <div class="ssa-block-header">
-                                <h4 class="ssa-block-title">江恩趋势预测</h4>
-                                <button type="button" class="btn btn-secondary btn-sm" id="ssaGannTradeObserveBtn"
-                                    data-perm="channel.analyze.tab.trade_observe"
-                                    title="将当前股票加入统一交易观察（来源：江恩趋势）"
-                                    disabled>交易观察</button>
-                            </div>
-                            <div class="ssa-block-status" id="ssaGannStatus"></div>
-                            <div class="ssa-gann-host" id="ssaGannHost"></div>
-                        </section>
+                            <section class="ssa-block" id="ssaSwingBlock" hidden>
+                                <h4 class="ssa-block-title">波段与趋势</h4>
+                                <div class="ssa-block-status" id="ssaSwingStatus"></div>
+                                <div class="ssa-swing-host" id="ssaSwingHost"></div>
+                            </section>
+
+                            <section class="ssa-block" id="ssaGannBlock" hidden>
+                                <div class="ssa-block-header">
+                                    <h4 class="ssa-block-title">江恩趋势预测</h4>
+                                    <button type="button" class="btn btn-secondary btn-sm" id="ssaGannTradeObserveBtn"
+                                        data-perm="channel.analyze.tab.trade_observe"
+                                        title="将当前股票加入统一交易观察（来源：江恩趋势）"
+                                        disabled>交易观察</button>
+                                </div>
+                                <div class="ssa-block-status" id="ssaGannStatus"></div>
+                                <div class="ssa-gann-host" id="ssaGannHost"></div>
+                            </section>
+                        </div>
 
                         <div class="ssa-empty" id="ssaEmpty">
                             输入股票代码或名称，也可从自选选择后点击「分析」。
@@ -1011,6 +1023,8 @@
     <script src="js/market_structure_tool.js"></script>
     <script src="js/gann_trend_tool.js"></script>
     <script src="js/stock_analysis_pdf.js"></script>
+    <script src="js/stock_analysis_png.js"></script>
+    <script src="js/stock_trade_plan.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/trade_observe.js"></script>
     <script src="js/analysis.js"></script>

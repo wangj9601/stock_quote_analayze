@@ -12,6 +12,10 @@ URT_STOP_BUFFER_PCT = 0.02  # 止损参考 = 锚点 × (1 - 2%)，含噪声缓�
 # 与个股分析形态买点一致：止损/失效须严格低于可执行买入下沿
 URT_ENTRY_ABOVE_STOP_PCT = 0.005  # 买入下沿至少高于止损约 0.5%
 URT_NEAR_SUPPORT_BAND_PCT = 0.01  # 短线可执行区：支撑下方约 1%～支撑（仍须高于止损）
+# 与 URT 结构回测一致：现价距第一支撑过近时，入场参考第二档
+STRUCTURE_ENTRY_NEAR_SUPPORT_PCT = 0.03
+STRUCTURE_EXIT_TARGET_PCT = 0.10
+STRUCTURE_EXIT_MIN_UPSIDE_PCT = 0.05
 
 
 def _f(v: Any) -> Optional[float]:
@@ -55,6 +59,163 @@ def _kde_resistance(row: Dict[str, Any]) -> Optional[float]:
         return nr
     st = row.get("structure") if isinstance(row.get("structure"), dict) else {}
     return _f(st.get("nearest_resistance"))
+
+
+def _structure_level_pool(
+    row: Optional[Dict[str, Any]],
+    ref: Optional[Dict[str, Any]],
+    side: str,
+) -> List[Any]:
+    """合并策略行与 reference_levels 中的支撑/阻力档位列表。"""
+    key = "support_levels" if side == "support" else "resistance_levels"
+    pool: List[Any] = []
+    seen: set = set()
+
+    def _add(vals: Any) -> None:
+        for x in vals or []:
+            raw = x.get("center") if isinstance(x, dict) else x
+            if raw is None and isinstance(x, dict):
+                raw = x.get("price")
+            v = _f(raw)
+            if v is None:
+                continue
+            k = round(v, 4)
+            if k in seen:
+                continue
+            seen.add(k)
+            pool.append(k)
+
+    for src in (row, ref):
+        if not isinstance(src, dict):
+            continue
+        _add(src.get(key))
+        st = src.get("structure")
+        if isinstance(st, dict):
+            _add(st.get(key))
+    nearest = _kde_support(row) if side == "support" else _kde_resistance(row)
+    if nearest is None and isinstance(ref, dict):
+        nearest = _f(ref.get("nearest_support" if side == "support" else "nearest_resistance"))
+    if nearest is not None:
+        k = round(float(nearest), 4)
+        if k not in seen:
+            pool.append(k)
+    if side == "support":
+        pool.sort(reverse=True)
+    else:
+        pool.sort()
+    return pool
+
+
+def _pick_entry_structure_support(
+    price: Optional[float],
+    nearest_support: Optional[float],
+    level_pool: List[Any],
+    *,
+    near_pct: float = STRUCTURE_ENTRY_NEAR_SUPPORT_PCT,
+) -> tuple[Optional[float], int, Optional[float]]:
+    """距第一支撑过近时退回第二档（与 URT structure_rr 第二档口径一致）。"""
+    if nearest_support is None:
+        return None, 1, None
+    ns = float(nearest_support)
+    if price is None or price <= 0:
+        return ns, 1, None
+    px = float(price)
+    if px <= ns:
+        return ns, 1, 0.0
+    dist = (px - ns) / px
+    if dist > float(near_pct):
+        return ns, 1, dist
+    try:
+        from backend_core.strategies.gms.structure_levels import pick_nth_level
+
+        s2 = pick_nth_level(level_pool, px, side="support", n=2)
+    except Exception:
+        s2 = None
+    if s2 is not None and float(s2) < ns - 1e-6:
+        return float(s2), 2, dist
+    return ns, 1, dist
+
+
+def _structure_stop_target_zones(
+    *,
+    entry_price: float,
+    entry_support: Optional[float],
+    nearest_resistance: Optional[float],
+    target_pct: float = STRUCTURE_EXIT_TARGET_PCT,
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], List[str]]:
+    """对齐 URT structure_exit 回测：支撑缓冲止损 + 阻力/百分比止盈。"""
+    from backend_core.strategies.urt.signal_detector import resolve_structure_exit_levels
+
+    notes: List[str] = []
+    struct = resolve_structure_exit_levels(
+        entry_price=float(entry_price),
+        nearest_support=entry_support,
+        nearest_resistance=nearest_resistance,
+        cfg={
+            "structure_stop_buffer_pct": URT_STOP_BUFFER_PCT,
+            "structure_exit_min_upside_pct": STRUCTURE_EXIT_MIN_UPSIDE_PCT,
+        },
+        target_pct=float(target_pct),
+    )
+    stop_zone = None
+    if struct.get("stop_price") is not None:
+        basis = str(struct.get("stop_basis") or "structure_support")
+        label = "结构支撑下方视为防守失效"
+        if basis == "pct_fallback_stop_above_entry":
+            label = "支撑过近，回退百分比止损"
+        elif basis == "pct_fallback_no_support":
+            label = "无结构支撑，回退百分比止损"
+        stop_zone = _zone(
+            price=float(struct["stop_price"]),
+            label=label,
+            basis=basis,
+        )
+        if struct.get("structure_fallback"):
+            stop_zone["structure_fallback"] = True
+            stop_zone["fallback_reason"] = struct.get("fallback_reason")
+    take_profit = None
+    if struct.get("target_price") is not None:
+        tb = str(struct.get("target_basis") or "structure_resistance")
+        if tb == "structure_resistance":
+            tp_label = "结构阻力止盈（上行空间充足）"
+        elif tb == "pct_target_low_upside":
+            tp_label = "阻力上行不足，回退百分比目标止盈"
+        else:
+            tp_label = "百分比目标止盈"
+        take_profit = {
+            "prices": [round(float(struct["target_price"]), 4)],
+            "price": round(float(struct["target_price"]), 4),
+            "label": tp_label,
+            "basis": tb,
+        }
+    if struct.get("nearest_support") is not None:
+        notes.append(f"结构止损锚≈{_fmt_px(struct['nearest_support'])}")
+    if struct.get("nearest_resistance") is not None and take_profit:
+        notes.append(f"结构止盈参考≈{_fmt_px(struct['nearest_resistance'])}")
+    return stop_zone, take_profit, notes
+
+
+def _build_structure_entry_zone(
+    *,
+    entry_anchor: Optional[float],
+    close: Optional[float],
+    label: str,
+    basis: str,
+) -> Optional[Dict[str, Any]]:
+    if entry_anchor is None and close is None:
+        return None
+    anchor = float(entry_anchor if entry_anchor is not None else close)
+    if close is not None and float(close) > anchor:
+        hi = min(float(close), anchor * (1.0 + URT_NEAR_SUPPORT_BAND_PCT))
+        if hi < anchor:
+            hi = anchor
+        return _zone(
+            low=round(anchor, 4),
+            high=round(hi, 4),
+            label=label,
+            basis=basis,
+        )
+    return _zone(price=round(anchor, 4), label=label, basis=basis)
 
 
 def _fmt_px(v: Any) -> str:
@@ -165,15 +326,20 @@ def _soft_align_confluence(
             "与 KDE 同向贴近"
         )
         if stop_zone and (stop_zone.get("basis") or "").startswith("kde"):
-            stop_zone = dict(stop_zone)
-            stop_zone["price"] = round(center_s, 4)
-            if nz_s.get("low") is not None:
-                stop_zone["low"] = round(float(nz_s["low"]), 4)
-            if nz_s.get("high") is not None:
-                stop_zone["high"] = round(float(nz_s["high"]), 4)
-            stop_zone["basis"] = "kde+confluence"
-            stop_zone["label"] = (stop_zone.get("label") or "") + "（对齐共振带）"
+            band_low = _f(nz_s.get("low")) or center_s
+            anchor = min(float(kde_s), float(band_low))
+            stop_zone = _urt_stop_with_buffer(
+                anchor,
+                basis="kde+confluence",
+                ref_label="共振支撑下沿",
+            )
             stop_zone["kde_price"] = round(float(kde_s), 4)
+            if band_low is not None:
+                stop_zone["confluence_low"] = round(float(band_low), 4)
+            band_high = _f(nz_s.get("high"))
+            if band_high is not None:
+                stop_zone["confluence_high"] = round(float(band_high), 4)
+            stop_zone["label"] = "结构支撑下方视为防守失效（对齐共振带）"
             if confidence == "medium":
                 confidence = "high"
 
@@ -260,6 +426,54 @@ def _urt_stop_with_buffer(
     z["ref_price"] = round(ref, 4)
     z["buffer_pct"] = buf
     return z
+
+
+def _entry_anchor(buy_zone: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not buy_zone or not isinstance(buy_zone, dict):
+        return None
+    lo = _f(buy_zone.get("low"))
+    if lo is not None:
+        return lo
+    return _f(buy_zone.get("price"))
+
+
+def _ensure_stop_below_entry(
+    buy_zone: Optional[Dict[str, Any]],
+    stop_zone: Optional[Dict[str, Any]],
+    *,
+    kde_s: Optional[float],
+    ref_label: str = "结构支撑",
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """止损价须严格低于买入下沿；共振对齐后若被抬高则重钳为缓冲止损。"""
+    if not buy_zone or not stop_zone:
+        return buy_zone, stop_zone
+    entry_px = _entry_anchor(buy_zone)
+    s_px = _f(stop_zone.get("price"))
+    if entry_px is None or s_px is None:
+        return buy_zone, stop_zone
+    if s_px + 1e-12 < entry_px:
+        return buy_zone, stop_zone
+    ref_px = _f(stop_zone.get("ref_price")) or kde_s or entry_px
+    old_basis = str(stop_zone.get("basis") or "kde")
+    basis_root = old_basis.split("+")[0] or "kde"
+    had_confluence = "confluence" in old_basis
+    stop_zone = _urt_stop_with_buffer(
+        float(ref_px),
+        basis=basis_root,
+        ref_label=ref_label,
+    )
+    if had_confluence:
+        stop_zone["basis"] = f"{basis_root}+confluence"
+    s_px = float(stop_zone["price"])
+    min_entry = s_px * (1.0 + float(URT_ENTRY_ABOVE_STOP_PCT))
+    if entry_px + 1e-12 < min_entry:
+        buy_zone = dict(buy_zone)
+        buy_zone["low"] = round(min_entry, 4)
+        if _f(buy_zone.get("high")) is not None and float(buy_zone["high"]) < min_entry:
+            buy_zone["high"] = round(min_entry, 4)
+        if buy_zone.get("price") is not None and float(buy_zone["price"]) < min_entry:
+            buy_zone["price"] = round(min_entry, 4)
+    return buy_zone, stop_zone
 
 
 def _urt_reconcile_entry_stop(
@@ -483,12 +697,41 @@ def build_trade_advice(
         board_weak = bool(row.get("board_weak"))
         if left or buy_type == "左侧":
             action = "buy"
-            buy_zone = _zone(
-                price=kde_s or close,
-                label="左侧吸筹：贴近均值/结构支撑附近低吸",
-                basis="gms_left+kde" if kde_s else "gms_left",
+            sup_pool = _structure_level_pool(row, ref, "support")
+            entry_anchor, support_rank, near_dist = _pick_entry_structure_support(
+                close, kde_s, sup_pool
             )
+            entry_anchor = entry_anchor or kde_s
+            buy_zone = _build_structure_entry_zone(
+                entry_anchor=entry_anchor,
+                close=close,
+                label="左侧吸筹：回踩结构支撑附近分批承接",
+                basis="gms_left+structure",
+            )
+            if buy_zone is None:
+                buy_zone = _zone(
+                    price=kde_s or close,
+                    label="左侧吸筹：贴近均值/结构支撑附近低吸",
+                    basis="gms_left+kde" if kde_s else "gms_left",
+                )
             summary_bits.append("GMS左侧买点：宜在结构支撑附近分批承接")
+            if support_rank >= 2 and entry_anchor is not None:
+                pct_txt = f"{near_dist * 100:.1f}%" if near_dist is not None else "较近"
+                summary_bits.append(
+                    f"距第一支撑过近（{pct_txt}），入场参考第二档支撑≈{_fmt_px(entry_anchor)}"
+                )
+            ref_entry = _entry_anchor(buy_zone) or close or entry_anchor
+            if ref_entry is not None and entry_anchor is not None:
+                sz, tp, st_notes = _structure_stop_target_zones(
+                    entry_price=float(ref_entry),
+                    entry_support=float(entry_anchor),
+                    nearest_resistance=kde_r,
+                )
+                if sz is not None:
+                    stop_zone = sz
+                if tp is not None:
+                    take_profit = tp
+                summary_bits.extend(st_notes)
         elif right or buy_type == "右侧":
             action = "buy"
             buy_zone = _zone(
@@ -497,9 +740,13 @@ def build_trade_advice(
                 basis="gms_right",
             )
             summary_bits.append("GMS右侧买点：回踩不破支撑再跟进")
-        if kde_s is not None:
-            stop_zone = _zone(price=kde_s, label="结构支撑下方视为防守失效", basis="kde")
-        if kde_r is not None:
+        if not stop_zone and kde_s is not None:
+            stop_zone = _urt_stop_with_buffer(
+                float(kde_s),
+                basis="kde",
+                ref_label="结构支撑",
+            )
+        if not take_profit and kde_r is not None:
             take_profit = {
                 "label": "靠近结构压力减仓/止盈",
                 "basis": "kde",
@@ -543,12 +790,23 @@ def build_trade_advice(
             st = row.get("structure") if isinstance(row.get("structure"), dict) else {}
             rr = _f(st.get("rr"))
 
+        trade_support = kde_s
         if bool(row.get("buy_signal")):
             action = "buy"
+            sup_pool = _structure_level_pool(row, ref, "support")
+            entry_support, support_rank, near_dist = _pick_entry_structure_support(
+                close, kde_s, sup_pool
+            )
+            trade_support = entry_support if entry_support is not None else kde_s
+            if support_rank >= 2 and trade_support is not None:
+                pct_txt = f"{near_dist * 100:.1f}%" if near_dist is not None else "较近"
+                summary_bits.append(
+                    f"距第一支撑过近（{pct_txt}），入场参考第二档支撑≈{_fmt_px(trade_support)}"
+                )
             # 默认：支撑～现价/MA20 的回踩承接区；已远离支撑或过热软标时强调回踩不追
             prefer_pullback = False
-            if close is not None and kde_s is not None and close > 0:
-                dist_pct = (float(close) - float(kde_s)) / float(close)
+            if close is not None and trade_support is not None and close > 0:
+                dist_pct = (float(close) - float(trade_support)) / float(close)
                 if dist_pct >= 0.03 or overheat_soft:
                     prefer_pullback = True
             if overheat_hard:
@@ -559,12 +817,14 @@ def build_trade_advice(
             entry_high = None
             anchors = [
                 x
-                for x in (kde_s, ma20)
+                for x in (trade_support, ma20)
                 if x is not None and (close is None or float(x) <= float(close) + 1e-12)
             ]
             if anchors:
                 entry_low = min(float(x) for x in anchors)
                 entry_high = max(float(x) for x in anchors)
+            elif trade_support is not None:
+                entry_low = float(trade_support)
             elif kde_s is not None:
                 entry_low = float(kde_s)
             elif ma20 is not None:
@@ -575,7 +835,7 @@ def build_trade_advice(
                     low=entry_low,
                     high=entry_high,
                     close=close,
-                    support=kde_s,
+                    support=trade_support,
                     ma20=ma20,
                 )
             elif entry_low is not None:
@@ -584,14 +844,14 @@ def build_trade_advice(
                     low=entry_low,
                     high=close if close is not None else entry_high,
                     close=close,
-                    support=kde_s,
+                    support=trade_support,
                     ma20=ma20,
                 )
 
             reconciled = _urt_reconcile_entry_stop(
                 entry_low=entry_low,
                 entry_high=entry_high,
-                support=kde_s,
+                support=trade_support,
                 ma20=ma20,
                 close=close,
                 prefer_pullback=prefer_pullback,
@@ -663,7 +923,17 @@ def build_trade_advice(
                     ma20, basis="ma20", ref_label="MA20"
                 )
 
-        if kde_r is not None:
+        if action == "buy" and trade_support is not None and buy_zone:
+            ref_entry = _entry_anchor(buy_zone) or close or trade_support
+            _, tp_struct, tp_notes = _structure_stop_target_zones(
+                entry_price=float(ref_entry),
+                entry_support=float(trade_support),
+                nearest_resistance=kde_r,
+            )
+            if tp_struct is not None:
+                take_profit = tp_struct
+            summary_bits.extend(tp_notes)
+        elif kde_r is not None:
             take_profit = {
                 "label": "靠近结构压力减仓/止盈",
                 "basis": "kde",
@@ -810,27 +1080,27 @@ def build_trade_advice(
     if take_profit and "prices" not in take_profit and take_profit.get("price") is not None:
         take_profit["prices"] = [take_profit["price"]]
 
-    # 共振对齐后再次保证：止损仍低于买入下沿（confluence 可能抬高展示止损）
-    if kind == "urt" and buy_zone and stop_zone:
-        b_lo = _f(buy_zone.get("low"))
-        s_px = _f(stop_zone.get("price") or stop_zone.get("high"))
-        if b_lo is not None and s_px is not None and s_px + 1e-12 >= b_lo:
-            # 展示止损被抬到买区上：改回缓冲锚，或抬高买入下沿
-            ref_px = _f(stop_zone.get("ref_price")) or (kde_s if kde_s is not None else b_lo)
-            stop_zone = _urt_stop_with_buffer(
-                float(ref_px),
-                basis="kde",
-                ref_label="最近结构支撑",
+    # 共振对齐后保证：止损仍低于买入下沿（GMS/SBBR/RPE 等同理）
+    if buy_zone and stop_zone:
+        buy_zone, stop_zone = _ensure_stop_below_entry(
+            buy_zone,
+            stop_zone,
+            kde_s=kde_s,
+            ref_label="结构支撑",
+        )
+        if kind == "urt" and _entry_anchor(buy_zone) is not None and stop_zone:
+            s_px = _f(stop_zone.get("price"))
+            min_entry = (
+                float(s_px) * (1.0 + float(URT_ENTRY_ABOVE_STOP_PCT)) if s_px is not None else None
             )
-            s_px = float(stop_zone["price"])
-            min_entry = s_px * (1.0 + float(URT_ENTRY_ABOVE_STOP_PCT))
-            if b_lo < min_entry:
-                buy_zone = dict(buy_zone)
-                buy_zone["low"] = round(min_entry, 4)
-                if _f(buy_zone.get("high")) is not None and float(buy_zone["high"]) < min_entry:
-                    buy_zone["high"] = round(min_entry, 4)
+            entry_px = _entry_anchor(buy_zone)
+            if (
+                min_entry is not None
+                and entry_px is not None
+                and entry_px + 1e-12 < min_entry
+            ):
                 summary_bits.append(
-                    f"共振对齐后已重钳：买入下沿≥{_fmt_px(min_entry)}，止损{_fmt_px(s_px)}"
+                    f"已重钳：买入下沿≥{_fmt_px(min_entry)}，止损{_fmt_px(s_px)}"
                 )
 
     structure_rr = _f(row.get("structure_rr"))

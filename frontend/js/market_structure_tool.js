@@ -109,7 +109,7 @@ const MarketStructureTool = {
             })
             .join('');
         return (
-            `<svg class="ms-zigzag-svg" viewBox="0 0 ${w} ${h}" role="img" ` +
+            `<svg class="ms-zigzag-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" ` +
             `aria-label="ZigZag 波段折线">` +
             `<polyline fill="none" stroke="#94a3b8" stroke-width="1.5" points="${poly}"/>` +
             dots +
@@ -211,8 +211,9 @@ const MarketStructureTool = {
             const wPts = weekly.points || weekly.zigzag || [];
             const wSvg = this.buildZigzagSvg(wPts);
             weeklyBlock =
-                `<details class="ms-weekly-details">` +
+                `<details class="ms-weekly-details" open>` +
                 `<summary>周线摆动明细（${this.esc(weeklyLabel || weeklyTrend || '--')}）</summary>` +
+                `<div class="ms-weekly-body">` +
                 (weekly.summary ? `<p class="ms-summary">${this.esc(weekly.summary)}</p>` : '') +
                 (weekly.pattern_contrast
                     ? `<div class="ms-contrast">${this.esc(weekly.pattern_contrast)}</div>`
@@ -220,7 +221,7 @@ const MarketStructureTool = {
                 (wSvg
                     ? `<div class="ms-zigzag-wrap">${wSvg}<p class="ms-muted ms-chart-hint">周线示意折线（结构标注旁为对应价格）</p></div>`
                     : '') +
-                `</details>`;
+                `</div></details>`;
         }
 
         host.innerHTML =

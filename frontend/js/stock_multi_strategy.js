@@ -15,6 +15,7 @@ const StockMultiStrategy = {
     lastPattern: null,
     lastSwing: null,
     lastGann: null,
+    lastTradePlan: null,
 
     init() {
         const btn = document.getElementById('ssaAnalyzeBtn');
@@ -24,6 +25,10 @@ const StockMultiStrategy = {
         const exportBtn = document.getElementById('ssaExportPdfBtn');
         if (exportBtn) {
             exportBtn.addEventListener('click', () => this.exportPdf());
+        }
+        const exportPngBtn = document.getElementById('ssaExportPngBtn');
+        if (exportPngBtn) {
+            exportPngBtn.addEventListener('click', () => this.exportPng());
         }
         const observeBtn = document.getElementById('ssaTradeObserveBtn');
         if (observeBtn) {
@@ -200,6 +205,9 @@ const StockMultiStrategy = {
         this.lastPattern = null;
         this.lastSwing = null;
         this.lastGann = null;
+        this.lastTradePlan = null;
+        const planHost = document.getElementById('ssaTradePlanHost');
+        if (planHost) planHost.innerHTML = '';
         const observeBtn = document.getElementById('ssaTradeObserveBtn');
         if (observeBtn) {
             observeBtn.classList.remove('is-added');
@@ -218,16 +226,22 @@ const StockMultiStrategy = {
             this.lastPattern ||
             this.lastSwing ||
             this.lastGann ||
+            this.lastTradePlan ||
             this.lastStrategyError
         );
     },
 
     updateExportBtn() {
-        const btn = document.getElementById('ssaExportPdfBtn');
         const ok = this.hasExportableResult();
-        if (btn) {
-            btn.disabled = !ok || this.exporting;
-            if (!this.exporting) btn.textContent = '导出 PDF';
+        const pdfBtn = document.getElementById('ssaExportPdfBtn');
+        const pngBtn = document.getElementById('ssaExportPngBtn');
+        if (pdfBtn) {
+            pdfBtn.disabled = !ok || this.exporting;
+            if (!this.exporting) pdfBtn.textContent = '导出 PDF';
+        }
+        if (pngBtn) {
+            pngBtn.disabled = !ok || this.exporting;
+            if (!this.exporting) pngBtn.textContent = '导出 PNG';
         }
         this.updateTradeObserveBtn();
     },
@@ -571,14 +585,16 @@ const StockMultiStrategy = {
     },
 
     hideResultBlocks() {
-        ['ssaStrategyBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
+        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
+        const planHost = document.getElementById('ssaTradePlanHost');
         const levelsHost = document.getElementById('ssaLevelsHost');
         const patternHost = document.getElementById('ssaPatternHost');
         const swingHost = document.getElementById('ssaSwingHost');
         const gannHost = document.getElementById('ssaGannHost');
+        if (planHost) planHost.innerHTML = '';
         if (levelsHost) levelsHost.innerHTML = '';
         if (patternHost) patternHost.innerHTML = '';
         if (swingHost) swingHost.innerHTML = '';
@@ -587,7 +603,8 @@ const StockMultiStrategy = {
         const patternStatus = document.getElementById('ssaPatternStatus');
         const swingStatus = document.getElementById('ssaSwingStatus');
         const gannStatus = document.getElementById('ssaGannStatus');
-        [levelsStatus, patternStatus, swingStatus, gannStatus].forEach((status) => {
+        const planStatus = document.getElementById('ssaTradePlanStatus');
+        [levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
             if (status) {
                 status.textContent = '';
                 status.hidden = false;
@@ -724,6 +741,7 @@ const StockMultiStrategy = {
                 this.loadSwingSection(resolvedCode, tradeDate),
                 this.loadGannSection(resolvedCode, tradeDate),
             ]);
+            await this.loadTradePlanSection(resolvedCode, tradeDate);
             this.updateExportBtn();
 
             CommonUtils.showToast(
@@ -763,6 +781,7 @@ const StockMultiStrategy = {
                     this.loadSwingSection(firstToken, asofFallback),
                     this.loadGannSection(firstToken, asofFallback),
                 ]);
+                await this.loadTradePlanSection(firstToken, asofFallback);
                 this.updateExportBtn();
                 CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑、形态、波段与江恩', 'warning');
             } else {
@@ -1023,6 +1042,76 @@ const StockMultiStrategy = {
         this.updateGannTradeObserveBtn();
     },
 
+    async loadTradePlanSection(code, asof) {
+        const block = document.getElementById('ssaTradePlanBlock');
+        const host = document.getElementById('ssaTradePlanHost');
+        if (!block || !host) return;
+        this.setBlockLoading('ssaTradePlanBlock', 'ssaTradePlanStatus', '正在合成综合交易策略…');
+        try {
+            const snapshots = {};
+            if (this.lastLevels && this.lastLevels.data) {
+                snapshots.levels = { data: this.lastLevels.data };
+            }
+            if (this.lastPattern) {
+                snapshots.pattern = {
+                    tactical: this.lastPattern.tactical || null,
+                    items: this.lastPattern.items || [],
+                };
+            }
+            if (this.lastSwing) {
+                snapshots.swing = { data: this.lastSwing.data || null };
+            }
+            if (this.lastGann) {
+                snapshots.gann = { data: this.lastGann.data || null };
+            }
+            const body = { code, snapshots };
+            if (asof) body.date = asof;
+            const resp = await authFetch(`${this.API_BASE_URL}/api/analysis/stock-integrated-trade-plan`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok || !payload.success) {
+                throw new Error(payload.message || payload.detail || `合成失败 ${resp.status}`);
+            }
+            const data = payload.data || {};
+            const plan = data.plan || {};
+            this.lastTradePlan = {
+                ok: true,
+                plan,
+                code: (data.stock && data.stock.code) || code,
+                name: (data.stock && data.stock.name) || '',
+                trade_date: data.trade_date || asof || '',
+                error: null,
+            };
+            if (typeof StockTradePlan !== 'undefined' && typeof StockTradePlan.render === 'function') {
+                StockTradePlan.render(host, this.lastTradePlan);
+            } else {
+                const summary = (plan.short_term && plan.short_term.summary) || '综合策略已生成';
+                host.innerHTML = `<p class="ssa-muted">${this.esc(summary)}</p>`;
+            }
+            block.hidden = false;
+            this.setBlockOk('ssaTradePlanStatus', '');
+            const st = document.getElementById('ssaTradePlanStatus');
+            if (st) st.hidden = true;
+        } catch (e) {
+            console.warn('个股分析·综合交易策略失败', e);
+            host.innerHTML = '';
+            this.lastTradePlan = {
+                ok: false,
+                plan: null,
+                code,
+                name: '',
+                trade_date: asof || '',
+                error: e.message || '综合交易策略合成失败',
+            };
+            block.hidden = false;
+            this.setBlockError('ssaTradePlanStatus', e.message || '综合交易策略合成失败，可稍后重试');
+        }
+        this.updateExportBtn();
+    },
+
     renderStrategyResult(data) {
         const empty = document.getElementById('ssaEmpty');
         const meta = document.getElementById('ssaMeta');
@@ -1100,7 +1189,7 @@ const StockMultiStrategy = {
         this.updateExportBtn();
     },
 
-    pdfFilename() {
+    exportBasename() {
         const d = new Date();
         const y = d.getFullYear();
         const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -1126,7 +1215,15 @@ const StockMultiStrategy = {
             .replace(/\s+/g, '_')
             .slice(0, 40);
         const mid = namePart ? `${codePart}_${namePart}` : codePart;
-        return `个股分析_${mid}_${y}${m}${day}.pdf`;
+        return `个股分析_${mid}_${y}${m}${day}`;
+    },
+
+    pdfFilename() {
+        return `${this.exportBasename()}.pdf`;
+    },
+
+    pngFilename() {
+        return `${this.exportBasename()}.png`;
     },
 
     buildPdfHtml() {
@@ -1318,6 +1415,25 @@ const StockMultiStrategy = {
         return true;
     },
 
+    _beginExport(btn, busyText) {
+        this.exporting = true;
+        this.updateExportBtn();
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('ssa-exporting');
+            btn.textContent = busyText || '导出中…';
+        }
+    },
+
+    _endExport(btn, idleText) {
+        this.exporting = false;
+        if (btn) {
+            btn.classList.remove('ssa-exporting');
+            btn.textContent = idleText;
+        }
+        this.updateExportBtn();
+    },
+
     async exportPdf() {
         if (!this.hasExportableResult()) {
             if (window.CommonUtils) CommonUtils.showToast('请先完成个股分析再导出', 'warning');
@@ -1326,12 +1442,7 @@ const StockMultiStrategy = {
         if (this.exporting) return;
         const btn = document.getElementById('ssaExportPdfBtn');
         const filename = this.pdfFilename();
-        this.exporting = true;
-        if (btn) {
-            btn.disabled = true;
-            btn.classList.add('ssa-exporting');
-            btn.textContent = '导出中…';
-        }
+        this._beginExport(btn, '导出中…');
         try {
             if (!window.StockAnalysisPdf || typeof StockAnalysisPdf.exportFromHost !== 'function') {
                 throw new Error('PDF 导出模块未加载');
@@ -1351,12 +1462,31 @@ const StockMultiStrategy = {
                 }
             }
         } finally {
-            this.exporting = false;
-            if (btn) {
-                btn.classList.remove('ssa-exporting');
-                btn.textContent = '导出 PDF';
+            this._endExport(btn, '导出 PDF');
+        }
+    },
+
+    async exportPng() {
+        if (!this.hasExportableResult()) {
+            if (window.CommonUtils) CommonUtils.showToast('请先完成个股分析再导出', 'warning');
+            return;
+        }
+        if (this.exporting) return;
+        const btn = document.getElementById('ssaExportPngBtn');
+        const filename = this.pngFilename();
+        this._beginExport(btn, '导出中…');
+        try {
+            if (!window.StockAnalysisPng || typeof StockAnalysisPng.exportFromHost !== 'function') {
+                throw new Error('PNG 导出模块未加载');
             }
-            this.updateExportBtn();
+            const saved = await StockAnalysisPng.exportFromHost(this);
+            if (window.CommonUtils) CommonUtils.showToast(`已导出 ${saved || filename}`, 'success');
+        } catch (e) {
+            console.warn('PNG 导出失败', e);
+            const reason = (e && e.message) || String(e || '未知错误');
+            if (window.CommonUtils) CommonUtils.showToast(`导出 PNG 失败：${reason}`, 'error');
+        } finally {
+            this._endExport(btn, '导出 PNG');
         }
     },
 

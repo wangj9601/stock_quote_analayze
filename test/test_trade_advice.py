@@ -13,7 +13,7 @@ def test_gms_left_buy_advice():
         },
     )
     assert adv["action"] == "buy"
-    assert adv["stop_zone"]["price"] == 10.0
+    assert adv["stop_zone"]["price"] == 9.8
     assert adv["kde_support"] == 10.0
     assert adv["kde_resistance"] == 12.0
     assert "左侧" in adv["summary"] or "吸筹" in adv["summary"]
@@ -202,8 +202,67 @@ def test_confluence_soft_aligns_stop_display():
         },
         reference_levels=ref,
     )
-    assert adv["stop_zone"]["basis"] == "kde+confluence"
-    assert adv["stop_zone"]["price"] == 10.05
-    assert adv["stop_zone"].get("kde_price") == 10.0
-    assert adv["take_profit"]["basis"] == "kde+confluence"
-    assert "共振" in adv["summary"]
+    assert adv["stop_zone"]["price"] == 9.8
+    assert float(adv["stop_zone"]["price"]) < float(
+        adv["buy_zone"].get("low") or adv["buy_zone"].get("price")
+    )
+    assert adv["take_profit"]["basis"] == "structure_resistance"
+    assert float(adv["take_profit"]["prices"][0]) == 12.0
+    assert "结构" in adv["summary"]
+
+
+def test_gms_left_buy_stop_below_entry_with_confluence_band():
+    """GMS 左侧 + 距第一支撑过近：入场参考第二档，止损/止盈对齐 structure_exit。"""
+    ref = {
+        "ok": True,
+        "confluence_zones": {
+            "ok": True,
+            "nearest_support_zone": {
+                "center": 16.12,
+                "low": 15.86,
+                "high": 16.32,
+                "sources": ["kde", "fib"],
+                "strength": 3.0,
+            },
+        },
+        "support_levels": [16.12, 15.50],
+        "nearest_support": 16.12,
+        "nearest_resistance": 18.30,
+    }
+    adv = build_trade_advice(
+        "gms",
+        {
+            "left_buy_signal": True,
+            "buy_type": "左侧",
+            "nearest_support": 16.12,
+            "nearest_resistance": 18.30,
+            "close": 16.48,
+            "support_levels": [16.12, 15.50],
+        },
+        reference_levels=ref,
+    )
+    entry_lo = float(adv["buy_zone"]["low"])
+    stop_px = float(adv["stop_zone"]["price"])
+    assert entry_lo == 15.5
+    assert stop_px < entry_lo
+    assert stop_px == round(15.5 * 0.98, 4)
+    assert float(adv["take_profit"]["prices"][0]) == 18.30
+    assert "第二档支撑" in adv["summary"]
+
+
+def test_urt_buy_uses_second_support_when_near_first():
+    adv = build_trade_advice(
+        "urt",
+        {
+            "buy_signal": True,
+            "close": 16.48,
+            "ma20": 15.8,
+            "nearest_support": 16.12,
+            "nearest_resistance": 18.30,
+            "support_levels": [16.12, 15.20],
+        },
+    )
+    assert "第二档支撑" in adv["summary"]
+    assert float(adv["buy_zone"]["low"]) <= 15.2 + 1e-6
+    assert float(adv["stop_zone"]["price"]) < float(adv["buy_zone"]["low"])
+    assert float(adv["take_profit"]["prices"][0]) == 18.30

@@ -1432,6 +1432,10 @@ a.ba-stock-code-link:focus {
 .ssa-meta {
     margin-top: 1rem;
 }
+.ssa-form .form-group.ssa-actions {
+    min-width: 280px;
+    flex: 1 1 auto;
+}
 .ssa-action-btns {
     display: flex;
     flex-wrap: wrap;
@@ -1440,6 +1444,153 @@ a.ba-stock-code-link:focus {
 }
 .ssa-action-btns .btn {
     margin: 0;
+}
+.ssa-export-root {
+    min-height: 0;
+}
+/* 综合交易策略 */
+.ssa-trade-plan-block {
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 1rem 1.1rem 1.15rem;
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 42%);
+}
+.ssa-plan-wrap { font-size: 0.9rem; color: #334155; }
+.ssa-plan-head { margin-bottom: 0.85rem; }
+.ssa-plan-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.ssa-plan-badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+}
+.ssa-plan-badge--buy { background: #ecfdf5; border-color: #86efac; color: #166534; }
+.ssa-plan-badge--watch { background: #fffbeb; border-color: #fde68a; color: #a16207; }
+.ssa-plan-badge--avoid { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.ssa-plan-badge--bull { background: #ecfdf5; border-color: #86efac; color: #166534; }
+.ssa-plan-badge--bear { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+.ssa-plan-badge--neutral { background: #f1f5f9; border-color: #cbd5e1; color: #475569; }
+.ssa-plan-badge--conf-high { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+.ssa-plan-badge--conf-mid { background: #f8fafc; border-color: #cbd5e1; color: #475569; }
+.ssa-plan-badge--conf-low { background: #fff7ed; border-color: #fdba74; color: #c2410c; }
+.ssa-plan-badge--primary { background: #eef2ff; border-color: #a5b4fc; color: #3730a3; }
+.ssa-plan-badge--rr { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.ssa-plan-levels { font-size: 0.82rem; color: #64748b; }
+.ssa-plan-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.85rem 1rem;
+}
+@media (max-width: 768px) {
+    .ssa-plan-grid { grid-template-columns: 1fr; }
+}
+.ssa-plan-col-title {
+    margin: 0 0 0.45rem;
+    font-size: 0.95rem;
+    color: #0f172a;
+    font-weight: 700;
+}
+.ssa-plan-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    margin-bottom: 0.45rem;
+}
+.ssa-plan-table th,
+.ssa-plan-table td {
+    border: 1px solid #e2e8f0;
+    padding: 0.35rem 0.45rem;
+    text-align: left;
+    vertical-align: top;
+}
+.ssa-plan-table th {
+    width: 4.5rem;
+    background: #f8fafc;
+    color: #64748b;
+    font-weight: 600;
+}
+.ssa-plan-list {
+    margin: 0.35rem 0 0.5rem 1.1rem;
+    padding: 0;
+    font-size: 0.82rem;
+    color: #475569;
+}
+.ssa-plan-list--exit { color: #b45309; }
+.ssa-plan-summary {
+    margin: 0.35rem 0 0;
+    line-height: 1.5;
+    color: #334155;
+}
+.ssa-plan-muted {
+    margin: 0.25rem 0 0;
+    font-size: 0.82rem;
+    color: #94a3b8;
+}
+.ssa-plan-conflicts {
+    margin-top: 0.75rem;
+    padding: 0.55rem 0.65rem;
+    border-radius: 6px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+}
+.ssa-plan-conflict-item {
+    font-size: 0.82rem;
+    color: #c2410c;
+    line-height: 1.45;
+}
+.ssa-plan-conflict-item + .ssa-plan-conflict-item { margin-top: 0.25rem; }
+.ssa-plan-disclaimer {
+    margin: 0.75rem 0 0;
+    font-size: 0.78rem;
+    color: #94a3b8;
+    line-height: 1.45;
+}
+.ssa-png-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.15rem;
+    color: #0f172a;
+    font-weight: 700;
+}
+.ssa-png-shot {
+    padding: 8px 4px 16px;
+    background: #fff;
+}
+body.ssa-png-capturing #ssaGannTradeObserveBtn,
+body.ssa-png-capturing .ssa-card-links,
+body.ssa-png-capturing .ssa-scroll-fab,
+.ssa-png-shot #ssaGannTradeObserveBtn,
+.ssa-png-shot .ssa-card-links {
+    display: none !important;
+}
+/* html2canvas 对 <details> / SVG height:auto 布局不准，截图时改为普通文档流 */
+body.ssa-png-capturing details,
+.ssa-png-shot details,
+.ssa-png-shot .ms-details-static {
+    display: block !important;
+    overflow: visible !important;
+}
+body.ssa-png-capturing details > *:not(summary),
+.ssa-png-shot details > *:not(summary),
+.ssa-png-shot .ms-weekly-body {
+    display: block !important;
+}
+body.ssa-png-capturing .ms-zigzag-wrap,
+.ssa-png-shot .ms-zigzag-wrap {
+    overflow: visible !important;
+}
+body.ssa-png-capturing .ms-zigzag-svg,
+.ssa-png-shot .ms-zigzag-svg {
+    display: block !important;
+    max-width: 100% !important;
 }
 .ssa-result-actions {
     display: flex;
@@ -1583,12 +1734,22 @@ a.ba-stock-code-link:focus {
     border: 1px solid #e2e8f0;
     border-radius: 6px;
     background: #fff;
+    overflow: visible;
 }
 .ms-weekly-details > summary {
     cursor: pointer;
     font-weight: 600;
     color: #334155;
     font-size: 13px;
+}
+.ms-weekly-body {
+    margin-top: 8px;
+}
+.ms-details-static-title {
+    font-weight: 600;
+    color: #334155;
+    font-size: 13px;
+    margin-bottom: 6px;
 }
 .ms-summary { flex: 1; min-width: 12rem; line-height: 1.45; }
 .ms-contrast {
@@ -1629,9 +1790,9 @@ a.ba-stock-code-link:focus {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    overflow-x: auto;
+    overflow: visible;
 }
-.ms-zigzag-svg { width: 100%; max-width: 560px; height: auto; display: block; }
+.ms-zigzag-svg { width: 100%; max-width: 100%; height: auto; display: block; }
 .ms-chart-hint { margin: 4px 0 0; font-size: 11px; }
 
 /* 江恩趋势预测 */

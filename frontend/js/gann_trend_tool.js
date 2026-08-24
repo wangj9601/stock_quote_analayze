@@ -135,7 +135,7 @@ const GannTrendTool = {
         const yBot = `<text x="4" y="${(h - padB).toFixed(1)}" font-size="8" fill="#64748b">${yMin.toFixed(2)}</text>`;
 
         return (
-            `<svg class="gann-fan-svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="江恩扇形示意">` +
+            `<svg class="gann-fan-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="江恩扇形示意">` +
             zzPoly +
             rays +
             priceLine +

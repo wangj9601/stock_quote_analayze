@@ -1,6 +1,6 @@
 /**
  * 个股分析 · 数据驱动 PDF 导出（复用 BoardAnalysisPdf 的 jsPDF / 中文字体封装）
- * 覆盖：策略分析 + 阻力支撑位 + 形态识别 + 波段与趋势 + 江恩趋势
+ * 覆盖：综合交易策略 + 策略分析 + 阻力支撑位 + 形态识别 + 波段与趋势 + 江恩趋势
  */
 (function (global) {
   function cell(v) {
@@ -406,6 +406,77 @@
     return { error: pack.error || null, rows, expert, empty: !rows.length };
   }
 
+  function zoneTxt(z) {
+    if (!z || typeof z !== 'object') return '--';
+    const lo = z.low;
+    const hi = z.high;
+    const px = z.price;
+    if (lo != null && hi != null) return `${fmtPrice(lo)} – ${fmtPrice(hi)}`;
+    if (px != null) return fmtPrice(px);
+    if (lo != null) return fmtPrice(lo);
+    return '--';
+  }
+
+  function tradePlanBody(host) {
+    const pack = host.lastTradePlan;
+    if (!pack) return { missing: true };
+    if (pack.error && !pack.plan) return { error: pack.error };
+    const plan = pack.plan || {};
+    const st = plan.short_term || {};
+    const mt = plan.medium_term || {};
+    const kl = plan.key_levels || {};
+    const confMap = { high: '高', medium: '中', low: '低' };
+    const isStructWatch =
+      plan.stance_short === 'watch' &&
+      st.entry_zone &&
+      st.entry_zone.basis === 'structure_watch';
+    const entryLabel = isStructWatch ? '观察区' : '入场/承接';
+    const stopLabel =
+      st.stop_zone && st.stop_zone.basis === 'structure_invalidation'
+        ? '失效参考'
+        : '止损参考';
+    const tpLabel =
+      st.take_profit && st.take_profit.basis === 'structure_resistance'
+        ? '压力观察'
+        : '止盈参考';
+    const rows = [
+      ['短线立场', cell(plan.stance_short_label || st.action_label)],
+      ['中长线立场', cell(plan.stance_medium_label || mt.bias_label)],
+      ['信心', cell(confMap[plan.confidence] || plan.confidence)],
+      ['主策略', cell(plan.primary_strategy_name || plan.primary_strategy)],
+      [entryLabel, zoneTxt(st.entry_zone), cell((st.entry_zone && st.entry_zone.label) || '')],
+      [stopLabel, zoneTxt(st.stop_zone), cell((st.stop_zone && st.stop_zone.label) || '')],
+      [
+        tpLabel,
+        zoneTxt(
+          st.take_profit && st.take_profit.prices
+            ? { price: (st.take_profit.prices || [])[0] }
+            : st.take_profit
+        ),
+        cell((st.take_profit && st.take_profit.label) || ''),
+      ],
+      [
+        '回撤观察',
+        zoneTxt(mt.watch_zone),
+        cell((mt.watch_zone && mt.watch_zone.label) || (mt.ma20 != null ? `MA20≈${fmtPrice(mt.ma20)}` : '')),
+      ],
+      [
+        '关键位',
+        `支撑 ${fmtPrice(kl.support)} / 现价 ${fmtPrice(kl.close)} / 阻力 ${fmtPrice(kl.resistance)}`,
+        '',
+      ],
+    ];
+    return {
+      error: pack.error || null,
+      plan,
+      rows,
+      shortSummary: st.summary || '',
+      mediumSummary: mt.summary || mt.holding_plan || '',
+      conflicts: Array.isArray(plan.conflicts) ? plan.conflicts : [],
+      disclaimer: plan.disclaimer || '',
+    };
+  }
+
   function swingBody(host) {
     const pack = host.lastSwing;
     if (!pack) return { error: null, text: '', rows: null };
@@ -579,8 +650,41 @@
     }
     y += 3;
 
+    // —— 综合交易策略 ——
+    drawTitle('一、综合交易策略', 12, [30, 64, 175]);
+    const tp = tradePlanBody(host);
+    if (tp.missing) {
+      drawWrapped('本报告未包含综合交易策略结果', 9, 4.2);
+      y += 2;
+    } else if (tp.error && !tp.plan) {
+      drawWrapped(`综合交易策略合成失败：${tp.error}`, 9, 4.2);
+      y += 2;
+    } else {
+      drawTable(
+        [['项目', '价位/结论', '说明']],
+        tp.rows,
+        { 0: { cellWidth: 28 }, 1: { cellWidth: 42 }, 2: { cellWidth: 'auto' } }
+      );
+      if (tp.shortSummary) {
+        drawTitle('短线摘要', 10, [71, 85, 105]);
+        drawWrapped(tp.shortSummary, 8.5, 4);
+      }
+      if (tp.mediumSummary) {
+        drawTitle('中长线摘要', 10, [71, 85, 105]);
+        drawWrapped(tp.mediumSummary, 8.5, 4);
+      }
+      if (tp.conflicts && tp.conflicts.length) {
+        drawTitle('冲突提示', 10, [185, 28, 28]);
+        tp.conflicts.forEach((c) => drawWrapped(`• ${c}`, 8.5, 4));
+      }
+      if (tp.disclaimer) {
+        y += 1;
+        drawWrapped(tp.disclaimer, 8, 3.8);
+      }
+    }
+
     // —— 策略分析 ——
-    drawTitle('一、策略分析', 12, [30, 64, 175]);
+    drawTitle('二、策略分析', 12, [30, 64, 175]);
     if (host.lastStrategyError && !host.lastStrategy) {
       drawWrapped(`策略分析失败：${host.lastStrategyError}`, 9, 4.2);
       y += 2;
@@ -599,7 +703,7 @@
     }
 
     // —— 阻力支撑 ——
-    drawTitle('二、阻力支撑位', 12, [30, 64, 175]);
+    drawTitle('三、阻力支撑位', 12, [30, 64, 175]);
     const lv = levelsTables(host);
     if (!host.lastLevels) {
       drawWrapped('本报告未包含阻力支撑结果', 9, 4.2);
@@ -623,7 +727,7 @@
     }
 
     // —— 形态识别 ——
-    drawTitle('三、形态识别', 12, [30, 64, 175]);
+    drawTitle('四、形态识别', 12, [30, 64, 175]);
     const pt = patternBody(host);
     if (!host.lastPattern) {
       drawWrapped('本报告未包含形态识别结果', 9, 4.2);
@@ -658,7 +762,7 @@
     }
 
     // —— 波段与趋势 ——
-    drawTitle('四、波段与趋势', 12, [30, 64, 175]);
+    drawTitle('五、波段与趋势', 12, [30, 64, 175]);
     const sw = swingBody(host);
     if (!host.lastSwing) {
       drawWrapped('本报告未包含波段趋势结果', 9, 4.2);
@@ -695,7 +799,7 @@
     }
 
     // —— 江恩趋势预测 ——
-    drawTitle('五、江恩趋势预测', 12, [30, 64, 175]);
+    drawTitle('六、江恩趋势预测', 12, [30, 64, 175]);
     const gn = gannBody(host);
     if (!host.lastGann) {
       drawWrapped('本报告未包含江恩趋势结果', 9, 4.2);
