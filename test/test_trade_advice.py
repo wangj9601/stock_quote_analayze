@@ -2,6 +2,36 @@
 from backend_core.analysis.trade_advice import build_trade_advice
 
 
+def test_sbbr_bottom_watch_uses_position_advice_message_not_dict():
+    pa = {
+        "probe_pct": 50.0,
+        "add_pct": 30.0,
+        "reserve_cash_pct": 20.0,
+        "max_open_positions": 3,
+        "max_allocated_pct": 80.0,
+        "can_open": True,
+        "next_action": "probe",
+        "next_pct": 50.0,
+        "message": "确认弱转强后试探配置 50%",
+        "allocated_pct": 0.0,
+        "stage": None,
+    }
+    adv = build_trade_advice(
+        "sbbr",
+        {
+            "bottom_matched": True,
+            "entry_signal": False,
+            "close": 6.43,
+            "position_advice": pa,
+        },
+    )
+    assert adv["action"] == "watch"
+    assert "已筑底未入场" in adv["summary"]
+    assert "确认弱转强后试探配置 50%" in adv["summary"]
+    assert "probe_pct" not in adv["summary"]
+    assert "{" not in adv["summary"]
+
+
 def test_gms_left_buy_advice():
     adv = build_trade_advice(
         "gms",
