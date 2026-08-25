@@ -117,8 +117,25 @@
 
           <div class="editor-grid">
             <div class="panel node-library">
-              <h3>节点库</h3>
+              <div class="panel-head">
+                <h3>节点库</h3>
+                <el-button link type="primary" :loading="loadingNodes" @click="loadNodes">刷新</el-button>
+              </div>
               <el-input v-model="nodeFilter" placeholder="搜索节点" clearable class="mb-2" />
+              <div v-if="loadingNodes" class="muted panel-hint">正在加载节点…</div>
+              <el-alert
+                v-else-if="nodesLoadError"
+                type="error"
+                :closable="false"
+                show-icon
+                class="mb-2"
+                :title="nodesLoadError"
+              />
+              <div v-else-if="!Object.keys(groupedNodes).length" class="panel-hint">
+                <p>暂无可用节点。</p>
+                <p class="muted">请确认 backend_api 已部署采集流程模块并已重启，接口应返回：</p>
+                <code class="hint-code">GET /api/admin/collection-workflows/nodes</code>
+              </div>
               <div v-for="(group, cat) in groupedNodes" :key="cat" class="cat-block">
                 <div class="cat-title">{{ categoryLabel(String(cat)) }}</div>
                 <div
@@ -293,7 +310,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   collectionWorkflowService,
@@ -311,6 +328,8 @@ const runningId = ref<number | null>(null)
 
 const workflows = ref<CollectionWorkflow[]>([])
 const nodeMetas = ref<WorkflowNodeMeta[]>([])
+const loadingNodes = ref(false)
+const nodesLoadError = ref('')
 const nodeFilter = ref('')
 const editing = ref<CollectionWorkflow | null>(null)
 const selectedIndex = ref<number | null>(null)
@@ -391,12 +410,40 @@ async function loadWorkflows() {
   }
 }
 
+function normalizeApiList<T>(res: unknown): T[] {
+  if (Array.isArray(res)) return res as T[]
+  if (res && typeof res === 'object' && Array.isArray((res as { data?: unknown }).data)) {
+    return (res as { data: T[] }).data
+  }
+  return []
+}
+
+function extractApiError(e: unknown): string {
+  const err = e as { response?: { status?: number; data?: { detail?: string } }; message?: string }
+  const status = err.response?.status
+  const detail = err.response?.data?.detail
+  if (status === 404) {
+    return '接口 404：后端未注册 /api/admin/collection-workflows，请合并 PR 并重启 backend_api'
+  }
+  return detail || err.message || '请求失败'
+}
+
 async function loadNodes() {
+  loadingNodes.value = true
+  nodesLoadError.value = ''
   try {
     const res = await collectionWorkflowService.listNodes()
-    nodeMetas.value = res.data || []
-  } catch (e: any) {
-    ElMessage.error(e?.message || '加载节点库失败')
+    const list = normalizeApiList<WorkflowNodeMeta>(res)
+    nodeMetas.value = list
+    if (!list.length) {
+      nodesLoadError.value = '节点库为空：请检查后端 collection_workflow_api 是否已加载'
+    }
+  } catch (e: unknown) {
+    nodeMetas.value = []
+    nodesLoadError.value = extractApiError(e)
+    ElMessage.error(nodesLoadError.value)
+  } finally {
+    loadingNodes.value = false
   }
 }
 
@@ -646,6 +693,12 @@ function stopPolling() {
   }
 }
 
+watch(activeTab, (tab) => {
+  if (tab === 'edit' && !nodeMetas.value.length && !loadingNodes.value) {
+    loadNodes()
+  }
+})
+
 onMounted(async () => {
   await loadAll()
   await loadRuns()
@@ -720,6 +773,27 @@ onUnmounted(() => stopPolling())
   margin: 0 0 10px;
   font-size: 14px;
   font-weight: 600;
+}
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.panel-head h3 {
+  margin: 0;
+}
+.panel-hint {
+  font-size: 13px;
+  color: #6b7280;
+  padding: 8px 0;
+}
+.hint-code {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: #374151;
+  word-break: break-all;
 }
 .cat-title {
   font-size: 12px;
