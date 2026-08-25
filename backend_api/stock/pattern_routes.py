@@ -192,6 +192,7 @@ async def patterns_meta(
             "head_shoulders": "头肩顶底",
             "triangle": "三角形",
             "wedge_flag": "楔形旗形",
+            "cup_handle": "带柄茶杯",
         },
         "types": {
             "double_bottom": "双底",
@@ -205,6 +206,7 @@ async def patterns_meta(
             "falling_wedge": "下降楔形",
             "bull_flag": "上升旗形",
             "bear_flag": "下降旗形",
+            "cup_with_handle": "带柄茶杯",
         },
     }
 

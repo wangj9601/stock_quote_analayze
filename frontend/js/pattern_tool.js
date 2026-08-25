@@ -16,6 +16,7 @@ const PatternTool = {
     falling_wedge: '下降楔形',
     bull_flag: '上升旗形',
     bear_flag: '下降旗形',
+    cup_with_handle: '带柄茶杯',
   },
 
   PIVOT_ROLE_LABELS: {
@@ -27,6 +28,10 @@ const PatternTool = {
     H1: 'H1',
     H2: 'H2',
     neck: '颈线',
+    left_rim: '左沿',
+    right_rim: '右沿',
+    cup_bottom: '杯底',
+    handle_low: '柄低',
     high: '高点',
     low: '低点',
   },
@@ -886,6 +891,7 @@ const PatternTool = {
     falling_wedge: true,
     bull_flag: true,
     bear_flag: true,
+    cup_with_handle: true,
   },
 
   /**
@@ -1246,7 +1252,14 @@ const PatternTool = {
     if (this.BEARISH_REVERSAL[type]) return 'bear';
     if (this.BULLISH_REVERSAL[type]) return 'bull';
     if (type === 'rising_wedge' || type === 'bear_flag' || type === 'descending_triangle') return 'bearish_bias';
-    if (type === 'falling_wedge' || type === 'bull_flag' || type === 'ascending_triangle') return 'bullish_bias';
+    if (
+      type === 'falling_wedge' ||
+      type === 'bull_flag' ||
+      type === 'ascending_triangle' ||
+      type === 'cup_with_handle'
+    ) {
+      return 'bullish_bias';
+    }
     return 'neutral';
   },
 
@@ -1266,7 +1279,14 @@ const PatternTool = {
     const lo = b.lower;
     if (c != null && up != null && c > up * 1.005) return 'up';
     if (c != null && lo != null && c < lo * 0.995) return 'down';
-    if (t === 'falling_wedge' || t === 'bull_flag' || t === 'ascending_triangle') return 'up';
+    if (
+      t === 'falling_wedge' ||
+      t === 'bull_flag' ||
+      t === 'ascending_triangle' ||
+      t === 'cup_with_handle'
+    ) {
+      return 'up';
+    }
     if (t === 'rising_wedge' || t === 'bear_flag' || t === 'descending_triangle') return 'down';
     return 'out';
   },

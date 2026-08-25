@@ -37,6 +37,7 @@ CONSOLIDATION = frozenset(
         "falling_wedge",
         "bull_flag",
         "bear_flag",
+        "cup_with_handle",
     }
 )
 
@@ -52,6 +53,7 @@ _TYPE_LABEL_ZH = {
     "falling_wedge": "下降楔形",
     "bull_flag": "上升旗形",
     "bear_flag": "下降旗形",
+    "cup_with_handle": "带柄茶杯",
 }
 
 _BIAS_LABEL = {
@@ -1864,7 +1866,7 @@ def _bias_of(pattern_type: str) -> str:
         return "bull"
     if t in ("rising_wedge", "bear_flag", "descending_triangle"):
         return "bearish_bias"
-    if t in ("falling_wedge", "bull_flag", "ascending_triangle"):
+    if t in ("falling_wedge", "bull_flag", "ascending_triangle", "cup_with_handle"):
         return "bullish_bias"
     return "neutral"
 
@@ -2525,7 +2527,7 @@ def consol_break_dir(h: Dict[str, Any]) -> str:
         return "up"
     if close is not None and lower is not None and lower > 0 and close < lower * BREAKOUT_DOWN_MULT:
         return "down"
-    if t in ("falling_wedge", "bull_flag", "ascending_triangle"):
+    if t in ("falling_wedge", "bull_flag", "ascending_triangle", "cup_with_handle"):
         return "up"
     if t in ("rising_wedge", "bear_flag", "descending_triangle"):
         return "down"

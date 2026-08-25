@@ -80,8 +80,10 @@ def test_normalize_families():
         "head_shoulders",
         "triangle",
         "wedge_flag",
+        "cup_handle",
     }
     assert normalize_families(["double", "hs"]) == {"double_extremes", "head_shoulders"}
+    assert normalize_families(["cup", "cup_with_handle"]) == {"cup_handle"}
 
 
 def test_double_bottom_synthetic():
@@ -1536,3 +1538,51 @@ def test_expert_vacuum_skips_stale_forming_hs_top():
     assert "结构整理期" in (out.get("shortTerm") or "") or "结构整理期" in (
         out.get("mediumTerm") or ""
     )
+
+
+def _synthetic_cup_with_handle_closes(*, breakout: bool = True):
+    """构造左沿→杯底→右沿→浅柄（可选上破）收盘序列。"""
+    closes = [100.0] * 10
+    for i in range(1, 21):
+        closes.append(100.0 - 25.0 * ((i / 20.0) ** 0.85))
+    closes.extend([75.0, 74.9, 75.1, 75.0])
+    for i in range(1, 21):
+        closes.append(75.0 + 24.5 * ((i / 20.0) ** 0.9))
+    closes.append(100.0)
+    for i in range(1, 9):
+        closes.append(100.0 - 7.0 * (i / 8.0))
+    closes.extend([93.2, 94.0, 95.5, 96.5])
+    if breakout:
+        closes.extend([101.5, 102.0, 103.0])
+    else:
+        closes.extend([97.0, 97.5, 98.0])
+    return closes
+
+
+def test_cup_with_handle_confirmed_breakout():
+    from backend_core.analysis.chart_patterns.cup_handle import detect_cup_with_handle
+
+    bars = _bars_from_closes(_synthetic_cup_with_handle_closes(breakout=True))
+    hits = detect_cup_with_handle(bars)
+    assert len(hits) == 1
+    h = hits[0]
+    assert h["pattern_family"] == "cup_handle"
+    assert h["pattern_type"] == "cup_with_handle"
+    assert h["status"] == "confirmed"
+    assert h["key_levels"]["rim"] >= h["key_levels"]["handle_low"]
+
+
+def test_cup_with_handle_forming_in_handle():
+    from backend_core.analysis.chart_patterns.cup_handle import detect_cup_with_handle
+
+    bars = _bars_from_closes(_synthetic_cup_with_handle_closes(breakout=False))
+    hits = detect_cup_with_handle(bars)
+    assert len(hits) == 1
+    assert hits[0]["status"] == "forming"
+
+
+def test_detect_all_includes_cup_handle_family():
+    bars = _bars_from_closes(_synthetic_cup_with_handle_closes(breakout=True))
+    hits = detect_all(bars, types=["cup_handle"])
+    types = {h["pattern_type"] for h in hits}
+    assert "cup_with_handle" in types

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 
+from .cup_handle import detect_cup_with_handle
 from .double_extremes import detect_double_extremes
 from .head_shoulders import detect_head_shoulders
 from .lifecycle import apply_pattern_lifecycle
@@ -18,6 +19,7 @@ PATTERN_FAMILIES = (
     "head_shoulders",
     "triangle",
     "wedge_flag",
+    "cup_handle",
 )
 
 FAMILY_ALIASES = {
@@ -32,6 +34,9 @@ FAMILY_ALIASES = {
     "wedge": "wedge_flag",
     "flag": "wedge_flag",
     "wedge_flag": "wedge_flag",
+    "cup": "cup_handle",
+    "cup_handle": "cup_handle",
+    "cup_with_handle": "cup_handle",
 }
 
 # 同源重叠对：同向巩固形态易同界/同枢轴误报双出
@@ -576,6 +581,8 @@ def detect_all_counted(
         hits.extend(detect_triangles(seq, pivots))
     if "wedge_flag" in families:
         hits.extend(detect_wedges_flags(seq, pivots))
+    if "cup_handle" in families:
+        hits.extend(detect_cup_with_handle(seq, pivots))
 
     hits = apply_pattern_lifecycle(hits, seq)
     hits = nms_overlapping_patterns(hits)
