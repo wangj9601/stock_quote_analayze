@@ -26,7 +26,7 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 
 ## API
 
-前缀：`/api/collection-workflows`
+前缀：`/api/admin/collection-workflows`（与管理端 `apiService` 的 baseURL `/api/admin` 一致）
 
 - `GET /nodes` 节点库
 - CRUD `/`、`/{id}`、`/{id}/nodes`
