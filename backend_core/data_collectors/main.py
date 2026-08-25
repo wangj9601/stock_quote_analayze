@@ -883,7 +883,10 @@ def _register_gms_signal_precompute_jobs():
     )
 
 
-_register_gms_signal_precompute_jobs()
+if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+    _register_gms_signal_precompute_jobs()
+else:
+    logging.info('跳过 _register_gms_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
 
 
 def _register_urt_signal_precompute_jobs():
@@ -922,7 +925,10 @@ def _register_urt_signal_precompute_jobs():
     )
 
 
-_register_urt_signal_precompute_jobs()
+if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+    _register_urt_signal_precompute_jobs()
+else:
+    logging.info('跳过 _register_urt_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
 
 
 def _register_sbbr_signal_precompute_jobs():
@@ -947,7 +953,10 @@ def _register_sbbr_signal_precompute_jobs():
     logging.info("已注册 SBBR 信号预计算任务（ENABLE_SBBR_PRECOMPUTE=true）19:30")
 
 
-_register_sbbr_signal_precompute_jobs()
+if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+    _register_sbbr_signal_precompute_jobs()
+else:
+    logging.info('跳过 _register_sbbr_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
 
 
 def _register_rpe_signal_precompute_jobs():
@@ -972,181 +981,275 @@ def _register_rpe_signal_precompute_jobs():
     logging.info("已注册 RPE 信号预计算任务（ENABLE_RPE_PRECOMPUTE=true）19:40")
 
 
-_register_rpe_signal_precompute_jobs()
+if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+    _register_rpe_signal_precompute_jobs()
+else:
+    logging.info('跳过 _register_rpe_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
 
-scheduler.add_job(collect_akshare_realtime, 'cron',
-    day_of_week=_cron('SCHED_AKSHARE_REALTIME_DOW', 'mon-fri'),
-    hour=_cron('SCHED_AKSHARE_REALTIME_HOUR', '15'),
-    minute=_cron_int('SCHED_AKSHARE_REALTIME_MINUTE', 31),
-    id='akshare_realtime')
-scheduler.add_job(collect_tushare_historical, 'cron',
-    hour=_cron('SCHED_TUSHARE_HISTORICAL_HOUR', '16'),
-    minute=_cron_int('SCHED_TUSHARE_HISTORICAL_MINUTE', 2),
-    id='tushare_historical')
+if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+    scheduler.add_job(collect_akshare_realtime, 'cron',
+        day_of_week=_cron('SCHED_AKSHARE_REALTIME_DOW', 'mon-fri'),
+        hour=_cron('SCHED_AKSHARE_REALTIME_HOUR', '15'),
+        minute=_cron_int('SCHED_AKSHARE_REALTIME_MINUTE', 31),
+        id='akshare_realtime')
+    scheduler.add_job(collect_tushare_historical, 'cron',
+        hour=_cron('SCHED_TUSHARE_HISTORICAL_HOUR', '16'),
+        minute=_cron_int('SCHED_TUSHARE_HISTORICAL_MINUTE', 2),
+        id='tushare_historical')
 
 
-def _register_triple_volume_observe_jobs():
-    """3倍量观察股扫描/复核：默认不注册；仅当 TRIPLE_VOLUME_OBSERVE_ENABLED=true 时启用。"""
-    if not _env_bool("TRIPLE_VOLUME_OBSERVE_ENABLED", False):
-        logging.info(
-            "3倍量观察股定时任务未注册（TRIPLE_VOLUME_OBSERVE_ENABLED=false，含扫描/复核及对应推送数据源）"
+    def _register_triple_volume_observe_jobs():
+        """3倍量观察股扫描/复核：默认不注册；仅当 TRIPLE_VOLUME_OBSERVE_ENABLED=true 时启用。"""
+        if not _env_bool("TRIPLE_VOLUME_OBSERVE_ENABLED", False):
+            logging.info(
+                "3倍量观察股定时任务未注册（TRIPLE_VOLUME_OBSERVE_ENABLED=false，含扫描/复核及对应推送数据源）"
+            )
+            return
+        scheduler.add_job(
+            run_job_triple_volume_scan,
+            "cron",
+            day_of_week=_cron("SCHED_TRIPLE_VOLUME_SCAN_DOW", "mon-fri"),
+            hour=_cron_int("SCHED_TRIPLE_VOLUME_SCAN_HOUR", 16),
+            minute=_cron_int("SCHED_TRIPLE_VOLUME_SCAN_MINUTE", 25),
+            id="triple_volume_observe_scan",
         )
+        scheduler.add_job(
+            run_job_triple_volume_eval,
+            "cron",
+            day_of_week=_cron("SCHED_TRIPLE_VOLUME_EVAL_DOW", "mon-fri"),
+            hour=_cron_int("SCHED_TRIPLE_VOLUME_EVAL_HOUR", 16),
+            minute=_cron_int("SCHED_TRIPLE_VOLUME_EVAL_MINUTE", 40),
+            id="triple_volume_observe_eval",
+        )
+        logging.info(
+            "已注册 3倍量观察股定时任务（TRIPLE_VOLUME_OBSERVE_ENABLED=true）：scan=%s:%s eval=%s:%s",
+            _cron_int("SCHED_TRIPLE_VOLUME_SCAN_HOUR", 16),
+            _cron_int("SCHED_TRIPLE_VOLUME_SCAN_MINUTE", 25),
+            _cron_int("SCHED_TRIPLE_VOLUME_EVAL_HOUR", 16),
+            _cron_int("SCHED_TRIPLE_VOLUME_EVAL_MINUTE", 40),
+        )
+
+
+    if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+        _register_triple_volume_observe_jobs()
+    else:
+        logging.info('跳过 _register_triple_volume_observe_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
+    scheduler.add_job(collect_akshare_index_realtime, 'cron',
+        day_of_week=_cron('SCHED_AKSHARE_INDEX_REALTIME_DOW', 'mon-fri'),
+        hour=_cron('SCHED_AKSHARE_INDEX_REALTIME_HOUR', '11,15'),
+        minute=_cron_int('SCHED_AKSHARE_INDEX_REALTIME_MINUTE', 59),
+        id='akshare_index_realtime')
+    scheduler.add_job(collect_akshare_industry_board_realtime, 'cron',
+        day_of_week=_cron('SCHED_AKSHARE_INDUSTRY_DOW', 'mon-fri'),
+        hour=_cron('SCHED_AKSHARE_INDUSTRY_HOUR', '11,16'),
+        minute=_cron_int('SCHED_AKSHARE_INDUSTRY_MINUTE', 3),
+        id='akshare_industry_board_realtime')
+    if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+        _register_industry_board_constituents_job()
+    else:
+        logging.info('跳过 _register_industry_board_constituents_job()（ENABLE_LEGACY_COLLECTION_CRON=false）')
+    # scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
+    if _env_bool("SCHED_AKSHARE_TURNOVER_ENABLED", False):
+        scheduler.add_job(collect_akshare_turnover_rate, 'cron',
+            day_of_week=_cron('SCHED_AKSHARE_TURNOVER_DOW', 'mon-fri'),
+            hour=_cron('SCHED_AKSHARE_TURNOVER_HOUR', '11'),
+            minute=_cron_int('SCHED_AKSHARE_TURNOVER_MINUTE', 13),
+            id='akshare_turnover_rate')
+    else:
+        logging.info("AKShare 历史换手率定时采集未注册（默认关闭，需设置 SCHED_AKSHARE_TURNOVER_ENABLED=true 启用）")
+    if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+        _register_stock_shares_job()
+    else:
+        logging.info('跳过 _register_stock_shares_job()（ENABLE_LEGACY_COLLECTION_CRON=false）')
+    # scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
+    # scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
+    # scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
+    # scheduler.add_job(cleanup_old_news, 'cron', hour=23, minute=0, id='old_news_cleanup')
+    scheduler.add_job(collect_hk_realtime, 'cron',
+        day_of_week=_cron('SCHED_HK_REALTIME_DOW', 'mon-fri'),
+        hour=_cron('SCHED_HK_REALTIME_HOUR', '16'),
+        minute=_cron_int('SCHED_HK_REALTIME_MINUTE', 39),
+        id='hk_realtime')
+    scheduler.add_job(collect_hk_historical, 'cron',
+        day_of_week=_cron('SCHED_HK_HISTORICAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_HK_HISTORICAL_HOUR', 16),
+        minute=_cron_int('SCHED_HK_HISTORICAL_MINUTE', 55),
+        id='hk_historical')
+    scheduler.add_job(generate_weekly_data, 'cron',
+        day_of_week=_cron('SCHED_WEEKLY_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_WEEKLY_HOUR', 16),
+        minute=_cron_int('SCHED_WEEKLY_MINUTE', 25),
+        id='generate_weekly')
+    scheduler.add_job(generate_hk_weekly_data, 'cron',
+        day_of_week=_cron('SCHED_HK_WEEKLY_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_HK_WEEKLY_HOUR', 17),
+        minute=_cron_int('SCHED_HK_WEEKLY_MINUTE', 1),
+        id='generate_hk_weekly')
+    scheduler.add_job(generate_monthly_data, 'cron',
+        day_of_week=_cron('SCHED_MONTHLY_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_MONTHLY_HOUR', 16),
+        minute=_cron_int('SCHED_MONTHLY_MINUTE', 30),
+        id='generate_monthly')
+    scheduler.add_job(generate_hk_monthly_data, 'cron',
+        day_of_week=_cron('SCHED_HK_MONTHLY_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_HK_MONTHLY_HOUR', 17),
+        minute=_cron_int('SCHED_HK_MONTHLY_MINUTE', 5),
+        id='generate_hk_monthly')
+
+    # 季线 / 半年线 / 年线：可由 ENABLE_*_COLLECTION 关闭（A股+港股同一开关）
+    # 开启后任务仍按日 cron 触发，但仅在对应周期最后一个交易日真正生成
+    # （自然期末 03-31/06-30/09-30/12-31；若期末休市则提前到期末前最后一个交易日）
+    if _env_bool('ENABLE_QUARTERLY_COLLECTION', True):
+        scheduler.add_job(generate_quarterly_data, 'cron',
+            day_of_week=_cron('SCHED_QUARTERLY_DOW', 'mon-fri'),
+            hour=_cron_int('SCHED_QUARTERLY_HOUR', 16),
+            minute=_cron_int('SCHED_QUARTERLY_MINUTE', 35),
+            id='generate_quarterly')
+        scheduler.add_job(generate_hk_quarterly_data, 'cron',
+            day_of_week=_cron('SCHED_HK_QUARTERLY_DOW', 'mon-fri'),
+            hour=_cron_int('SCHED_HK_QUARTERLY_HOUR', 17),
+            minute=_cron_int('SCHED_HK_QUARTERLY_MINUTE', 9),
+            id='generate_hk_quarterly')
+        logging.info("已注册季线生成任务（ENABLE_QUARTERLY_COLLECTION=true）")
+    else:
+        logging.info("季线生成已禁用（ENABLE_QUARTERLY_COLLECTION=false）")
+
+    if _env_bool('ENABLE_SEMIANNUAL_COLLECTION', True):
+        scheduler.add_job(generate_semiannual_data, 'cron',
+            day_of_week=_cron('SCHED_SEMIANNUAL_DOW', 'mon-fri'),
+            hour=_cron_int('SCHED_SEMIANNUAL_HOUR', 16),
+            minute=_cron_int('SCHED_SEMIANNUAL_MINUTE', 42),
+            id='generate_semiannual')
+        scheduler.add_job(generate_hk_semiannual_data, 'cron',
+            day_of_week=_cron('SCHED_HK_SEMIANNUAL_DOW', 'mon-fri'),
+            hour=_cron_int('SCHED_HK_SEMIANNUAL_HOUR', 17),
+            minute=_cron_int('SCHED_HK_SEMIANNUAL_MINUTE', 13),
+            id='generate_hk_semiannual')
+        logging.info("已注册半年线生成任务（ENABLE_SEMIANNUAL_COLLECTION=true）")
+    else:
+        logging.info("半年线生成已禁用（ENABLE_SEMIANNUAL_COLLECTION=false）")
+
+    if _env_bool('ENABLE_ANNUAL_COLLECTION', True):
+        scheduler.add_job(generate_annual_data, 'cron',
+            day_of_week=_cron('SCHED_ANNUAL_DOW', 'mon-fri'),
+            hour=_cron_int('SCHED_ANNUAL_HOUR', 16),
+            minute=_cron_int('SCHED_ANNUAL_MINUTE', 47),
+            id='generate_annual')
+        scheduler.add_job(generate_hk_annual_data, 'cron',
+            day_of_week=_cron('SCHED_HK_ANNUAL_DOW', 'mon-fri'),
+            hour=_cron_int('SCHED_HK_ANNUAL_HOUR', 17),
+            minute=_cron_int('SCHED_HK_ANNUAL_MINUTE', 16),
+            id='generate_hk_annual')
+        logging.info("已注册年线生成任务（ENABLE_ANNUAL_COLLECTION=true）")
+    else:
+        logging.info("年线生成已禁用（ENABLE_ANNUAL_COLLECTION=false）")
+
+    scheduler.add_job(collect_hk_index_realtime, 'cron',
+        day_of_week=_cron('SCHED_HK_INDEX_REALTIME_DOW', 'mon-fri'),
+        hour=_cron('SCHED_HK_INDEX_REALTIME_HOUR', '12,16'),
+        minute=_cron_int('SCHED_HK_INDEX_REALTIME_MINUTE', 35),
+        id='hk_index_realtime')
+    scheduler.add_job(collect_hk_index_historical, 'cron',
+        day_of_week=_cron('SCHED_HK_INDEX_HISTORICAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_HK_INDEX_HISTORICAL_HOUR', 17),
+        minute=_cron_int('SCHED_HK_INDEX_HISTORICAL_MINUTE', 18),
+        id='hk_index_historical')
+
+    if _env_bool('ENABLE_ETF', True):
+        scheduler.add_job(collect_etf_realtime, 'cron',
+            day_of_week=_cron('SCHED_ETF_REALTIME_DOW', 'mon-fri'),
+            hour=_cron('SCHED_ETF_REALTIME_HOUR', '15'),
+            minute=_cron_int('SCHED_ETF_REALTIME_MINUTE', 33),
+            id='etf_realtime')
+        scheduler.add_job(collect_etf_historical, 'cron',
+            day_of_week=_cron('SCHED_ETF_HISTORICAL_DOW', 'mon-fri'),
+            hour=_cron_int('SCHED_ETF_HISTORICAL_HOUR', 16),
+            minute=_cron_int('SCHED_ETF_HISTORICAL_MINUTE', 5),
+            id='etf_historical')
+        logging.info("已注册 ETF 实时/历史采集任务（ENABLE_ETF=true）")
+    else:
+        logging.info("ETF 采集已禁用（ENABLE_ETF=false），未注册 etf_realtime / etf_historical")
+else:
+    logging.info('已跳过 legacy 分散采集 cron 任务注册（ENABLE_LEGACY_COLLECTION_CRON=false）')
+
+
+def _register_workflow_cron_jobs():
+    """从 DB 加载 trigger_type=cron 的启用流程，各注册一个 APScheduler job。"""
+    try:
+        from backend_core.data_collectors.workflow.engine import workflow_engine
+        from backend_core.database.db import SessionLocal
+        from backend_core.models.collection_workflow import CollectionWorkflow
+    except Exception as e:
+        logging.error("导入采集流程引擎失败，跳过流程 cron 注册: %s", e)
         return
-    scheduler.add_job(
-        run_job_triple_volume_scan,
-        "cron",
-        day_of_week=_cron("SCHED_TRIPLE_VOLUME_SCAN_DOW", "mon-fri"),
-        hour=_cron_int("SCHED_TRIPLE_VOLUME_SCAN_HOUR", 16),
-        minute=_cron_int("SCHED_TRIPLE_VOLUME_SCAN_MINUTE", 25),
-        id="triple_volume_observe_scan",
-    )
-    scheduler.add_job(
-        run_job_triple_volume_eval,
-        "cron",
-        day_of_week=_cron("SCHED_TRIPLE_VOLUME_EVAL_DOW", "mon-fri"),
-        hour=_cron_int("SCHED_TRIPLE_VOLUME_EVAL_HOUR", 16),
-        minute=_cron_int("SCHED_TRIPLE_VOLUME_EVAL_MINUTE", 40),
-        id="triple_volume_observe_eval",
-    )
-    logging.info(
-        "已注册 3倍量观察股定时任务（TRIPLE_VOLUME_OBSERVE_ENABLED=true）：scan=%s:%s eval=%s:%s",
-        _cron_int("SCHED_TRIPLE_VOLUME_SCAN_HOUR", 16),
-        _cron_int("SCHED_TRIPLE_VOLUME_SCAN_MINUTE", 25),
-        _cron_int("SCHED_TRIPLE_VOLUME_EVAL_HOUR", 16),
-        _cron_int("SCHED_TRIPLE_VOLUME_EVAL_MINUTE", 40),
-    )
+
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(CollectionWorkflow)
+            .filter(
+                CollectionWorkflow.enabled.is_(True),
+                CollectionWorkflow.trigger_type == "cron",
+            )
+            .all()
+        )
+    finally:
+        db.close()
+
+    if not rows:
+        logging.info("无启用的 cron 采集流程，跳过流程级定时注册")
+        return
+
+    for wf in rows:
+        wid = wf.id
+        job_id = f"collection_workflow_{wid}"
+
+        def _make_job(workflow_id: int):
+            def _job():
+                try:
+                    run_id = workflow_engine.start(
+                        workflow_id, trigger_source="cron", background=True
+                    )
+                    logging.info(
+                        "[流程定时] 已触发 workflow_id=%s run_id=%s",
+                        workflow_id,
+                        run_id,
+                    )
+                except RuntimeError as e:
+                    logging.warning("[流程定时] workflow_id=%s 跳过: %s", workflow_id, e)
+                except Exception as e:
+                    logging.error("[流程定时] workflow_id=%s 异常: %s", workflow_id, e)
+
+            return _job
+
+        kwargs = {"id": job_id}
+        if wf.cron_dow:
+            kwargs["day_of_week"] = wf.cron_dow
+        if wf.cron_hour is not None and str(wf.cron_hour).strip() != "":
+            # APScheduler hour 可为 int 或 逗号表达式字符串
+            hour_raw = str(wf.cron_hour).strip()
+            if "," in hour_raw:
+                kwargs["hour"] = hour_raw
+            else:
+                try:
+                    kwargs["hour"] = int(hour_raw)
+                except ValueError:
+                    kwargs["hour"] = hour_raw
+        if wf.cron_minute is not None:
+            kwargs["minute"] = int(wf.cron_minute)
+        scheduler.add_job(_make_job(wid), "cron", **kwargs)
+        logging.info(
+            "已注册采集流程 cron：id=%s name=%s dow=%s hour=%s minute=%s",
+            wid,
+            wf.name,
+            wf.cron_dow,
+            wf.cron_hour,
+            wf.cron_minute,
+        )
 
 
-_register_triple_volume_observe_jobs()
-scheduler.add_job(collect_akshare_index_realtime, 'cron',
-    day_of_week=_cron('SCHED_AKSHARE_INDEX_REALTIME_DOW', 'mon-fri'),
-    hour=_cron('SCHED_AKSHARE_INDEX_REALTIME_HOUR', '11,15'),
-    minute=_cron_int('SCHED_AKSHARE_INDEX_REALTIME_MINUTE', 59),
-    id='akshare_index_realtime')
-scheduler.add_job(collect_akshare_industry_board_realtime, 'cron',
-    day_of_week=_cron('SCHED_AKSHARE_INDUSTRY_DOW', 'mon-fri'),
-    hour=_cron('SCHED_AKSHARE_INDUSTRY_HOUR', '11,16'),
-    minute=_cron_int('SCHED_AKSHARE_INDUSTRY_MINUTE', 3),
-    id='akshare_industry_board_realtime')
-_register_industry_board_constituents_job()
-# scheduler.add_job(collect_akshare_stock_notices, 'interval', minutes=2400, id='akshare_stock_notices')
-if _env_bool("SCHED_AKSHARE_TURNOVER_ENABLED", False):
-    scheduler.add_job(collect_akshare_turnover_rate, 'cron',
-        day_of_week=_cron('SCHED_AKSHARE_TURNOVER_DOW', 'mon-fri'),
-        hour=_cron('SCHED_AKSHARE_TURNOVER_HOUR', '11'),
-        minute=_cron_int('SCHED_AKSHARE_TURNOVER_MINUTE', 13),
-        id='akshare_turnover_rate')
-else:
-    logging.info("AKShare 历史换手率定时采集未注册（默认关闭，需设置 SCHED_AKSHARE_TURNOVER_ENABLED=true 启用）")
-_register_stock_shares_job()
-# scheduler.add_job(run_watchlist_history_collection, 'cron', minute='*/2', id='watchlist_history_every_5_minutes')
-# scheduler.add_job(collect_market_news, 'interval', minutes=1440, id='market_news_collection')
-# scheduler.add_job(update_hot_news, 'interval', hours=1, id='hot_news_update')
-# scheduler.add_job(cleanup_old_news, 'cron', hour=23, minute=0, id='old_news_cleanup')
-scheduler.add_job(collect_hk_realtime, 'cron',
-    day_of_week=_cron('SCHED_HK_REALTIME_DOW', 'mon-fri'),
-    hour=_cron('SCHED_HK_REALTIME_HOUR', '16'),
-    minute=_cron_int('SCHED_HK_REALTIME_MINUTE', 39),
-    id='hk_realtime')
-scheduler.add_job(collect_hk_historical, 'cron',
-    day_of_week=_cron('SCHED_HK_HISTORICAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_HK_HISTORICAL_HOUR', 16),
-    minute=_cron_int('SCHED_HK_HISTORICAL_MINUTE', 55),
-    id='hk_historical')
-scheduler.add_job(generate_weekly_data, 'cron',
-    day_of_week=_cron('SCHED_WEEKLY_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_WEEKLY_HOUR', 16),
-    minute=_cron_int('SCHED_WEEKLY_MINUTE', 25),
-    id='generate_weekly')
-scheduler.add_job(generate_hk_weekly_data, 'cron',
-    day_of_week=_cron('SCHED_HK_WEEKLY_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_HK_WEEKLY_HOUR', 17),
-    minute=_cron_int('SCHED_HK_WEEKLY_MINUTE', 1),
-    id='generate_hk_weekly')
-scheduler.add_job(generate_monthly_data, 'cron',
-    day_of_week=_cron('SCHED_MONTHLY_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_MONTHLY_HOUR', 16),
-    minute=_cron_int('SCHED_MONTHLY_MINUTE', 30),
-    id='generate_monthly')
-scheduler.add_job(generate_hk_monthly_data, 'cron',
-    day_of_week=_cron('SCHED_HK_MONTHLY_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_HK_MONTHLY_HOUR', 17),
-    minute=_cron_int('SCHED_HK_MONTHLY_MINUTE', 5),
-    id='generate_hk_monthly')
 
-# 季线 / 半年线 / 年线：可由 ENABLE_*_COLLECTION 关闭（A股+港股同一开关）
-# 开启后任务仍按日 cron 触发，但仅在对应周期最后一个交易日真正生成
-# （自然期末 03-31/06-30/09-30/12-31；若期末休市则提前到期末前最后一个交易日）
-if _env_bool('ENABLE_QUARTERLY_COLLECTION', True):
-    scheduler.add_job(generate_quarterly_data, 'cron',
-        day_of_week=_cron('SCHED_QUARTERLY_DOW', 'mon-fri'),
-        hour=_cron_int('SCHED_QUARTERLY_HOUR', 16),
-        minute=_cron_int('SCHED_QUARTERLY_MINUTE', 35),
-        id='generate_quarterly')
-    scheduler.add_job(generate_hk_quarterly_data, 'cron',
-        day_of_week=_cron('SCHED_HK_QUARTERLY_DOW', 'mon-fri'),
-        hour=_cron_int('SCHED_HK_QUARTERLY_HOUR', 17),
-        minute=_cron_int('SCHED_HK_QUARTERLY_MINUTE', 9),
-        id='generate_hk_quarterly')
-    logging.info("已注册季线生成任务（ENABLE_QUARTERLY_COLLECTION=true）")
-else:
-    logging.info("季线生成已禁用（ENABLE_QUARTERLY_COLLECTION=false）")
-
-if _env_bool('ENABLE_SEMIANNUAL_COLLECTION', True):
-    scheduler.add_job(generate_semiannual_data, 'cron',
-        day_of_week=_cron('SCHED_SEMIANNUAL_DOW', 'mon-fri'),
-        hour=_cron_int('SCHED_SEMIANNUAL_HOUR', 16),
-        minute=_cron_int('SCHED_SEMIANNUAL_MINUTE', 42),
-        id='generate_semiannual')
-    scheduler.add_job(generate_hk_semiannual_data, 'cron',
-        day_of_week=_cron('SCHED_HK_SEMIANNUAL_DOW', 'mon-fri'),
-        hour=_cron_int('SCHED_HK_SEMIANNUAL_HOUR', 17),
-        minute=_cron_int('SCHED_HK_SEMIANNUAL_MINUTE', 13),
-        id='generate_hk_semiannual')
-    logging.info("已注册半年线生成任务（ENABLE_SEMIANNUAL_COLLECTION=true）")
-else:
-    logging.info("半年线生成已禁用（ENABLE_SEMIANNUAL_COLLECTION=false）")
-
-if _env_bool('ENABLE_ANNUAL_COLLECTION', True):
-    scheduler.add_job(generate_annual_data, 'cron',
-        day_of_week=_cron('SCHED_ANNUAL_DOW', 'mon-fri'),
-        hour=_cron_int('SCHED_ANNUAL_HOUR', 16),
-        minute=_cron_int('SCHED_ANNUAL_MINUTE', 47),
-        id='generate_annual')
-    scheduler.add_job(generate_hk_annual_data, 'cron',
-        day_of_week=_cron('SCHED_HK_ANNUAL_DOW', 'mon-fri'),
-        hour=_cron_int('SCHED_HK_ANNUAL_HOUR', 17),
-        minute=_cron_int('SCHED_HK_ANNUAL_MINUTE', 16),
-        id='generate_hk_annual')
-    logging.info("已注册年线生成任务（ENABLE_ANNUAL_COLLECTION=true）")
-else:
-    logging.info("年线生成已禁用（ENABLE_ANNUAL_COLLECTION=false）")
-
-scheduler.add_job(collect_hk_index_realtime, 'cron',
-    day_of_week=_cron('SCHED_HK_INDEX_REALTIME_DOW', 'mon-fri'),
-    hour=_cron('SCHED_HK_INDEX_REALTIME_HOUR', '12,16'),
-    minute=_cron_int('SCHED_HK_INDEX_REALTIME_MINUTE', 35),
-    id='hk_index_realtime')
-scheduler.add_job(collect_hk_index_historical, 'cron',
-    day_of_week=_cron('SCHED_HK_INDEX_HISTORICAL_DOW', 'mon-fri'),
-    hour=_cron_int('SCHED_HK_INDEX_HISTORICAL_HOUR', 17),
-    minute=_cron_int('SCHED_HK_INDEX_HISTORICAL_MINUTE', 18),
-    id='hk_index_historical')
-
-if _env_bool('ENABLE_ETF', True):
-    scheduler.add_job(collect_etf_realtime, 'cron',
-        day_of_week=_cron('SCHED_ETF_REALTIME_DOW', 'mon-fri'),
-        hour=_cron('SCHED_ETF_REALTIME_HOUR', '15'),
-        minute=_cron_int('SCHED_ETF_REALTIME_MINUTE', 33),
-        id='etf_realtime')
-    scheduler.add_job(collect_etf_historical, 'cron',
-        day_of_week=_cron('SCHED_ETF_HISTORICAL_DOW', 'mon-fri'),
-        hour=_cron_int('SCHED_ETF_HISTORICAL_HOUR', 16),
-        minute=_cron_int('SCHED_ETF_HISTORICAL_MINUTE', 5),
-        id='etf_historical')
-    logging.info("已注册 ETF 实时/历史采集任务（ENABLE_ETF=true）")
-else:
-    logging.info("ETF 采集已禁用（ENABLE_ETF=false），未注册 etf_realtime / etf_historical")
+_register_workflow_cron_jobs()
 
 if __name__ == "__main__":
     enable_sched = os.getenv('ENABLE_SCHEDULED_COLLECTION', 'true').lower() in ('true', '1', 'yes')

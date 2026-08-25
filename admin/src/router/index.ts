@@ -133,6 +133,11 @@ const routes = [
         component: () => import('@/views/DataCollectView.vue')
       },
       {
+        path: 'collection-workflows',
+        name: 'CollectionWorkflows',
+        component: () => import('@/views/CollectionWorkflowView.vue')
+      },
+      {
         path: 'monitoring',
         name: 'Monitoring',
         component: () => import('@/views/MonitoringView.vue')

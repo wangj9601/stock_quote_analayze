@@ -111,6 +111,7 @@ const menuItems = [
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/env-sync', name: '环境数据同步', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
+  { path: '/collection-workflows', name: '采集流程', icon: DataAnalysis },
   { path: '/monitoring', name: '系统监控', icon: Monitor },
   { path: '/models', name: '预测模型', icon: Cpu },
   { path: '/logs', name: '系统日志', icon: Document },

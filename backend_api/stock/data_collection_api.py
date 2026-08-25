@@ -49,6 +49,54 @@ task_execution_lock = threading.Lock()
 
 logger = logging.getLogger(__name__)
 
+try:
+    from backend_core.data_collectors.workflow.mutex import (
+        try_acquire as _wf_mutex_acquire,
+        release as _wf_mutex_release,
+        is_busy as _wf_mutex_busy,
+        get_active as _wf_mutex_active,
+    )
+except Exception:  # pragma: no cover
+    def _wf_mutex_acquire(kind, eid):
+        return True, None, None
+
+    def _wf_mutex_release(eid):
+        return None
+
+    def _wf_mutex_busy():
+        return False
+
+    def _wf_mutex_active():
+        return None, None
+
+
+def _claim_task_execution(task_id: str) -> None:
+    """占用单任务槽位（与采集流程引擎互斥）。失败抛 HTTPException。"""
+    global current_task_id
+    with task_execution_lock:
+        if current_task_id is not None or _wf_mutex_busy():
+            kind, eid = _wf_mutex_active()
+            detail = "已有采集任务正在运行，请等待完成后再启动新任务"
+            if kind == "workflow":
+                detail = f"采集流程正在运行（{eid}），请等待完成后再启动"
+            raise HTTPException(status_code=400, detail=detail)
+        ok, kind, eid = _wf_mutex_acquire("task", task_id)
+        if not ok:
+            raise HTTPException(
+                status_code=400,
+                detail=f"已有执行占用中: {kind}={eid}",
+            )
+        current_task_id = task_id
+
+
+def _release_task_execution(task_id: str) -> None:
+    global current_task_id
+    with task_execution_lock:
+        if current_task_id == task_id:
+            current_task_id = None
+        _wf_mutex_release(task_id)
+
+
 class AkshareDataCollector:
     """akshare数据采集器"""
     
@@ -1963,10 +2011,8 @@ def run_realtime_historical_collection_task(
                     "error_message": str(e)
                 })
     finally:
-        with task_execution_lock:
-            if current_task_id == task_id:
-                current_task_id = None
-                logger.info(f"已清除当前任务ID: {task_id}")
+        _release_task_execution(task_id)
+        logger.info(f"已清除当前任务ID: {task_id}")
 
 
 @router.post("/realtime-historical", response_model=DataCollectionResponse)
@@ -1984,10 +2030,6 @@ async def start_realtime_historical_collection(
         except ValueError:
             raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
 
-        # 检查是否有其他任务正在运行
-        with task_execution_lock:
-            if current_task_id is not None:
-                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
 
         # 生成任务ID
         task_id = f"realtime_historical_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
@@ -2011,8 +2053,7 @@ async def start_realtime_historical_collection(
             }
 
         # 设置当前任务ID
-        with task_execution_lock:
-            current_task_id = task_id
+        _claim_task_execution(task_id)
 
         # 启动后台任务
         background_tasks.add_task(
@@ -2151,10 +2192,8 @@ def run_file_historical_collection_task(
                     "error_message": str(e)
                 })
     finally:
-        with task_execution_lock:
-            if current_task_id == task_id:
-                current_task_id = None
-                logger.info(f"已清除当前任务ID: {task_id}")
+        _release_task_execution(task_id)
+        logger.info(f"已清除当前任务ID: {task_id}")
 
 def run_hk_file_historical_collection_task(
     task_id: str,
@@ -2266,10 +2305,8 @@ def run_hk_file_historical_collection_task(
                     "error_message": str(e)
                 })
     finally:
-        with task_execution_lock:
-            if current_task_id == task_id:
-                current_task_id = None
-                logger.info(f"已清除当前任务ID: {task_id}")
+        _release_task_execution(task_id)
+        logger.info(f"已清除当前任务ID: {task_id}")
 
 @router.post("/file-historical", response_model=DataCollectionResponse)
 async def start_file_historical_collection(
@@ -2286,10 +2323,6 @@ async def start_file_historical_collection(
         except ValueError:
             raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
 
-        # 检查是否有其他任务正在运行
-        with task_execution_lock:
-            if current_task_id is not None:
-                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
 
         # 生成任务ID
         task_id = f"file_historical_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
@@ -2313,8 +2346,7 @@ async def start_file_historical_collection(
             }
 
         # 设置当前任务ID
-        with task_execution_lock:
-            current_task_id = task_id
+        _claim_task_execution(task_id)
 
         # 启动后台任务
         background_tasks.add_task(
@@ -2357,10 +2389,6 @@ async def start_hk_file_historical_collection(
         except ValueError:
             raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
 
-        # 检查是否有其他任务正在运行
-        with task_execution_lock:
-            if current_task_id is not None:
-                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
 
         # 生成任务ID
         task_id = f"hk_file_historical_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
@@ -2384,8 +2412,7 @@ async def start_hk_file_historical_collection(
             }
 
         # 设置当前任务ID
-        with task_execution_lock:
-            current_task_id = task_id
+        _claim_task_execution(task_id)
 
         # 启动后台任务
         background_tasks.add_task(
@@ -2474,10 +2501,6 @@ async def start_historical_collection(
         except ValueError:
             raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
         
-        # 检查是否有其他任务正在运行
-        with task_execution_lock:
-            if current_task_id is not None:
-                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
         
         # 生成任务ID
         task_id = f"historical_collection_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
@@ -2501,8 +2524,7 @@ async def start_historical_collection(
             }
         
         # 设置当前任务ID
-        with task_execution_lock:
-            current_task_id = task_id
+        _claim_task_execution(task_id)
         
         # 启动后台任务
         background_tasks.add_task(
@@ -2662,10 +2684,8 @@ def run_historical_collection_task(
                 })
     finally:
         # 清除当前任务ID
-        with task_execution_lock:
-            if current_task_id == task_id:
-                current_task_id = None
-                logger.info(f"已清除当前任务ID: {task_id}")
+        _release_task_execution(task_id)
+        logger.info(f"已清除当前任务ID: {task_id}")
 
 @router.get("/status/{task_id}", response_model=DataCollectionStatus)
 async def get_collection_status(task_id: str):
@@ -2761,9 +2781,7 @@ async def cancel_collection_task(task_id: str):
             collection_tasks[task_id]["end_time"] = datetime.now()
             
             # 如果是当前运行的任务，清除当前任务ID
-            with task_execution_lock:
-                if current_task_id == task_id:
-                    current_task_id = None
+            _release_task_execution(task_id)
             
             logger.info(f"取消历史数据采集任务: {task_id}")
             
@@ -3303,10 +3321,8 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                     'error_message': str(e),
                 })
     finally:
-        with task_execution_lock:
-            if current_task_id == task_id:
-                current_task_id = None
-                logger.info(f"已清除当前任务ID: {task_id}")
+        _release_task_execution(task_id)
+        logger.info(f"已清除当前任务ID: {task_id}")
 
 
 @router.post('/realtime', response_model=RealtimeCollectionResponse)
@@ -3331,10 +3347,6 @@ async def start_realtime_collection(
         if single_code and full_mode:
             raise HTTPException(status_code=400, detail='单股采集与全量采集不可同时指定')
 
-        with task_execution_lock:
-            if current_task_id is not None:
-                raise HTTPException(status_code=400, detail='已有采集任务正在运行，请等待完成后再启动新任务')
-
         task_id = f"realtime_collection_{market}_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
 
         with task_lock:
@@ -3353,8 +3365,7 @@ async def start_realtime_collection(
                 'failed_details': [],
             }
 
-        with task_execution_lock:
-            current_task_id = task_id
+        _claim_task_execution(task_id)
 
         background_tasks.add_task(run_realtime_collection_task, task_id, market, single_code, full_mode)
 
@@ -3664,10 +3675,6 @@ async def start_tushare_historical_collection(
         except ValueError:
             raise HTTPException(status_code=400, detail="日期格式错误，请使用 YYYY-MM-DD 格式")
         
-        # 检查是否有其他任务正在运行
-        with task_execution_lock:
-            if current_task_id is not None:
-                raise HTTPException(status_code=400, detail="已有采集任务正在运行，请等待完成后再启动新任务")
         
         # 生成任务ID
         task_id = f"tushare_historical_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{threading.get_ident()}"
@@ -3693,8 +3700,7 @@ async def start_tushare_historical_collection(
             }
         
         # 设置当前任务ID
-        with task_execution_lock:
-            current_task_id = task_id
+        _claim_task_execution(task_id)
         
         # 启动后台任务
         background_tasks.add_task(
@@ -3805,7 +3811,5 @@ def run_tushare_historical_collection_task(
                 })
     finally:
         # 清除当前任务ID
-        with task_execution_lock:
-            if current_task_id == task_id:
-                current_task_id = None
-                logger.info(f"已清除当前任务ID: {task_id}")
+        _release_task_execution(task_id)
+        logger.info(f"已清除当前任务ID: {task_id}")
