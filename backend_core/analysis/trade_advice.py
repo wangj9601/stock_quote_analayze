@@ -18,6 +18,22 @@ STRUCTURE_EXIT_TARGET_PCT = 0.10
 STRUCTURE_EXIT_MIN_UPSIDE_PCT = 0.05
 
 
+def _position_advice_text(pa: Any) -> Optional[str]:
+    """仓位建议转为可读文案；避免把 dict 整段 str() 进摘要。"""
+    if not pa:
+        return None
+    if isinstance(pa, dict):
+        msg = str(pa.get("message") or "").strip()
+        return msg or None
+    text = str(pa).strip()
+    if not text:
+        return None
+    # 已序列化的 dict/json 不进摘要
+    if text.startswith("{") or text.startswith("["):
+        return None
+    return text
+
+
 def _f(v: Any) -> Optional[float]:
     try:
         if v is None or v == "":
@@ -1002,9 +1018,9 @@ def build_trade_advice(
             }
         elif kde_r is not None:
             take_profit = {"label": "结构压力止盈", "basis": "kde", "prices": [round(kde_r, 4)]}
-        pa = row.get("position_advice")
-        if pa:
-            summary_bits.append(str(pa))
+        pa_text = _position_advice_text(row.get("position_advice"))
+        if pa_text:
+            summary_bits.append(pa_text)
 
     elif kind == "rpe":
         sig = (row.get("signal_type") or "").strip().lower()
