@@ -318,6 +318,13 @@ except ImportError as e:
     print(f"data_collection_router 导入失败: {e}")
     data_collection_router = None
 
+try:
+    from .stock.collection_workflow_api import router as collection_workflow_router
+    print("collection_workflow_router 导入成功")
+except ImportError as e:
+    print(f"collection_workflow_router 导入失败: {e}")
+    collection_workflow_router = None
+
 # 尝试导入股票分析路由
 try:
     from .stock.stock_analysis_routes import router as stock_analysis_router
@@ -690,6 +697,7 @@ _include_router(app, vsb_signal_router, "vsb_signal")
 _include_router(app, history_router, "history")
 _include_router(app, news_router, "新闻")
 _include_router(app, data_collection_router, "数据采集")
+_include_router(app, collection_workflow_router, "采集流程")
 _include_router(app, stock_analysis_router, "股票分析")
 _include_router(app, board_analysis_router, "板块分析")
 _include_router(app, pattern_router, "形态识别")

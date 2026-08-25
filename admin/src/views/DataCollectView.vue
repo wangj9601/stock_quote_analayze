@@ -1,5 +1,15 @@
 <template>
   <div class="datacollect-view">
+    <div class="mb-4 flex items-center justify-between gap-3 flex-wrap">
+      <el-alert
+        title="推荐：使用「采集流程」一次编排多个节点串行执行，减少逐步手动启动。"
+        type="success"
+        :closable="false"
+        show-icon
+        class="flex-1"
+      />
+      <el-button type="primary" @click="$router.push('/collection-workflows')">使用流程采集</el-button>
+    </div>
     <!-- 当前任务状态（仅运行中显示；完成后依赖轮询清空，避免仍显示「等待任务完成」） -->
     <div v-if="currentTaskIsRunning && currentTask" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
       <div class="flex items-center">
