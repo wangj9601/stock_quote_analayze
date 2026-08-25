@@ -14,7 +14,7 @@
             </div>
           </div>
           <div>
-            <el-button @click="$router.push('/users')">返回</el-button>
+            <el-button @click="$router.push({ path: '/access-management', query: { tab: 'users' } })">返回</el-button>
             <el-button :disabled="!detail?.override_count" @click="resetToRole">恢复角色默认</el-button>
             <el-button type="primary" :loading="saving" @click="save">保存</el-button>
           </div>

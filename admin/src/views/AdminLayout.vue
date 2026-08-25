@@ -18,7 +18,7 @@
           :key="item.path"
           :to="item.path"
           class="nav-item"
-          :class="{ active: $route.path === item.path }"
+          :class="{ active: isMenuActive(item.path) }"
           @click="closeSidebar"
         >
           <el-icon class="nav-icon">
@@ -93,9 +93,7 @@ const sidebarOpen = ref(false)
 
 const menuItems = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
-  { path: '/users', name: '用户管理', icon: User },
-  { path: '/roles', name: '角色管理', icon: Lock },
-  { path: '/permissions', name: '权限资源', icon: Lock },
+  { path: '/access-management', name: '用户与权限', icon: Lock },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
   { path: '/stock-basic', name: '股票基本信息管理', icon: Tickets },
   { path: '/board-constituents', name: '板块成分股维护', icon: Histogram },
@@ -118,7 +116,35 @@ const menuItems = [
 ]
 
 const user = computed(() => authStore.user)
+
+const accessManagementPaths = new Set([
+  '/access-management',
+  '/users',
+  '/roles',
+  '/permissions',
+])
+
+function isAccessManagementRoute(path: string) {
+  if (accessManagementPaths.has(path)) return true
+  return /^\/users\/\d+\/permissions$/.test(path) || /^\/roles\/\d+\/permissions$/.test(path)
+}
+
+function isMenuActive(menuPath: string) {
+  if (menuPath === '/access-management') {
+    return isAccessManagementRoute(route.path)
+  }
+  return route.path === menuPath
+}
+
 const currentPageName = computed(() => {
+  if (route.path.match(/^\/users\/\d+\/permissions$/)) return '用户权限配置'
+  if (route.path.match(/^\/roles\/\d+\/permissions$/)) return '角色权限配置'
+  if (isAccessManagementRoute(route.path)) {
+    const tab = route.query.tab
+    if (tab === 'roles') return '用户与权限 · 角色管理'
+    if (tab === 'permissions') return '用户与权限 · 权限资源'
+    return '用户与权限'
+  }
   const hit = menuItems.find((m) => m.path === route.path)
   return hit?.name || '管理后台'
 })

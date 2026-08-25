@@ -28,14 +28,21 @@ const routes = [
         component: () => import('@/views/LogsView.vue')
       },
       {
+        path: 'access-management',
+        name: 'AccessManagement',
+        component: () => import('@/views/AccessManagementView.vue')
+      },
+      {
         path: 'users',
-        name: 'Users',
-        component: () => import('@/views/UsersView.vue')
+        redirect: { path: '/access-management', query: { tab: 'users' } }
       },
       {
         path: 'roles',
-        name: 'Roles',
-        component: () => import('@/views/RolesView.vue')
+        redirect: { path: '/access-management', query: { tab: 'roles' } }
+      },
+      {
+        path: 'permissions',
+        redirect: { path: '/access-management', query: { tab: 'permissions' } }
       },
       {
         path: 'roles/:id/permissions',
@@ -46,11 +53,6 @@ const routes = [
         path: 'users/:id/permissions',
         name: 'UserPermissions',
         component: () => import('@/views/UserPermissionsView.vue')
-      },
-      {
-        path: 'permissions',
-        name: 'Permissions',
-        component: () => import('@/views/PermissionsView.vue')
       },
       {
         path: 'quotes',

@@ -134,7 +134,7 @@ const stats = ref({
 // 快速操作
 const quickActions: { name: string; path: string; type: '' | 'text' | 'default' | 'success' | 'primary' | 'warning' | 'info' | 'danger'; icon: any }[] = [
   { name: '查看日志', path: '/logs', type: 'primary', icon: Document },
-  { name: '用户管理', path: '/users', type: 'success', icon: User },
+  { name: '用户与权限', path: '/access-management', type: 'success', icon: User },
   { name: '行情数据', path: '/quotes', type: 'warning', icon: TrendCharts },
   { name: '系统监控', path: '/monitoring', type: 'info', icon: Monitor },
   { name: '数据采集', path: '/datacollect', type: 'primary', icon: DataAnalysis },

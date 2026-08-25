@@ -5,7 +5,7 @@
         <div class="card-header">
           <span>角色权限配置：{{ roleName }}</span>
           <div>
-            <el-button @click="$router.push('/roles')">返回</el-button>
+            <el-button @click="$router.push({ path: '/access-management', query: { tab: 'roles' } })">返回</el-button>
             <el-button type="primary" :loading="saving" @click="save">保存</el-button>
           </div>
         </div>
