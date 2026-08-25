@@ -26,7 +26,7 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 
 ## API
 
-前缀：`/api/collection-workflows`
+前缀：`/api/admin/collection-workflows`（管理端 Axios baseURL 为 `/api/admin`）
 
 - `GET /nodes` 节点库
 - CRUD `/`、`/{id}`、`/{id}/nodes`

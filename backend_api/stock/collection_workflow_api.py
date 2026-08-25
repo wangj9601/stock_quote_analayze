@@ -23,7 +23,8 @@ from backend_core.models.collection_workflow import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/collection-workflows", tags=["采集流程"])
+# 管理端 apiService baseURL 为 /api/admin，须与此前缀一致
+router = APIRouter(prefix="/api/admin/collection-workflows", tags=["采集流程"])
 
 
 # ---------- Pydantic ----------
