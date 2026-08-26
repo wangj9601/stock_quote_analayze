@@ -2483,6 +2483,61 @@ class DblbSignalTrace(Base):
         UniqueConstraint("code", "trade_date", "config_id", name="uq_dblb_signal_trace_code_date_cfg"),
     )
 
+
+# ========== CUPB 杯底形态策略 ==========
+
+class CupbStrategyConfig(Base):
+    """杯底形态策略参数版本。"""
+    __tablename__ = "cupb_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class CupbSignalTrace(Base):
+    """杯底形态日终信号追溯。"""
+    __tablename__ = "cupb_signal_trace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    config_id = Column(
+        Integer,
+        ForeignKey("cupb_strategy_configs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String(200), nullable=True)
+    status = Column(String(20), nullable=True, index=True)  # forming | confirmed
+    left_rim_date = Column(String(10), nullable=True)
+    cup_bottom_date = Column(String(10), nullable=True)
+    right_rim_date = Column(String(10), nullable=True)
+    handle_low_date = Column(String(10), nullable=True)
+    left_rim_price = Column(Float, nullable=True)
+    cup_bottom_price = Column(Float, nullable=True)
+    right_rim_price = Column(Float, nullable=True)
+    handle_low_price = Column(Float, nullable=True)
+    rim = Column(Float, nullable=True)
+    last_close = Column(Float, nullable=True)
+    confirm_date = Column(String(10), nullable=True)
+    cup_depth_pct = Column(Float, nullable=True)
+    handle_retrace_pct = Column(Float, nullable=True)
+    board_labels = Column(String(500), nullable=True)
+    detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("code", "trade_date", "config_id", name="uq_cupb_signal_trace_code_date_cfg"),
+    )
+
+
 # ========== 统一交易观察 / 正式交易 ==========
 
 class TradeObserveStock(Base):

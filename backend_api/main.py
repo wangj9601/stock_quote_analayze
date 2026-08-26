@@ -998,6 +998,19 @@ else:
     print("DBLB admin 路由未注册")
 
 try:
+    from backend_api.admin.cupb_admin_routes import router as cupb_admin_router
+    print("cupb_admin_router 导入成功")
+except Exception as e:
+    print(f"cupb_admin_router 导入失败: {e}")
+    cupb_admin_router = None
+
+if cupb_admin_router is not None:
+    app.include_router(cupb_admin_router)
+    print("CUPB admin 路由注册成功 (/api/admin/cupb)")
+else:
+    print("CUPB admin 路由未注册")
+
+try:
     from backend_api.admin.rpe_admin_routes import router as rpe_admin_router
     print("rpe_admin_router 导入成功")
 except Exception as e:

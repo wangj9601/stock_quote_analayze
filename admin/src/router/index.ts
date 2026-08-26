@@ -100,6 +100,11 @@ const routes = [
         component: () => import('@/views/DblbManagementView.vue')
       },
       {
+        path: 'cupb-management',
+        name: 'CupbManagement',
+        component: () => import('@/views/CupbManagementView.vue')
+      },
+      {
         path: 'rpe-management',
         name: 'RPEManagement',
         component: () => import('@/views/RPEManagementView.vue')

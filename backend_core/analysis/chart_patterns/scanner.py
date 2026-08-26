@@ -212,6 +212,7 @@ def scan_patterns(
         scanned += 1
         if len(bars) < 30:
             continue
+        bars_raw = list(bars)
         if adjust_n == "qfq":
             try:
                 bars, _meta = apply_qfq_to_code_bars(
@@ -228,7 +229,11 @@ def scan_patterns(
                 logger.debug("pattern scan qfq fail %s: %s", code, e)
                 continue
         try:
-            hits, inv_n = detect_all_counted(bars, types=families)
+            hits, inv_n = detect_all_counted(
+                bars,
+                types=families,
+                ref_bars=bars_raw if adjust_n == "qfq" else None,
+            )
         except Exception as e:
             logger.debug("pattern detect fail %s: %s", code, e)
             continue

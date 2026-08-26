@@ -111,7 +111,7 @@ const PatternTool = {
   },
 
   /** 个股分析默认全选形态大类（与技术工具默认勾选一致） */
-  DEFAULT_TYPES: ['double_extremes', 'head_shoulders', 'triangle', 'wedge_flag'],
+  DEFAULT_TYPES: ['double_extremes', 'head_shoulders', 'triangle', 'wedge_flag', 'cup_handle'],
 
   /** 与 levels 一致：adjust=qfq|none；UI 默认勾选前复权 */
   selectedAdjust() {

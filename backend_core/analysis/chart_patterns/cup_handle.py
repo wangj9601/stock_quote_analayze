@@ -1,233 +1,175 @@
 # -*- coding: utf-8 -*-
-"""带柄茶杯形态（Cup with Handle）启发式检测。"""
+"""带柄茶杯形态：与管理端 CUPB 策略共用 detect_cup_bottom 算法。
+
+前复权检测时可用 ref_bars（不复权）按枢轴日回填展示价，与管理端 CUPB 对齐。
+"""
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence
+
+from backend_core.strategies.cup_bottom.config import get_default_cupb_config, merge_pattern_cfg
 
 from .pivots import extract_pivot_sequence
-from .rules import consolidation_status
 from .schema import fmt_px, make_hit
 
-# 杯身 / 柄部几何阈值（可随回归微调）
-_MIN_BARS = 50
-_MIN_CUP_BARS = 20
-_MIN_HANDLE_BARS = 5
-_MAX_HANDLE_BARS = 40
-_RIM_REL_TOL = 0.12  # 左右沿相对差
-_CUP_DEPTH_MIN = 0.12  # 相对左沿深度下限
-_CUP_DEPTH_MAX = 0.50  # 相对左沿深度上限
-_HANDLE_DEPTH_MIN = 0.05  # 柄回撤 / 杯深
-_HANDLE_DEPTH_MAX = 0.35
-_HANDLE_FLOOR_FRAC = 0.40  # 柄低不得跌破 杯底 + 40%*杯深
+
+def _cup_pattern_cfg(override: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """形态工具默认与管理端 CUPB 默认参数一致；保留 invalidated 供前端统计。"""
+    base = merge_pattern_cfg(get_default_cupb_config())
+    base["exclude_invalidated"] = False
+    if override:
+        base.update(override)
+    return base
 
 
-def _closes(bars: Sequence[Dict[str, Any]]) -> List[float]:
-    out: List[float] = []
-    for b in bars:
-        try:
-            c = float(b.get("close"))
-            if c == c and c > 0:
-                out.append(c)
-        except (TypeError, ValueError):
+def _bar_date(bar: Dict[str, Any]) -> str:
+    raw = bar.get("date") if bar.get("date") is not None else bar.get("trade_date")
+    return str(raw or "")[:10]
+
+
+def _ohlc_by_date(bars: Sequence[Dict[str, Any]]) -> Dict[str, Dict[str, float]]:
+    out: Dict[str, Dict[str, float]] = {}
+    for b in bars or []:
+        if not isinstance(b, dict):
             continue
+        d = _bar_date(b)
+        if not d:
+            continue
+        row: Dict[str, float] = {}
+        for k in ("high", "low", "close"):
+            try:
+                fv = float(b.get(k))
+                if fv == fv and fv > 0:
+                    row[k] = fv
+            except (TypeError, ValueError):
+                pass
+        if row:
+            out[d] = row
     return out
 
 
-def _bar_date(bars: Sequence[Dict[str, Any]], idx: int) -> str:
-    if idx < 0 or idx >= len(bars):
-        return ""
-    return str(bars[idx].get("date") or "")[:10]
+def _sync_cup_prices_from_ref_bars(
+    hit: Dict[str, Any],
+    ref_bars: Sequence[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """按枢轴日从不复权 ref_bars 取 OHLC，使展示价与管理端 CUPB 一致。"""
+    by_date = _ohlc_by_date(ref_bars)
+    if not by_date:
+        return hit
 
+    out = dict(hit)
+    qfq_prices: Dict[str, float] = {}
+    field_map = (
+        ("left_rim_date", "left_rim_price", "high"),
+        ("cup_bottom_date", "cup_bottom_price", "low"),
+        ("right_rim_date", "right_rim_price", "high"),
+        ("handle_low_date", "handle_low_price", "low"),
+    )
+    for date_key, price_key, ohlc_key in field_map:
+        d = str(out.get(date_key) or "")[:10]
+        row = by_date.get(d) or {}
+        ref_px = row.get(ohlc_key) or row.get("close")
+        if ref_px is None:
+            continue
+        try:
+            qfq_prices[price_key] = float(out.get(price_key))
+        except (TypeError, ValueError):
+            pass
+        out[price_key] = round(float(ref_px), 4)
 
-def _find_cup_and_handle(
-    closes: Sequence[float],
-) -> Optional[Tuple[int, int, int, int, int]]:
-    """
-    返回 (left_rim_i, cup_bottom_i, right_rim_i, handle_low_i, handle_end_i)。
-    索引相对 closes；失败返回 None。
-    """
-    n = len(closes)
-    if n < _MIN_BARS:
-        return None
+    left = float(out["left_rim_price"])
+    bottom = float(out["cup_bottom_price"])
+    right = float(out["right_rim_price"])
+    handle_low = float(out["handle_low_price"])
+    rim = round(max(left, right), 4)
+    out["rim"] = rim
 
-    # 在近端窗口内搜索（保留足够历史形成杯身）
-    win = closes[-min(n, 160) :]
-    offset = n - len(win)
-    w = len(win)
-    if w < _MIN_BARS:
-        return None
+    if ref_bars:
+        try:
+            last_ref = float((ref_bars[-1] or {}).get("close"))
+            if last_ref == last_ref and last_ref > 0:
+                out["last_close"] = round(last_ref, 4)
+        except (TypeError, ValueError, IndexError):
+            pass
 
-    best: Optional[Tuple[float, Tuple[int, int, int, int, int]]] = None
-
-    # 杯底：窗口中段附近的最低点
-    search_lo = max(10, w // 5)
-    search_hi = min(w - 15, (4 * w) // 5)
-    if search_hi <= search_lo + _MIN_CUP_BARS:
-        return None
-
-    for bi in range(search_lo, search_hi + 1):
-        bottom = win[bi]
-        # 左沿：杯底左侧最高点
-        left_slice = win[:bi]
-        if len(left_slice) < 8:
-            continue
-        li = max(range(len(left_slice)), key=lambda i: left_slice[i])
-        left = left_slice[li]
-        if left <= 0 or bi - li < 8:
-            continue
-        depth = left - bottom
-        depth_pct = depth / left
-        if depth_pct < _CUP_DEPTH_MIN or depth_pct > _CUP_DEPTH_MAX:
-            continue
-
-        # 右沿：杯底右侧回到左沿附近的高点；一旦出现够深的柄回撤则冻结右沿，
-        # 避免后续突破新高把右沿「抬走」导致柄部消失。
-        right_region = win[bi + 1 :]
-        if len(right_region) < _MIN_HANDLE_BARS + 5:
-            continue
-        ri_local = None
-        right_px = None
-        rim_frozen = False
-        for j, px in enumerate(right_region):
-            abs_j = bi + 1 + j
-            near_rim = (
-                abs(px - left) / left <= _RIM_REL_TOL
-                and px >= left * (1.0 - _RIM_REL_TOL)
-            )
-            if near_rim and not rim_frozen:
-                if right_px is None or px >= right_px:
-                    right_px = px
-                    ri_local = abs_j
-            # 相对已锁定右沿回撤达到柄深下限 → 冻结，后续再创新高也不抬沿
-            if ri_local is not None and right_px is not None and not rim_frozen:
-                if (right_px - px) / depth >= _HANDLE_DEPTH_MIN:
-                    rim_frozen = True
-            if ri_local is not None and abs_j - ri_local > _MAX_HANDLE_BARS + 5:
-                break
-        if ri_local is None or right_px is None:
-            continue
-        if ri_local - li < _MIN_CUP_BARS:
-            continue
-        if abs(right_px - left) / left > _RIM_REL_TOL:
-            continue
-
-        # 柄部：右沿之后、至多 MAX_HANDLE_BARS；首次明显站上右沿视为柄结束
-        after = win[ri_local + 1 :]
-        if len(after) < _MIN_HANDLE_BARS:
-            continue
-        handle_len = min(len(after), _MAX_HANDLE_BARS)
-        cut = handle_len
-        for k in range(handle_len):
-            if after[k] > right_px * (1.0 + 0.002):
-                # 突破点本身不算柄；至少保留 MIN 根柄 K
-                cut = k if k >= _MIN_HANDLE_BARS else _MIN_HANDLE_BARS
-                break
-        handle_len = min(max(cut, _MIN_HANDLE_BARS), len(after), _MAX_HANDLE_BARS)
-        handle_seg = after[:handle_len]
-        hli_rel = min(range(len(handle_seg)), key=lambda i: handle_seg[i])
-        handle_low = handle_seg[hli_rel]
-        handle_low_i = ri_local + 1 + hli_rel
-        handle_end_i = ri_local + handle_len
-
-        handle_retrace = right_px - handle_low
-        if handle_retrace <= 0:
-            continue
-        retrace_frac = handle_retrace / depth
-        if retrace_frac < _HANDLE_DEPTH_MIN or retrace_frac > _HANDLE_DEPTH_MAX:
-            continue
-        # 柄不能破坏杯底结构
-        floor = bottom + depth * _HANDLE_FLOOR_FRAC
-        if handle_low < floor:
-            continue
-        # 柄长须短于杯身
-        cup_len = ri_local - li
-        if handle_len >= cup_len:
-            continue
-        if handle_len < _MIN_HANDLE_BARS:
-            continue
-
-        # 评分：左右沿更齐、柄更浅、杯深适中优先
-        rim_align = 1.0 - abs(right_px - left) / left
-        shallow = 1.0 - retrace_frac
-        depth_score = 1.0 - abs(depth_pct - 0.25) / 0.25
-        score = rim_align * 0.4 + shallow * 0.35 + max(0.0, depth_score) * 0.25
-        cand = (
-            offset + li,
-            offset + bi,
-            offset + ri_local,
-            offset + handle_low_i,
-            offset + handle_end_i,
-        )
-        if best is None or score > best[0]:
-            best = (score, cand)
-
-    return None if best is None else best[1]
+    depth = rim - bottom
+    handle_retrace = rim - handle_low
+    out["cup_depth_pct"] = round(depth / rim * 100, 2) if rim > 0 else None
+    out["handle_retrace_pct"] = (
+        round(handle_retrace / depth * 100, 2) if depth > 0 else None
+    )
+    if qfq_prices:
+        out["_qfq_prices"] = qfq_prices
+    out["_cup_price_basis"] = "unadjusted_ref"
+    return out
 
 
 def detect_cup_with_handle(
     bars: Sequence[Dict[str, Any]],
     pivots: Optional[List[Dict[str, Any]]] = None,
+    *,
+    pattern_cfg: Optional[Dict[str, Any]] = None,
+    ref_bars: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """检测带柄茶杯；无命中返回空列表。"""
-    seq = [b for b in (bars or []) if isinstance(b, dict)]
-    closes = _closes(seq)
-    if len(closes) < _MIN_BARS or len(closes) != len(seq):
-        # closes 与 bars 索引可能因坏点错位：退化为按 bars 重算对齐索引
-        aligned: List[Dict[str, Any]] = []
-        closes = []
-        for b in seq:
-            try:
-                c = float(b.get("close"))
-            except (TypeError, ValueError):
-                continue
-            if c != c or c <= 0:
-                continue
-            aligned.append(b)
-            closes.append(c)
-        seq = aligned
-    if len(closes) < _MIN_BARS:
-        return []
+    from backend_core.strategies.cup_bottom.detector import detect_cup_bottom
 
-    # pivots 预留：当前算法以收盘序列为主；保留参数与其它检测器签名一致
+    seq = [b for b in (bars or []) if isinstance(b, dict)]
     _ = pivots if pivots is not None else extract_pivot_sequence(seq)
 
-    found = _find_cup_and_handle(closes)
-    if not found:
+    hit = detect_cup_bottom(seq, pattern_cfg=_cup_pattern_cfg(pattern_cfg))
+    if not hit:
         return []
-    li, bi, ri, hli, hei = found
-    left = closes[li]
-    bottom = closes[bi]
-    right = closes[ri]
-    handle_low = closes[hli]
-    rim = max(left, right)
-    last_c = closes[-1]
-    upper = rim
-    lower = handle_low
 
-    status, st_note = consolidation_status(
-        last_c, upper, lower, expect_up=True
-    )
+    if ref_bars:
+        hit = _sync_cup_prices_from_ref_bars(hit, ref_bars)
+
+    left = float(hit["left_rim_price"])
+    bottom = float(hit["cup_bottom_price"])
+    right = float(hit["right_rim_price"])
+    handle_low = float(hit["handle_low_price"])
+    rim = float(hit["rim"])
+    last_c = float(hit["last_close"])
+    status = str(hit.get("status") or "forming")
+    grade = str(hit.get("grade") or "")
+
     if status == "confirmed":
-        conf = 0.60
+        conf = {"A": 0.68, "B": 0.60, "C": 0.52}.get(grade, 0.60)
     elif status == "invalidated":
         conf = 0.22
     else:
-        conf = 0.46
+        conf = {"A": 0.50, "B": 0.46, "C": 0.40}.get(grade, 0.46)
 
-    depth = rim - bottom
-    handle_retrace = rim - handle_low
     reason = (
-        f"带柄茶杯 "
-        f"{fmt_px('左沿', round(left, 4), _bar_date(seq, li))} "
-        f"{fmt_px('杯底', round(bottom, 4), _bar_date(seq, bi))} "
-        f"{fmt_px('右沿', round(right, 4), _bar_date(seq, ri))} "
-        f"{fmt_px('柄低', round(handle_low, 4), _bar_date(seq, hli))} "
-        f"杯深={round(depth / rim * 100, 1)}% "
-        f"柄回撤={round(handle_retrace / depth * 100, 1)}%杯深"
+        f"带柄茶杯"
+        f"{f'[{grade}级]' if grade else ''} "
+        f"{fmt_px('左沿', hit['left_rim_price'], hit.get('left_rim_date'))} "
+        f"{fmt_px('杯底', hit['cup_bottom_price'], hit.get('cup_bottom_date'))} "
+        f"{fmt_px('右沿', hit['right_rim_price'], hit.get('right_rim_date'))} "
+        f"{fmt_px('柄低', hit['handle_low_price'], hit.get('handle_low_date'))} "
+        f"杯深={hit.get('cup_depth_pct')}% "
+        f"柄回撤={hit.get('handle_retrace_pct')}%杯深"
     )
-    if st_note:
-        reason = f"{reason} {st_note}"
+    if status == "confirmed" and hit.get("confirm_date"):
+        reason = f"{reason} 确认日={hit['confirm_date']}"
+    vs = hit.get("volume_score")
+    if vs is not None:
+        reason = f"{reason} 量价分={vs}/4"
+
+    extra: Dict[str, Any] = {
+        "confirm_date": hit.get("confirm_date"),
+        "handle_end_date": hit.get("handle_end_date"),
+        "cupb_aligned": True,
+        "grade": grade or None,
+        "volume_score": hit.get("volume_score"),
+        "volume_flags": hit.get("volume_flags"),
+        "quality_flags": hit.get("quality_flags"),
+    }
+    if hit.get("_cup_price_basis"):
+        extra["cup_price_basis"] = hit["_cup_price_basis"]
+    if hit.get("_qfq_prices"):
+        extra["qfq_prices"] = hit["_qfq_prices"]
 
     return [
         make_hit(
@@ -237,28 +179,26 @@ def detect_cup_with_handle(
             confidence=conf,
             reason=reason,
             key_levels={
-                "upper": round(upper, 4),
-                "lower": round(lower, 4),
+                "upper": round(rim, 4),
+                "lower": round(handle_low, 4),
                 "rim": round(rim, 4),
                 "cup_bottom": round(bottom, 4),
                 "left_rim": round(left, 4),
                 "right_rim": round(right, 4),
                 "handle_low": round(handle_low, 4),
                 "last_close": round(last_c, 4),
-                "cup_depth_pct": round(depth / rim * 100, 2),
-                "handle_retrace_pct_of_cup": round(handle_retrace / depth * 100, 2)
-                if depth > 0
-                else None,
+                "cup_depth_pct": hit.get("cup_depth_pct"),
+                "handle_retrace_pct_of_cup": hit.get("handle_retrace_pct"),
+                "handle_retrace_of_rim_pct": hit.get("handle_retrace_of_rim_pct"),
+                "grade": grade or None,
+                "volume_score": hit.get("volume_score"),
             },
             pivots=[
-                {"role": "left_rim", "date": _bar_date(seq, li), "price": left},
-                {"role": "cup_bottom", "date": _bar_date(seq, bi), "price": bottom},
-                {"role": "right_rim", "date": _bar_date(seq, ri), "price": right},
-                {"role": "handle_low", "date": _bar_date(seq, hli), "price": handle_low},
+                {"role": "left_rim", "date": hit.get("left_rim_date"), "price": left},
+                {"role": "cup_bottom", "date": hit.get("cup_bottom_date"), "price": bottom},
+                {"role": "right_rim", "date": hit.get("right_rim_date"), "price": right},
+                {"role": "handle_low", "date": hit.get("handle_low_date"), "price": handle_low},
             ],
-            extra={
-                "simplified": True,
-                "handle_end_date": _bar_date(seq, min(hei, len(seq) - 1)),
-            },
+            extra=extra,
         )
     ]

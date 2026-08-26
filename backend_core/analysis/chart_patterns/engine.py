@@ -560,6 +560,7 @@ def detect_all_counted(
     types: Optional[Iterable[str]] = None,
     pattern_cfg: Optional[Dict[str, Any]] = None,
     include_invalidated: bool = False,
+    ref_bars: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
     """对升序日线 bars 跑所选形态族，返回 (hit 列表, 过滤前 invalidated 条数)。
 
@@ -582,7 +583,14 @@ def detect_all_counted(
     if "wedge_flag" in families:
         hits.extend(detect_wedges_flags(seq, pivots))
     if "cup_handle" in families:
-        hits.extend(detect_cup_with_handle(seq, pivots))
+        hits.extend(
+            detect_cup_with_handle(
+                seq,
+                pivots,
+                pattern_cfg=pattern_cfg,
+                ref_bars=ref_bars,
+            )
+        )
 
     hits = apply_pattern_lifecycle(hits, seq)
     hits = nms_overlapping_patterns(hits)
@@ -607,6 +615,7 @@ def detect_all(
     types: Optional[Iterable[str]] = None,
     pattern_cfg: Optional[Dict[str, Any]] = None,
     include_invalidated: bool = False,
+    ref_bars: Optional[Sequence[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     """对升序日线 bars 跑所选形态族，返回标准化 hit 列表。
 
@@ -619,5 +628,6 @@ def detect_all(
         types=types,
         pattern_cfg=pattern_cfg,
         include_invalidated=include_invalidated,
+        ref_bars=ref_bars,
     )
     return hits

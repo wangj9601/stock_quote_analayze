@@ -1541,8 +1541,11 @@ def test_expert_vacuum_skips_stale_forming_hs_top():
 
 
 def _synthetic_cup_with_handle_closes(*, breakout: bool = True):
-    """构造左沿→杯底→右沿→浅柄（可选上破）收盘序列。"""
-    closes = [100.0] * 10
+    """构造前期上涨 + 左沿→杯底→右沿→浅柄（可选上破）收盘序列。"""
+    closes = []
+    for i in range(35):
+        closes.append(65.0 + i * 1.0)
+    closes.extend([100.0] * 10)
     for i in range(1, 21):
         closes.append(100.0 - 25.0 * ((i / 20.0) ** 0.85))
     closes.extend([75.0, 74.9, 75.1, 75.0])
@@ -1559,11 +1562,21 @@ def _synthetic_cup_with_handle_closes(*, breakout: bool = True):
     return closes
 
 
+def _cup_test_pattern_cfg():
+    from backend_core.strategies.cup_bottom.config import get_default_cupb_config, merge_pattern_cfg
+
+    cfg = merge_pattern_cfg(get_default_cupb_config())
+    cfg["cup_u_shape_required"] = False
+    cfg["volume"] = {"enabled": False}
+    cfg["handle_retrace_of_rim_min"] = 0.05
+    return cfg
+
+
 def test_cup_with_handle_confirmed_breakout():
     from backend_core.analysis.chart_patterns.cup_handle import detect_cup_with_handle
 
     bars = _bars_from_closes(_synthetic_cup_with_handle_closes(breakout=True))
-    hits = detect_cup_with_handle(bars)
+    hits = detect_cup_with_handle(bars, pattern_cfg=_cup_test_pattern_cfg())
     assert len(hits) == 1
     h = hits[0]
     assert h["pattern_family"] == "cup_handle"
@@ -1576,13 +1589,32 @@ def test_cup_with_handle_forming_in_handle():
     from backend_core.analysis.chart_patterns.cup_handle import detect_cup_with_handle
 
     bars = _bars_from_closes(_synthetic_cup_with_handle_closes(breakout=False))
-    hits = detect_cup_with_handle(bars)
+    hits = detect_cup_with_handle(bars, pattern_cfg=_cup_test_pattern_cfg())
     assert len(hits) == 1
     assert hits[0]["status"] == "forming"
 
 
 def test_detect_all_includes_cup_handle_family():
     bars = _bars_from_closes(_synthetic_cup_with_handle_closes(breakout=True))
-    hits = detect_all(bars, types=["cup_handle"])
+    hits = detect_all(bars, types=["cup_handle"], pattern_cfg=_cup_test_pattern_cfg())
     types = {h["pattern_type"] for h in hits}
     assert "cup_with_handle" in types
+
+
+def test_cup_with_handle_ref_bars_sync_prices():
+    from backend_core.analysis.chart_patterns.cup_handle import detect_cup_with_handle
+
+    closes = _synthetic_cup_with_handle_closes(breakout=True)
+    qfq_bars = _bars_from_closes(closes)
+    raw_closes = [round(c * 1.05, 4) for c in closes]
+    raw_bars = _bars_from_closes(raw_closes)
+    hits = detect_cup_with_handle(qfq_bars, ref_bars=raw_bars, pattern_cfg=_cup_test_pattern_cfg())
+    assert len(hits) == 1
+    h = hits[0]
+    assert h.get("cup_price_basis") == "unadjusted_ref"
+    left_date = h["pivots"][0]["date"]
+    raw_row = next(
+        b for b in raw_bars if str(b["date"])[:10] == left_date
+    )
+    raw_left = float(raw_row["high"])
+    assert h["key_levels"]["left_rim"] == round(raw_left, 4)

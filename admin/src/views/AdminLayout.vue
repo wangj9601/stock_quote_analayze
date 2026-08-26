@@ -13,19 +13,48 @@
       </div>
 
       <nav class="sidebar-nav">
-        <router-link
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: isMenuActive(item.path) }"
-          @click="closeSidebar"
-        >
-          <el-icon class="nav-icon">
-            <component :is="item.icon" />
-          </el-icon>
-          <span class="nav-text">{{ item.name }}</span>
-        </router-link>
+        <template v-for="item in menuItems" :key="item.path || item.name">
+          <div v-if="item.children?.length" class="nav-group">
+            <button
+              type="button"
+              class="nav-item nav-group-toggle"
+              :class="{ active: isGroupActive(item) }"
+              @click="toggleGroup(item.name)"
+            >
+              <el-icon class="nav-icon">
+                <component :is="item.icon" />
+              </el-icon>
+              <span class="nav-text">{{ item.name }}</span>
+              <el-icon class="nav-chevron" :class="{ expanded: isGroupExpanded(item.name) }">
+                <ArrowDown />
+              </el-icon>
+            </button>
+            <div v-show="isGroupExpanded(item.name)" class="nav-children">
+              <router-link
+                v-for="child in item.children"
+                :key="child.path"
+                :to="child.path"
+                class="nav-item nav-child"
+                :class="{ active: isMenuActive(child.path) }"
+                @click="closeSidebar"
+              >
+                <span class="nav-text">{{ child.name }}</span>
+              </router-link>
+            </div>
+          </div>
+          <router-link
+            v-else
+            :to="item.path!"
+            class="nav-item"
+            :class="{ active: isMenuActive(item.path!) }"
+            @click="closeSidebar"
+          >
+            <el-icon class="nav-icon">
+              <component :is="item.icon" />
+            </el-icon>
+            <span class="nav-text">{{ item.name }}</span>
+          </router-link>
+        </template>
       </nav>
 
       <div class="sidebar-footer">
@@ -82,16 +111,26 @@ import {
   Select,
   Star,
   Notebook,
-  Lock
+  Lock,
+  ArrowDown
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
+
+type MenuChild = { path: string; name: string }
+type MenuItem = {
+  path?: string
+  name: string
+  icon: typeof DataBoard
+  children?: MenuChild[]
+}
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const sidebarOpen = ref(false)
+const expandedGroups = ref<Record<string, boolean>>({})
 
-const menuItems = [
+const menuItems: MenuItem[] = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
   { path: '/access-management', name: '用户与权限', icon: Lock },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
@@ -102,9 +141,16 @@ const menuItems = [
   { path: '/triple-volume-observe', name: '3倍量观察股', icon: Notebook },
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/gms-management', name: 'GMS策略回测管理', icon: TrendCharts },
-  { path: '/sbbr-management', name: '做小做底SBBR', icon: TrendCharts },
-  { path: '/dblb-management', name: '双底策略DBLB', icon: TrendCharts },
-  { path: '/rpe-management', name: '比价效应RPE', icon: TrendCharts },
+  {
+    name: '形态策略',
+    icon: TrendCharts,
+    children: [
+      { path: '/sbbr-management', name: '做小做底 SBBR' },
+      { path: '/dblb-management', name: '双底策略 DBLB' },
+      { path: '/cupb-management', name: '杯底形态 CUPB' },
+      { path: '/rpe-management', name: '比价效应 RPE' },
+    ],
+  },
   { path: '/urt-management', name: 'URT上升趋势策略', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/env-sync', name: '环境数据同步', icon: Setting },
@@ -130,6 +176,37 @@ function isAccessManagementRoute(path: string) {
   return /^\/users\/\d+\/permissions$/.test(path) || /^\/roles\/\d+\/permissions$/.test(path)
 }
 
+
+function isGroupActive(item: MenuItem) {
+  return (item.children || []).some((child) => child.path === route.path)
+}
+
+function isGroupExpanded(groupName: string) {
+  return expandedGroups.value[groupName] ?? false
+}
+
+function toggleGroup(groupName: string) {
+  expandedGroups.value[groupName] = !isGroupExpanded(groupName)
+}
+
+function ensureActiveGroupExpanded() {
+  for (const item of menuItems) {
+    if (item.children?.length && isGroupActive(item)) {
+      expandedGroups.value[item.name] = true
+    }
+  }
+}
+
+function findMenuName(path: string): string | undefined {
+  for (const item of menuItems) {
+    if (item.path === path) return item.name
+    for (const child of item.children || []) {
+      if (child.path === path) return child.name
+    }
+  }
+  return undefined
+}
+
 function isMenuActive(menuPath: string) {
   if (menuPath === '/access-management') {
     return isAccessManagementRoute(route.path)
@@ -146,8 +223,8 @@ const currentPageName = computed(() => {
     if (tab === 'permissions') return '用户与权限 · 权限资源'
     return '用户与权限'
   }
-  const hit = menuItems.find((m) => m.path === route.path)
-  return hit?.name || '管理后台'
+  const hit = findMenuName(route.path)
+  return hit || '管理后台'
 })
 
 function toggleSidebar() {
@@ -162,10 +239,14 @@ function onResize() {
 
 watch(
   () => route.fullPath,
-  () => closeSidebar()
+  () => {
+    ensureActiveGroupExpanded()
+    closeSidebar()
+  }
 )
 
 onMounted(() => {
+  ensureActiveGroupExpanded()
   window.addEventListener('resize', onResize)
 })
 onUnmounted(() => {
@@ -251,6 +332,35 @@ const handleLogout = async () => {
 .nav-text {
   @apply font-medium;
   text-decoration: none;
+}
+
+.nav-group-toggle {
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+}
+
+.nav-chevron {
+  margin-left: auto;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+}
+
+.nav-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+.nav-children {
+  @apply ml-3 pl-3 border-l border-gray-200 space-y-1 mb-1;
+}
+
+.nav-child {
+  @apply py-2;
+}
+
+.nav-child .nav-text {
+  @apply text-sm;
 }
 
 .nav-item,

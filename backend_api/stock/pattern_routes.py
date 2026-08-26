@@ -275,6 +275,7 @@ async def patterns_for_stock(
     asof_s = resolve_effective_trade_date(db, asof, market=market)
     bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)
     bars = bars_map.get(stock_code) or []
+    bars_raw = list(bars)
     adj_meta: Optional[Dict[str, Any]] = None
     if adjust_n == "qfq":
         try:
@@ -293,10 +294,14 @@ async def patterns_for_stock(
 
     names = load_names(db, [stock_code])
     type_list = _parse_types(types)
+    cup_ref_bars = bars_raw if adjust_n == "qfq" else None
     if len(bars) >= 30:
         # tactical 需要看 invalidated（空头上破失效等旁路）；对外 items 仍默认过滤失效项
         hits_all, invalidated_count = detect_all_counted(
-            bars, types=type_list or None, include_invalidated=True
+            bars,
+            types=type_list or None,
+            include_invalidated=True,
+            ref_bars=cup_ref_bars,
         )
     else:
         hits_all, invalidated_count = [], 0
