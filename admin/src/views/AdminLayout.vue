@@ -100,7 +100,6 @@ import { ElMessageBox } from 'element-plus'
 import {
   DataBoard,
   Document,
-  User,
   TrendCharts,
   Setting,
   DataAnalysis,

@@ -35,4 +35,8 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 
 ## 与单任务采集互斥
 
-流程运行与 `/api/data-collection/*` 单任务共用全局互斥槽，避免并发写库。
+- **多个采集流程**可并行运行（每个流程占用独立 execution 槽）。
+- **单任务采集**（`/api/data-collection/*`）仍全局独占：不能与任何流程或其它单任务并发，避免写库冲突。
+- 流程运行期间无法从管理端启动单任务采集；单任务运行期间无法启动流程。
+
+`GET /active-execution` 返回 `active` 数组与 `active_count`，便于监控并发流程。

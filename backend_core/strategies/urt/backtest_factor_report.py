@@ -144,9 +144,12 @@ def enrich_detail_with_factors(
     sig: Optional[Dict[str, Any]],
     future: Sequence[Dict[str, Any]],
     entry_price: float,
+    *,
+    hit_rate_only: bool = False,
 ) -> Dict[str, Any]:
     row.update(flatten_score_factors(sig))
-    attach_horizon_metrics(row, future, entry_price)
+    if not hit_rate_only:
+        attach_horizon_metrics(row, future, entry_price)
     return row
 
 

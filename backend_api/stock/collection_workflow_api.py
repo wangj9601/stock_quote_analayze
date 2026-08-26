@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
 from backend_core.data_collectors.workflow.engine import workflow_engine
-from backend_core.data_collectors.workflow.mutex import get_active
+from backend_core.data_collectors.workflow.mutex import get_active, is_busy, list_active
 from backend_core.data_collectors.workflow.node_registry import get_node, list_nodes_meta
 from backend_core.models.collection_workflow import (
     CollectionWorkflow,
@@ -185,7 +185,17 @@ async def api_list_nodes():
 @router.get("/active-execution")
 async def api_active_execution():
     kind, eid = get_active()
-    return {"success": True, "data": {"kind": kind, "id": eid, "busy": eid is not None}}
+    items = list_active()
+    return {
+        "success": True,
+        "data": {
+            "kind": kind,
+            "id": eid,
+            "busy": is_busy(),
+            "active_count": len(items),
+            "active": items,
+        },
+    }
 
 
 @router.get("")

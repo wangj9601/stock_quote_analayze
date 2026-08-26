@@ -338,6 +338,8 @@ const dragFrom = ref<number | null>(null)
 const runs = ref<WorkflowRun[]>([])
 const runFilterWf = ref<number | undefined>()
 const currentRunDetail = ref<WorkflowRun | null>(null)
+/** 运行记录 / 详情轮询间隔（毫秒） */
+const RUN_POLL_INTERVAL_MS = 30_000
 let pollTimer: number | null = null
 
 const categoryLabel = (c: string) =>
@@ -583,8 +585,9 @@ async function saveEditing(andRun = false) {
       ElMessage.success('已保存流程')
     }
     await loadWorkflows()
-    if (andRun && editing.value.id) {
-      await runNow(editing.value)
+    const saved = editing.value
+    if (andRun && saved?.id) {
+      await runNow(saved)
     }
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e?.message || '保存失败')
@@ -683,7 +686,7 @@ function startPolling() {
         await selectRun(currentRunDetail.value)
       }
     }
-  }, 3000)
+  }, RUN_POLL_INTERVAL_MS)
 }
 
 function stopPolling() {

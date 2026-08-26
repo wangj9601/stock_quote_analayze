@@ -9,6 +9,7 @@ from backend_core.data_collectors.workflow.context import NodeResult, WorkflowCo
 from backend_core.data_collectors.workflow.mutex import (
     get_active,
     is_busy,
+    list_active,
     release,
     try_acquire,
 )
@@ -21,9 +22,8 @@ from backend_core.data_collectors.workflow.node_registry import (
 
 
 def _clear_mutex():
-    kind, eid = get_active()
-    if eid:
-        release(eid)
+    for item in list(list_active()):
+        release(item["id"])
 
 
 def test_node_registry_contains_core_nodes():
@@ -32,14 +32,18 @@ def test_node_registry_contains_core_nodes():
     assert "cn_historical" in keys
     assert "cn_weekly" in keys
     assert "gms_signals_cn" in keys
+    assert "gms_signals_hk" in keys
+    assert "urt_signals_hk" in keys
     assert get_node("cn_realtime") is not None
+    assert get_node("gms_signals_hk") is not None
+    assert get_node("urt_signals_hk") is not None
     assert get_node("not_exists_xyz") is None
     meta = list_nodes_meta()
     assert all("executor" not in m for m in meta)
     assert any(m["key"] == "cn_historical_akshare" for m in meta)
 
 
-def test_mutex_exclusive():
+def test_mutex_task_blocks_workflow():
     _clear_mutex()
     ok, _, _ = try_acquire("task", "t1")
     assert ok
@@ -50,9 +54,27 @@ def test_mutex_exclusive():
     assert eid2 == "t1"
     release("t1")
     assert not is_busy()
-    ok3, _, _ = try_acquire("workflow", "w1")
-    assert ok3
+
+
+def test_mutex_multiple_workflows():
+    _clear_mutex()
+    ok1, _, _ = try_acquire("workflow", "w1")
+    ok2, _, _ = try_acquire("workflow", "w2")
+    assert ok1 and ok2
+    assert len(list_active()) == 2
+    ok3, kind3, _ = try_acquire("task", "t1")
+    assert not ok3
+    assert kind3 == "workflow"
     release("w1")
+    assert is_busy()
+    ok4, _, _ = try_acquire("workflow", "w3")
+    assert ok4
+    release("w2")
+    release("w3")
+    assert not is_busy()
+    ok5, _, _ = try_acquire("task", "t1")
+    assert ok5
+    release("t1")
 
 
 def test_mutex_release_only_owner():

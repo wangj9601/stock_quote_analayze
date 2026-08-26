@@ -433,6 +433,20 @@ def _urt_cn() -> Any:
     return True
 
 
+def _gms_hk() -> Any:
+    from backend_core.strategies.gms.scheduled_precompute import scheduled_gms_signals_hk
+
+    scheduled_gms_signals_hk()
+    return True
+
+
+def _urt_hk() -> Any:
+    from backend_core.strategies.urt.scheduled_precompute import scheduled_urt_signals_hk
+
+    scheduled_urt_signals_hk()
+    return True
+
+
 def _sbbr_cn() -> Any:
     from backend_core.strategies.sbbr.scheduled_precompute import scheduled_sbbr_signals_cn
 
@@ -496,8 +510,10 @@ exec_hk_monthly = _wrap_hk(_gen_hk_monthly, "港股月K")
 exec_hk_quarterly = _wrap_hk(_gen_hk_quarterly, "港股季K")
 exec_hk_semiannual = _wrap_hk(_gen_hk_semiannual, "港股半年K")
 exec_hk_annual = _wrap_hk(_gen_hk_annual, "港股年K")
-exec_gms_cn = _wrap_plain(_gms_cn, "GMS信号预计算")
-exec_urt_cn = _wrap_plain(_urt_cn, "URT信号预计算")
+exec_gms_cn = _wrap_plain(_gms_cn, "GMS信号预计算(A股)")
+exec_gms_hk = _wrap_plain(_gms_hk, "GMS信号预计算(港股)")
+exec_urt_cn = _wrap_plain(_urt_cn, "URT信号预计算(A股)")
+exec_urt_hk = _wrap_plain(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
 exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
 exec_market_news = _wrap_plain(_market_news, "市场新闻采集")

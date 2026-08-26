@@ -9,7 +9,7 @@ URT 回测执行器（A 股）：
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
@@ -448,12 +448,11 @@ def build_urt_trade_meta(
                 "入场：信号日之后下一交易日开盘价买入；开盘价无效则跳过。",
                 f"观察期：自入场日起共 {hz} 根交易日 K 线（默认 10，短线定位）。",
                 (
-                    f"目标命中（不止损）：{hit_stat_rule}；"
-                    "同时记录观察期最高价与最大涨幅；不因浮亏/连跌/回撤提前离场。"
+                    f"命中判定：{hit_stat_rule}；"
+                    "不模拟止损/止盈/到期平仓，仅统计观察期内是否触达目标涨幅。"
                 ),
-                f"到期平仓：持有满观察期，以最后一根 K 线收盘价作为参考出场价（horizon_end）。",
-                "同标的去重：上一笔观察期结束日之前不再接受新信号开仓。",
-                "参考盈亏 pnl_pct：按观察期末收盘价相对入场价计算；另输出 max_gain_pct（观察期最高价涨幅）。",
+                f"观察期：自入场日起共 {hz} 根交易日 K 线；记录观察期最高价与最大涨幅。",
+                "同标的去重：上一笔观察期结束日之前不再计入新信号（对齐 GMS signal_hit_rate）。",
                 (
                     "说明：策略配置中的风控参数（止损/连跌/回撤）在 hit_rate 模式下仅作文档参考，"
                     f"本模式不启用（止损区间约 {stop_min:.0f}%–{stop_max:.0f}%，"
@@ -465,12 +464,7 @@ def build_urt_trade_meta(
                 {
                     "code": "target_hit",
                     "label": "触及目标（统计）",
-                    "desc": f"{hit_priority_desc}（不止损、不提前平仓）",
-                },
-                {
-                    "code": "horizon_end",
-                    "label": "到期平仓",
-                    "desc": f"满 {hz} 个交易日以收盘价记作出场参考",
+                    "desc": f"{hit_priority_desc}；不模拟交易出场",
                 },
             ],
         }
@@ -543,6 +537,12 @@ def _future_bars(db: Session, code: str, after_date: str, limit: int) -> List[Di
             }
         )
     return out
+
+
+def _observation_end_date(future: Sequence[Dict[str, Any]], fallback: str = "") -> str:
+    if not future:
+        return str(fallback)[:10]
+    return str(future[-1].get("date") or fallback)[:10]
 
 
 def _history_bars_until(db: Session, code: str, until_date: str, limit: int) -> List[Dict[str, Any]]:
@@ -756,8 +756,10 @@ def run_urt_backtest(
             code = str(sig.get("code") or "")
             if not code:
                 continue
-            if code in cooldown and d < cooldown[code]:
-                continue
+            if code in cooldown:
+                cd = str(cooldown[code] or "")[:10]
+                if cd and (d <= cd if mode == "hit_rate" else d < cd):
+                    continue
             # 信号日之后 horizon_days 根 K 线为观察窗（首根为入场日）
             future = _future_bars(db, code, d, horizon_days)
             if not future or future[0].get("open") is None or float(future[0]["open"]) <= 0:
@@ -799,6 +801,33 @@ def run_urt_backtest(
             hit_in_band = bool(band["hit_in_band"])
             if not hit:
                 hit_date = None
+
+            if mode == "hit_rate":
+                obs_end = _observation_end_date(future, entry_date)
+                row_out: Dict[str, Any] = {
+                    "code": code,
+                    "name": sig.get("name") or "",
+                    "signal_date": d,
+                    "score": sig.get("score"),
+                    "entry_date": entry_date,
+                    "entry_price": round(entry_price, 4),
+                    "observation_end_date": obs_end,
+                    "horizon_days": len(future),
+                    "max_high": round(max_high, 4),
+                    "max_gain_pct": round(max_gain * 100.0, 2),
+                    "hit_target": hit,
+                    "hit_date": hit_date,
+                    "hit_target_upper": hit_upper,
+                    "hit_date_upper": hit_upper_date,
+                    "hit_in_band": hit_in_band,
+                }
+                enrich_detail_with_factors(
+                    row_out, sig, future, entry_price, hit_rate_only=True
+                )
+                details.append(row_out)
+                cooldown[code] = obs_end
+                continue
+
             struct_levels: Dict[str, Any] = {}
             if mode == "structure_exit":
                 sig_st = extract_signal_structure_levels(sig)
@@ -1164,24 +1193,36 @@ def run_urt_backtest(
 
     by_score_bucket = assign_score_buckets(details)
     by_factor_bucket = build_factor_buckets(details)
-    hit_rate_compare = build_hit_rate_compare(details, mode)
+    hit_rate_compare = None if mode == "hit_rate" else build_hit_rate_compare(details, mode)
 
     holding_hist = {"1-3": 0, "4-10": 0, "11-20": 0, "21+": 0}
-    for r in details:
-        bars = int(r.get("bars_held") or 0)
-        if bars <= 3:
-            holding_hist["1-3"] += 1
-        elif bars <= 10:
-            holding_hist["4-10"] += 1
-        elif bars <= 20:
-            holding_hist["11-20"] += 1
+    if mode != "hit_rate":
+        for r in details:
+            bars = int(r.get("bars_held") or 0)
+            if bars <= 3:
+                holding_hist["1-3"] += 1
+            elif bars <= 10:
+                holding_hist["4-10"] += 1
+            elif bars <= 20:
+                holding_hist["11-20"] += 1
+            else:
+                holding_hist["21+"] += 1
+    elif details:
+        hz_n = int(horizon_days)
+        if hz_n <= 3:
+            holding_hist["1-3"] = total
+        elif hz_n <= 10:
+            holding_hist["4-10"] = total
+        elif hz_n <= 20:
+            holding_hist["11-20"] = total
         else:
-            holding_hist["21+"] += 1
+            holding_hist["21+"] = total
 
     exit_reason_dist: Dict[str, int] = {}
-    for r in details:
-        reason = str(r.get("exit_reason") or "unknown")
-        exit_reason_dist[reason] = exit_reason_dist.get(reason, 0) + 1
+    if mode != "hit_rate":
+        for r in details:
+            reason = str(r.get("exit_reason") or "unknown")
+            exit_reason_dist[reason] = exit_reason_dist.get(reason, 0) + 1
 
     structure_exit_stats: Optional[Dict[str, Any]] = None
     if mode == "structure_exit" and total:
@@ -1220,19 +1261,24 @@ def run_urt_backtest(
             "pct_target_rate": round(exit_reason_dist.get("pct_target", 0) / total, 4),
         }
 
-    # 分月收益：按出场月汇总 pnl_pct 均值（简化）
+    # 分月收益：按出场月汇总 pnl_pct 均值（简化；命中率模式不统计）
     monthly_map: Dict[str, List[float]] = {}
-    for r in details:
-        ed = str(r.get("exit_date") or "")[:7]
-        if not ed:
-            continue
-        monthly_map.setdefault(ed, []).append(float(r.get("pnl_pct") or 0))
+    if mode != "hit_rate":
+        for r in details:
+            ed = str(r.get("exit_date") or "")[:7]
+            if not ed:
+                continue
+            monthly_map.setdefault(ed, []).append(float(r.get("pnl_pct") or 0))
     monthly_returns = [
         {"month": m, "return_pct": round(sum(vs) / len(vs), 2), "count": len(vs)}
         for m, vs in sorted(monthly_map.items())
     ]
 
-    avg_bars = sum(int(r.get("bars_held") or 0) for r in details) / total if total else 0.0
+    avg_bars = (
+        float(horizon_days)
+        if mode == "hit_rate"
+        else (sum(int(r.get("bars_held") or 0) for r in details) / total if total else 0.0)
+    )
 
     trade_meta = build_urt_trade_meta(
         target_pct=float(target_lo),
@@ -1246,7 +1292,7 @@ def run_urt_backtest(
         structure_rr_min_upside_pct=float(cfg.get("structure_rr_min_upside_pct") or 0.03),
         structure_cfg=cfg,
     )
-    summary = {
+    summary_base = {
         "total_signals": total,
         "total_samples": total,
         "target_hits": hits,
@@ -1256,11 +1302,7 @@ def run_urt_backtest(
         "hit_rate_upper": round(hits_upper / total, 4) if total else 0.0,
         "in_band_count": in_band_n,
         "in_band_rate": round(in_band_n / total, 4) if total else 0.0,
-        "win_count": wins,
-        "win_rate": round(wins / total, 4) if total else 0.0,
-        "avg_pnl_pct": round(avg_pnl, 2),
         "avg_max_gain_pct": round(avg_max_gain, 2),
-        "avg_bars_held": round(avg_bars, 2),
         "target_pct": target_lo,
         "target_pct_max": target_hi,
         "horizon_days": horizon_days,
@@ -1277,16 +1319,29 @@ def run_urt_backtest(
         "min_score": cfg.get("min_score"),
         "by_score_bucket": by_score_bucket,
         "by_factor_bucket": by_factor_bucket,
-        "hit_rate_compare": hit_rate_compare,
         "holding_days_histogram": holding_hist,
-        "exit_reason_dist": exit_reason_dist,
-        "structure_exit_stats": structure_exit_stats,
-        "monthly_returns": monthly_returns,
         "stock_pool_size": len(pool) if pool else None,
         "risk_params": trade_meta["risk_params"],
         "trade_logic": trade_meta["trade_logic"],
         "precompute": precompute_meta or None,
     }
+    if mode == "hit_rate":
+        summary = {
+            **summary_base,
+            "avg_bars_held": round(avg_bars, 2),
+        }
+    else:
+        summary = {
+            **summary_base,
+            "win_count": wins,
+            "win_rate": round(wins / total, 4) if total else 0.0,
+            "avg_pnl_pct": round(avg_pnl, 2),
+            "avg_bars_held": round(avg_bars, 2),
+            "hit_rate_compare": hit_rate_compare,
+            "exit_reason_dist": exit_reason_dist,
+            "structure_exit_stats": structure_exit_stats,
+            "monthly_returns": monthly_returns,
+        }
     if progress_cb:
         progress_cb(100, "回测完成")
     return {"summary": summary, "details": details}

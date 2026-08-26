@@ -32,7 +32,7 @@
         >
           <el-checkbox
             :model-value="draftSet.has(b.board_code)"
-            @change="(v: boolean) => toggleDraft(b.board_code, v)"
+            @change="(v) => toggleDraft(b.board_code, v === true)"
           />
           <span class="board-picker-item-text">
             <span class="board-picker-name">{{ b.board_name || b.board_code }}</span>

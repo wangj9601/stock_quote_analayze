@@ -337,9 +337,15 @@
           <template #default="{ row }">{{ exitModeLabel(resolveExitMode(row)) }}</template>
         </el-table-column>
         <el-table-column label="摘要" min-width="240">
-          <template #default="{ row }">
+            <template #default="{ row }">
             <span v-if="row.summary">
-              信号 {{ row.summary.total_signals ?? 0 }} · 命中率 {{ pct(row.summary.hit_rate) }} · 胜率 {{ pct(row.summary.win_rate) }} · 均盈亏 {{ row.summary.avg_pnl_pct }}%
+              信号 {{ row.summary.total_signals ?? 0 }} · 命中率 {{ pct(row.summary.hit_rate) }}
+              <template v-if="isHitRateMode(row)">
+                · 均最大涨幅 {{ row.summary.avg_max_gain_pct ?? '-' }}%
+              </template>
+              <template v-else>
+                · 胜率 {{ pct(row.summary.win_rate) }} · 均盈亏 {{ row.summary.avg_pnl_pct }}%
+              </template>
             </span>
             <span v-else>{{ row.message || '--' }}</span>
           </template>
@@ -560,6 +566,10 @@ function resolveExitMode(row: any): string {
   // 旧任务：仅有 apply_stop_loss 时推断
   if (row?.summary?.apply_stop_loss === true) return 'risk_exit'
   return 'hit_rate'
+}
+
+function isHitRateMode(row: any): boolean {
+  return resolveExitMode(row) === 'hit_rate'
 }
 
 function exitModeLabel(mode?: string) {

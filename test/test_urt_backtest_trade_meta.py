@@ -20,8 +20,7 @@ def test_build_urt_trade_meta_defaults():
     assert "观察期 10" in logic["summary"]
     assert any("开盘价" in r for r in logic["rules"])
     codes = [x["code"] for x in logic["exit_priority"]]
-    assert codes[0] == "target_hit"
-    assert codes[-1] == "horizon_end"
+    assert codes == ["target_hit"]
 
 
 def test_build_urt_trade_meta_custom_risk():

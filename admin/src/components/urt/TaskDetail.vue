@@ -111,8 +111,10 @@
           <el-descriptions-item label="命中数">{{ task.summary.target_hits ?? task.summary.hit_count ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="命中率">{{ pct(task.summary.hit_rate) }}</el-descriptions-item>
           <el-descriptions-item v-if="targetRangeOpen" label="上限触及率">{{ pct(task.summary.hit_rate_upper) }}</el-descriptions-item>
-          <el-descriptions-item label="胜率">{{ pct(task.summary.win_rate) }}</el-descriptions-item>
-          <el-descriptions-item label="均盈亏(期末)">{{ task.summary.avg_pnl_pct ?? '-' }}%</el-descriptions-item>
+          <template v-if="resolvedExitMode !== 'hit_rate'">
+            <el-descriptions-item label="胜率">{{ pct(task.summary.win_rate) }}</el-descriptions-item>
+            <el-descriptions-item label="均盈亏(期末)">{{ task.summary.avg_pnl_pct ?? '-' }}%</el-descriptions-item>
+          </template>
           <el-descriptions-item label="均最大涨幅">{{ task.summary.avg_max_gain_pct ?? '-' }}%</el-descriptions-item>
           <el-descriptions-item label="目标涨幅">{{ formatTargetPctRange(task.summary) }}</el-descriptions-item>
           <el-descriptions-item label="出场模式">{{ exitModeLabel }}</el-descriptions-item>
@@ -179,10 +181,10 @@
           <el-table-column label="命中率" width="90">
             <template #default="{ row }">{{ pct(row.hit_rate) }}</template>
           </el-table-column>
-          <el-table-column label="胜率" width="90">
+          <el-table-column v-if="resolvedExitMode !== 'hit_rate'" label="胜率" width="90">
             <template #default="{ row }">{{ pct(row.win_rate) }}</template>
           </el-table-column>
-          <el-table-column label="均盈亏" width="90">
+          <el-table-column v-if="resolvedExitMode !== 'hit_rate'" label="均盈亏" width="90">
             <template #default="{ row }">{{ row.avg_pnl_pct ?? '-' }}%</template>
           </el-table-column>
           <el-table-column label="均最大涨幅" width="100">
@@ -199,10 +201,10 @@
           <el-table-column label="命中率" width="90">
             <template #default="{ row }">{{ pct(row.hit_rate) }}</template>
           </el-table-column>
-          <el-table-column label="胜率" width="90">
+          <el-table-column v-if="resolvedExitMode !== 'hit_rate'" label="胜率" width="90">
             <template #default="{ row }">{{ pct(row.win_rate) }}</template>
           </el-table-column>
-          <el-table-column label="均盈亏" width="90">
+          <el-table-column v-if="resolvedExitMode !== 'hit_rate'" label="均盈亏" width="90">
             <template #default="{ row }">{{ row.avg_pnl_pct ?? '-' }}%</template>
           </el-table-column>
           <el-table-column label="均最大涨幅" width="100">
@@ -368,7 +370,7 @@ const riskParamsAlertTitle = computed(() => {
   if (mode === 'risk_exit') {
     return '当前回测为「纪律出场」：以下价格止损/连跌/回撤参数参与出场模拟。'
   }
-  return '当前回测为「命中率/不止损」模式：以下风控参数仅作策略配置快照，不参与出场模拟。'
+  return '当前回测为「命中率/不止损」模式（对齐 GMS signal_hit_rate）：仅统计观察期内是否触达目标涨幅；以下风控参数不参与模拟。'
 })
 
 const EXIT_REASON_ZH: Record<string, string> = {

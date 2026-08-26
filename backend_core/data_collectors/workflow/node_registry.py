@@ -20,6 +20,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_etf_historical,
     exec_etf_realtime,
     exec_gms_cn,
+    exec_gms_hk,
     exec_hk_annual,
     exec_hk_historical,
     exec_hk_index_historical,
@@ -35,6 +36,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_stock_shares,
     exec_triple_volume_scan,
     exec_urt_cn,
+    exec_urt_hk,
     exec_watchlist_history,
 )
 from backend_core.data_collectors.workflow.adapters.api_nodes import (
@@ -131,7 +133,9 @@ NODE_DEFS: List[CollectionNodeDef] = [
     _n("hk_annual", "港股年K生成", "agg", exec_hk_annual),
     # 策略
     _n("gms_signals_cn", "GMS信号预计算(A股)", "strategy", exec_gms_cn),
+    _n("gms_signals_hk", "GMS信号预计算(港股)", "strategy", exec_gms_hk),
     _n("urt_signals_cn", "URT信号预计算(A股)", "strategy", exec_urt_cn),
+    _n("urt_signals_hk", "URT信号预计算(港股)", "strategy", exec_urt_hk),
     _n("sbbr_signals_cn", "SBBR信号预计算(A股)", "strategy", exec_sbbr_cn),
     _n("rpe_signals_cn", "RPE信号预计算(A股)", "strategy", exec_rpe_cn),
     _n("triple_volume_scan", "3倍量爆量扫描", "strategy", exec_triple_volume_scan),

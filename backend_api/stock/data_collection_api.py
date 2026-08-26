@@ -55,6 +55,7 @@ try:
         release as _wf_mutex_release,
         is_busy as _wf_mutex_busy,
         get_active as _wf_mutex_active,
+        list_active as _wf_mutex_list_active,
     )
 except Exception:  # pragma: no cover
     def _wf_mutex_acquire(kind, eid):
@@ -69,6 +70,9 @@ except Exception:  # pragma: no cover
     def _wf_mutex_active():
         return None, None
 
+    def _wf_mutex_list_active():
+        return []
+
 
 def _claim_task_execution(task_id: str) -> None:
     """占用单任务槽位（与采集流程引擎互斥）。失败抛 HTTPException。"""
@@ -78,7 +82,11 @@ def _claim_task_execution(task_id: str) -> None:
             kind, eid = _wf_mutex_active()
             detail = "已有采集任务正在运行，请等待完成后再启动新任务"
             if kind == "workflow":
-                detail = f"采集流程正在运行（{eid}），请等待完成后再启动"
+                wf_runs = [x for x in _wf_mutex_list_active() if x.get("kind") == "workflow"]
+                if len(wf_runs) <= 1:
+                    detail = f"采集流程正在运行（{eid}），请等待完成后再启动"
+                else:
+                    detail = f"有 {len(wf_runs)} 个采集流程正在运行，请等待完成后再启动"
             raise HTTPException(status_code=400, detail=detail)
         ok, kind, eid = _wf_mutex_acquire("task", task_id)
         if not ok:
