@@ -54,6 +54,7 @@ class URTFrontendInterface:
         prefer_cache: bool = True,
         force_realtime: bool = False,
         skip_screening_filters: bool = False,
+        signal_quality_mode: Optional[str] = None,
         market: str = "CN",
     ) -> Dict[str, Any]:
         """
@@ -89,6 +90,35 @@ class URTFrontendInterface:
             min_turnover=min_turnover,
             min_volume_ratio=min_volume_ratio,
         )
+        quality_mode = (signal_quality_mode or cfg.get("signal_quality_mode") or "standard").strip().lower()
+        if quality_mode not in ("standard", "premium"):
+            quality_mode = "standard"
+        from .signal_filters import (
+            build_signal_filter_from_cfg,
+            passes_signal_factor_filter,
+            signal_quality_mode_label,
+        )
+
+        quality_filter = build_signal_filter_from_cfg(cfg, quality_mode)
+
+        def _apply_quality_filter(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            if not quality_filter or not rows:
+                return rows
+            from backend_core.strategies.urt.signal_detector import build_buy_logic
+
+            out: List[Dict[str, Any]] = []
+            for row in rows:
+                r = dict(row)
+                is_buy = bool(r.get("buy_signal"))
+                if skip_screening_filters:
+                    if is_buy and not passes_signal_factor_filter(r, quality_filter):
+                        r["buy_signal"] = False
+                        r["ma_bull_mid_gate_ok"] = r.get("ma_bull_mid_gate_ok")
+                        r["buy_logic"] = build_buy_logic(r, cfg)
+                    out.append(r)
+                elif passes_signal_factor_filter(r, quality_filter):
+                    out.append(r)
+            return out
 
         mkt = str(market or "CN").strip().upper()
         loader = URTDataLoader(db, market=mkt)
@@ -126,6 +156,7 @@ class URTFrontendInterface:
 
         data: List[Dict[str, Any]] = []
         data_source = "realtime"
+        cache_served = False
         require_pass = not skip_screening_filters
         scope_norm = str(scope or "all").strip().lower()
         # scope=watchlist 时必须显式传入股票池；空列表=无标的，禁止回落到全市场
@@ -209,12 +240,13 @@ class URTFrontendInterface:
                             row["buy_logic"] = build_buy_logic(row, cfg)
                             row["filter_ok"] = row["buy_logic"].get("filter_ok")
                             row["score_ok"] = row["buy_logic"].get("score_ok")
-                        data = cached
+                        data = _apply_quality_filter(cached)
                         data_source = "urt_signal_trace"
+                        cache_served = True
             except Exception as e:
                 logger.debug("URT cache read failed: %s", e)
 
-        if not data:
+        if not cache_served and not data:
             pool_codes = stock_codes if stock_codes is not None else None
             if mkt == "HK":
                 stocks = loader.list_hk_share_candidates(
@@ -236,6 +268,7 @@ class URTFrontendInterface:
                 as_of_end_date=effective,
                 require_pass=require_pass,
             )
+            data = _apply_quality_filter(data)
             data_source = "realtime"
 
         parameters_out = {
@@ -257,6 +290,8 @@ class URTFrontendInterface:
             "screening_date_effective": effective,
             "data_source": data_source,
             "skip_screening_filters": bool(skip_screening_filters),
+            "signal_quality_mode": quality_mode,
+            "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
         }
         out: Dict[str, Any] = {
             "success": True,
@@ -268,6 +303,8 @@ class URTFrontendInterface:
             "search_date": effective,
             "data_source": data_source,
             "skip_screening_filters": bool(skip_screening_filters),
+            "signal_quality_mode": quality_mode,
+            "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
         }
         if hint:
             out["message"] = hint

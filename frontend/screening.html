@@ -1546,6 +1546,13 @@
                         <label for="urtMinScore">最低得分（空=用版本）</label>
                         <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" placeholder="生效配置">
                     </div>
+                    <div class="param-item">
+                        <label for="urtSignalQualityMode">信号质量</label>
+                        <select id="urtSignalQualityMode" class="param-input">
+                            <option value="standard">标准（排除均线多头分中段）</option>
+                            <option value="premium">精选（近支撑≤2% + 排除弱项）</option>
+                        </select>
+                    </div>
                 </div>
                 <p id="urtSingleSkipFilterHint" class="param-hint" style="display:none;margin:8px 0 0;color:#64748b;font-size:13px;">
                     单只股票模式：不应用量能倍数、最低得分等筛选条件，直接计算并展示策略信号（含未通过买点）。

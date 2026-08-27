@@ -3101,6 +3101,10 @@ async def get_urt_strategy(
     use_volume_ratio: Optional[bool] = Query(None, description="是否启用量比硬筛"),
     min_turnover: Optional[float] = Query(None, ge=0, description="最低换手率%"),
     min_volume_ratio: Optional[float] = Query(None, ge=0, description="最低量比"),
+    signal_quality_mode: Optional[str] = Query(
+        "standard",
+        description="信号质量: standard=标准(排除均线多头分中段) | premium=精选(近支撑≤2%+排除弱项)",
+    ),
     boards: Optional[List[str]] = Query(
         None,
         description="板块过滤：CYB/KCB/SH_MAIN/SZ_MAIN/SZ_SME/BJ（兼容旧参数）",
@@ -3311,6 +3315,9 @@ async def get_urt_strategy(
     screen_boards = None if stock_codes is not None else boards_out
     # 对齐 GMS：非全市场（自选/行业/概念/单股）不按硬筛+最低得分过滤列表，得分原样返回；正式买点仍看 buy_signal
     skip_filters = scope_raw in ("single", "watchlist", "industry_board", "concept_board")
+    sqm = (signal_quality_mode or "standard").strip().lower()
+    if sqm not in ("standard", "premium"):
+        sqm = "standard"
 
     loop = asyncio.get_event_loop()
 
@@ -3330,6 +3337,7 @@ async def get_urt_strategy(
             min_turnover=None if skip_filters else min_turnover,
             min_volume_ratio=None if skip_filters else min_volume_ratio,
             skip_screening_filters=skip_filters,
+            signal_quality_mode=sqm,
             market=urt_market,
         )
 

@@ -4463,6 +4463,9 @@ const ScreeningPage = {
                 if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
             }
         }
+        const sqmEl = document.getElementById('urtSignalQualityMode');
+        const sqm = sqmEl && sqmEl.value ? String(sqmEl.value).trim().toLowerCase() : 'standard';
+        params.set('signal_quality_mode', sqm === 'premium' ? 'premium' : 'standard');
         return params;
     },
 
@@ -4948,6 +4951,9 @@ const ScreeningPage = {
                 }
                 if (searchDate) {
                     let dateText = `筛选时间: ${result.search_date}`;
+                    if (strategy === 'urt' && result.signal_quality_mode_label) {
+                        dateText += ` · ${result.signal_quality_mode_label}`;
+                    }
                     if (result.data.length > 0 && result.message) dateText += `（${result.message}）`;
                     searchDate.textContent = dateText;
                 }
