@@ -21,6 +21,7 @@ from backend_api.services.gms_selection_snapshot import enrich_trace_meta
 logger = logging.getLogger(__name__)
 
 _GMS_BATCH_SIZE = max(50, int(os.getenv("GMS_SCREENING_BATCH_SIZE", "200")))
+_GMS_TRACE_UPSERT_BATCH_SIZE = max(50, int(os.getenv("GMS_TRACE_UPSERT_BATCH_SIZE", "500")))
 
 
 def _is_a_share(code: str) -> bool:
@@ -562,6 +563,109 @@ def enrich_results_with_structure(
     return enriched
 
 
+def _build_trace_values(result: dict, date: str, config_id: int) -> Optional[dict]:
+    code = result.get("code") or result.get("symbol") or ""
+    if not code:
+        return None
+    code = str(code).strip()
+    date = str(date).strip()[:10]
+    market_type = str(result.get("market_type") or _infer_market_type(code) or "").strip()
+    sd = sanitize_for_pg_json(result.get("score_detail") or {})
+    risk_tags = sanitize_for_pg_json(result.get("risk_tags"))
+    return {
+        "code": code,
+        "date": date,
+        "market_type": market_type,
+        "config_id": int(config_id),
+        "score_total": result.get("score_total"),
+        "score_accumulation": result.get("score_accumulation"),
+        "score_momentum": result.get("score_momentum"),
+        "signal_strength": result.get("signal_strength"),
+        "buy_type": result.get("buy_type") or None,
+        "left_buy_signal": result.get("left_buy_signal"),
+        "right_buy_signal": result.get("right_buy_signal"),
+        "sell_signal": result.get("sell_signal"),
+        "accumulation_grade": result.get("accumulation_grade") or None,
+        "momentum_grade": result.get("momentum_grade") or None,
+        "delta": result.get("delta"),
+        "d": result.get("d"),
+        "ratio_d20": result.get("ratio_d20"),
+        "ratio_d1": result.get("ratio_d1"),
+        "fz_ratio": result.get("fz_ratio"),
+        "volume_ratio": result.get("volume_ratio"),
+        "instant_deviation": result.get("instant_deviation"),
+        "rising_days": result.get("rising_days"),
+        "falling_days": result.get("falling_days"),
+        "score_acc_fz": sd.get("score_acc_fz"),
+        "score_acc_balance": sd.get("score_acc_balance"),
+        "score_acc_volume": sd.get("score_acc_volume"),
+        "score_mom_ratio_d1": sd.get("score_mom_ratio_d1"),
+        "score_mom_deviation": sd.get("score_mom_deviation"),
+        "score_mom_volume": sd.get("score_mom_volume"),
+        "acc_fz_judge": sd.get("acc_fz_judge") or None,
+        "acc_balance_judge": sd.get("acc_balance_judge") or None,
+        "acc_volume_judge": sd.get("acc_volume_judge") or None,
+        "mom_ratio_d1_judge": sd.get("mom_ratio_d1_judge") or None,
+        "mom_deviation_judge": sd.get("mom_deviation_judge") or None,
+        "mom_volume_judge": sd.get("mom_volume_judge") or None,
+        "created_at": datetime.now(),
+        "risk_tags": risk_tags,
+        "score_detail": sd,
+    }
+
+
+def _save_results_to_trace_batch(
+    db,
+    results: List[dict],
+    date: str,
+    config_id: int,
+    batch_size: int = _GMS_TRACE_UPSERT_BATCH_SIZE,
+) -> int:
+    """批量 upsert gms_signal_trace，返回成功写入条数。"""
+    if not results:
+        return 0
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from backend_api.models import GMSSignalTrace
+
+    values_list = []
+    paired: List[tuple] = []
+    for r in results:
+        v = _build_trace_values(r, date, config_id)
+        if v:
+            values_list.append(v)
+            paired.append((r, v))
+    if not values_list:
+        return 0
+
+    written = 0
+    for i in range(0, len(values_list), batch_size):
+        chunk_values = values_list[i : i + batch_size]
+        chunk_pairs = paired[i : i + batch_size]
+        try:
+            stmt = pg_insert(GMSSignalTrace).values(chunk_values)
+            update_cols = {
+                k: getattr(stmt.excluded, k)
+                for k in chunk_values[0]
+                if k not in ("code", "date", "market_type", "config_id", "created_at")
+            }
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["code", "date", "market_type", "config_id"],
+                set_=update_cols,
+            )
+            db.execute(stmt)
+            written += len(chunk_values)
+        except Exception as e:
+            logger.warning("GMS trace 批量写入失败 batch=%s-%s: %s", i, i + len(chunk_values), e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            for r, _ in chunk_pairs:
+                _save_result_to_trace(db, r, date, config_id)
+                written += 1
+    return written
+
+
 def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
     """
     将 engine.screen 单条结果完整写入 gms_signal_trace，便于后续优先读表。
@@ -574,55 +678,9 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from backend_api.models import GMSSignalTrace
 
-        market_type = result.get("market_type") or _infer_market_type(code)
-        if not code:
+        values = _build_trace_values(result, date, config_id)
+        if not values:
             return
-        code = str(code).strip()
-        date = str(date).strip()[:10]
-        market_type = str(market_type or "").strip()
-        # PG JSON 不接受 NaN/Inf（常见于缺失 ma60_d 等浮点字段）
-        sd = sanitize_for_pg_json(result.get("score_detail") or {})
-        risk_tags = sanitize_for_pg_json(result.get("risk_tags"))
-        values = {
-            "code": code,
-            "date": date,
-            "market_type": market_type,
-            "config_id": int(config_id),
-            "score_total": result.get("score_total"),
-            "score_accumulation": result.get("score_accumulation"),
-            "score_momentum": result.get("score_momentum"),
-            "signal_strength": result.get("signal_strength"),
-            "buy_type": result.get("buy_type") or None,
-            "left_buy_signal": result.get("left_buy_signal"),
-            "right_buy_signal": result.get("right_buy_signal"),
-            "sell_signal": result.get("sell_signal"),
-            "accumulation_grade": result.get("accumulation_grade") or None,
-            "momentum_grade": result.get("momentum_grade") or None,
-            "delta": result.get("delta"),
-            "d": result.get("d"),
-            "ratio_d20": result.get("ratio_d20"),
-            "ratio_d1": result.get("ratio_d1"),
-            "fz_ratio": result.get("fz_ratio"),
-            "volume_ratio": result.get("volume_ratio"),
-            "instant_deviation": result.get("instant_deviation"),
-            "rising_days": result.get("rising_days"),
-            "falling_days": result.get("falling_days"),
-            "score_acc_fz": sd.get("score_acc_fz"),
-            "score_acc_balance": sd.get("score_acc_balance"),
-            "score_acc_volume": sd.get("score_acc_volume"),
-            "score_mom_ratio_d1": sd.get("score_mom_ratio_d1"),
-            "score_mom_deviation": sd.get("score_mom_deviation"),
-            "score_mom_volume": sd.get("score_mom_volume"),
-            "acc_fz_judge": sd.get("acc_fz_judge") or None,
-            "acc_balance_judge": sd.get("acc_balance_judge") or None,
-            "acc_volume_judge": sd.get("acc_volume_judge") or None,
-            "mom_ratio_d1_judge": sd.get("mom_ratio_d1_judge") or None,
-            "mom_deviation_judge": sd.get("mom_deviation_judge") or None,
-            "mom_volume_judge": sd.get("mom_volume_judge") or None,
-            "created_at": datetime.now(),
-            "risk_tags": risk_tags,
-            "score_detail": sd,
-        }
         stmt = pg_insert(GMSSignalTrace).values(**values)
         update_cols = {
             k: getattr(stmt.excluded, k)
@@ -939,6 +997,9 @@ class GMSFrontendInterface:
         if missing and not trace_only:
             loader = GMSDataLoader(self.db)
             engine = GMSStrategyEngine(loader, self.config)
+            from .structure_levels import kde_bars_limit
+
+            bars_limit = kde_bars_limit(self.config)
             missing_cn = [c for c, mt in missing if mt == "CN"]
             missing_etf = [c for c, mt in missing if mt == "ETF"]
             missing_hk = [c for c, mt in missing if mt == "HK"]
@@ -954,6 +1015,9 @@ class GMSFrontendInterface:
                     chunk = codes_sub[start : start + batch_size]
                     done = min(start + len(chunk), total_missing)
                     try:
+                        bars_cache = loader.load_bars_batch(
+                            chunk, mt, end_date=date, limit=bars_limit
+                        )
                         sub = engine.screen(
                             codes=chunk,
                             date=date,
@@ -961,11 +1025,14 @@ class GMSFrontendInterface:
                             config=self.config,
                             min_score=0,
                             max_results=self.max_results,
+                            bars_cache=bars_cache,
                         )
                         for r in sub:
                             computed.append(r)
-                            if self.use_trace:
-                                _save_result_to_trace(self.db, r, date, self.config_id)
+                        if self.use_trace and sub:
+                            _save_results_to_trace_batch(
+                                self.db, sub, date, self.config_id
+                            )
                         logger.info(
                             "GMS 策略信号计算进度 %s(%s) %s：已完成 %d/%d 只",
                             label,

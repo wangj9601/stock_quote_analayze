@@ -4,7 +4,7 @@ GMS 策略引擎
 """
 
 import logging
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime
 from collections import defaultdict
 
@@ -53,6 +53,7 @@ class GMSStrategyEngine:
         min_score: float = 0,
         max_results: Optional[int] = None,
         use_latest_per_stock: bool = True,
+        bars_cache: Optional[Dict[str, List[Dict[str, Any]]]] = None,
     ) -> List[Dict]:
         """
         选股：返回符合条件的股票列表
@@ -144,12 +145,16 @@ class GMSStrategyEngine:
 
                 structure = empty_structure()
                 try:
-                    bars_desc = self.data_loader.load_bars(
-                        code,
-                        mt,
-                        end_date=end_d,
-                        limit=kde_bars_limit(active_cfg),
-                    )
+                    bars_desc = None
+                    if bars_cache is not None:
+                        bars_desc = bars_cache.get(code)
+                    if not bars_desc:
+                        bars_desc = self.data_loader.load_bars(
+                            code,
+                            mt,
+                            end_date=end_d,
+                            limit=kde_bars_limit(active_cfg),
+                        )
                     px = None
                     if bars_desc:
                         try:

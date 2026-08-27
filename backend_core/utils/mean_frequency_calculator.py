@@ -145,6 +145,38 @@ class MeanFrequencyResonanceCalculator:
                 results.append(item)
                 
         return results
+
+    def calculate_for_target_day(
+        self,
+        closes,
+        volumes,
+        dates,
+        target_date,
+        window: int = 20,
+    ):
+        """
+        仅计算 target_date 对应交易日的 PVFRS 指标（避免对全序列逐日展开）。
+        dates 与 closes/volumes 等长、升序。
+        """
+        if not closes or not volumes or not dates:
+            return None
+        target = _fmt_date(target_date)
+        norm_dates = [_fmt_date(d) for d in dates]
+        if target not in norm_dates:
+            return None
+        idx = norm_dates.index(target)
+        triples = []
+        for d, c, v in zip(dates[: idx + 1], closes[: idx + 1], volumes[: idx + 1]):
+            if c is None or v is None:
+                continue
+            triples.append((d, float(c), float(v)))
+        if len(triples) < window + 1:
+            return None
+        sub_dates, sub_closes, sub_volumes = zip(*triples)
+        results = self.calculate(list(sub_closes), list(sub_volumes), dates=list(sub_dates), window=window)
+        if not results:
+            return None
+        return results[-1]
     
     def calculate_for_dataframe(self, history_rows, window=20):
         """

@@ -25,8 +25,9 @@ from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.boll_calculator import BOLLCalculator
 from backend_core.utils.mavol_calculator import MAVOLCalculator
-from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
+from backend_core.data_collectors.batch_ma_mavol import calculate_and_save_ma_mavol_for_date
+from backend_core.data_collectors.batch_mean_frequency import calculate_and_save_mean_frequency_for_date
 
 _project_root = Path(__file__).resolve().parent.parent.parent.parent
 if load_dotenv is not None:
@@ -450,8 +451,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                         if exists_row:
                             target_stocks.append(str(code))
                     funcs = [
-                        self._calculate_and_save_ma_hk,
-                        self._calculate_and_save_mavol_hk,
+                        self._calculate_and_save_ma_mavol_hk,
                         self._calculate_and_save_mean_frequency_hk,
                         self._calculate_and_save_kdj_hk,
                         self._calculate_and_save_boll_hk,
@@ -472,8 +472,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     """), {"target_date": target_date}).fetchall()
                     target_stocks = [str(r[0]) for r in full_rows if r and r[0]]
                     funcs = [
-                        self._calculate_and_save_ma_hk,
-                        self._calculate_and_save_mavol_hk,
+                        self._calculate_and_save_ma_mavol_hk,
                         self._calculate_and_save_mean_frequency_hk,
                     ]
                     self.logger.info(
@@ -809,106 +808,38 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             self.logger.error(f"批量计算港股RSI指标失败: {e}")
             session.rollback()
 
+    def _calculate_and_save_ma_mavol_hk(self, stock_codes: list, target_date: str, session):
+        """批量预加载 + 并行计算 + 批量写入港股 MA / MAVOL。"""
+        result = calculate_and_save_ma_mavol_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes_hk",
+            market_type="HK",
+            stock_codes=stock_codes,
+            compute_ma=True,
+            compute_mavol=True,
+            log=self.logger,
+        )
+        self.logger.info(
+            "港股 MA+MAVOL 完成: total=%s success=%s ma=%s mavol=%s failed=%s",
+            result.get("total"),
+            result.get("success"),
+            result.get("ma_written"),
+            result.get("mavol_written"),
+            result.get("failed"),
+        )
+
     def _calculate_and_save_ma_hk(self, stock_codes: list, target_date: str, session):
-        """
-        计算并保存港股MA指标
-        
-        Args:
-            stock_codes: 股票代码列表
-            target_date: 目标日期 (YYYY-MM-DD)
-            session: 数据库会话
-        """
-        try:
-            for stock_code in stock_codes:
-                try:
-                    # 查询该股票所有历史收盘价数据（不限制日期范围，确保有足够数据计算MA200）
-                    # 注意：MA200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
-                    result = session.execute(text("""
-                        SELECT date, close
-                        FROM historical_quotes_hk 
-                        WHERE code = :stock_code 
-                        AND date <= :target_date
-                        AND close IS NOT NULL
-                        ORDER BY date ASC
-                    """), {
-                        'stock_code': stock_code,
-                        'target_date': target_date
-                    })
-                    
-                    rows = result.fetchall()
-                    if len(rows) < 5:  # 至少需要5天数据才能计算MA5
-                        continue
-                    
-                    # 构建DataFrame
-                    df_data = []
-                    dates = []
-                    for row in rows:
-                        dates.append(str(row[0]))
-                        df_data.append({
-                            'date': str(row[0]),
-                            'close': float(row[1]) if row[1] else None
-                        })
-                    
-                    df = pd.DataFrame(df_data)
-                    df['date'] = pd.to_datetime(df['date'])
-                    df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
-                    
-                    if 'close' not in df.columns or len(df) == 0:
-                        continue
-                    
-                    # 计算MA指标
-                    ma_df = MACalculator.calculate_ma_for_dataframe(df, periods=[5, 10, 20, 30, 60, 120, 200])
-                    
-                    # 保存MA数据（只保存目标日期的数据）
-                    for _, row in ma_df.iterrows():
-                        date_str = row['date'].strftime('%Y-%m-%d') if isinstance(row['date'], pd.Timestamp) else str(row['date'])
-                        
-                        # 只保存目标日期的数据
-                        if date_str != target_date:
-                            continue
-                        
-                        try:
-                            session.execute(text("""
-                                INSERT INTO ma_indicators
-                                (code, date, market_type, ma5, ma10, ma20, ma30, ma60, ma120, ma200, created_at)
-                                VALUES (:code, :date, :market_type, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200, :created_at)
-                                ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                    ma5 = EXCLUDED.ma5,
-                                    ma10 = EXCLUDED.ma10,
-                                    ma20 = EXCLUDED.ma20,
-                                    ma30 = EXCLUDED.ma30,
-                                    ma60 = EXCLUDED.ma60,
-                                    ma120 = EXCLUDED.ma120,
-                                    ma200 = EXCLUDED.ma200,
-                                    created_at = EXCLUDED.created_at
-                            """), {
-                                'code': stock_code,
-                                'date': date_str,
-                                'market_type': 'HK',
-                                'ma5': self._safe_value(row.get('ma5')),
-                                'ma10': self._safe_value(row.get('ma10')),
-                                'ma20': self._safe_value(row.get('ma20')),
-                                'ma30': self._safe_value(row.get('ma30')),
-                                'ma60': self._safe_value(row.get('ma60')),
-                                'ma120': self._safe_value(row.get('ma120')),
-                                'ma200': self._safe_value(row.get('ma200')),
-                                'created_at': datetime.now()
-                            })
-                        except Exception as e:
-                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} MA数据失败: {e}")
-                            continue
-                    
-                    session.commit()
-                    self.logger.debug(f"股票 {stock_code} MA指标计算完成")
-                    
-                except Exception as e:
-                    self.logger.error(f"计算股票 {stock_code} MA指标失败: {e}")
-                    session.rollback()
-                    continue
-                    
-        except Exception as e:
-            self.logger.error(f"批量计算港股MA指标失败: {e}")
-            session.rollback()
+        calculate_and_save_ma_mavol_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes_hk",
+            market_type="HK",
+            stock_codes=stock_codes,
+            compute_ma=True,
+            compute_mavol=False,
+            log=self.logger,
+        )
 
     def _calculate_and_save_boll_hk(self, stock_codes: list, target_date: str, session):
         """
@@ -1002,211 +933,33 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             session.rollback()
 
     def _calculate_and_save_mavol_hk(self, stock_codes: list, target_date: str, session):
-        """
-        计算并保存港股MAVOL指标
-        
-        Args:
-            stock_codes: 股票代码列表
-            target_date: 目标日期 (YYYY-MM-DD)
-            session: 数据库会话
-        """
-        try:
-            for stock_code in stock_codes:
-                try:
-                    # 查询该股票所有历史成交量数据（不限制日期范围，确保有足够数据计算MAVOL200）
-                    # 注意：MAVOL200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
-                    result = session.execute(text("""
-                        SELECT date, volume
-                        FROM historical_quotes_hk
-                        WHERE code = :stock_code
-                        AND date <= :target_date
-                        AND volume IS NOT NULL
-                        ORDER BY date ASC
-                    """), {
-                        'stock_code': stock_code,
-                        'target_date': target_date
-                    })
-                    
-                    rows = result.fetchall()
-                    if len(rows) < 5:  # 至少需要5天数据才能计算MAVOL5
-                        continue
-                    
-                    # 构建DataFrame
-                    df_data = []
-                    for row in rows:
-                        df_data.append({
-                            'date': str(row[0]),
-                            'volume': float(row[1]) if row[1] is not None else None
-                        })
-                    
-                    df = pd.DataFrame(df_data)
-                    df['date'] = pd.to_datetime(df['date'])
-                    df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
-                    
-                    if 'volume' not in df.columns or len(df) == 0:
-                        continue
-                    
-                    # 计算MAVOL指标
-                    mavol_df = MAVOLCalculator.calculate_mavol_for_dataframe(df, periods=[5, 10, 20, 30, 60, 120, 200])
-                    
-                    # 保存MAVOL数据（只保存目标日期的数据）
-                    for _, row in mavol_df.iterrows():
-                        date_str = row['date'].strftime('%Y-%m-%d') if isinstance(row['date'], pd.Timestamp) else str(row['date'])
-                        
-                        # 只保存目标日期的数据
-                        if date_str != target_date:
-                            continue
-                        
-                        try:
-                            session.execute(text("""
-                                INSERT INTO mavol_indicators
-                                (code, date, market_type, mavol5, mavol10, mavol20, mavol30, mavol60, mavol120, mavol200, created_at)
-                                VALUES (:code, :date, :market_type, :mavol5, :mavol10, :mavol20, :mavol30, :mavol60, :mavol120, :mavol200, :created_at)
-                                ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                    mavol5 = EXCLUDED.mavol5,
-                                    mavol10 = EXCLUDED.mavol10,
-                                    mavol20 = EXCLUDED.mavol20,
-                                    mavol30 = EXCLUDED.mavol30,
-                                    mavol60 = EXCLUDED.mavol60,
-                                    mavol120 = EXCLUDED.mavol120,
-                                    mavol200 = EXCLUDED.mavol200,
-                                    created_at = EXCLUDED.created_at
-                            """), {
-                                'code': stock_code,
-                                'date': date_str,
-                                'market_type': 'HK',
-                                'mavol5': self._safe_value(row.get('mavol5')),
-                                'mavol10': self._safe_value(row.get('mavol10')),
-                                'mavol20': self._safe_value(row.get('mavol20')),
-                                'mavol30': self._safe_value(row.get('mavol30')),
-                                'mavol60': self._safe_value(row.get('mavol60')),
-                                'mavol120': self._safe_value(row.get('mavol120')),
-                                'mavol200': self._safe_value(row.get('mavol200')),
-                                'created_at': datetime.now()
-                            })
-                        except Exception as e:
-                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} MAVOL数据失败: {e}")
-                            continue
-                    
-                    session.commit()
-                    self.logger.debug(f"股票 {stock_code} MAVOL指标计算完成")
-                    
-                except Exception as e:
-                    self.logger.error(f"计算股票 {stock_code} MAVOL指标失败: {e}")
-                    session.rollback()
-                    continue
-                    
-        except Exception as e:
-            self.logger.error(f"批量计算港股MAVOL指标失败: {e}")
-            session.rollback()
+        calculate_and_save_ma_mavol_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes_hk",
+            market_type="HK",
+            stock_codes=stock_codes,
+            compute_ma=False,
+            compute_mavol=True,
+            log=self.logger,
+        )
 
     def _calculate_and_save_mean_frequency_hk(self, stock_codes: list, target_date: str, session):
-        """
-        计算并保存港股均值频率共振指标
-        
-        Args:
-            stock_codes: 股票代码列表
-            target_date: 目标日期 (YYYY-MM-DD)
-            session: 数据库会话
-        """
-        try:
-            calculator = MeanFrequencyResonanceCalculator()
-            
-            for stock_code in stock_codes:
-                try:
-                    # 查询该股票最近至少30天的收盘价和成交量数据
-                    query_start_date = (datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
-                    
-                    result = session.execute(text("""
-                        SELECT date, close, volume
-                        FROM historical_quotes_hk 
-                        WHERE code = :stock_code 
-                        AND date >= :query_start_date 
-                        AND date <= :target_date
-                        AND close IS NOT NULL
-                        AND volume IS NOT NULL
-                        ORDER BY date ASC
-                    """), {
-                        'stock_code': stock_code,
-                        'query_start_date': query_start_date,
-                        'target_date': target_date
-                    })
-                    
-                    rows = result.fetchall()
-                    if len(rows) < 21:
-                        continue
-                    
-                    # 提取数据列表
-                    dates = [str(row[0]) for row in rows]
-                    closes = [float(row[1]) for row in rows]
-                    volumes = [float(row[2]) for row in rows]
-                    
-                    # 计算（传入 dates 以输出 d1_date、d20_date）
-                    results = calculator.calculate(closes, volumes, dates=dates)
-                    
-                    if not results:
-                        continue
-                    
-                    # 保存数据（只保存目标日期的数据）
-                    for i, res in enumerate(results):
-                        if res is None:
-                            continue
-                            
-                        date_str = dates[i]
-                        
-                        # 只保存目标日期的数据
-                        if date_str != target_date:
-                            continue
-                        
-                        try:
-                            from backend_core.strategies.gms.ma60_source import lookup_ma60_d
+        """批量预加载 + 内存计算 + 批量写入港股 PVFRS。"""
+        result = calculate_and_save_mean_frequency_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes_hk",
+            market_type="HK",
+            stock_codes=stock_codes,
+            include_ma60=True,
+            log=self.logger,
+        )
+        self.logger.info(
+            "港股 PVFRS 完成: total=%s success=%s written=%s failed=%s",
+            result.get("total"),
+            result.get("success"),
+            result.get("written"),
+            result.get("failed"),
+        )
 
-                            session.execute(text("""
-                                INSERT INTO mean_frequency_resonance_indicators
-                                (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f, efficiency_m20_minus_m, ma20_d, ma60_d, mavol20_m, bias, created_at)
-                                VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :ma60_d, :mavol20, :bias, :created_at)
-                                ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                    macro_displacement_delta = EXCLUDED.macro_displacement_delta,
-                                    amplitude = EXCLUDED.amplitude,
-                                    ratio_d20 = EXCLUDED.ratio_d20,
-                                    ratio_d1 = EXCLUDED.ratio_d1,
-                                    instant_deviation = EXCLUDED.instant_deviation,
-                                    rising_days_z = EXCLUDED.rising_days_z,
-                                    falling_days_f = EXCLUDED.falling_days_f,
-                                    efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
-                                    ma20_d = EXCLUDED.ma20_d,
-                                    ma60_d = EXCLUDED.ma60_d,
-                                    mavol20_m = EXCLUDED.mavol20_m,
-                                    bias = EXCLUDED.bias,
-                                    created_at = EXCLUDED.created_at
-                            """), {
-                                'code': stock_code,
-                                'date': date_str,
-                                'market_type': 'HK',
-                                'delta': res['macro_displacement_delta'],
-                                'amplitude': res.get('amplitude'),
-                                'ratio_d20': res.get('ratio_d20'),
-                                'ratio_d1': res.get('ratio_d1'),
-                                'instant_deviation': res['instant_deviation'],
-                                'z': res['rising_days_z'],
-                                'f': res['falling_days_f'],
-                                'efficiency': res['efficiency_m20_minus_m'],
-                                'ma20': res['ma20_d'],
-                                'ma60_d': lookup_ma60_d(session, stock_code, date_str, 'HK'),
-                                'mavol20': res['mavol20_m'],
-                                'bias': res['bias'],
-                                'created_at': datetime.now()
-                            })
-                        except Exception as e:
-                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} 均值频率共振数据失败: {e}")
-                            continue
-                            
-                    session.commit()
-                    
-                except Exception as e:
-                    self.logger.error(f"计算股票 {stock_code} 均值频率共振指标失败: {e}")
-                    session.rollback()
-                    continue
-                    
-        except Exception as e:
-            self.logger.error(f"批量计算港股均值频率共振指标失败: {e}")

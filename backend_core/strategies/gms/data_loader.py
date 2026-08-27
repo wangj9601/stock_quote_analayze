@@ -4,10 +4,14 @@ GMS 数据加载器
 """
 
 import logging
+import os
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import bindparam, cast, String, text
 
 logger = logging.getLogger(__name__)
+
+_GMS_BARS_BATCH_SIZE = max(50, int(os.getenv("GMS_BARS_BATCH_SIZE") or "500"))
 
 
 class GMSDataLoader:
@@ -383,3 +387,86 @@ class GMSDataLoader:
             except Exception:
                 pass
             return []
+
+    def load_bars_batch(
+        self,
+        codes: List[str],
+        market_type: str = "CN",
+        end_date: Optional[str] = None,
+        limit: int = 800,
+        batch_size: int = _GMS_BARS_BATCH_SIZE,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        批量加载日 K（每 code 最多 limit 根，日期 DESC），供 KDE 结构位预加载。
+        """
+        code_list = [str(c).strip() for c in codes if str(c).strip()]
+        if not code_list:
+            return {}
+        mt = str(market_type or "CN").strip().upper()
+        lim = int(limit) if limit and int(limit) > 0 else 800
+        end_str = str(end_date).strip()[:10] if end_date else None
+        out: Dict[str, List[Dict[str, Any]]] = {}
+
+        try:
+            if mt == "HK":
+                table = "historical_quotes_hk"
+                date_filter = "AND date <= :end_date" if end_str else ""
+            elif mt == "ETF":
+                table = "fund_historical_quotes"
+                date_filter = "AND date <= :end_date" if end_str else ""
+            else:
+                table = "historical_quotes"
+                date_filter = "AND CAST(date AS TEXT) <= :end_date" if end_str else ""
+
+            stmt = text(
+                f"""
+                SELECT code, date, open, high, low, close, volume
+                FROM {table}
+                WHERE code IN :codes
+                {date_filter}
+                ORDER BY code ASC, date DESC
+                """
+            ).bindparams(bindparam("codes", expanding=True))
+
+            params_base: Dict[str, Any] = {}
+            if end_str:
+                params_base["end_date"] = end_str
+
+            for i in range(0, len(code_list), batch_size):
+                batch = code_list[i : i + batch_size]
+                params = {**params_base, "codes": batch}
+                rows = self.db.execute(stmt, params).fetchall()
+                for code, dt, opn, high, low, close, volume in rows:
+                    key = str(code)
+                    bucket = out.setdefault(key, [])
+                    if len(bucket) >= lim:
+                        continue
+                    d = dt.strftime("%Y-%m-%d") if hasattr(dt, "strftime") else str(dt).strip()[:10]
+                    if not d:
+                        continue
+                    bucket.append(
+                        {
+                            "date": d,
+                            "open": float(opn or 0),
+                            "high": float(high or 0),
+                            "low": float(low or 0),
+                            "close": float(close or 0),
+                            "volume": float(volume or 0),
+                        }
+                    )
+
+            logger.info(
+                "GMS 批量 load_bars market=%s codes=%s hit=%s limit=%s",
+                mt,
+                len(code_list),
+                len(out),
+                lim,
+            )
+            return out
+        except Exception as e:
+            logger.warning("GMS load_bars_batch failed market=%s: %s", mt, e)
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+            return {}

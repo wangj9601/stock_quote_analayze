@@ -11,12 +11,11 @@ from .five_day_change_calculator import FiveDayChangeCalculator
 from .extended_change_calculator import ExtendedChangeCalculator
 from .thirty_day_change_calculator import ThirtyDayChangeCalculator
 from backend_core.utils.macd_calculator import MACDCalculator
-from backend_core.utils.ma_calculator import MACalculator
 from backend_core.utils.kdj_calculator import KDJCalculator
 from backend_core.utils.rsi_calculator import RSICalculator
 from backend_core.utils.boll_calculator import BOLLCalculator
-from backend_core.utils.mavol_calculator import MAVOLCalculator
-from backend_core.utils.mean_frequency_calculator import MeanFrequencyResonanceCalculator
+from backend_core.data_collectors.batch_ma_mavol import calculate_and_save_ma_mavol_for_date
+from backend_core.data_collectors.batch_mean_frequency import calculate_and_save_mean_frequency_for_date
 from datetime import timedelta
 
 
@@ -238,6 +237,93 @@ class HistoricalQuoteCollector(TushareCollector):
             self.logger.error(f"获取自选股列表失败: {e}")
             return set()
 
+    def _stock_codes_for_indicator_date(
+        self,
+        session,
+        target_date: str,
+        watchlist_codes: Optional[set] = None,
+    ) -> Optional[list]:
+        """全市场返回 None；自选股模式返回当日有 K 线的自选代码列表。"""
+        if watchlist_codes is None:
+            return None
+        result = session.execute(
+            text(
+                """
+                SELECT DISTINCT code
+                FROM historical_quotes
+                WHERE date = :target_date
+                """
+            ),
+            {"target_date": target_date},
+        )
+        codes = [row[0] for row in result.fetchall() if row and row[0]]
+        filtered = [code for code in codes if code in watchlist_codes]
+        self.logger.info("限制为 %s 只自选股计算指标", len(filtered))
+        return filtered
+
+    def _calculate_and_save_ma_and_mavol_for_date(
+        self,
+        session,
+        target_date: str,
+        watchlist_codes: Optional[set] = None,
+    ) -> dict:
+        """一次预加载、并行计算、批量写入 MA + MAVOL。"""
+        stock_codes = self._stock_codes_for_indicator_date(session, target_date, watchlist_codes)
+        return calculate_and_save_ma_mavol_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes",
+            market_type="CN",
+            stock_codes=stock_codes,
+            compute_ma=True,
+            compute_mavol=True,
+            log=self.logger,
+        )
+
+    def _calculate_and_save_ma_for_date(
+        self, session, target_date: str, watchlist_codes: Optional[set] = None
+    ) -> dict:
+        stock_codes = self._stock_codes_for_indicator_date(session, target_date, watchlist_codes)
+        result = calculate_and_save_ma_mavol_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes",
+            market_type="CN",
+            stock_codes=stock_codes,
+            compute_ma=True,
+            compute_mavol=False,
+            log=self.logger,
+        )
+        return {
+            "total": result.get("total", 0),
+            "success": result.get("success", 0),
+            "skipped": result.get("skipped", 0),
+            "failed": result.get("failed", 0),
+            "details": result.get("details", []),
+        }
+
+    def _calculate_and_save_mavol_for_date(
+        self, session, target_date: str, watchlist_codes: Optional[set] = None
+    ) -> dict:
+        stock_codes = self._stock_codes_for_indicator_date(session, target_date, watchlist_codes)
+        result = calculate_and_save_ma_mavol_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes",
+            market_type="CN",
+            stock_codes=stock_codes,
+            compute_ma=False,
+            compute_mavol=True,
+            log=self.logger,
+        )
+        return {
+            "total": result.get("total", 0),
+            "success": result.get("success", 0),
+            "skipped": result.get("skipped", 0),
+            "failed": result.get("failed", 0),
+            "details": result.get("details", []),
+        }
+
     def _calculate_and_save_macd_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
         """
         计算并保存指定日期的MACD指标
@@ -392,172 +478,6 @@ class HistoricalQuoteCollector(TushareCollector):
             
         except Exception as e:
             self.logger.error(f"批量计算MACD指标失败: {e}")
-            session.rollback()
-            return {
-                'total': 0,
-                'success': 0,
-                'skipped': 0,
-                'failed': 0,
-                'details': [str(e)]
-            }
-    
-    def _calculate_and_save_ma_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
-        """
-        计算并保存指定日期的MA指标
-        
-        Args:
-            session: 数据库会话
-            target_date: 目标日期 (YYYY-MM-DD)
-            
-        Returns:
-            dict: 计算结果统计
-        """
-        try:
-            # 获取该日期所有有数据的股票代码
-            result = session.execute(text("""
-                SELECT DISTINCT code 
-                FROM historical_quotes 
-                WHERE date = :target_date
-            """), {'target_date': target_date})
-            
-            stock_codes = [row[0] for row in result.fetchall()]
-            
-            # 如果提供了自选股列表，则只计算自选股
-            if watchlist_codes is not None:
-                stock_codes = [code for code in stock_codes if code in watchlist_codes]
-                self.logger.info(f"限制为 {len(stock_codes)} 只自选股计算MA")
-
-            if not stock_codes:
-                self.logger.warning(f"日期 {target_date} 没有股票数据")
-                return {
-                    'total': 0,
-                    'success': 0,
-                    'skipped': 0,
-                    'failed': 0,
-                    'details': []
-                }
-            
-            success_count = 0
-            skipped_count = 0
-            failed_count = 0
-            failed_details = []
-            
-            # 查询所有历史数据（不限制日期范围，确保有足够数据计算MA200）
-            # 注意：MA200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
-            
-            for stock_code in stock_codes:
-                try:
-                    # 查询该股票所有历史收盘价数据（不限制日期范围）
-                    result = session.execute(text("""
-                        SELECT date, close 
-                        FROM historical_quotes 
-                        WHERE code = :stock_code 
-                        AND date <= :target_date
-                        AND close IS NOT NULL
-                        ORDER BY date ASC
-                    """), {
-                        'stock_code': stock_code,
-                        'target_date': target_date
-                    })
-                    
-                    rows = result.fetchall()
-                    if len(rows) < 5:  # 至少需要5天数据才能计算MA5
-                        skipped_count += 1
-                        continue
-                    
-                    # 构建DataFrame
-                    df_data = []
-                    dates = []
-                    for row in rows:
-                        date_val = row[0]
-                        if isinstance(date_val, datetime.datetime):
-                            date_str = date_val.strftime('%Y-%m-%d')
-                        elif isinstance(date_val, str):
-                            date_str = date_val
-                        else:
-                            date_str = str(date_val)
-                        dates.append(date_str)
-                        df_data.append({
-                            'date': date_str,
-                            'close': float(row[1]) if row[1] else None
-                        })
-                    
-                    df = pd.DataFrame(df_data)
-                    df['date'] = pd.to_datetime(df['date'])
-                    df = df.sort_values('date').drop_duplicates(subset=['date'], keep='last')
-                    
-                    if 'close' not in df.columns or len(df) == 0:
-                        skipped_count += 1
-                        continue
-                    
-                    # 计算MA指标
-                    ma_df = MACalculator.calculate_ma_for_dataframe(df, periods=[5, 10, 20, 30, 60, 120, 200])
-                    
-                    # 保存MA数据（只保存目标日期的数据）
-                    saved = False
-                    for _, row in ma_df.iterrows():
-                        date_str = row['date'].strftime('%Y-%m-%d') if isinstance(row['date'], pd.Timestamp) else str(row['date'])
-                        
-                        # 只保存目标日期的数据
-                        if date_str != target_date:
-                            continue
-                        
-                        try:
-                            session.execute(text("""
-                                INSERT INTO ma_indicators
-                                (code, date, market_type, ma5, ma10, ma20, ma30, ma60, ma120, ma200, created_at)
-                                VALUES (:code, :date, :market_type, :ma5, :ma10, :ma20, :ma30, :ma60, :ma120, :ma200, :created_at)
-                                ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                    ma5 = EXCLUDED.ma5,
-                                    ma10 = EXCLUDED.ma10,
-                                    ma20 = EXCLUDED.ma20,
-                                    ma30 = EXCLUDED.ma30,
-                                    ma60 = EXCLUDED.ma60,
-                                    ma120 = EXCLUDED.ma120,
-                                    ma200 = EXCLUDED.ma200,
-                                    created_at = EXCLUDED.created_at
-                            """), {
-                                'code': stock_code,
-                                'date': date_str,
-                                'market_type': 'CN',
-                                'ma5': self._safe_value(row.get('ma5')),
-                                'ma10': self._safe_value(row.get('ma10')),
-                                'ma20': self._safe_value(row.get('ma20')),
-                                'ma30': self._safe_value(row.get('ma30')),
-                                'ma60': self._safe_value(row.get('ma60')),
-                                'ma120': self._safe_value(row.get('ma120')),
-                                'ma200': self._safe_value(row.get('ma200')),
-                                'created_at': datetime.datetime.now()
-                            })
-                            saved = True
-                        except Exception as e:
-                            self.logger.error(f"保存股票 {stock_code} 日期 {date_str} MA数据失败: {e}")
-                            continue
-                    
-                    if saved:
-                        success_count += 1
-                    else:
-                        skipped_count += 1
-                    
-                except Exception as e:
-                    failed_count += 1
-                    failed_details.append(f"{stock_code}: {str(e)}")
-                    self.logger.error(f"计算股票 {stock_code} MA指标失败: {e}")
-                    continue
-            
-            # 提交事务
-            session.commit()
-            
-            return {
-                'total': len(stock_codes),
-                'success': success_count,
-                'skipped': skipped_count,
-                'failed': failed_count,
-                'details': failed_details
-            }
-            
-        except Exception as e:
-            self.logger.error(f"批量计算MA指标失败: {e}")
             session.rollback()
             return {
                 'total': 0,
@@ -956,173 +876,20 @@ class HistoricalQuoteCollector(TushareCollector):
             session.rollback()
             return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': [str(e)]}
 
-    def _calculate_and_save_mavol_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
-        """计算并保存指定日期的MAVOL指标"""
-        try:
-            result = session.execute(text("""
-                SELECT DISTINCT code 
-                FROM historical_quotes 
-                WHERE date = :target_date
-            """), {'target_date': target_date})
-            stock_codes = [row[0] for row in result.fetchall()]
-            if watchlist_codes is not None:
-                stock_codes = [code for code in stock_codes if code in watchlist_codes]
-            if not stock_codes:
-                return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': []}
-            
-            success_count = 0
-            skipped_count = 0
-            failed_count = 0
-            failed_details = []
-            # 查询所有历史数据（不限制日期范围，确保有足够数据计算MAVOL200）
-            # 注意：MAVOL200需要至少200个交易日，约300个日历天，但为了保险起见，查询所有历史数据
-            calculator = MAVOLCalculator()
-            for stock_code in stock_codes:
-                try:
-                    result = session.execute(text("""
-                        SELECT date, volume FROM historical_quotes 
-                        WHERE code = :stock_code AND date <= :target_date
-                        AND volume IS NOT NULL ORDER BY date ASC
-                    """), {'stock_code': stock_code, 'target_date': target_date})
-                    rows = result.fetchall()
-                    if len(rows) < 5:
-                        skipped_count += 1
-                        continue
-                    dates = [str(row[0]) for row in rows]
-                    volumes = [float(row[1]) for row in rows]
-                    mavol_results = calculator.calculate_mavol_batch(volumes)
-                    if not mavol_results:
-                        failed_count += 1
-                        continue
-                    saved = False
-                    for i, mavol_data in enumerate(mavol_results):
-                        # 处理日期格式
-                        date_val = dates[i]
-                        if isinstance(date_val, datetime.datetime):
-                           date_str = date_val.strftime('%Y-%m-%d')
-                        else:
-                           date_str = str(date_val)
-                           
-                        if date_str != target_date: continue
-                        session.execute(text("""
-                            INSERT INTO mavol_indicators (code, date, market_type, mavol5, mavol10, mavol20, mavol30, mavol60, mavol120, mavol200, created_at)
-                            VALUES (:code, :date, :market_type, :m5, :m10, :m20, :m30, :m60, :m120, :m200, :created_at)
-                            ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                mavol5 = EXCLUDED.mavol5, mavol10 = EXCLUDED.mavol10, mavol20 = EXCLUDED.mavol20,
-                                mavol30 = EXCLUDED.mavol30, mavol60 = EXCLUDED.mavol60, mavol120 = EXCLUDED.mavol120,
-                                mavol200 = EXCLUDED.mavol200, created_at = EXCLUDED.created_at
-                        """), {
-                            'code': stock_code, 'date': date_str, 'market_type': 'CN',
-                            'm5': mavol_data.get('mavol5'), 'm10': mavol_data.get('mavol10'), 'm20': mavol_data.get('mavol20'),
-                            'm30': mavol_data.get('mavol30'), 'm60': mavol_data.get('mavol60'), 'm120': mavol_data.get('mavol120'),
-                            'm200': mavol_data.get('mavol200'), 'created_at': datetime.datetime.now()
-                        })
-                        saved = True
-                    if saved: success_count += 1
-                    else: skipped_count += 1
-                except Exception as e:
-                    failed_count += 1
-                    failed_details.append(f"{stock_code}: {str(e)}")
-            session.commit()
-            return {'total': len(stock_codes), 'success': success_count, 'skipped': skipped_count, 'failed': failed_count, 'details': failed_details}
-        except Exception as e:
-            session.rollback()
-            return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': [str(e)]}
-
-    def _calculate_and_save_mean_frequency_for_date(self, session, target_date: str, watchlist_codes: Optional[set] = None) -> dict:
-        """计算并保存指定日期的均值频率共振指标"""
-        try:
-            result = session.execute(text("""
-                SELECT DISTINCT code FROM historical_quotes WHERE date = :target_date
-            """), {'target_date': target_date})
-            stock_codes = [row[0] for row in result.fetchall()]
-            if watchlist_codes is not None:
-                stock_codes = [code for code in stock_codes if code in watchlist_codes]
-            if not stock_codes:
-                return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': []}
-            
-            success_count = 0
-            skipped_count = 0
-            failed_count = 0
-            failed_details = []
-            query_start_date = (datetime.datetime.strptime(target_date, '%Y-%m-%d') - timedelta(days=60)).strftime('%Y-%m-%d')
-            calculator = MeanFrequencyResonanceCalculator()
-            for stock_code in stock_codes:
-                try:
-                    result = session.execute(text("""
-                        SELECT date, close, volume FROM historical_quotes 
-                        WHERE code = :stock_code AND date >= :query_start_date AND date <= :target_date
-                        AND close IS NOT NULL AND volume IS NOT NULL ORDER BY date ASC
-                    """), {'stock_code': stock_code, 'query_start_date': query_start_date, 'target_date': target_date})
-                    rows = result.fetchall()
-                    if len(rows) < 21:
-                        skipped_count += 1
-                        continue
-                    dates = [str(row[0]) for row in rows]
-                    closes = [float(row[1]) for row in rows]
-                    volumes = [float(row[2]) for row in rows]
-                    mf_results = calculator.calculate(closes, volumes, dates=dates)
-                    if not mf_results:
-                        failed_count += 1
-                        continue
-                    saved = False
-                    for i, res in enumerate(mf_results):
-                        if res is None: continue
-                        
-                        # 处理日期格式
-                        date_val = dates[i]
-                        if isinstance(date_val, datetime.datetime):
-                           date_str = date_val.strftime('%Y-%m-%d')
-                        else:
-                           date_str = str(date_val)
-                           
-                        if date_str != target_date: continue
-                        
-                        session.execute(text("""
-                            INSERT INTO mean_frequency_resonance_indicators
-                            (code, date, market_type, macro_displacement_delta, amplitude, ratio_d20, ratio_d1, instant_deviation, rising_days_z, falling_days_f,
-                             efficiency_m20_minus_m, ma20_d, mavol20_m, bias, d1, d1_date, d20, d20_date, created_at)
-                            VALUES (:code, :date, :market_type, :delta, :amplitude, :ratio_d20, :ratio_d1, :instant_deviation, :z, :f, :efficiency, :ma20, :mavol20, :bias, :d1, :d1_date, :d20, :d20_date, :created_at)
-                            ON CONFLICT (code, date, market_type) DO UPDATE SET
-                                macro_displacement_delta = EXCLUDED.macro_displacement_delta,
-                                amplitude = EXCLUDED.amplitude,
-                                ratio_d20 = EXCLUDED.ratio_d20,
-                                ratio_d1 = EXCLUDED.ratio_d1,
-                                instant_deviation = EXCLUDED.instant_deviation,
-                                rising_days_z = EXCLUDED.rising_days_z,
-                                falling_days_f = EXCLUDED.falling_days_f,
-                                efficiency_m20_minus_m = EXCLUDED.efficiency_m20_minus_m,
-                                ma20_d = EXCLUDED.ma20_d,
-                                mavol20_m = EXCLUDED.mavol20_m,
-                                bias = EXCLUDED.bias,
-                                d1 = EXCLUDED.d1,
-                                d1_date = EXCLUDED.d1_date,
-                                d20 = EXCLUDED.d20,
-                                d20_date = EXCLUDED.d20_date,
-                                created_at = EXCLUDED.created_at
-                        """), {
-                            'code': stock_code, 'date': date_str, 'market_type': 'CN',
-                            'delta': res['macro_displacement_delta'],
-                            'amplitude': res.get('amplitude'),
-                            'ratio_d20': res.get('ratio_d20'), 'ratio_d1': res.get('ratio_d1'),
-                            'instant_deviation': res['instant_deviation'],
-                            'z': res['rising_days_z'], 'f': res['falling_days_f'], 'efficiency': res['efficiency_m20_minus_m'],
-                            'ma20': res['ma20_d'], 'mavol20': res['mavol20_m'], 'bias': res['bias'],
-                            'd1': res.get('d1'), 'd1_date': res.get('d1_date'),
-                            'd20': res.get('d20'), 'd20_date': res.get('d20_date'),
-                            'created_at': datetime.datetime.now()
-                        })
-                        saved = True
-                    if saved: success_count += 1
-                    else: skipped_count += 1
-                except Exception as e:
-                    failed_count += 1
-                    failed_details.append(f"{stock_code}: {str(e)}")
-            session.commit()
-            return {'total': len(stock_codes), 'success': success_count, 'skipped': skipped_count, 'failed': failed_count, 'details': failed_details}
-        except Exception as e:
-            session.rollback()
-            return {'total': 0, 'success': 0, 'skipped': 0, 'failed': 0, 'details': [str(e)]}
+    def _calculate_and_save_mean_frequency_for_date(
+        self, session, target_date: str, watchlist_codes: Optional[set] = None
+    ) -> dict:
+        """批量预加载 + 内存计算 + 批量写入 PVFRS（GMS 上游指标）。"""
+        stock_codes = self._stock_codes_for_indicator_date(session, target_date, watchlist_codes)
+        return calculate_and_save_mean_frequency_for_date(
+            session,
+            target_date,
+            quotes_table="historical_quotes",
+            market_type="CN",
+            stock_codes=stock_codes,
+            include_ma60=True,
+            log=self.logger,
+        )
 
     def collect_historical_quotes(self, date_str: str) -> bool:
         self._init_db()  # 初始化表结构
@@ -1543,8 +1310,7 @@ class HistoricalQuoteCollector(TushareCollector):
         """日 K 入库后补充全市场 MA / MAVOL / PVFRS（GMS）指标（不限于自选股）。"""
         target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
         for label, method in (
-            ("MA", lambda: self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=None)),
-            ("MAVOL", lambda: self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=None)),
+            ("MA+MAVOL", lambda: self._calculate_and_save_ma_and_mavol_for_date(session, target_date, watchlist_codes=None)),
             (
                 "PVFRS（GMS）",
                 lambda: self._calculate_and_save_mean_frequency_for_date(
@@ -1652,11 +1418,10 @@ class HistoricalQuoteCollector(TushareCollector):
 
         for calc_name, calc_method in [
             ('MACD', lambda: self._calculate_and_save_macd_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-            ('MA', lambda: self._calculate_and_save_ma_for_date(session, target_date, watchlist_codes=watchlist_codes)),
+            ('MA+MAVOL', lambda: self._calculate_and_save_ma_and_mavol_for_date(session, target_date, watchlist_codes=watchlist_codes)),
             ('KDJ', lambda: self._calculate_and_save_kdj_for_date(session, target_date, watchlist_codes=watchlist_codes)),
             ('RSI', lambda: self._calculate_and_save_rsi_for_date(session, target_date, watchlist_codes=watchlist_codes)),
             ('BOLL', lambda: self._calculate_and_save_boll_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-            ('MAVOL', lambda: self._calculate_and_save_mavol_for_date(session, target_date, watchlist_codes=watchlist_codes)),
             ('mean_frequency_resonance', lambda: self._calculate_and_save_mean_frequency_for_date(session, target_date, watchlist_codes=watchlist_codes)),
         ]:
             try:
