@@ -23,6 +23,11 @@ from .backtest_factor_report import (
     build_hit_rate_compare,
     enrich_detail_with_factors,
 )
+from .signal_filters import (
+    build_signal_filter_from_cfg,
+    passes_signal_factor_filter,
+    signal_quality_mode_label,
+)
 from .trace_store import (
     dates_ready_for_universe_backtest,
     mark_date_scanned,
@@ -595,6 +600,8 @@ def run_urt_backtest(
     progress_cb: Optional[Callable[[int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     config_overrides: Optional[Dict[str, Any]] = None,
+    signal_filter: Optional[Dict[str, Any]] = None,
+    signal_quality_mode: Optional[str] = None,
 ) -> Dict[str, Any]:
     from .signal_detector import (
         _compute_structure_levels,
@@ -618,6 +625,13 @@ def run_urt_backtest(
         cfg = cm.merge_overrides(cfg, min_score=min_score)
     if config_overrides:
         cfg = cm.merge_overrides(cfg, **config_overrides)
+
+    quality_mode = (signal_quality_mode or cfg.get("signal_quality_mode") or "standard").strip().lower()
+    if quality_mode not in ("standard", "premium"):
+        quality_mode = "standard"
+    effective_signal_filter = signal_filter
+    if effective_signal_filter is None:
+        effective_signal_filter = build_signal_filter_from_cfg(cfg, quality_mode)
 
     resolved_id = strategy_config_id
     if resolved_id is None:
@@ -762,6 +776,9 @@ def run_urt_backtest(
                 for s in signals
                 if float(s.get("volume_multiple") or 0) >= vol_need
             ]
+
+        if effective_signal_filter:
+            signals = [s for s in signals if passes_signal_factor_filter(s, effective_signal_filter)]
 
         for sig in signals:
             code = str(sig.get("code") or "")
@@ -1350,6 +1367,9 @@ def run_urt_backtest(
         "end_date": end_date,
         "strategy_config_id": resolved_id,
         "min_score": cfg.get("min_score"),
+        "signal_quality_mode": quality_mode,
+        "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
+        "signal_filter": effective_signal_filter,
         "by_score_bucket": by_score_bucket,
         "by_factor_bucket": by_factor_bucket,
         "holding_days_histogram": holding_hist,

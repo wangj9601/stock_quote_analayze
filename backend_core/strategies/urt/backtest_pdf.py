@@ -229,6 +229,14 @@ def build_backtest_detail_html(
                 ("目标涨幅", _format_target_pct_range(config)),
                 ("观察期", f"{config.get('horizon_days') if config.get('horizon_days') is not None else 10} 个交易日"),
                 ("最低得分", str(config.get("min_score") if config.get("min_score") is not None else summary.get("min_score") or "-")),
+                (
+                    "信号质量",
+                    str(
+                        summary.get("signal_quality_mode_label")
+                        or config.get("signal_quality_mode")
+                        or "standard"
+                    ),
+                ),
                 ("优先读缓存", "是" if config.get("use_trace") else "否"),
                 ("出场模式", mode_label),
             ]

@@ -65,6 +65,7 @@ def _run_task(task_id: str) -> None:
             exit_mode=str(cfg.get("exit_mode") or "hit_rate"),
             progress_cb=progress_cb,
             cancel_check=cancel_check,
+            signal_quality_mode=cfg.get("signal_quality_mode"),
         )
         if cancel_check():
             backtest_storage.cancel_task(task_id)

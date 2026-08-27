@@ -403,6 +403,8 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
     require_ma_bull = bool(cfg.get("require_ma_bull"))
     hard_gate_enabled = cfg.get("structure_rr_hard_gate_enabled") is not False
     overheat_gate_enabled = cfg.get("overheat_hard_gate_enabled") is not False
+    ma_bull_mid_enabled = cfg.get("exclude_ma_bull_score_mid_enabled") is not False
+    from .signal_filters import ma_bull_mid_range, ma_bull_part_score
     min_turn = float(cfg.get("min_turnover") or 0) if use_turnover else None
     min_vr = float(cfg.get("min_volume_ratio") or 0) if use_volume_ratio else None
     a_w = int(rule_a.get("window") or 4)
@@ -489,10 +491,28 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         elif isinstance(oh_gate, dict) and oh_gate.get("blocked"):
             overheat_gate_ok = False
 
+    mb_gate = detail.get("ma_bull_mid_gate") or {}
+    if not mb_gate and isinstance(detail.get("score_detail"), dict):
+        mb_gate = detail["score_detail"].get("ma_bull_mid_gate") or {}
+    ma_bull_mid_gate_ok = True
+    if ma_bull_mid_enabled:
+        if detail.get("ma_bull_mid_gate_ok") is not None:
+            ma_bull_mid_gate_ok = bool(detail.get("ma_bull_mid_gate_ok"))
+        elif isinstance(mb_gate, dict) and mb_gate.get("blocked"):
+            ma_bull_mid_gate_ok = False
+        elif isinstance(mb_gate, dict) and mb_gate.get("pass") is False:
+            ma_bull_mid_gate_ok = False
+
     buy = (
         bool(detail.get("buy_signal"))
         if detail.get("buy_signal") is not None
-        else (filter_ok and structure_gate_ok and overheat_gate_ok and score_ok)
+        else (
+            filter_ok
+            and structure_gate_ok
+            and overheat_gate_ok
+            and score_ok
+            and ma_bull_mid_gate_ok
+        )
     )
 
     mid_rules = cfg.get("yang_medium_rules") or []
@@ -640,6 +660,27 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
                 "required": True,
             }
         )
+    if ma_bull_mid_enabled:
+        lo, hi = ma_bull_mid_range(cfg)
+        mb_score = ma_bull_part_score(detail.get("score_detail") or detail)
+        mb_actual = (
+            mb_gate.get("reason")
+            if isinstance(mb_gate, dict) and mb_gate.get("reason")
+            else (
+                f"均线多头分={mb_score if mb_score is not None else '—'}"
+            )
+        )
+        steps.append(
+            {
+                "id": "ma_bull_mid_gate",
+                "name": "均线多头分弱项闸",
+                "rule": f"否决：均线多头分 ∈ [{lo:g},{hi:g})",
+                "actual": mb_actual,
+                "pass": ma_bull_mid_gate_ok,
+                "required": True,
+                "note": "A/B 验证弱项区间，默认开启",
+            }
+        )
     steps.append(
         {
             "id": "min_score",
@@ -660,17 +701,27 @@ def build_buy_logic(detail: Dict[str, Any], cfg: Dict[str, Any]) -> Dict[str, An
         + (f" ∧ 量比≥{min_vr}" if use_volume_ratio else "")
         + (" ∧ 结构硬闸" if hard_gate_enabled else "")
         + (" ∧ 过热硬闸" if overheat_gate_enabled else "")
+        + (
+            f" ∧ 均线多头分∉[{ma_bull_mid_range(cfg)[0]:g},{ma_bull_mid_range(cfg)[1]:g})"
+            if ma_bull_mid_enabled
+            else ""
+        )
         + f"；再要求得分≥{min_score}"
     )
 
     return {
-        "formula": "买点 = 硬筛全部通过 AND 结构硬闸通过 AND 过热硬闸通过 AND 得分≥最低得分",
+        "formula": (
+            "买点 = 硬筛全部通过 AND 结构硬闸通过 AND 过热硬闸通过"
+            + (" AND 均线多头分弱项闸通过" if ma_bull_mid_enabled else "")
+            + " AND 得分≥最低得分"
+        ),
         "formula_detail": formula_detail,
         "min_score": min_score,
         "score": score,
         "filter_ok": filter_ok,
         "structure_gate_ok": structure_gate_ok,
         "overheat_gate_ok": overheat_gate_ok,
+        "ma_bull_mid_gate_ok": ma_bull_mid_gate_ok,
         "score_ok": score_ok,
         "buy_signal": buy,
         "filter_reason": detail.get("filter_reason") or "",
@@ -735,7 +786,11 @@ def evaluate_buy_signal(
     structure_gate_ok = not bool(hard_gate.get("blocked"))
     overheat_gate = evaluate_overheat_hard_gate(ind, cfg)
     overheat_gate_ok = not bool(overheat_gate.get("blocked"))
-    buy = bool(ok and structure_gate_ok and overheat_gate_ok and score_ok)
+    from .signal_filters import evaluate_ma_bull_mid_gate
+
+    ma_bull_mid_gate = evaluate_ma_bull_mid_gate(score_detail, cfg)
+    ma_bull_mid_gate_ok = not bool(ma_bull_mid_gate.get("blocked"))
+    buy = bool(ok and structure_gate_ok and overheat_gate_ok and score_ok and ma_bull_mid_gate_ok)
 
     if require_pass and not buy:
         return None
@@ -787,6 +842,7 @@ def evaluate_buy_signal(
         score_detail["risk_tags"] = risk_tags
         score_detail["structure_hard_gate"] = hard_gate
         score_detail["overheat_hard_gate"] = overheat_gate
+        score_detail["ma_bull_mid_gate"] = ma_bull_mid_gate
         score_detail["ret_from_low_n"] = ind.get("ret_from_low_n")
         score_detail["ma20_bias"] = ind.get("ma20_bias")
         score_detail["overheat_lookback_days"] = ind.get("overheat_lookback_days")
@@ -859,6 +915,8 @@ def evaluate_buy_signal(
         "structure_hard_gate": hard_gate,
         "overheat_gate_ok": overheat_gate_ok,
         "overheat_hard_gate": overheat_gate,
+        "ma_bull_mid_gate_ok": ma_bull_mid_gate_ok,
+        "ma_bull_mid_gate": ma_bull_mid_gate,
         "ret_from_low_n": ind.get("ret_from_low_n"),
         "ma20_bias": ind.get("ma20_bias"),
         "overheat_lookback_days": ind.get("overheat_lookback_days"),

@@ -35,6 +35,7 @@
             <span v-if="task.config.min_score_override" class="hint-inline">（任务覆盖）</span>
             <span v-else class="hint-inline">（参数版本）</span>
           </el-descriptions-item>
+          <el-descriptions-item label="信号质量">{{ signalQualityLabel }}</el-descriptions-item>
           <el-descriptions-item label="优先读缓存">{{ task.config.use_trace ? '是' : '否' }}</el-descriptions-item>
           <el-descriptions-item label="出场模式">{{ exitModeLabel }}</el-descriptions-item>
           <el-descriptions-item v-if="poolSizeLabel" label="股票池规模">{{ poolSizeLabel }}</el-descriptions-item>
@@ -334,6 +335,16 @@ const minScoreDisplay = computed(() => {
   const cfg = task.value?.config || {}
   const v = cfg.min_score ?? task.value?.summary?.min_score ?? cfg.package_min_score
   return v == null || Number.isNaN(Number(v)) ? '-' : String(v)
+})
+
+const signalQualityLabel = computed(() => {
+  const t = task.value
+  const summary = t?.summary || {}
+  const cfg = t?.config || {}
+  if (summary.signal_quality_mode_label) return String(summary.signal_quality_mode_label)
+  const mode = String(cfg.signal_quality_mode || summary.signal_quality_mode || 'standard').toLowerCase()
+  if (mode === 'premium') return '精选（近支撑≤2% + 排除弱项）'
+  return '标准（排除均线多头分中段）'
 })
 
 const divergeReasonsLabel = computed(() => {

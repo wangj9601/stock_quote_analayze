@@ -25,6 +25,77 @@ START_DEFAULT = "2026-05-27"
 END_DEFAULT = "2026-08-12"
 
 
+SCENARIOS_FACTOR: List[Dict[str, Any]] = [
+    {
+        "id": "D0_baseline",
+        "label": "基线(对照)",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": None,
+    },
+    {
+        "id": "D1_no_ma_bull_mid",
+        "label": "排除均线多头分[4,7)",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {"exclude_ma_bull_range": [4.0, 7.0]},
+    },
+    {
+        "id": "D2_no_score90",
+        "label": "排除得分≥90",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {"exclude_score_ge": 90.0},
+    },
+    {
+        "id": "D3_near_support",
+        "label": "仅距支撑≤2%",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {"require_dist_to_support_max": 2.0},
+    },
+    {
+        "id": "D4_exclude_weak",
+        "label": "排除弱项(ma_mid+高得分)",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "exclude_score_ge": 90.0,
+        },
+    },
+    {
+        "id": "D5_quality_combo",
+        "label": "优质组合(近支撑+排弱项)",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {
+            "require_dist_to_support_max": 2.0,
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "exclude_score_ge": 90.0,
+        },
+    },
+    {
+        "id": "D6_no_rr25",
+        "label": "排除结构RR≥2.5",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {"exclude_structure_rr_ge": 2.5},
+    },
+    {
+        "id": "D7_full_quality",
+        "label": "全优质(近支撑+排弱+量能≥3.5)",
+        "min_score": 70.0,
+        "config_overrides": {"volume_multiple": 3.5},
+        "signal_filter": {
+            "require_dist_to_support_max": 2.0,
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "exclude_score_ge": 90.0,
+        },
+    },
+]
+
+
 def _trail_override(pct: float) -> Dict[str, Any]:
     return {
         "structure_protect_trail_drawdown_pct": pct,
@@ -124,6 +195,8 @@ def run_scenario(
         stock_pool=None,
         exit_mode="structure_exit",
         config_overrides=scenario.get("config_overrides"),
+        signal_filter=scenario.get("signal_filter"),
+        signal_quality_mode=scenario.get("signal_quality_mode"),
     )
     sm = result.get("summary") or {}
     cmpd = sm.get("hit_rate_compare") or {}
@@ -150,7 +223,7 @@ def run_scenario(
     return row
 
 
-def print_table(rows: List[Dict[str, Any]]) -> None:
+def print_table(rows: List[Dict[str, Any]], *, group_label: str = "") -> None:
     headers = [
         ("label", "方案", 22),
         ("signals", "信号", 6),
@@ -162,8 +235,11 @@ def print_table(rows: List[Dict[str, Any]]) -> None:
         ("max_gain_gap", "回吐缺口", 8),
         ("trail_exits", "移动止盈", 14),
     ]
+    title = "URT 结构出场 A/B 汇总"
+    if group_label:
+        title += f" — {group_label}"
     print("\n" + "=" * 110)
-    print("URT 结构出场 A/B 汇总")
+    print(title)
     print("=" * 110)
     hdr = "".join(f"{title:<{width}}" for _, title, width in headers)
     print(hdr)
@@ -195,22 +271,31 @@ def main() -> int:
     parser.add_argument("--start", default=START_DEFAULT)
     parser.add_argument("--end", default=END_DEFAULT)
     parser.add_argument("--out", default="", help="可选：JSON 结果输出路径")
+    parser.add_argument(
+        "--group",
+        choices=("default", "factor"),
+        default="factor",
+        help="default=参数A/B；factor=因子筛选C组",
+    )
     args = parser.parse_args()
 
-    print(f"区间: {args.start} ~ {args.end} · 全市场 · 结构出场 · use_trace=True")
+    scenarios = SCENARIOS if args.group == "default" else SCENARIOS_FACTOR
+    group_label = "参数A/B" if args.group == "default" else "因子筛选C组"
+
+    print(f"区间: {args.start} ~ {args.end} · 全市场 · 结构出场 · {group_label} · use_trace=True")
     db = SessionLocal()
     rows: List[Dict[str, Any]] = []
     try:
-        for sc in SCENARIOS:
+        for sc in scenarios:
             rows.append(run_scenario(db, start=args.start, end=args.end, scenario=sc))
     finally:
         db.close()
 
-    print_table(rows)
+    print_table(rows, group_label=group_label)
     best = pick_best(rows)
     if best:
         print(f"\n均盈亏最优: {best['label']} ({best['id']}) → {_num(best['avg_pnl_pct'])}%")
-    baseline = next((r for r in rows if r["id"] == "A0_baseline"), None)
+    baseline = next((r for r in rows if r["id"] in ("A0_baseline", "D0_baseline")), None)
     if baseline and best and best["id"] != "A0_baseline":
         try:
             delta = float(best["avg_pnl_pct"]) - float(baseline["avg_pnl_pct"])

@@ -1,0 +1,70 @@
+[
+  {
+    "id": "D0_baseline",
+    "label": "基线(对照)",
+    "signals": 698,
+    "hit_rate": 0.4384,
+    "win_rate": 0.5516,
+    "avg_pnl_pct": 1.33,
+    "avg_max_gain_pct": 11.48,
+    "avg_bars_held": 5.66
+  },
+  {
+    "id": "D1_no_ma_bull_mid",
+    "label": "排除均线多头分[4,7)",
+    "signals": 408,
+    "hit_rate": 0.5392,
+    "win_rate": 0.6838,
+    "avg_pnl_pct": 3.2,
+    "avg_max_gain_pct": null,
+    "avg_bars_held": null
+  },
+  {
+    "id": "D2_no_score90",
+    "label": "排除得分≥90",
+    "signals": 683,
+    "hit_rate": 0.4392,
+    "win_rate": 0.5564,
+    "avg_pnl_pct": 1.4
+  },
+  {
+    "id": "D3_near_support",
+    "label": "仅距支撑≤2%",
+    "signals": 125,
+    "hit_rate": 0.392,
+    "win_rate": 0.448,
+    "avg_pnl_pct": 2.2
+  },
+  {
+    "id": "D4_exclude_weak",
+    "label": "排除弱项(ma_mid+高得分)",
+    "signals": 408,
+    "hit_rate": 0.5392,
+    "win_rate": 0.6838,
+    "avg_pnl_pct": 3.22
+  },
+  {
+    "id": "D5_quality_combo",
+    "label": "优质组合(近支撑+排弱项)",
+    "signals": 41,
+    "hit_rate": 0.4878,
+    "win_rate": 0.561,
+    "avg_pnl_pct": 4.95
+  },
+  {
+    "id": "D6_no_rr25",
+    "label": "排除结构RR≥2.5",
+    "signals": 531,
+    "hit_rate": 0.4896,
+    "win_rate": 0.6008,
+    "avg_pnl_pct": 1.71
+  },
+  {
+    "id": "D7_full_quality",
+    "label": "全优质(近支撑+排弱+量能≥3.5)",
+    "signals": 7,
+    "hit_rate": 0.5714,
+    "win_rate": 0.7143,
+    "avg_pnl_pct": 1.96
+  }
+]

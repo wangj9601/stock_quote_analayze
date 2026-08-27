@@ -79,6 +79,10 @@ class BacktestCreateBody(BaseModel):
         None,
         description="结构/纪律出场完成后是否自动再跑一条同配置命中率对照；默认对非 hit_rate 开启",
     )
+    signal_quality_mode: Optional[str] = Field(
+        "standard",
+        description="信号质量: standard=标准(排除均线多头分中段) | premium=精选(近支撑≤2%+排除弱项)",
+    )
 
 
 class BatchDeleteBody(BaseModel):
@@ -335,6 +339,10 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         "stock_pool_mode": mode,
         "market": "cn",
     }
+    sqm = (body.signal_quality_mode or "standard").strip().lower()
+    if sqm not in ("standard", "premium"):
+        sqm = "standard"
+    config["signal_quality_mode"] = sqm
     if body.compare_hit_rate is None:
         config["compare_hit_rate"] = config["exit_mode"] in ("structure_exit", "risk_exit")
     else:

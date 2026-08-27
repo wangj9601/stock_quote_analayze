@@ -28,8 +28,10 @@ def test_build_buy_logic_pass():
         "score": 86,
         "filter_ok": True,
         "score_ok": True,
+        "ma_bull_mid_gate_ok": True,
         "buy_signal": True,
         "filter_reason": "ok",
+        "score_detail": {"parts": {"ma_bull": {"score": 7.5}}},
     }
     logic = build_buy_logic(detail, cfg)
     assert logic["buy_signal"] is True
@@ -37,7 +39,15 @@ def test_build_buy_logic_pass():
     assert logic["score_ok"] is True
     assert logic["formula"].startswith("买点")
     ids = [s["id"] for s in logic["steps"]]
-    assert ids == ["above_ma", "yang", "volume_multiple", "yang_medium", "ma_bull", "min_score"]
+    assert ids == [
+        "above_ma",
+        "yang",
+        "volume_multiple",
+        "yang_medium",
+        "ma_bull",
+        "ma_bull_mid_gate",
+        "min_score",
+    ]
     assert all(s["pass"] for s in logic["steps"])
     mid = next(s for s in logic["steps"] if s["id"] == "yang_medium")
     assert mid["required"] is False

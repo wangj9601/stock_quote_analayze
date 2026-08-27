@@ -98,6 +98,15 @@
         </el-row>
         <el-row :gutter="16">
           <el-col :span="12">
+            <el-form-item label="信号质量">
+              <el-select v-model="form.signal_quality_mode" class="w-full">
+                <el-option label="标准（排除均线多头分中段）" value="standard" />
+                <el-option label="精选（近支撑≤2% + 排除弱项）" value="premium" />
+              </el-select>
+              <span class="hint">标准模式默认排除 f_ma_bull∈[4,7)；精选在标准基础上再筛近支撑与过高得分</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
             <el-form-item label="出场模式">
               <el-select v-model="form.exit_mode" class="w-full">
                 <el-option label="命中率（不止损）" value="hit_rate" />
@@ -106,6 +115,8 @@
               </el-select>
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="16">
           <el-col v-if="form.exit_mode !== 'hit_rate'" :span="12">
             <el-form-item label="命中率对照">
               <el-switch v-model="form.compare_hit_rate" />
@@ -397,6 +408,7 @@ const form = reactive({
   use_trace: true,
   exit_mode: 'hit_rate' as 'hit_rate' | 'risk_exit' | 'structure_exit',
   compare_hit_rate: true,
+  signal_quality_mode: 'standard' as 'standard' | 'premium',
   stock_pool_mode: 'all',
   stock_code: '',
   stock_list: '',
@@ -736,6 +748,7 @@ async function createTask() {
       use_trace: form.use_trace,
       exit_mode: form.exit_mode,
       compare_hit_rate: form.exit_mode === 'hit_rate' ? false : form.compare_hit_rate,
+      signal_quality_mode: form.signal_quality_mode,
       stock_pool_mode: mode,
       cn_board_segment: cnBoardSegment.value === 'ALL' ? undefined : cnBoardSegment.value,
     }
