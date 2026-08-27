@@ -10,7 +10,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel
-from backend_api.models import Token, AdminInDB, Admin
+from backend_api.models import AdminInDB, Admin
 from backend_api.database import get_db
 from backend_api.auth import (
     authenticate_admin,
@@ -25,10 +25,16 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+
+class AdminLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: AdminInDB
+
 # 修改路由前缀以匹配前端请求路径
 router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=AdminLoginResponse)
 async def login_for_access_token(
     username: str = Form(...),
     password: str = Form(...),
@@ -61,7 +67,7 @@ async def login_for_access_token(
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "admin": AdminInDB.from_orm(admin)
+        "user": AdminInDB.model_validate(admin),
     }
 
 @router.get("/verify")

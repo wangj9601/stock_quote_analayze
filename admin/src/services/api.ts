@@ -28,21 +28,28 @@ class ApiService {
     // 请求拦截器
     this.api.interceptors.request.use(
       (config) => {
-        // 动态获取认证token，避免在构造函数中过早调用store
+        const reqUrl = String(config.url ?? '')
+        const isPublicAuthRequest =
+          reqUrl.includes('/auth/login') || reqUrl.includes('/auth/logout')
+
         try {
-          // 从localStorage直接获取token，避免在构造函数中过早调用store
           const token = localStorage.getItem('admin_token')
           if (token) {
             config.headers.Authorization = `Bearer ${token}`
-            console.log('🔐 添加认证token到请求:', config.url)
-            console.log('🌐 完整请求URL:', (this.api.defaults.baseURL ?? '') + (config.url ?? ''))
-          } else {
-            console.warn('⚠️ 未找到认证token，请求:', config.url)
-            console.log('🌐 完整请求URL:', (this.api.defaults.baseURL ?? '') + (config.url ?? ''))
+          } else if (!isPublicAuthRequest && getCurrentEnvConfig().enableDebug) {
+            console.warn('未找到认证 token，请求:', reqUrl)
           }
         } catch (error) {
-          console.error('❌ 获取认证token失败:', error)
+          console.error('获取认证 token 失败:', error)
         }
+
+        // URLSearchParams / FormData 不能用默认 application/json
+        if (config.data instanceof URLSearchParams) {
+          config.headers['Content-Type'] = 'application/x-www-form-urlencoded'
+        } else if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+          delete config.headers['Content-Type']
+        }
+
         return config
       },
       (error) => Promise.reject(error)

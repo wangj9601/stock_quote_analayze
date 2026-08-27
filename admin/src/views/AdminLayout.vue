@@ -1,5 +1,8 @@
 <template>
-  <div class="admin-layout" :class="{ 'sidebar-open': sidebarOpen }">
+  <div
+    class="admin-layout"
+    :class="{ 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed }"
+  >
     <div
       class="sidebar-overlay"
       :class="{ show: sidebarOpen }"
@@ -8,40 +11,31 @@
 
     <aside class="admin-sidebar" :class="{ open: sidebarOpen }">
       <div class="sidebar-header">
-        <h2 class="text-xl font-bold text-gray-900">管理后台</h2>
-        <p class="text-sm text-gray-600">{{ user?.username || '管理员' }}</p>
+        <div class="sidebar-header-text">
+          <h2 class="text-xl font-bold text-gray-900">管理后台</h2>
+          <p class="text-sm text-gray-600">{{ user?.username || '管理员' }}</p>
+        </div>
+        <button
+          type="button"
+          class="sidebar-collapse-btn"
+          aria-label="收起菜单"
+          title="收起菜单"
+          @click="toggleSidebarCollapsed"
+        >
+          <el-icon><Fold /></el-icon>
+        </button>
       </div>
 
       <nav class="sidebar-nav">
         <template v-for="item in menuItems" :key="item.path || item.name">
-          <div v-if="item.children?.length" class="nav-group">
-            <button
-              type="button"
-              class="nav-item nav-group-toggle"
-              :class="{ active: isGroupActive(item) }"
-              @click="toggleGroup(item.name)"
-            >
-              <el-icon class="nav-icon">
-                <component :is="item.icon" />
-              </el-icon>
-              <span class="nav-text">{{ item.name }}</span>
-              <el-icon class="nav-chevron" :class="{ expanded: isGroupExpanded(item.name) }">
-                <ArrowDown />
-              </el-icon>
-            </button>
-            <div v-show="isGroupExpanded(item.name)" class="nav-children">
-              <router-link
-                v-for="child in item.children"
-                :key="child.path"
-                :to="child.path"
-                class="nav-item nav-child"
-                :class="{ active: isMenuActive(child.path) }"
-                @click="closeSidebar"
-              >
-                <span class="nav-text">{{ child.name }}</span>
-              </router-link>
-            </div>
-          </div>
+          <NavMenuGroup
+            v-if="item.children?.length"
+            :name="item.name"
+            :icon="item.icon"
+            :children="item.children"
+            :is-child-active="isMenuActive"
+            @navigate="closeSidebar"
+          />
           <router-link
             v-else
             :to="item.path!"
@@ -63,6 +57,17 @@
         </el-button>
       </div>
     </aside>
+
+    <button
+      v-show="sidebarCollapsed"
+      type="button"
+      class="sidebar-expand-rail"
+      aria-label="展开菜单"
+      title="展开菜单"
+      @click="toggleSidebarCollapsed"
+    >
+      <el-icon><Expand /></el-icon>
+    </button>
 
     <main class="admin-main">
       <header class="admin-topbar">
@@ -109,10 +114,11 @@ import {
   Tickets,
   Select,
   Star,
-  Notebook,
   Lock,
-  ArrowDown
+  Fold,
+  Expand,
 } from '@element-plus/icons-vue'
+import NavMenuGroup from '@/components/layout/NavMenuGroup.vue'
 import { useAuthStore } from '@/stores/auth'
 
 type MenuChild = { path: string; name: string }
@@ -123,11 +129,13 @@ type MenuItem = {
   children?: MenuChild[]
 }
 
+const SIDEBAR_COLLAPSED_KEY = 'admin_sidebar_collapsed'
+
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const sidebarOpen = ref(false)
-const expandedGroups = ref<Record<string, boolean>>({})
+const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1')
 
 const menuItems: MenuItem[] = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
@@ -137,7 +145,6 @@ const menuItems: MenuItem[] = [
   { path: '/board-constituents', name: '板块成分股维护', icon: Histogram },
   { path: '/selection-results', name: '选股管理', icon: Select },
   { path: '/gms-watchlist', name: 'GMS策略版本', icon: Star },
-  { path: '/triple-volume-observe', name: '3倍量观察股', icon: Notebook },
   { path: '/indicators', name: '指标管理', icon: Histogram },
   { path: '/gms-management', name: 'GMS策略回测管理', icon: TrendCharts },
   {
@@ -175,27 +182,6 @@ function isAccessManagementRoute(path: string) {
   return /^\/users\/\d+\/permissions$/.test(path) || /^\/roles\/\d+\/permissions$/.test(path)
 }
 
-
-function isGroupActive(item: MenuItem) {
-  return (item.children || []).some((child) => child.path === route.path)
-}
-
-function isGroupExpanded(groupName: string) {
-  return expandedGroups.value[groupName] ?? false
-}
-
-function toggleGroup(groupName: string) {
-  expandedGroups.value[groupName] = !isGroupExpanded(groupName)
-}
-
-function ensureActiveGroupExpanded() {
-  for (const item of menuItems) {
-    if (item.children?.length && isGroupActive(item)) {
-      expandedGroups.value[item.name] = true
-    }
-  }
-}
-
 function findMenuName(path: string): string | undefined {
   for (const item of menuItems) {
     if (item.path === path) return item.name
@@ -206,9 +192,16 @@ function findMenuName(path: string): string | undefined {
   return undefined
 }
 
+function isSelectionResultsRoute() {
+  return route.path === '/selection-results'
+}
+
 function isMenuActive(menuPath: string) {
   if (menuPath === '/access-management') {
     return isAccessManagementRoute(route.path)
+  }
+  if (menuPath === '/selection-results') {
+    return isSelectionResultsRoute()
   }
   return route.path === menuPath
 }
@@ -222,6 +215,11 @@ const currentPageName = computed(() => {
     if (tab === 'permissions') return '用户与权限 · 权限资源'
     return '用户与权限'
   }
+  if (isSelectionResultsRoute()) {
+    const tab = route.query.tab
+    if (tab === 'triple-volume') return '选股管理 · 3倍量观察股'
+    return '选股管理 · 策略选股'
+  }
   const hit = findMenuName(route.path)
   return hit || '管理后台'
 })
@@ -229,23 +227,30 @@ const currentPageName = computed(() => {
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
 }
+function toggleSidebarCollapsed() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0')
+  if (sidebarCollapsed.value) {
+    sidebarOpen.value = false
+  }
+}
 function closeSidebar() {
   sidebarOpen.value = false
 }
 function onResize() {
-  if (window.innerWidth > 768) sidebarOpen.value = false
+  if (window.innerWidth <= 768) {
+    sidebarOpen.value = false
+  }
 }
 
 watch(
   () => route.fullPath,
   () => {
-    ensureActiveGroupExpanded()
     closeSidebar()
   }
 )
 
 onMounted(() => {
-  ensureActiveGroupExpanded()
   window.addEventListener('resize', onResize)
 })
 onUnmounted(() => {
@@ -294,6 +299,58 @@ const handleLogout = async () => {
 
 .sidebar-header {
   @apply p-6 border-b border-gray-200;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sidebar-header-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-collapse-btn {
+  flex-shrink: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+.sidebar-collapse-btn:hover {
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.sidebar-expand-rail {
+  display: none;
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 45;
+  width: 28px;
+  height: 72px;
+  border: 1px solid #e5e7eb;
+  border-left: none;
+  border-radius: 0 10px 10px 0;
+  background: #fff;
+  color: #374151;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+.sidebar-expand-rail:hover {
+  background: #f9fafb;
+  color: #2563eb;
 }
 
 .sidebar-nav {
@@ -302,6 +359,8 @@ const handleLogout = async () => {
 
 .nav-item {
   @apply flex items-center px-4 py-3 text-gray-700 rounded-lg transition-colors hover:bg-gray-100;
+  font-size: 14px;
+  line-height: 20px;
   text-decoration: none;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
@@ -330,6 +389,8 @@ const handleLogout = async () => {
 
 .nav-text {
   @apply font-medium;
+  font-size: inherit;
+  line-height: inherit;
   text-decoration: none;
 }
 
@@ -338,16 +399,13 @@ const handleLogout = async () => {
   border: none;
   background: transparent;
   text-align: left;
+  font: inherit;
+  color: inherit;
 }
 
 .nav-chevron {
   margin-left: auto;
   font-size: 14px;
-  transition: transform 0.2s ease;
-}
-
-.nav-chevron.expanded {
-  transform: rotate(180deg);
 }
 
 .nav-children {
@@ -359,7 +417,8 @@ const handleLogout = async () => {
 }
 
 .nav-child .nav-text {
-  @apply text-sm;
+  font-size: 13px;
+  font-weight: 400;
 }
 
 .nav-item,
@@ -478,8 +537,28 @@ const handleLogout = async () => {
   }
 }
 
+/* 桌面端：收起侧栏，主区全宽 */
+@media (min-width: 769px) {
+  .sidebar-collapse-btn {
+    display: inline-flex;
+  }
+  .admin-layout.sidebar-collapsed .admin-sidebar {
+    transform: translateX(-100%);
+  }
+  .admin-layout.sidebar-collapsed .admin-main {
+    margin-left: 0 !important;
+  }
+  .admin-layout.sidebar-collapsed .sidebar-expand-rail {
+    display: inline-flex;
+  }
+}
+
 /* ≤768：侧栏抽屉，主区全宽 */
 @media (max-width: 768px) {
+  .sidebar-collapse-btn,
+  .sidebar-expand-rail {
+    display: none !important;
+  }
   .admin-sidebar {
     width: min(280px, 82vw);
     transform: translateX(-100%);

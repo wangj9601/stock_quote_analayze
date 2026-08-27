@@ -34,6 +34,7 @@ EXIT_REASON_ZH = {
 
 STOCK_POOL_LABELS = {
     "all": "全市场",
+    "gms_watchlist": "GMS观察股",
     "watchlist": "自选股",
     "industry_board": "行业板块",
     "concept_board": "概念板块",

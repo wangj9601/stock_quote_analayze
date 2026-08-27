@@ -1,7 +1,33 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import axios from 'axios'
 import { authService } from '@/services/auth.service'
-import type { LoginRequest, UserInfo } from '@/types/auth.types'
+import type { LoginRequest, LoginResponse, UserInfo } from '@/types/auth.types'
+
+function mapLoginProfile(response: LoginResponse): UserInfo | null {
+  if (response.user) return response.user
+  if (!response.admin) return null
+  return {
+    id: response.admin.id,
+    username: response.admin.username,
+    role: response.admin.role,
+    created_at: response.admin.created_at,
+    updated_at: response.admin.created_at,
+  }
+}
+
+function formatLoginError(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail
+    if (typeof detail === 'string' && detail.trim()) return detail
+    if (Array.isArray(detail) && detail.length > 0) {
+      return detail.map((item) => item?.msg || String(item)).join('；')
+    }
+    if (err.response?.status === 401) return '用户名或密码错误'
+    if (err.response?.status === 422) return '登录请求格式错误，请刷新页面后重试'
+  }
+  return err instanceof Error ? err.message : '登录失败'
+}
 
 export const useAuthStore = defineStore('auth', () => {
   // 状态
@@ -25,17 +51,26 @@ export const useAuthStore = defineStore('auth', () => {
     
     try {
       const response = await authService.login(credentials)
+      const profile = mapLoginProfile(response)
+      if (!response.access_token) {
+        throw new Error('登录响应缺少 access_token')
+      }
+
       token.value = response.access_token
-      user.value = response.user
-      
-      // 保存到本地存储
+      user.value = profile
+
       localStorage.setItem('admin_token', response.access_token)
-      localStorage.setItem('admin_user', JSON.stringify(response.user))
-      
+      if (profile) {
+        localStorage.setItem('admin_user', JSON.stringify(profile))
+      } else {
+        localStorage.removeItem('admin_user')
+      }
+
       return response
     } catch (err) {
-      error.value = err instanceof Error ? err.message : '登录失败'
-      throw err
+      const message = formatLoginError(err)
+      error.value = message
+      throw new Error(message)
     } finally {
       loading.value = false
     }

@@ -180,6 +180,44 @@ def test_frontend_config_alignment_meta_marks_effective():
     assert "默认" in meta["config_name"]
 
 
+def test_build_backtest_config_gms_watchlist_pool():
+    body = BacktestCreateBody(
+        start_date="2025-01-01",
+        end_date="2025-02-01",
+        stock_pool_mode="gms_watchlist",
+        exit_mode="hit_rate",
+    )
+    db = MagicMock()
+    with patch("backend_api.admin.urt_admin_routes.URTConfigManager") as Mgr:
+        inst = Mgr.return_value
+        inst.ensure_default_row = MagicMock()
+        inst.resolve_effective_config_id = MagicMock(return_value=3)
+        inst.get_config_meta = MagicMock(
+            return_value={
+                "config_id": 3,
+                "effective_config_id": 3,
+                "is_effective": True,
+                "name": "默认",
+                "version_label": "v1",
+                "min_score": 72,
+                "volume_multiple": 3.0,
+                "config_params": {"min_score": 72, "risk": {}},
+            }
+        )
+        with patch(
+            "backend_api.admin.urt_admin_routes._distinct_gms_strategy_stock_codes",
+            return_value=["000001", "600000"],
+        ):
+            with patch(
+                "backend_api.admin.urt_admin_routes._attach_urt_trade_meta",
+                side_effect=lambda _db, cfg: cfg,
+            ):
+                cfg = _build_backtest_config(db, body)
+
+    assert cfg["stock_pool_mode"] == "gms_watchlist"
+    assert cfg["stock_pool"] == ["000001", "600000"]
+
+
 def test_get_trace_freshness_marks_stale_when_config_newer():
     from datetime import datetime, timedelta
 

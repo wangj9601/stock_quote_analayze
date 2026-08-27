@@ -6,8 +6,15 @@ export interface LoginRequest {
 export interface LoginResponse {
   access_token: string
   token_type: string
-  expires_in: number
-  user: UserInfo
+  expires_in?: number
+  user?: UserInfo
+  admin?: {
+    id: number
+    username: string
+    role: string
+    created_at: string
+    last_login?: string | null
+  }
 }
 
 export interface UserInfo {

@@ -33,13 +33,13 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 |------|------|------|------|
 | `start_date` / `end_date` | 信号扫描区间 | 必填 | 按区间内交易日逐日扫描 |
 | `target_pct` | 目标涨幅下限 | **0.10（10%）** | 入场价 × (1 + 下限) 为命中价；与上限相等时等同原单值 |
-| `target_pct_max` | 目标涨幅上限 | **等于下限（缺省 10%～10%）** | 如 0.05～0.08 表示 5%～8% 区间判断；命中=最大涨幅落在区间内 |
+| `target_pct_max` | 目标涨幅上限 | **等于下限（缺省 10%～10%）** | 如 0.05～0.08 表示区间辅助统计；**命中=最大涨幅 ≥ 下限** |
 | `horizon_days` | 观察期交易日数 | **10** | 入场日后最多取 N 根 K 线（短线默认；可对照 5/15） |
 | `min_score` | 最低得分 | 策略配置（常为 70） | 过滤买点；可任务级覆盖 |
 | `use_trace` | 优先读缓存 | `true` | 优先 `urt_signal_trace`；无则实时引擎 |
 | `exit_mode` | 出场模式 | `hit_rate` | `hit_rate` / `risk_exit` |
 | `strategy_config_id` | 参数版本 | 默认版本 | 含硬筛、得分、`risk` 风控 |
-| `stock_pool_mode` | 股票池 | `all` | 全市场 / 自选 / 行业 / 概念 / 单股 / 自定义 |
+| `stock_pool_mode` | 股票池 | `all` | 全市场 / GMS观察股 / 自选 / 行业 / 概念 / 单股 / 自定义 |
 | `cn_board_segment` | A 股板块 | 全部 | MAIN / CYB / SZ_SME / KCB / BJ |
 
 创建时固化 `strategy_config_id`（默认绑生效/`is_default` 版本）。**改参不会改写已完成任务**；若 `use_trace=true` 重跑，读的是该 id **当前** trace（可能已按新参重算）。任务级覆盖 `min_score` 或选用非生效版本会标 `params_diverged`。
@@ -78,9 +78,9 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 
 | 规则项 | 说明 |
 |--------|------|
-| 目标命中 | **上下限相等**（缺省 10%～10%）：观察期内最高价 ≥ 入场价 × (1 + 下限)，与原先单值一致。<br>**上下限不等**（如 5%～8%）：最大涨幅落在 [下限, 上限] 才 `hit_target=true`（冲过上限不算命中） |
-| 上限命中 | 当 `target_pct_max` > 下限时，最高价 ≥ 入场价 × (1 + 上限) → `hit_target_upper=true` |
-| 区间内 | `hit_in_band` 与区间模式下的 `hit_target` 相同；点目标时与 `hit_target` 相同 |
+| 目标命中 | 观察期内最大涨幅 **≥ 下限**（`target_pct`）即 `hit_target=true`；单点（10%～10%）与区间（5%～10%）口径一致 |
+| 上限命中 | 当 `target_pct_max` > 下限时，最大涨幅 ≥ 上限 → `hit_target_upper=true`（辅助统计） |
+| 区间内 | 最大涨幅落在 [下限, 上限] → `hit_in_band=true`（辅助统计；冲过上限则为否） |
 | 最高价 / 最大涨幅 | 输出 `max_high`、`max_gain_pct`（相对入场价） |
 | 止损 | **不启用**价格止损 / 连跌离场 / 回撤止盈 |
 | 参考出场 | 持有满观察期，以最后一根收盘价记 `exit_price`（`horizon_end`） |
@@ -134,7 +134,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | `max_gain_pct` | `(max_high - entry_price) / entry_price × 100` |
 | `hit_target` / `hit_date` | 是否触及下限目标及首次触及日（相对 `target_pct`，独立统计） |
 | `hit_target_upper` / `hit_date_upper` | 是否触及上限及首次触及日（相对 `target_pct_max`） |
-| `hit_in_band` | 最大涨幅是否落在 [下限, 上限]；上下限相等时与 `hit_target` 相同 |
+| `hit_in_band` | 最大涨幅是否落在 [下限, 上限]（辅助统计；与 `hit_target` 独立） |
 | `pnl_pct` | 出场价相对入场价盈亏 |
 | `bars_held` | 实际持有 K 线根数 |
 | `stop_price` / `target_price` | （`structure_exit`）结构或回退止损/止盈价 |

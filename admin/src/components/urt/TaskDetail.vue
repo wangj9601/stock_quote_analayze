@@ -106,10 +106,19 @@
 
       <template v-if="task.summary">
         <h4 class="mt-4 mb-2">汇总统计</h4>
+        <el-alert
+          v-if="targetRangeOpen"
+          class="mb-2"
+          type="info"
+          :closable="false"
+          show-icon
+          title="区间目标模式：命中率 = 最大涨幅 ≥ 下限；「涨幅落在区间内」「上限触及率」为辅助统计。"
+        />
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="信号数">{{ task.summary.total_signals ?? task.summary.total_samples ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="命中数">{{ task.summary.target_hits ?? task.summary.hit_count ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="命中率">{{ pct(task.summary.hit_rate) }}</el-descriptions-item>
+          <el-descriptions-item v-if="targetRangeOpen" label="涨幅落在区间内">{{ pct(task.summary.in_band_rate) }}</el-descriptions-item>
           <el-descriptions-item v-if="targetRangeOpen" label="上限触及率">{{ pct(task.summary.hit_rate_upper) }}</el-descriptions-item>
           <template v-if="resolvedExitMode !== 'hit_rate'">
             <el-descriptions-item label="胜率">{{ pct(task.summary.win_rate) }}</el-descriptions-item>
@@ -274,6 +283,7 @@ const statusType = computed(() => {
 
 const STOCK_POOL_LABELS: Record<string, string> = {
   all: '全市场',
+  gms_watchlist: 'GMS观察股',
   watchlist: '自选股',
   industry_board: '行业板块',
   concept_board: '概念板块',

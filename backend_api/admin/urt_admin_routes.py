@@ -65,7 +65,7 @@ class BacktestCreateBody(BaseModel):
     )
     stock_pool_mode: Optional[str] = Field(
         "all",
-        description="股票池: all / single / custom / watchlist / industry_board / concept_board",
+        description="股票池: all / single / custom / watchlist / gms_watchlist / industry_board / concept_board",
     )
     stock_code: Optional[str] = None
     stock_pool: Optional[List[str]] = None
@@ -174,6 +174,26 @@ def _distinct_watchlist_codes(db: Session, user_id: Optional[int] = None) -> Lis
     if user_id is not None:
         q = q.filter(Watchlist.user_id == int(user_id))
     rows = q.distinct().all()
+    return sorted({_normalize_a_code(str(r[0])) for r in rows if r[0] and str(r[0]).strip()})
+
+
+def _distinct_gms_strategy_stock_codes(db: Session) -> List[str]:
+    """GMS 观察股：启用版本 + status=active；URT 回测仅 A 股。"""
+    from sqlalchemy import func
+
+    from backend_api.models import GMSStrategyVersion, GMSStrategyVersionStock
+
+    rows = (
+        db.query(GMSStrategyVersionStock.stock_code)
+        .join(GMSStrategyVersion, GMSStrategyVersion.id == GMSStrategyVersionStock.version_id)
+        .filter(
+            GMSStrategyVersion.is_active.is_(True),
+            func.lower(func.trim(func.coalesce(GMSStrategyVersionStock.status, ""))) == "active",
+            GMSStrategyVersionStock.market == "A",
+        )
+        .distinct()
+        .all()
+    )
     return sorted({_normalize_a_code(str(r[0])) for r in rows if r[0] and str(r[0]).strip()})
 
 
@@ -364,6 +384,12 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         codes = _apply_cn_board_segment(codes, body.cn_board_segment)
         if not codes:
             raise HTTPException(status_code=400, detail="自选股列表为空")
+        config["stock_pool"] = codes
+    elif mode == "gms_watchlist":
+        codes = _distinct_gms_strategy_stock_codes(db)
+        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        if not codes:
+            raise HTTPException(status_code=400, detail="GMS观察股(A股)列表为空，请先在 GMS 策略版本页维护观察股")
         config["stock_pool"] = codes
     elif mode == "industry_board":
         raw = _normalize_board_codes(body.industry_board_codes)

@@ -38,6 +38,7 @@ def test_urt_details_csv_chinese_headers():
     assert "股票代码" in header
     assert "股票名称" in header
     assert "信号日期" in header
+    assert "出场日期" in header
     assert "是否命中目标" in header
     assert "出场原因" in header
     assert "量能分" in header
@@ -116,3 +117,35 @@ def test_urt_details_xlsx_keeps_leading_zeros():
     assert str(c1.value).replace(_EXCEL_TEXT_PREFIX, "") == "000700"
     assert str(c2.value).replace(_EXCEL_TEXT_PREFIX, "") == "002036"
     assert str(c1.value).startswith(_EXCEL_TEXT_PREFIX)
+
+
+def test_urt_details_xlsx_column_widths_and_dates():
+    from openpyxl import load_workbook
+    from openpyxl.utils import get_column_letter
+
+    rows = [
+        {
+            "code": "603678",
+            "name": "火炬电子",
+            "signal_date": "2026-05-27",
+            "entry_date": "2026-05-28",
+            "exit_date": "2026-06-10",
+            "hit_date": "2026-06-01",
+            "observation_end_date": "2026-06-10",
+            "exit_reason": "horizon_end",
+            "max_gain_pct": 50.55,
+            "pnl_pct": 28.49,
+            "hit_target": True,
+            "hit_in_band": False,
+        }
+    ]
+    xlsx = _csv_bytes_to_xlsx(_build_urt_details_csv_bytes(rows))
+    wb = load_workbook(BytesIO(xlsx))
+    ws = wb.active
+    headers = [c.value for c in ws[1]]
+    gain_col = headers.index("观察期最大涨幅(%)") + 1
+    assert ws.column_dimensions[get_column_letter(gain_col)].width >= 16.0
+    date_col = headers.index("信号日期") + 1
+    date_cell = ws.cell(row=2, column=date_col)
+    assert date_cell.number_format == "@"
+    assert str(date_cell.value) == "2026-05-27"

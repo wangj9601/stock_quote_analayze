@@ -3,14 +3,14 @@ import type { LoginRequest, LoginResponse } from '@/types/auth.types'
 
 export class AuthService {
   async login(credentials: LoginRequest): Promise<LoginResponse> {
-    const formData = new FormData()
-    formData.append('username', credentials.username)
-    formData.append('password', credentials.password)
-    
-    return apiService.post<LoginResponse>('/auth/login', formData, {
+    const body = new URLSearchParams()
+    body.append('username', credentials.username)
+    body.append('password', credentials.password)
+
+    return apiService.post<LoginResponse>('/auth/login', body, {
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded'
-      }
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
     })
   }
 

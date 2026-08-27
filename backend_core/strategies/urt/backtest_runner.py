@@ -72,9 +72,9 @@ def classify_target_hits(
     target_lo: float,
     target_hi: float,
 ) -> Dict[str, bool]:
-    """观察期最高价：点目标=至少达到；开区间=最大涨幅落在 [下限, 上限]。"""
+    """观察期最高价：命中=最大涨幅 ≥ 下限；上限/区间为辅助统计。"""
     if entry_price is None or float(entry_price) <= 0:
-        return {"hit_target": False, "hit_target_upper": False, "hit_in_band": False}
+        return {"hit_target": False, "hit_target_lower": False, "hit_target_upper": False, "hit_in_band": False}
     entry = float(entry_price)
     high = float(max_high)
     gain = high / entry - 1.0
@@ -83,12 +83,11 @@ def classify_target_hits(
     hit_hi = high + 1e-12 >= entry * (1.0 + hi)
     if abs(hi - lo) < 1e-12:
         in_band = hit_lo
-        hit_target = hit_lo
     else:
         in_band = gain + 1e-12 >= lo and gain <= hi + 1e-12
-        hit_target = in_band
     return {
-        "hit_target": bool(hit_target),
+        "hit_target": bool(hit_lo),
+        "hit_target_lower": bool(hit_lo),
         "hit_target_upper": bool(hit_hi),
         "hit_in_band": bool(in_band),
     }
@@ -236,12 +235,13 @@ def build_urt_trade_meta(
     range_open = abs(float(target_hi) - float(target_lo)) >= 1e-12
     if range_open:
         hit_stat_rule = (
-            f"观察期最大涨幅落在 {tp_label} 内则 hit_target=是；"
-            f"触及上限 +{target_hi * 100:.1f}% 则 hit_target_upper=是（冲过上限不算命中）"
+            f"观察期最大涨幅 ≥ +{target_lo * 100:.1f}% 则 hit_target=是；"
+            f"≥ +{target_hi * 100:.1f}% 则 hit_target_upper=是；"
+            f"落在 [{target_lo * 100:.1f}%, {target_hi * 100:.1f}%] 则 hit_in_band=是"
         )
-        hit_stat_short = f"目标涨幅区间 {tp_label}（命中=落在区间内）"
+        hit_stat_short = f"目标涨幅区间 {tp_label}（命中=≥ 下限 {target_lo * 100:.1f}%）"
         hit_priority_desc = (
-            f"观察期最大涨幅落在 {tp_label} 内（触及上限另计 hit_target_upper）"
+            f"观察期最大涨幅 ≥ +{target_lo * 100:.1f}%（上限/区间内为辅助统计）"
         )
     else:
         hit_stat_rule = f"观察期内最高价 ≥ 入场价 × (1+{tp:.1f}%) 则 hit_target=是"
@@ -594,6 +594,7 @@ def run_urt_backtest(
     exit_mode: str = "hit_rate",
     progress_cb: Optional[Callable[[int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
+    config_overrides: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     from .signal_detector import (
         _compute_structure_levels,
@@ -615,6 +616,8 @@ def run_urt_backtest(
     cfg = cm.get_config(strategy_config_id, db=db)
     if min_score is not None:
         cfg = cm.merge_overrides(cfg, min_score=min_score)
+    if config_overrides:
+        cfg = cm.merge_overrides(cfg, **config_overrides)
 
     resolved_id = strategy_config_id
     if resolved_id is None:
@@ -752,6 +755,14 @@ def run_urt_backtest(
             allow = set(pool)
             signals = [s for s in signals if str(s.get("code")) in allow]
 
+        vol_need = float(cfg.get("volume_multiple") or 3.0)
+        if vol_need > 0:
+            signals = [
+                s
+                for s in signals
+                if float(s.get("volume_multiple") or 0) >= vol_need
+            ]
+
         for sig in signals:
             code = str(sig.get("code") or "")
             if not code:
@@ -797,6 +808,7 @@ def run_urt_backtest(
                 target_hi=target_hi,
             )
             hit = bool(band["hit_target"])
+            hit_lower = bool(band["hit_target_lower"])
             hit_upper = bool(band["hit_target_upper"])
             hit_in_band = bool(band["hit_in_band"])
             if not hit:
@@ -804,6 +816,17 @@ def run_urt_backtest(
 
             if mode == "hit_rate":
                 obs_end = _observation_end_date(future, entry_date)
+                last = future[-1] if future else {}
+                exit_date = last.get("date") or entry_date
+                exit_close = last.get("close")
+                if exit_close is None:
+                    exit_close = (
+                        last.get("open") if last.get("open") is not None else entry_price
+                    )
+                exit_price = float(exit_close) if exit_close is not None else entry_price
+                pnl_pct = (
+                    (exit_price - entry_price) / entry_price * 100.0 if entry_price else 0.0
+                )
                 row_out: Dict[str, Any] = {
                     "code": code,
                     "name": sig.get("name") or "",
@@ -817,13 +840,17 @@ def run_urt_backtest(
                     "max_gain_pct": round(max_gain * 100.0, 2),
                     "hit_target": hit,
                     "hit_date": hit_date,
+                    "hit_target_lower": hit_lower,
                     "hit_target_upper": hit_upper,
                     "hit_date_upper": hit_upper_date,
                     "hit_in_band": hit_in_band,
+                    "exit_date": exit_date,
+                    "exit_price": round(exit_price, 4),
+                    "exit_reason": "horizon_end",
+                    "pnl_pct": round(pnl_pct, 2),
+                    "bars_held": len(future),
                 }
-                enrich_detail_with_factors(
-                    row_out, sig, future, entry_price, hit_rate_only=True
-                )
+                enrich_detail_with_factors(row_out, sig, future, entry_price)
                 details.append(row_out)
                 cooldown[code] = obs_end
                 continue
@@ -1146,6 +1173,7 @@ def run_urt_backtest(
                 "exit_reason": exit_reason,
                 "hit_target": hit,
                 "hit_date": hit_date,
+                "hit_target_lower": hit_lower,
                 "hit_target_upper": hit_upper,
                 "hit_date_upper": hit_upper_date,
                 "hit_in_band": hit_in_band,
@@ -1183,6 +1211,7 @@ def run_urt_backtest(
 
     total = len(details)
     hits = sum(1 for r in details if r.get("hit_target"))
+    hits_lower = sum(1 for r in details if r.get("hit_target_lower"))
     hits_upper = sum(1 for r in details if r.get("hit_target_upper"))
     in_band_n = sum(1 for r in details if r.get("hit_in_band"))
     wins = sum(1 for r in details if float(r.get("pnl_pct") or 0) > 0)
@@ -1298,6 +1327,9 @@ def run_urt_backtest(
         "target_hits": hits,
         "hit_count": hits,
         "hit_rate": round(hits / total, 4) if total else 0.0,
+        "target_hits_lower": hits_lower,
+        "hit_count_lower": hits_lower,
+        "hit_rate_lower": round(hits_lower / total, 4) if total else 0.0,
         "target_hits_upper": hits_upper,
         "hit_rate_upper": round(hits_upper / total, 4) if total else 0.0,
         "in_band_count": in_band_n,
@@ -1305,6 +1337,7 @@ def run_urt_backtest(
         "avg_max_gain_pct": round(avg_max_gain, 2),
         "target_pct": target_lo,
         "target_pct_max": target_hi,
+        "target_range_open": abs(float(target_hi) - float(target_lo)) >= 1e-12,
         "horizon_days": horizon_days,
         "backtest_mode": (
             "structure_exit"

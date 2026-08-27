@@ -48,7 +48,7 @@
           <el-col :span="12">
             <el-form-item label="目标涨幅上限(%)">
               <el-input-number v-model="targetPctMaxPercent" :min="0.1" :max="100" :step="0.5" :precision="2" class="w-full" />
-              <span class="hint">缺省 10%～10%。相等=至少达到该值；5%～8% 表示最大涨幅落在区间内才算命中</span>
+              <span class="hint">缺省 10%～10%。命中率=最大涨幅 ≥ 下限；上下限不等时上限/「落在区间内」为辅助统计</span>
             </el-form-item>
           </el-col>
         </el-row>
@@ -80,6 +80,7 @@
             <el-form-item label="股票池">
               <el-select v-model="form.stock_pool_mode" class="w-full" @change="onStockPoolModeChange">
                 <el-option label="全市场" value="all" />
+                <el-option label="GMS观察股" value="gms_watchlist" />
                 <el-option label="自选股" value="watchlist" />
                 <el-option label="行业板块" value="industry_board" />
                 <el-option label="概念板块" value="concept_board" />
@@ -340,6 +341,10 @@
             <template #default="{ row }">
             <span v-if="row.summary">
               信号 {{ row.summary.total_signals ?? 0 }} · 命中率 {{ pct(row.summary.hit_rate) }}
+              <template v-if="isHitRateMode(row) && isTargetRangeOpen(row)">
+                · 落在区间内 {{ pct(row.summary.in_band_rate) }}
+                · 上限触及 {{ pct(row.summary.hit_rate_upper) }}
+              </template>
               <template v-if="isHitRateMode(row)">
                 · 均最大涨幅 {{ row.summary.avg_max_gain_pct ?? '-' }}%
               </template>
@@ -542,6 +547,7 @@ function formatDateTime(v: unknown) {
 function poolModeLabel(mode?: string) {
   const map: Record<string, string> = {
     all: '全市场',
+    gms_watchlist: 'GMS观察股',
     watchlist: '自选股',
     industry_board: '行业板块',
     concept_board: '概念板块',
@@ -570,6 +576,15 @@ function resolveExitMode(row: any): string {
 
 function isHitRateMode(row: any): boolean {
   return resolveExitMode(row) === 'hit_rate'
+}
+
+function isTargetRangeOpen(row: any): boolean {
+  const s = row?.summary || row?.config
+  if (!s) return false
+  if (s.target_range_open === true) return true
+  const lo = Number(s.target_pct || 0)
+  const hi = s.target_pct_max == null || s.target_pct_max === '' ? lo : Number(s.target_pct_max)
+  return Number.isFinite(hi) && Math.abs(hi - lo) > 1e-9
 }
 
 function exitModeLabel(mode?: string) {

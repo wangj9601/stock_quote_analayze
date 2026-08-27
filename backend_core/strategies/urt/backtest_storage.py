@@ -30,6 +30,7 @@ _URT_DETAIL_FIELDS: List[str] = [
     "max_gain_pct",
     "hit_target",
     "hit_date",
+    "hit_target_lower",
     "hit_target_upper",
     "hit_date_upper",
     "hit_in_band",
@@ -90,11 +91,13 @@ _URT_DETAIL_HEADER_ZH: Dict[str, str] = {
     "max_gain_pct": "观察期最大涨幅(%)",
     "hit_target": "是否命中目标",
     "hit_date": "命中日期",
+    "hit_target_lower": "是否触及下限",
     "hit_target_upper": "是否触及上限",
     "hit_date_upper": "触及上限日期",
     "hit_in_band": "涨幅落在区间内",
     "observation_end_date": "观察期结束日",
     "horizon_days": "观察期天数",
+    "exit_date": "出场日期",
     "exit_price": "出场价(期末收盘)",
     "exit_reason": "出场原因",
     "pnl_pct": "期末盈亏比例(%)",
@@ -153,6 +156,114 @@ _URT_EXIT_REASON_ZH: Dict[str, str] = {
     "breakeven_stop": "保本止损",
     "fallback_trail": "移动止盈",
 }
+
+# xlsx 列宽（中文表头）；未知列由内容自适应
+_URT_BACKTEST_XLSX_COL_WIDTH: Dict[str, float] = {
+    "股票代码": 12.0,
+    "股票名称": 14.0,
+    "信号日期": 13.0,
+    "得分": 8.0,
+    "入场日期": 13.0,
+    "入场价": 10.0,
+    "观察期最高价": 14.0,
+    "观察期最大涨幅(%)": 18.0,
+    "是否命中目标": 14.0,
+    "命中日期": 13.0,
+    "是否触及下限": 14.0,
+    "是否触及上限": 14.0,
+    "触及上限日期": 14.0,
+    "涨幅落在区间内": 16.0,
+    "观察期结束日": 14.0,
+    "观察期天数": 12.0,
+    "出场日期": 13.0,
+    "出场价(期末收盘)": 16.0,
+    "出场原因": 12.0,
+    "期末盈亏比例(%)": 16.0,
+    "持有天数": 10.0,
+    "结构回退": 10.0,
+    "回退原因": 14.0,
+    "结构来源": 12.0,
+    "止损依据": 12.0,
+    "止盈依据": 12.0,
+    "最近支撑": 10.0,
+    "最近阻力": 10.0,
+    "止损价": 10.0,
+    "止盈价": 10.0,
+    "KDE有效": 10.0,
+    "分批出场": 10.0,
+    "分批比例": 10.0,
+    "分批出场价": 12.0,
+    "分批出场日": 13.0,
+    "组合出场原因": 14.0,
+    "MA20趋势分": 12.0,
+    "量能倍数": 10.0,
+    "5日连阳": 10.0,
+    "结构盈亏比": 12.0,
+    "距支撑(%)": 12.0,
+    "贴近支撑原因": 16.0,
+    "换手率(%)": 12.0,
+    "换手相对中位": 14.0,
+    "均线多头深度": 14.0,
+    "过热强度": 12.0,
+    "近低点涨幅": 12.0,
+    "满观察期盈亏(%)": 16.0,
+    "满观察期收盘": 14.0,
+}
+
+_URT_XLSX_DATE_HEADERS = frozenset(
+    {
+        "信号日期",
+        "入场日期",
+        "命中日期",
+        "触及上限日期",
+        "观察期结束日",
+        "出场日期",
+        "分批出场日",
+    }
+)
+
+
+def _excel_text_display_width(value: Any) -> float:
+    """估算 Excel 列宽（CJK 约 2 单位，ASCII 约 1）。"""
+    s = str(value or "").replace(_EXCEL_TEXT_PREFIX, "")
+    w = 0.0
+    for ch in s:
+        w += 2.2 if ord(ch) > 127 else 1.0
+    return w
+
+
+def _autofit_urt_xlsx_columns(ws: Any, headers: List[str], data_rows: List[List[str]]) -> None:
+    from openpyxl.utils import get_column_letter
+
+    sample = data_rows[:300]
+    for col_idx, header in enumerate(headers, start=1):
+        base = _URT_BACKTEST_XLSX_COL_WIDTH.get(header, 12.0)
+        content_w = _excel_text_display_width(header)
+        for row in sample:
+            if col_idx - 1 < len(row):
+                content_w = max(content_w, _excel_text_display_width(row[col_idx - 1]))
+        width = max(base, content_w + 2.0)
+        ws.column_dimensions[get_column_letter(col_idx)].width = min(max(width, 8.0), 42.0)
+
+
+def _apply_urt_xlsx_cell_formats(ws: Any, headers: List[str]) -> None:
+    """日期列按文本显示，避免 #######；股票代码列保持文本。"""
+    col_map = {h: i + 1 for i, h in enumerate(headers)}
+    code_col = col_map.get("股票代码")
+    date_cols = [col_map[h] for h in _URT_XLSX_DATE_HEADERS if h in col_map]
+    if ws.max_row < 2:
+        return
+    for row in range(2, ws.max_row + 1):
+        if code_col:
+            cell = ws.cell(row=row, column=code_col)
+            cell.number_format = "@"
+            if cell.value is not None:
+                cell.value = str(cell.value)
+        for dc in date_cols:
+            cell = ws.cell(row=row, column=dc)
+            cell.number_format = "@"
+            if cell.value is not None and cell.value != "":
+                cell.value = str(cell.value)[:10]
 
 
 def _session() -> Session:
@@ -316,7 +427,7 @@ def _normalize_export_stock_code(value: Any) -> str:
 
 
 def _format_urt_detail_cell(key: str, value: Any) -> Any:
-    if key in ("hit_target", "hit_target_upper", "hit_in_band"):
+    if key in ("hit_target", "hit_target_lower", "hit_target_upper", "hit_in_band"):
         if value is True or value == 1 or str(value).lower() in ("true", "1", "yes"):
             return "是"
         if value is False or value == 0 or str(value).lower() in ("false", "0", "no"):
@@ -512,7 +623,6 @@ def _csv_bytes_to_xlsx(raw: bytes) -> bytes:
 
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font
-    from openpyxl.utils import get_column_letter
 
     text = raw.decode("utf-8-sig")
     reader = csv.reader(io.StringIO(text))
@@ -539,15 +649,8 @@ def _csv_bytes_to_xlsx(raw: bytes) -> bytes:
             row = list(row)
             row[idx] = _normalize_export_stock_code(row[idx])
         ws.append(row)
-    if code_col and ws.max_row >= 2:
-        for r in range(2, ws.max_row + 1):
-            cell = ws.cell(row=r, column=code_col)
-            cell.number_format = "@"
-            # 显式按字符串写入，避免 openpyxl/Excel 把纯数字码当数值
-            if cell.value is not None:
-                cell.value = str(cell.value)
-    for col_idx in range(1, len(headers) + 1):
-        ws.column_dimensions[get_column_letter(col_idx)].width = 14
+    _apply_urt_xlsx_cell_formats(ws, headers)
+    _autofit_urt_xlsx_columns(ws, headers, rows[1:])
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue()

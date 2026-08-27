@@ -33,7 +33,12 @@ def test_format_target_pct_range_label():
 
 def test_classify_point_target_10():
     hit = classify_target_hits(entry_price=10, max_high=11.0, target_lo=0.10, target_hi=0.10)
-    assert hit == {"hit_target": True, "hit_target_upper": True, "hit_in_band": True}
+    assert hit == {
+        "hit_target": True,
+        "hit_target_lower": True,
+        "hit_target_upper": True,
+        "hit_in_band": True,
+    }
     miss = classify_target_hits(entry_price=10, max_high=10.9, target_lo=0.10, target_hi=0.10)
     assert miss["hit_target"] is False
     assert miss["hit_in_band"] is False
@@ -42,24 +47,35 @@ def test_classify_point_target_10():
 def test_classify_range_5_to_8():
     in_band = classify_target_hits(entry_price=100, max_high=106, target_lo=0.05, target_hi=0.08)
     assert in_band["hit_target"] is True
+    assert in_band["hit_target_lower"] is True
     assert in_band["hit_target_upper"] is False
     assert in_band["hit_in_band"] is True
 
     overshoot = classify_target_hits(entry_price=100, max_high=110, target_lo=0.05, target_hi=0.08)
-    assert overshoot["hit_target"] is False
+    assert overshoot["hit_target"] is True
+    assert overshoot["hit_target_lower"] is True
     assert overshoot["hit_target_upper"] is True
     assert overshoot["hit_in_band"] is False
 
     miss = classify_target_hits(entry_price=100, max_high=104, target_lo=0.05, target_hi=0.08)
     assert miss["hit_target"] is False
+    assert miss["hit_target_lower"] is False
     assert miss["hit_target_upper"] is False
     assert miss["hit_in_band"] is False
+
+
+def test_range_hit_rate_monotonic_with_lower_bound():
+    """同一 max_high，降低下限不应降低 hit_target。"""
+    high = classify_target_hits(entry_price=100, max_high=110, target_lo=0.10, target_hi=0.10)
+    low = classify_target_hits(entry_price=100, max_high=110, target_lo=0.05, target_hi=0.10)
+    assert high["hit_target"] is True
+    assert low["hit_target"] is True
 
 
 def test_trade_meta_range_text():
     meta = build_urt_trade_meta(target_pct=0.05, target_pct_max=0.08)
     assert "5.0%～8.0%" in meta["trade_logic"]["summary"]
-    assert any("区间内" in r or "落在" in r for r in meta["trade_logic"]["rules"])
+    assert any("≥" in r and "5.0%" in r for r in meta["trade_logic"]["rules"])
 
 
 def test_pdf_target_range_label():
@@ -81,6 +97,7 @@ def test_export_includes_range_hit_columns():
     text = _build_urt_details_csv_bytes(rows).decode("utf-8-sig")
     header = text.splitlines()[0]
     assert "是否命中目标" in header
+    assert "是否触及下限" in header
     assert "是否触及上限" in header
     assert "涨幅落在区间内" in header
     body = text.splitlines()[1]

@@ -49,7 +49,7 @@ def _patch_hit_rate_backtest(monkeypatch, *, future_bars, signal_date="2024-01-0
 
 
 def test_hit_rate_mode_only_records_target_hit(mock_db, monkeypatch):
-    """命中率模式不输出出场/盈亏字段，summary 不含 win_rate。"""
+    """命中率模式输出参考出场与期末盈亏，summary 不含 win_rate。"""
     future = [
         {"date": "2024-01-03", "open": 100.0, "high": 106.0, "low": 99.0, "close": 104.0},
     ]
@@ -75,9 +75,12 @@ def test_hit_rate_mode_only_records_target_hit(mock_db, monkeypatch):
     row = result["details"][0]
     assert row["hit_target"] is True
     assert row["max_high"] == pytest.approx(106.0)
-    assert "exit_date" not in row
-    assert "pnl_pct" not in row
-    assert "horizon_pnl_pct" not in row
+    assert row["exit_date"] == "2024-01-03"
+    assert row["exit_price"] == pytest.approx(104.0)
+    assert row["exit_reason"] == "horizon_end"
+    assert row["pnl_pct"] == pytest.approx(4.0, rel=1e-3)
+    assert row["horizon_pnl_pct"] == pytest.approx(4.0, rel=1e-3)
+    assert row["bars_held"] == 1
     assert row["observation_end_date"] == "2024-01-03"
 
 

@@ -116,8 +116,7 @@ const routes = [
       },
       {
         path: 'triple-volume-observe',
-        name: 'TripleVolumeObserve',
-        component: () => import('@/views/TripleVolumeObserveView.vue')
+        redirect: { path: '/selection-results', query: { tab: 'triple-volume' } }
       },
       {
         path: 'selection-results',
