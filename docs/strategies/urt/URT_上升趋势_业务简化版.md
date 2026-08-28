@@ -98,7 +98,11 @@
 ### 6.1 正式买点
 
 ```text
-买点 = 硬筛全部通过 AND 结构硬闸通过 AND 过热硬闸通过 AND 得分 ≥ min_score
+买点 = 硬筛全部通过
+     AND 结构硬闸通过
+     AND 过热硬闸通过
+     AND 均线多头分弱项闸通过（默认：f_ma_bull ∉ [4, 7)）
+     AND 得分 ≥ min_score
 ```
 
 **默认硬筛**：
@@ -116,7 +120,17 @@
 
 **得分门槛**：默认 `min_score=70`。
 
-选股全部A股/全部港股：`require_pass=True`，**只返回正式买点**。  
+**信号质量**（2026-08-27，选股页 / 回测任务参数 `signal_quality_mode`）：
+
+| 模式 | 说明 |
+|------|------|
+| `standard`（默认） | 实时硬闸 + 读 trace 后滤：排除均线多头分 **∈ [4, 7)** |
+| `premium`（精选） | 在标准上再加：距支撑 **≤2%**、排除得分 **≥90** |
+
+- 全市场 / 港股：后滤直接减少列表条数。  
+- 自选 / 行业 / 概念 / 单股：列表仍含未过筛明细；不满足精选的行 **`buy_signal` 置为 false**。
+
+选股全部A股/全部港股：`require_pass=True`，**只返回正式买点**（再经信号质量后滤）。  
 `scope=watchlist|industry_board|concept_board|single`：对齐 GMS，`skip_screening_filters=True`，返回可算明细（含未过筛/未达分），得分原样展示；**不等于**给出买点（看 `buy_signal`）。
 
 ### 6.2 得分分项（封顶 100）
@@ -192,6 +206,7 @@
 | JSON 文件 | `backend_core/strategies/urt/urt_config.json`（与内置 deep merge） |
 | 数据库 | 表 `urt_strategy_configs`；有启用默认版本时**优先 DB**；管理端可多版本 / `precompute_enabled` |
 | 选股 Query 覆盖 | `volume_multiple`、`min_score`：仅 **全部A股 / 全部港股** 覆盖并过滤买点；**自选/行业/概念/单股** 对齐 GMS：不按硬筛与最低得分过滤列表、得分原样返回（正式买点仍看 `buy_signal`）；有覆盖时全市场不走预计算缓存 |
+| 信号质量 | Query / 任务参数 `signal_quality_mode`：`standard` / `premium`；见 §6.1 |
 
 ### 8.1 常用默认（文件 + 代码一致部分）
 
@@ -221,6 +236,10 @@
 | `overheat_soft_pct` / `overheat_hard_pct` | **0.15 / 0.25**（相对近窗最低价） |
 | `overheat_bias_soft_pct` / `overheat_bias_hard_pct` | **0.15 / 0.20**（相对 MA20） |
 | `overheat_warn_enabled` / `overheat_hard_gate_enabled` | **true / true** |
+| `exclude_ma_bull_score_mid_enabled` | **true**（弱项闸：f_ma_bull ∈ [4,7) 否决） |
+| `exclude_ma_bull_score_lo` / `hi` | **4.0 / 7.0** |
+| `premium_signal_near_support_max_pct` | **2.0**（精选模式） |
+| `premium_signal_exclude_score_ge` | **90.0**（精选模式） |
 
 ### 8.2 买后纪律（主要在回测 `risk_exit`）
 
@@ -241,7 +260,7 @@
 ### 9.1 选股
 
 - **路径**：`GET /api/screening/urt-strategy`  
-- **关键 Query**：`scope`、`date`、`limit`、`config_id`、`cn_board_segment`（可重复）、`industry_board_code` / `concept_board_code`、`board_code_source`、`stock_code`、`volume_multiple`、`min_score` 等  
+- **关键 Query**：`scope`、`date`、`limit`、`config_id`、`cn_board_segment`（可重复）、`industry_board_code` / `concept_board_code`、`board_code_source`、`stock_code`、`volume_multiple`、`min_score`、**`signal_quality_mode`**（`standard` \| `premium`）等  
 - **超时**：环境变量 `URT_SCREENING_TIMEOUT`（默认至少 600s）  
 - **缓存**：无 Query 覆盖、无板块键过滤、非单股时优先读 `urt_signal_trace` 当日买点；否则实时扫描  
 - **刷新**：改 scope / 板块 / 版本 / 量能 / 得分后须点「刷新筛选」才重算（前端不自动刷新）
@@ -294,7 +313,7 @@
 
 | 层级 | 路径 |
 |------|------|
-| 策略包 | `backend_core/strategies/urt/`（`indicators` / `scoring` / `signal_detector` / `frontend_interface` / `data_loader` / `risk_tags` / `config`） |
+| 策略包 | `backend_core/strategies/urt/`（`indicators` / `scoring` / `signal_detector` / `signal_filters` / `frontend_interface` / `data_loader` / `risk_tags` / `config`） |
 | 选股路由 | `backend_api/stock/stock_screening_routes.py` → `get_urt_strategy` |
 | 前台公开配置 | `backend_api/stock/urt_public_frontend_routes.py` |
 | 信号/回测/交易 | `urt_frontend_routes.py`、`urt_trade_observe_routes.py`、`urt_formal_trade_routes.py` |

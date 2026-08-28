@@ -39,6 +39,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | `use_trace` | 优先读缓存 | `true` | 优先 `urt_signal_trace`；无则实时引擎 |
 | `exit_mode` | 出场模式 | `hit_rate` | `hit_rate` / `risk_exit` |
 | `strategy_config_id` | 参数版本 | 默认版本 | 含硬筛、得分、`risk` 风控 |
+| `signal_quality_mode` | 信号质量 | **`standard`** | `standard`=排除均线多头分弱项区间；`premium`=近支撑≤2% + 排除弱项（见 §2.3） |
 | `stock_pool_mode` | 股票池 | `all` | 全市场 / GMS观察股 / 自选 / 行业 / 概念 / 单股 / 自定义 |
 | `cn_board_segment` | A 股板块 | 全部 | MAIN / CYB / SZ_SME / KCB / BJ |
 
@@ -56,8 +57,24 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 2. **区间补齐**：回测开始时检查时间范围内各交易日是否已具备**全市场/股票池级**预计算（仅有个股强制重算的零星 trace **不算**覆盖；**股票池扫描占位 `scope=pool` 也不能冒充全市场已覆盖**）。未覆盖日对全市场（或任务股票池）**一次拉齐区间行情、内存按日评买点**并写入 `urt_signal_trace`，打上 `__URT_SCANNED__` 扫描占位，再进入交易模拟。不要按每个交易日重复拉取全市场 K 线。
 3. **关闭缓存**（`use_trace=false`）：同样走区间一次扫描（内存出信号），不再逐日 `screen_universe`。全市场务必打开「优先读缓存」：结果可复用，且命中率对照不必再扫一遍。
 
-买点判定（硬筛 + 得分）与选股一致，详见设计文档 §1 / §6。  
+买点判定（硬筛 + 得分 + **均线多头分弱项闸**）与选股一致，详见设计文档 §1 / §6 与业务简化版 §6.1。  
+读 trace 时会对 `volume_multiple`、因子弱项等做**后滤**（与实时硬闸对齐；见 §2.3）。  
 「手动预计算」只跑选定的**一天**，不能覆盖整段回测区间。全市场首次回测若区间缺缓存，进度条前半段为「区间一次扫描」补齐预计算。环境变量 `URT_SCREEN_WORKERS`（默认最多 4）可加快评点。
+
+### 2.3 信号质量模式（2026-08-27）
+
+任务参数 `signal_quality_mode`（管理端回测页「信号质量」）与网站选股页同口径：
+
+| 模式 | 说明 | trace 后滤 |
+|------|------|------------|
+| `standard`（默认） | 排除均线多头分 **∈ [4, 7)**（A/B 验证弱项区间） | 是 |
+| `premium`（精选） | 在标准基础上再加：距支撑 **≤2%**、排除得分 **≥90** | 是 |
+
+- **实时扫描 / 新预计算**：弱项闸在 `signal_detector` 打分后硬否决，不再产生 `[4,7)` 买点。  
+- **读旧 trace**：仍可能含弱项行，由 `signal_filters.build_signal_filter_from_cfg` 后滤；筛后为空**不会**触发全市场实时重扫。  
+- 汇总字段：`summary.signal_quality_mode` / `signal_quality_mode_label`；PDF/任务详情可见。
+
+批量 A/B 脚本：`manual_scripts/urt_ab_backtest.py`（`--group default` 参数 A/B；`--group factor` 因子 C 组）。
 
 ### 2.2 买入规则
 
@@ -180,6 +197,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | 分月收益 | 按出场月对 `pnl_pct` 取均值（简化） |
 | `avg_bars_held` | 平均持有天数 |
 | `trade_logic` / `risk_params` | 交易逻辑说明与风控快照 |
+| `signal_quality_mode` / `signal_quality_mode_label` | 任务信号质量模式及中文标签 |
 
 ### 5.2 明细导出
 

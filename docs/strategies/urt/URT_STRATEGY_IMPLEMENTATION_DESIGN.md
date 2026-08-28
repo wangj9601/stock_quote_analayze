@@ -33,9 +33,10 @@
 | 中期阳线 10/15/20 | 默认仅展示与轻度加分；`use_yang_medium=true` 时硬筛（默认阈值 ≥6/≥8/≥10） |
 | 均线多头 | 默认仅展示与轻度加分（MA5>MA10>MA20）；`require_ma_bull=true` 时硬筛 |
 
-**出信号流程**：先过硬筛（MA20 + 连阳 + 量能，以及若启用的换手/量比/中期阳线/多头）→ 再计算得分 → `score < min_score` 仍过滤。
+**出信号流程**：先过硬筛（MA20 + 连阳 + 量能，以及若启用的换手/量比/中期阳线/多头）→ 再计算得分 → **均线多头分弱项闸**（默认排除 f_ma_bull∈[4,7)）→ `score < min_score` 仍过滤。
 
-交易纪律（写入配置，选股不强制；**回测持仓阶段生效**）：价格止损 5%–10%、连跌 3 日且浮亏≥4% 离场、涨约 **8%–10%** 后高点回撤 5% 止盈。完整买卖与观察期规则见：[URT策略交易回测说明.md](./URT策略交易回测说明.md)。
+交易纪律（写入配置，选股不强制；**回测持仓阶段生效**）：价格止损 5%–10%、连跌 3 日且浮亏≥4% 离场、涨约 **8%–10%** 后高点回撤 5% 止盈。完整买卖与观察期规则见：[URT策略交易回测说明.md](./URT策略交易回测说明.md)。  
+回测与因子 A/B 结论见：[URT策略回测优化方案.md](./URT策略回测优化方案.md)（2026-08-27 更新）。
 
 与 GMS 差异：不做左侧吸附；数据源为 `historical_quotes`（现算 MA），不依赖 `mean_frequency_resonance_indicators`。
 
@@ -178,7 +179,7 @@ admin/  # /urt-management 参数配置页
 
 `GET /api/screening/urt-strategy`
 
-主要 Query：`scope`(all|watchlist)、`limit`、`date`、`config_id`、`volume_multiple`、`min_score`、`boards`、`use_turnover`、`use_volume_ratio`。
+主要 Query：`scope`(all|watchlist)、`limit`、`date`、`config_id`、`volume_multiple`、`min_score`、`signal_quality_mode`（`standard`|`premium`）、`boards`、`use_turnover`、`use_volume_ratio`。
 
 响应：
 
@@ -269,7 +270,8 @@ admin/  # /urt-management 参数配置页
 | 信号 | 优先 `urt_signal_trace`；区间内缺失日先按时间范围全市场/股票池补算一次再回测；`use_trace=false` 则逐日实时（含全市场） |
 | 入场 | 信号次日开盘价；同标的上一笔出场日前不重复开仓 |
 | 观察期 | `horizon_days`，**默认 10 个交易日**（短线；可任务级改为 5/15/20） |
-| 出场 | 默认 `hit_rate`：观察期内最高价判定目标（默认 10%），**不止损**；可选 `risk_exit` 调用 `evaluate_exit_rules` |
+| 出场 | 默认 `hit_rate`：观察期内最高价判定目标（默认 10%），**不止损**；可选 `risk_exit` / `structure_exit` |
+| 信号质量 | 任务 `signal_quality_mode`：`standard`（默认，ma_bull 弱项后滤）/ `premium`（精选） |
 | 元数据 | 任务 `config`/`summary` 含 `trade_logic`、`risk_params`；详情页展示 |
 | 导出 | UTF-8-BOM CSV，中文列名（Excel 可开） |
 | API | `/api/admin/urt/backtests*`（创建/列表/详情/取消/重跑/删除/导出） |
@@ -295,6 +297,10 @@ admin/  # /urt-management 参数配置页
 | `volume_lookback` | 量能均量窗口（交易日） | 20 | 管理端 **5～60** | 均量**不含当日**；量能倍数 = 当日量 / 该均量 |
 | `volume_multiple` | 量能倍数阈值 | 2.5 | 管理端/API **1～30** | 硬筛：派生量能倍数 ≥ 本值；同时是量能打分基准 |
 | `min_score` | 最低得分 | 70 | **0～100** | 硬筛通过后仍须 `score ≥ min_score` |
+| `exclude_ma_bull_score_mid_enabled` | 均线多头分弱项闸 | **true** | — | 默认否决 f_ma_bull ∈ [lo, hi) |
+| `exclude_ma_bull_score_lo` / `hi` | 弱项区间 | **4.0 / 7.0** | — | 左闭右开；A/B 验证 |
+| `premium_signal_near_support_max_pct` | 精选：距支撑上限 | **2.0** | — | 仅 `signal_quality_mode=premium` |
+| `premium_signal_exclude_score_ge` | 精选：排除高分 | **90.0** | — | 同上 |
 | `yang_rule_a.window` | 规则 A 窗口（日） | 4 | 表单固定 4；JSON 可改 | 与 `min_up_days` 组成「N 日至少 M 阳」 |
 | `yang_rule_a.min_up_days` | 规则 A 最少阳线数 | 3 | 管理端 **1～4** | 满足 A **或** B 即过连阳硬筛 |
 | `yang_rule_b.window` | 规则 B 窗口（日） | 5 | 表单固定 5；JSON 可改 | 同上 |
@@ -369,6 +375,9 @@ admin/  # /urt-management 参数配置页
 | `target_pct_max` | 目标涨幅上限（小数） | 等于下限（缺省 10%～10%） |
 | `horizon_days` | 观察期交易日数 | **10** |
 | `use_trace` | 是否优先读 `urt_signal_trace` | true |
+| `signal_quality_mode` | 信号质量 | **`standard`** |
+| `compare_hit_rate` | 结构/纪律完成后自动命中率对照 | 非 `hit_rate` 默认开 |
+| `stock_pool_mode` | 股票池 | `all`（含 `gms_watchlist`） |
 
 ### 6.6 选股 API 运行时参数（Query，不写配置表）
 
@@ -383,6 +392,7 @@ admin/  # /urt-management 参数配置页
 | `config_id` | 参数版本 ID | ≥1 | 不传则用默认版本 / JSON |
 | `volume_multiple` | 临时覆盖量能阈值 | **1.0～30.0** | 仅全部A股/港股前端会传并过滤；自选/板块/单股不传且列表不过滤 |
 | `min_score` | 临时覆盖最低分 | **0～100** | 同上 |
+| `signal_quality_mode` | 信号质量 | **`standard`** | `standard` / `premium`；见回测说明 §2.3 |
 | `use_turnover` / `use_volume_ratio` | 临时开关 | bool | 同上 |
 | `min_turnover` / `min_volume_ratio` | 临时阈值 | ≥0 | 同上 |
 | `boards` | 板块过滤（可多选） | `CYB` / `KCB` / `SH_MAIN` / `SZ_MAIN` / `SZ_SME` / `BJ` | 按代码前缀过滤 `stock_basic_info`；不传=不限板块 |
