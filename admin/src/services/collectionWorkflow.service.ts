@@ -135,6 +135,16 @@ class CollectionWorkflowService {
     return apiService.post(`/collection-workflows/runs/${runId}/cancel`)
   }
 
+  /** 重启正在运行的环节；orderIndex 省略则重启当前节点 */
+  restartNode(runId: string, orderIndex?: number) {
+    return apiService.post(`/collection-workflows/runs/${runId}/restart-node`, {
+      order_index: orderIndex ?? null,
+    }) as Promise<{
+      success: boolean
+      data: { restarted: boolean; run_id: string; order_index?: number | null }
+    }>
+  }
+
   activeExecution() {
     return apiService.get('/collection-workflows/active-execution')
   }

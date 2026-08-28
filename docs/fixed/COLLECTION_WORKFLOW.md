@@ -32,6 +32,17 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 - CRUD `/`、`/{id}`、`/{id}/nodes`
 - `POST /{id}/run` 手动启动
 - `GET /runs`、`GET /runs/{run_id}`、`POST /runs/{run_id}/cancel`
+- `POST /runs/{run_id}/restart-node` 重启正在运行的环节（body 可选 `order_index`；省略则重启当前节点）
+
+### 重启环节说明
+
+- 仅当流程状态为 `running` / `pending`，且目标节点为 `running`（或等于 `current_node_index`）时可重启。
+- **强制停止**：节点在独立子进程中执行；点击重启会对子进程 `terminate`/`kill`，然后立即重跑该节点并继续后续环节。
+- **引擎恢复**：若 API 热重载/进程重启导致引擎线程丢失，强制重启会写入 DB 意图并重新拉起执行线程（跳过已完成节点，从目标节点重跑）。
+- **子进程日志**：节点业务日志经 Queue 回传到 API 进程（uvicorn 终端可见），并写入 `logs/app.log`，带 `[wf:run_id/node_key]` 前缀。IDE 若只盯父进程输出，旧行为下会误以为「没日志」——可直接看 `logs/app.log`。
+- **非 daemon 子进程**：节点进程必须 `daemon=False`，否则内部 `ProcessPoolExecutor`（如批量 MA/MAVOL）会报 `daemonic processes are not allowed to have children`。
+- 与「取消整条流程」不同：重启不结束 run，只强杀并重做当前环节。
+- 单测可用环境变量 `COLLECTION_WORKFLOW_SYNC_NODES=1` 退回同进程同步执行（无法强杀）。
 
 ## 与单任务采集互斥
 

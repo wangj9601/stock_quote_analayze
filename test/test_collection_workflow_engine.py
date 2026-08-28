@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import List
 from unittest.mock import MagicMock
 
@@ -255,6 +256,8 @@ def test_engine_serial_stop_on_failure(monkeypatch):
     from backend_core.data_collectors.workflow import node_registry as reg
     from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine
 
+    prev_sync = eng_mod._FORCE_SYNC_EXEC
+    eng_mod._FORCE_SYNC_EXEC = True
     keys = ["ut_a", "ut_b", "ut_c"]
     for k, label, fail in [
         ("ut_a", "A", False),
@@ -386,6 +389,7 @@ def test_engine_serial_stop_on_failure(monkeypatch):
         assert run_holder["run"].status == "failed"
         assert not is_busy()
     finally:
+        eng_mod._FORCE_SYNC_EXEC = prev_sync
         for k in keys:
             reg._BY_KEY.pop(k, None)
         _clear_mutex()
@@ -397,6 +401,8 @@ def test_engine_continue_on_failure(monkeypatch):
     from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine
 
     sink: List[str] = []
+    prev_sync = eng_mod._FORCE_SYNC_EXEC
+    eng_mod._FORCE_SYNC_EXEC = True
     keys = ["ut2_a", "ut2_b", "ut2_c"]
     for k, label, fail in [
         ("ut2_a", "A", False),
@@ -502,6 +508,7 @@ def test_engine_continue_on_failure(monkeypatch):
         assert run_holder["run"].status == "completed"
         assert not is_busy()
     finally:
+        eng_mod._FORCE_SYNC_EXEC = prev_sync
         for k in keys:
             reg._BY_KEY.pop(k, None)
         _clear_mutex()
@@ -514,3 +521,146 @@ def test_context_merge_dates():
     ctx.merge_dates_from_params()
     assert ctx.start_date == "2024-01-01"
     assert ctx.end_date == "2024-01-10"
+
+
+def test_configure_worker_logging_enables_info(caplog):
+    from backend_core.data_collectors.workflow import engine as eng_mod
+
+    # 模拟子进程：清空 root handlers 后 INFO 会被丢弃
+    root = logging.getLogger()
+    old_handlers = list(root.handlers)
+    old_level = root.level
+    try:
+        root.handlers.clear()
+        if hasattr(root, "_collection_workflow_worker_configured"):
+            delattr(root, "_collection_workflow_worker_configured")
+        eng_mod._configure_worker_logging("ut_node", "cwr_log_ut")
+        assert getattr(root, "_collection_workflow_worker_configured", False)
+        assert root.level <= logging.INFO
+        assert any(isinstance(h, logging.StreamHandler) for h in root.handlers)
+    finally:
+        root.handlers.clear()
+        for h in old_handlers:
+            root.addHandler(h)
+        root.setLevel(old_level)
+        if hasattr(root, "_collection_workflow_worker_configured"):
+            delattr(root, "_collection_workflow_worker_configured")
+
+
+def test_restart_flags_consume():
+    from backend_core.data_collectors.workflow import engine as eng_mod
+
+    run_id = "cwr_restart_ut"
+    eng_mod.clear_restart(run_id)
+    eng_mod.request_restart(run_id, 1)
+    assert eng_mod.is_restart_requested(run_id, 1)
+    assert not eng_mod.is_restart_requested(run_id, 0)
+    assert eng_mod.consume_restart(run_id, 1)
+    assert not eng_mod.is_restart_requested(run_id, 1)
+
+    eng_mod.request_restart(run_id, None)  # 当前节点
+    assert eng_mod.is_restart_requested(run_id, 3)
+    assert eng_mod.consume_restart(run_id, 3)
+    eng_mod.clear_restart(run_id)
+
+
+def test_request_restart_terminates_process(monkeypatch):
+    from backend_core.data_collectors.workflow import engine as eng_mod
+
+    called = []
+    monkeypatch.setattr(eng_mod, "terminate_run_process", lambda rid: called.append(rid) or True)
+    eng_mod.clear_restart("r_force")
+    eng_mod.request_restart("r_force", 2)
+    assert called == ["r_force"]
+    eng_mod.clear_restart("r_force")
+
+
+def test_restart_node_respawns_dead_engine(monkeypatch):
+    """引擎线程已丢失时，restart_node 应恢复线程并写入 DB 重启意图。"""
+    from backend_core.data_collectors.workflow import engine as eng_mod
+    from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine
+
+    run_id = "cwr_resume_ut"
+    engine = CollectionWorkflowEngine()
+    spawned = []
+
+    run = MagicMock()
+    run.run_id = run_id
+    run.status = "running"
+    run.current_node_index = 1
+    run.context = {"node_snapshot": []}
+    run.finished_at = None
+
+    node_run = MagicMock()
+    node_run.status = "running"
+    node_run.message = "执行中"
+
+    db = MagicMock()
+    q = MagicMock()
+    db.query.return_value = q
+    q.filter.return_value = q
+    q.first.side_effect = [run, node_run]
+
+    monkeypatch.setattr(eng_mod, "SessionLocal", lambda: db)
+    monkeypatch.setattr(eng_mod, "is_engine_thread_alive", lambda rid: False)
+    monkeypatch.setattr(eng_mod, "request_restart", lambda rid, oi=None: None)
+    monkeypatch.setattr(
+        eng_mod,
+        "mutex_try_acquire",
+        lambda kind, rid: (True, None, None),
+    )
+    monkeypatch.setattr(
+        engine,
+        "_spawn_engine_thread",
+        lambda rid: spawned.append(rid) or True,
+    )
+
+    assert engine.restart_node(run_id, 1) is True
+    assert spawned == [run_id]
+    assert run.context.get("restart_order_index") == 1
+    assert node_run.status == "pending"
+    assert "即将重跑" in (node_run.message or "")
+    db.commit.assert_called()
+    db.close.assert_called()
+
+
+def test_execute_returns_restart_requested(monkeypatch):
+    """执行中请求重启时，_execute_with_retry 应返回 restart_requested 而非 completed。"""
+    from backend_core.data_collectors.workflow import engine as eng_mod
+    from backend_core.data_collectors.workflow import node_registry as reg
+    from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine
+
+    key = "ut_restart_node"
+    calls = {"n": 0}
+    prev_sync = eng_mod._FORCE_SYNC_EXEC
+    eng_mod._FORCE_SYNC_EXEC = True
+
+    def _exec(ctx: WorkflowContext) -> NodeResult:
+        calls["n"] += 1
+        eng_mod.request_restart(ctx.run_id, 0)
+        return NodeResult.ok("done")
+
+    reg._BY_KEY[key] = CollectionNodeDef(key, key, "cn", _exec)
+    try:
+        engine = CollectionWorkflowEngine()
+        node_run = MagicMock()
+        node_run.started_at = None
+        node_run.status = "pending"
+        db = MagicMock()
+        ctx = WorkflowContext(run_id="cwr_r1", workflow_id=1, trigger_source="manual")
+        node_cfg = {
+            "order_index": 0,
+            "node_key": key,
+            "params": {},
+            "retry_count": 0,
+        }
+        eng_mod.clear_restart("cwr_r1")
+        result = engine._execute_with_retry(db, node_run, ctx, node_cfg, 0)
+        assert result.error == "restart_requested"
+        assert calls["n"] == 1
+        assert eng_mod.is_restart_requested("cwr_r1", 0)
+    finally:
+        eng_mod._FORCE_SYNC_EXEC = prev_sync
+        reg._BY_KEY.pop(key, None)
+        eng_mod.clear_restart("cwr_r1")
+

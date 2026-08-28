@@ -274,6 +274,46 @@ async def api_cancel_run(run_id: str, db: Session = Depends(get_db)):
     return {"success": True, "data": {"cancelled": ok, "run_id": run_id}}
 
 
+class RestartNodeRequest(BaseModel):
+    """重启正在运行的环节；不传 order_index 则重启当前节点。"""
+
+    order_index: Optional[int] = Field(
+        None, description="节点序号（与 node_runs.order_index 一致）；默认当前节点"
+    )
+
+
+@router.post("/runs/{run_id}/restart-node")
+async def api_restart_node(
+    run_id: str,
+    body: Optional[RestartNodeRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    强制停止流程中正在执行的环节并立即重跑该节点，然后继续后续环节。
+
+    节点在独立子进程中执行，重启时会对子进程 terminate/kill。
+    """
+    run = db.query(CollectionWorkflowRun).filter(CollectionWorkflowRun.run_id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    order_index = body.order_index if body else None
+    ok = workflow_engine.restart_node(run_id, order_index=order_index)
+    if not ok:
+        raise HTTPException(
+            status_code=409,
+            detail="无法重启：流程未在运行，或目标节点不是当前/运行中环节",
+        )
+    return {
+        "success": True,
+        "data": {
+            "restarted": True,
+            "run_id": run_id,
+            "order_index": order_index if order_index is not None else run.current_node_index,
+            "force": True,
+        },
+    }
+
+
 @router.get("/{workflow_id}")
 async def api_get_workflow(workflow_id: int, db: Session = Depends(get_db)):
     wf = db.query(CollectionWorkflow).filter(CollectionWorkflow.id == workflow_id).first()

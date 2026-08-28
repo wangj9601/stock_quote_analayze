@@ -295,9 +295,19 @@
               :type="timelineType(nr.status)"
               :timestamp="formatTime(nr.started_at)"
             >
-              <div>
-                <strong>#{{ nr.order_index + 1 }} {{ nr.node_key }}</strong>
-                <el-tag size="small" class="ml-2" :type="statusTag(nr.status)">{{ nr.status }}</el-tag>
+              <div class="node-run-row">
+                <div>
+                  <strong>#{{ nr.order_index + 1 }} {{ nr.node_key }}</strong>
+                  <el-tag size="small" class="ml-2" :type="statusTag(nr.status)">{{ nr.status }}</el-tag>
+                </div>
+                <el-button
+                  v-if="canRestartNode(currentRunDetail, nr)"
+                  link
+                  type="warning"
+                  size="small"
+                  :loading="restartingKey === `${currentRunDetail.run_id}:${nr.order_index}`"
+                  @click.stop="restartNode(currentRunDetail.run_id, nr.order_index)"
+                >重启</el-button>
               </div>
               <div class="muted">{{ nr.message }}</div>
               <div v-if="nr.error" class="error-text">{{ nr.error }}</div>
@@ -338,6 +348,7 @@ const dragFrom = ref<number | null>(null)
 const runs = ref<WorkflowRun[]>([])
 const runFilterWf = ref<number | undefined>()
 const currentRunDetail = ref<WorkflowRun | null>(null)
+const restartingKey = ref<string | null>(null)
 /** 运行记录 / 详情轮询间隔（毫秒） */
 const RUN_POLL_INTERVAL_MS = 30_000
 let pollTimer: number | null = null
@@ -675,6 +686,36 @@ async function cancelRun(runId: string) {
   }
 }
 
+function canRestartNode(run: WorkflowRun, nr: { status: string; order_index: number }) {
+  if (run.status !== 'running' && run.status !== 'pending') return false
+  if (nr.status === 'running') return true
+  return run.current_node_index === nr.order_index
+}
+
+async function restartNode(runId: string, orderIndex: number) {
+  const key = `${runId}:${orderIndex}`
+  try {
+    await ElMessageBox.confirm(
+      `确认强制停止并重跑第 ${orderIndex + 1} 个环节？将立即终止当前节点进程，然后重新执行该节点并继续后续环节。`,
+      '强制重启环节',
+      { type: 'warning', confirmButtonText: '强制重启', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  restartingKey.value = key
+  try {
+    await collectionWorkflowService.restartNode(runId, orderIndex)
+    ElMessage.success('已强制停止该环节，即将重跑')
+    await selectRun({ run_id: runId } as WorkflowRun)
+    await loadRuns()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '重启失败')
+  } finally {
+    restartingKey.value = null
+  }
+}
+
 function startPolling() {
   stopPolling()
   pollTimer = window.setInterval(async () => {
@@ -875,6 +916,12 @@ onUnmounted(() => stopPolling())
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fafafa;
+}
+.node-run-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .error-text {
   color: #dc2626;
