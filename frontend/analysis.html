@@ -120,7 +120,7 @@
                                 <strong>形态识别</strong>（与技术工具同口径）、
                                 <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
-                                自选股支持<strong>多选或全选</strong>；默认勾选「一次分析全部勾选」时，选多少分析多少（数量较多会确认）。
+                                自选股与<strong>行业龙头</strong>均支持多选或全选；默认勾选「一次分析全部勾选」时，选多少分析多少（数量较多会确认）。
                                 分析后每只股一个 Tab 页签切换查看。
                             </p>
                         </div>
@@ -139,6 +139,17 @@
                                             一次分析全部勾选
                                         </label>
                                         <span id="ssaWatchlistSummary" class="lm-board-picker-summary">未选择自选股，点击「选择自选」</span>
+                                    </div>
+                                </div>
+                                <div class="form-group ssa-watchlist-group">
+                                    <label>从行业龙头选择</label>
+                                    <div class="lm-board-picker-row ssa-watchlist-row">
+                                        <button type="button" class="btn btn-secondary" id="ssaLeaderPickBtn">选择行业龙头</button>
+                                        <label class="ssa-batch-all-opt" title="勾选后加载龙头时一并纳入板块中军股">
+                                            <input type="checkbox" id="ssaLeaderIncludeMid">
+                                            含中军
+                                        </label>
+                                        <span id="ssaLeaderSummary" class="lm-board-picker-summary">未选择行业龙头，点击「选择行业龙头」</span>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -217,7 +228,7 @@
                         </div>
 
                         <div class="ssa-empty" id="ssaEmpty">
-                            输入股票代码或名称，也可从自选选择后点击「分析」。
+                            输入股票代码或名称，也可从自选 / 行业龙头选择后点击「分析」。
                         </div>
                     </div>
                     <div class="ssa-scroll-fab" id="ssaScrollFab" aria-label="页面快速滚动">
@@ -1032,6 +1043,48 @@
             <div class="lm-modal-actions">
                 <button type="button" class="btn btn-secondary" id="ssaWatchlistPickerCancel">取消</button>
                 <button type="button" class="btn btn-primary" id="ssaWatchlistPickerConfirm">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 个股分析：行业龙头多选（先选行业板 → 再勾选龙头/中军） -->
+    <div id="ssaLeaderPickerModal" class="lm-modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="lm-modal-card lm-modal-card-wide" role="dialog" aria-labelledby="ssaLeaderPickerTitle">
+            <div class="lm-modal-header">
+                <h3 id="ssaLeaderPickerTitle">选择行业龙头股</h3>
+                <button type="button" class="lm-modal-close" id="ssaLeaderPickerClose" aria-label="关闭">×</button>
+            </div>
+            <p class="ssa-leader-picker-hint" id="ssaLeaderPickerHint">
+                步骤 1：勾选行业板块 →「加载龙头」；步骤 2：勾选股票后确定。可选「含中军」。
+            </p>
+            <div id="ssaLeaderStepBoards" class="ssa-leader-step">
+                <div class="lm-board-picker-toolbar">
+                    <input type="search" id="ssaLeaderBoardSearch" class="lm-board-picker-search" placeholder="搜索行业板块名称或代码">
+                    <span id="ssaLeaderBoardCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="ssaLeaderBoardSelectAll">全选当前</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="ssaLeaderBoardClear">清空当前</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="ssaLeaderLoadStocksBtnTop">加载龙头</button>
+                </div>
+                <div id="ssaLeaderBoardList" class="lm-board-picker-list"></div>
+                <div class="lm-modal-actions">
+                    <button type="button" class="btn btn-secondary" id="ssaLeaderPickerCancel">取消</button>
+                    <button type="button" class="btn btn-primary" id="ssaLeaderLoadStocksBtn">加载龙头 →</button>
+                </div>
+            </div>
+            <div id="ssaLeaderStepStocks" class="ssa-leader-step" hidden>
+                <div class="lm-board-picker-toolbar">
+                    <input type="search" id="ssaLeaderStockSearch" class="lm-board-picker-search" placeholder="搜索股票代码或名称">
+                    <span id="ssaLeaderStockCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="ssaLeaderStockSelectAll">全选当前</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="ssaLeaderStockClear">清空当前</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="ssaLeaderBackToBoards">返回选板</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="ssaLeaderStockConfirmTop">确定</button>
+                </div>
+                <div id="ssaLeaderStockList" class="lm-board-picker-list"></div>
+                <div class="lm-modal-actions">
+                    <button type="button" class="btn btn-secondary" id="ssaLeaderStockCancel">取消</button>
+                    <button type="button" class="btn btn-primary" id="ssaLeaderStockConfirm">确定</button>
+                </div>
             </div>
         </div>
     </div>

@@ -23,6 +23,9 @@ const StockMultiStrategy = {
     stockSessions: {},
     activeSessionKey: null,
     watchlistStocks: [],
+    industryBoardCatalog: [],
+    leaderStockOptions: [],
+    _industryCatalogLoaded: false,
 
     init() {
         const btn = document.getElementById('ssaAnalyzeBtn');
@@ -59,6 +62,7 @@ const StockMultiStrategy = {
             });
         }
         this.bindWatchlistPanel();
+        this.bindLeaderPanel();
         const dateEl = document.getElementById('ssaTradeDate');
         if (dateEl) {
             dateEl.addEventListener('change', () => this.updateTradeObserveBtn());
@@ -437,6 +441,478 @@ const StockMultiStrategy = {
         }
     },
 
+
+    bindLeaderPanel() {
+        if (this._leaderBound || this.embeddedMode) return;
+        const pickBtn = document.getElementById('ssaLeaderPickBtn');
+        const overlay = document.getElementById('ssaLeaderPickerModal');
+        if (!pickBtn || !overlay) return;
+        this._leaderBound = true;
+        this._leaderSelectedBoardCodes = [];
+        this._leaderBoardDraft = new Set();
+        this._leaderSelectedCodes = new Set();
+        this._leaderStockDraft = new Set();
+        this.leaderStockOptions = [];
+
+        pickBtn.addEventListener('click', () => {
+            void this.openLeaderPicker();
+        });
+        ['ssaLeaderPickerClose', 'ssaLeaderPickerCancel', 'ssaLeaderStockCancel'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('click', () => this.hideLeaderPicker());
+        });
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.hideLeaderPicker();
+        });
+
+        const boardSearch = document.getElementById('ssaLeaderBoardSearch');
+        if (boardSearch) {
+            boardSearch.addEventListener('input', () => this.renderLeaderBoardList());
+            boardSearch.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.hideLeaderPicker();
+                }
+            });
+        }
+        const stockSearch = document.getElementById('ssaLeaderStockSearch');
+        if (stockSearch) {
+            stockSearch.addEventListener('input', () => this.renderLeaderStockList());
+        }
+        const boardSelAll = document.getElementById('ssaLeaderBoardSelectAll');
+        if (boardSelAll) {
+            boardSelAll.addEventListener('click', () => this.leaderBoardSelectAllVisible());
+        }
+        const boardClear = document.getElementById('ssaLeaderBoardClear');
+        if (boardClear) {
+            boardClear.addEventListener('click', () => this.leaderBoardClearVisible());
+        }
+        const loadBtn = document.getElementById('ssaLeaderLoadStocksBtn');
+        if (loadBtn) {
+            loadBtn.addEventListener('click', () => {
+                void this.loadLeaderStocksFromBoards();
+            });
+        }
+        const loadBtnTop = document.getElementById('ssaLeaderLoadStocksBtnTop');
+        if (loadBtnTop) {
+            loadBtnTop.addEventListener('click', () => {
+                void this.loadLeaderStocksFromBoards();
+            });
+        }
+        const backBtn = document.getElementById('ssaLeaderBackToBoards');
+        if (backBtn) {
+            backBtn.addEventListener('click', () => this.showLeaderBoardStep());
+        }
+        const stockSelAll = document.getElementById('ssaLeaderStockSelectAll');
+        if (stockSelAll) {
+            stockSelAll.addEventListener('click', () => this.leaderStockSelectAllVisible());
+        }
+        const stockClear = document.getElementById('ssaLeaderStockClear');
+        if (stockClear) {
+            stockClear.addEventListener('click', () => this.leaderStockClearVisible());
+        }
+        const confirmBtn = document.getElementById('ssaLeaderStockConfirm');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => this.confirmLeaderPicker());
+        }
+        const confirmBtnTop = document.getElementById('ssaLeaderStockConfirmTop');
+        if (confirmBtnTop) {
+            confirmBtnTop.addEventListener('click', () => this.confirmLeaderPicker());
+        }
+        const boardList = document.getElementById('ssaLeaderBoardList');
+        if (boardList) {
+            boardList.addEventListener('change', (e) => {
+                const t = e.target;
+                if (!t || !t.matches('input[type="checkbox"][data-board-code]')) return;
+                const code = t.getAttribute('data-board-code') || '';
+                if (!code) return;
+                if (t.checked) this._leaderBoardDraft.add(code);
+                else this._leaderBoardDraft.delete(code);
+                this.updateLeaderBoardCount();
+            });
+        }
+        const stockList = document.getElementById('ssaLeaderStockList');
+        if (stockList) {
+            stockList.addEventListener('change', (e) => {
+                const t = e.target;
+                if (!t || !t.matches('input[type="checkbox"][data-code]')) return;
+                const code = t.getAttribute('data-code') || '';
+                if (!code) return;
+                if (t.checked) this._leaderStockDraft.add(code);
+                else this._leaderStockDraft.delete(code);
+                this.updateLeaderStockCount();
+            });
+        }
+        this.updateLeaderSummary();
+    },
+
+    async openLeaderPicker() {
+        await this.loadIndustryBoardCatalog();
+        this._leaderBoardDraft = new Set(this._leaderSelectedBoardCodes || []);
+        const boardSearch = document.getElementById('ssaLeaderBoardSearch');
+        if (boardSearch) boardSearch.value = '';
+        const stockSearch = document.getElementById('ssaLeaderStockSearch');
+        if (stockSearch) stockSearch.value = '';
+        this.showLeaderBoardStep();
+        this.renderLeaderBoardList();
+        const overlay = document.getElementById('ssaLeaderPickerModal');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+        if (boardSearch) window.setTimeout(() => boardSearch.focus(), 0);
+    },
+
+    hideLeaderPicker() {
+        const overlay = document.getElementById('ssaLeaderPickerModal');
+        if (overlay) {
+            overlay.style.display = 'none';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+    },
+
+    showLeaderBoardStep() {
+        const boards = document.getElementById('ssaLeaderStepBoards');
+        const stocks = document.getElementById('ssaLeaderStepStocks');
+        if (boards) boards.hidden = false;
+        if (stocks) stocks.hidden = true;
+        const hint = document.getElementById('ssaLeaderPickerHint');
+        if (hint) {
+            hint.textContent = '步骤 1：勾选行业板块 →「加载龙头」；步骤 2：勾选股票后确定。可选「含中军」。';
+        }
+        const title = document.getElementById('ssaLeaderPickerTitle');
+        if (title) title.textContent = '选择行业龙头股 · 选板块';
+    },
+
+    showLeaderStockStep() {
+        const boards = document.getElementById('ssaLeaderStepBoards');
+        const stocks = document.getElementById('ssaLeaderStepStocks');
+        if (boards) boards.hidden = true;
+        if (stocks) stocks.hidden = false;
+        const hint = document.getElementById('ssaLeaderPickerHint');
+        if (hint) {
+            const n = (this.leaderStockOptions || []).length;
+            const includeMid = !!document.getElementById('ssaLeaderIncludeMid')?.checked;
+            hint.textContent = `步骤 2：已加载 ${n} 只（${includeMid ? '龙头+中军' : '仅龙头'}），勾选后确定。`;
+        }
+        const title = document.getElementById('ssaLeaderPickerTitle');
+        if (title) title.textContent = '选择行业龙头股 · 选股票';
+    },
+
+    async loadIndustryBoardCatalog() {
+        if (this._industryCatalogLoaded) return;
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        try {
+            const resp = await authFetch(
+                `${this.API_BASE_URL}/api/market/industry_board/list?board_code_source=tonghuashun`
+            );
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            const payload = await resp.json();
+            this.industryBoardCatalog = Array.isArray(payload.data) ? payload.data : [];
+            this._industryCatalogLoaded = true;
+        } catch (e) {
+            console.warn('加载行业板块失败', e);
+            CommonUtils.showToast('加载行业板块失败', 'error');
+        }
+    },
+
+    _filteredLeaderBoards() {
+        const q = String(document.getElementById('ssaLeaderBoardSearch')?.value || '')
+            .trim()
+            .toLowerCase();
+        const items = this.industryBoardCatalog || [];
+        if (!q) return items.slice();
+        return items.filter((b) => {
+            const text = `${b.board_code || ''} ${b.board_name || ''}`.toLowerCase();
+            return text.includes(q);
+        });
+    },
+
+    updateLeaderBoardCount() {
+        const countEl = document.getElementById('ssaLeaderBoardCount');
+        if (!countEl) return;
+        const total = (this.industryBoardCatalog || []).length;
+        const filtered = this._filteredLeaderBoards().length;
+        const selected = (this._leaderBoardDraft || new Set()).size;
+        const q = String(document.getElementById('ssaLeaderBoardSearch')?.value || '').trim();
+        countEl.textContent = q
+            ? `匹配 ${filtered} / 共 ${total} · 已勾选 ${selected}`
+            : `共 ${total} 个可选 · 已勾选 ${selected}`;
+    },
+
+    renderLeaderBoardList() {
+        const listEl = document.getElementById('ssaLeaderBoardList');
+        if (!listEl) return;
+        const items = this._filteredLeaderBoards();
+        this.updateLeaderBoardCount();
+        if (!(this.industryBoardCatalog || []).length) {
+            listEl.innerHTML = '<div class="lm-board-picker-empty">暂无行业板块数据</div>';
+            return;
+        }
+        if (!items.length) {
+            listEl.innerHTML = '<div class="lm-board-picker-empty">无匹配板块</div>';
+            return;
+        }
+        const draft = this._leaderBoardDraft || new Set();
+        listEl.innerHTML = items.map((b) => {
+            const code = String(b.board_code || '').trim();
+            const name = String(b.board_name || '').trim();
+            const checked = draft.has(code) ? ' checked' : '';
+            const title = name ? `${name}（${code}）` : code;
+            return `<label class="lm-board-picker-item" title="${this.escAttr(title)}">
+                <input type="checkbox" data-board-code="${this.escAttr(code)}"${checked}>
+                <span class="lm-board-picker-item-text">
+                    <span class="lm-board-picker-name">${this.esc(name || code)}</span>
+                    <span class="lm-board-picker-code">${this.esc(code)}</span>
+                </span>
+            </label>`;
+        }).join('');
+    },
+
+    leaderBoardSelectAllVisible() {
+        this._filteredLeaderBoards().forEach((b) => {
+            const code = String(b.board_code || '').trim();
+            if (code) this._leaderBoardDraft.add(code);
+        });
+        this.renderLeaderBoardList();
+    },
+
+    leaderBoardClearVisible() {
+        this._filteredLeaderBoards().forEach((b) => {
+            const code = String(b.board_code || '').trim();
+            if (code) this._leaderBoardDraft.delete(code);
+        });
+        this.renderLeaderBoardList();
+    },
+
+    async loadLeaderStocksFromBoards() {
+        const boardCodes = Array.from(this._leaderBoardDraft || []);
+        if (!boardCodes.length) {
+            CommonUtils.showToast('请先勾选至少一个行业板块', 'warning');
+            return;
+        }
+        if (boardCodes.length > 40) {
+            const ok = window.confirm(
+                `已选 ${boardCodes.length} 个板块，加载龙头可能较慢，是否继续？`
+            );
+            if (!ok) return;
+        }
+        const includeMid = !!document.getElementById('ssaLeaderIncludeMid')?.checked;
+        const loadBtns = [
+            document.getElementById('ssaLeaderLoadStocksBtn'),
+            document.getElementById('ssaLeaderLoadStocksBtnTop'),
+        ].filter(Boolean);
+        loadBtns.forEach((btn) => {
+            btn.disabled = true;
+            btn.textContent = '加载中…';
+        });
+        try {
+            const byCode = new Map();
+            const concurrency = 6;
+            let idx = 0;
+            const worker = async () => {
+                while (idx < boardCodes.length) {
+                    const i = idx;
+                    idx += 1;
+                    const boardCode = boardCodes[i];
+                    const board = (this.industryBoardCatalog || []).find(
+                        (x) => String(x.board_code) === String(boardCode)
+                    );
+                    const boardName = board ? (board.board_name || boardCode) : boardCode;
+                    try {
+                        const url =
+                            `${this.API_BASE_URL}/api/market/industry_board/` +
+                            `${encodeURIComponent(boardCode)}/roles?board_code_source=tonghuashun`;
+                        const resp = await authFetch(url);
+                        if (!resp.ok) continue;
+                        const payload = await resp.json();
+                        const data = payload.data || {};
+                        const leaders = Array.isArray(data.leaders) ? data.leaders : [];
+                        const mids = includeMid && Array.isArray(data.mids) ? data.mids : [];
+                        [...leaders, ...mids].forEach((item) => {
+                            const code = String(item.code || item.stock_code || '').trim();
+                            if (!code) return;
+                            const name = String(item.name || item.stock_name || '').trim();
+                            const role = String(item.board_role || '').toLowerCase() === 'mid'
+                                ? 'mid'
+                                : 'leader';
+                            const prev = byCode.get(code);
+                            if (!prev) {
+                                byCode.set(code, {
+                                    code,
+                                    name,
+                                    role,
+                                    board_name: boardName,
+                                    board_code: boardCode,
+                                });
+                                return;
+                            }
+                            if (prev.role !== 'leader' && role === 'leader') {
+                                prev.role = 'leader';
+                            }
+                            if (boardName && !(prev.board_name || '').includes(boardName)) {
+                                prev.board_name = prev.board_name
+                                    ? `${prev.board_name}、${boardName}`
+                                    : boardName;
+                            }
+                        });
+                    } catch (e) {
+                        console.warn('加载板块龙头失败', boardCode, e);
+                    }
+                }
+            };
+            await Promise.all(
+                Array.from({ length: Math.min(concurrency, boardCodes.length) }, () => worker())
+            );
+            this.leaderStockOptions = Array.from(byCode.values()).sort((a, b) =>
+                String(a.code).localeCompare(String(b.code))
+            );
+            this._leaderSelectedBoardCodes = boardCodes.slice();
+            this._leaderStockDraft = new Set(
+                (this._leaderSelectedCodes && this._leaderSelectedCodes.size)
+                    ? Array.from(this._leaderSelectedCodes).filter((c) => byCode.has(c))
+                    : this.leaderStockOptions.map((s) => s.code)
+            );
+            if (!this.leaderStockOptions.length) {
+                CommonUtils.showToast('所选板块暂无龙头/中军数据', 'warning');
+                return;
+            }
+            this.showLeaderStockStep();
+            this.renderLeaderStockList();
+        } finally {
+            loadBtns.forEach((btn) => {
+                btn.disabled = false;
+                btn.textContent = btn.id === 'ssaLeaderLoadStocksBtn' ? '加载龙头 →' : '加载龙头';
+            });
+        }
+    },
+
+    _filteredLeaderStocks() {
+        const q = String(document.getElementById('ssaLeaderStockSearch')?.value || '')
+            .trim()
+            .toLowerCase();
+        const items = this.leaderStockOptions || [];
+        if (!q) return items.slice();
+        return items.filter((item) => {
+            const text = `${item.code || ''} ${item.name || ''} ${item.board_name || ''}`.toLowerCase();
+            return text.includes(q);
+        });
+    },
+
+    updateLeaderStockCount() {
+        const countEl = document.getElementById('ssaLeaderStockCount');
+        if (!countEl) return;
+        const total = (this.leaderStockOptions || []).length;
+        const filtered = this._filteredLeaderStocks().length;
+        const selected = (this._leaderStockDraft || new Set()).size;
+        const q = String(document.getElementById('ssaLeaderStockSearch')?.value || '').trim();
+        countEl.textContent = q
+            ? `匹配 ${filtered} / 共 ${total} · 已勾选 ${selected}`
+            : `共 ${total} 个可选 · 已勾选 ${selected}`;
+    },
+
+    renderLeaderStockList() {
+        const listEl = document.getElementById('ssaLeaderStockList');
+        if (!listEl) return;
+        const items = this._filteredLeaderStocks();
+        this.updateLeaderStockCount();
+        if (!(this.leaderStockOptions || []).length) {
+            listEl.innerHTML = '<div class="lm-board-picker-empty">暂无龙头股，请返回重新选板加载</div>';
+            return;
+        }
+        if (!items.length) {
+            listEl.innerHTML = '<div class="lm-board-picker-empty">无匹配股票</div>';
+            return;
+        }
+        const draft = this._leaderStockDraft || new Set();
+        listEl.innerHTML = items.map((item) => {
+            const code = item.code || '';
+            const name = item.name || '';
+            const role = item.role === 'mid' ? 'mid' : 'leader';
+            const roleLabel = role === 'mid' ? '中军' : '龙头';
+            const checked = draft.has(code) ? ' checked' : '';
+            const boardMeta = item.board_name
+                ? `<span class="ssa-leader-board-meta">${this.esc(item.board_name)}</span>`
+                : '';
+            const title = name ? `${code} ${name}` : code;
+            return `<label class="lm-board-picker-item" title="${this.escAttr(title)}">
+                <input type="checkbox" data-code="${this.escAttr(code)}" data-name="${this.escAttr(name)}"${checked}>
+                <span class="lm-board-picker-item-text">
+                    <span class="lm-board-picker-name">
+                        ${this.esc(name || code)}
+                        <span class="ssa-leader-role-tag${role === 'mid' ? ' is-mid' : ''}">${roleLabel}</span>
+                    </span>
+                    <span class="lm-board-picker-code">${this.esc(code)}</span>
+                    ${boardMeta}
+                </span>
+            </label>`;
+        }).join('');
+    },
+
+    leaderStockSelectAllVisible() {
+        this._filteredLeaderStocks().forEach((item) => {
+            if (item.code) this._leaderStockDraft.add(item.code);
+        });
+        this.renderLeaderStockList();
+    },
+
+    leaderStockClearVisible() {
+        this._filteredLeaderStocks().forEach((item) => {
+            if (item.code) this._leaderStockDraft.delete(item.code);
+        });
+        this.renderLeaderStockList();
+    },
+
+    confirmLeaderPicker() {
+        this._leaderSelectedCodes = new Set(this._leaderStockDraft || []);
+        this.updateLeaderSummary();
+        this.hideLeaderPicker();
+    },
+
+    updateLeaderSummary() {
+        const el = document.getElementById('ssaLeaderSummary');
+        if (!el) return;
+        const selected = this.getSelectedLeaderStocks();
+        const n = selected.length;
+        const boards = (this._leaderSelectedBoardCodes || []).length;
+        if (!n) {
+            el.textContent = boards
+                ? `未勾选龙头股（已备选板块 ${boards} 个），点击「选择行业龙头」`
+                : '未选择行业龙头，点击「选择行业龙头」';
+            return;
+        }
+        if (n <= 3) {
+            el.textContent = `已选 ${n} 只：${selected.map((s) => (s.name ? `${s.code} ${s.name}` : s.code)).join('、')}`;
+            return;
+        }
+        const preview = selected.slice(0, 2).map((s) => (s.name ? `${s.code} ${s.name}` : s.code)).join('、');
+        el.textContent = `已选 ${n} 只：${preview} 等`;
+    },
+
+    getSelectedLeaderStocks() {
+        const codes = this._leaderSelectedCodes || new Set();
+        if (!codes.size) return [];
+        const byCode = new Map((this.leaderStockOptions || []).map((s) => [s.code, s]));
+        return Array.from(codes).map((code) => {
+            const hit = byCode.get(code);
+            return { code, name: (hit && hit.name) || '' };
+        }).filter((item) => item.code);
+    },
+
+    /** 自选 + 行业龙头去重合并，供批量分析 */
+    getSelectedBatchStocks() {
+        const map = new Map();
+        this.getSelectedWatchlistStocks().forEach((s) => {
+            if (s.code) map.set(s.code, s);
+        });
+        this.getSelectedLeaderStocks().forEach((s) => {
+            if (!s.code) return;
+            if (!map.has(s.code)) map.set(s.code, s);
+            else if (s.name && !map.get(s.code).name) map.set(s.code, s);
+        });
+        return Array.from(map.values());
+    },
+
     _sessionKey(code) {
         let c = String(code || '').trim();
         if (/^(sh|sz|bj|hk)/i.test(c)) c = c.slice(2);
@@ -517,10 +993,14 @@ const StockMultiStrategy = {
 
         delete this.stockSessions[key];
 
-        // 同步取消自选勾选状态（若仍在已选集合中）
+        // 同步取消自选 / 行业龙头勾选状态（若仍在已选集合中）
         if (this._watchlistSelectedCodes && this._watchlistSelectedCodes.has(key)) {
             this._watchlistSelectedCodes.delete(key);
             this.updateWatchlistSummary();
+        }
+        if (this._leaderSelectedCodes && this._leaderSelectedCodes.has(key)) {
+            this._leaderSelectedCodes.delete(key);
+            this.updateLeaderSummary();
         }
 
         const remain = Object.keys(this.stockSessions);
@@ -531,7 +1011,7 @@ const StockMultiStrategy = {
             const empty = document.getElementById('ssaEmpty');
             if (empty) {
                 empty.hidden = false;
-                empty.textContent = '已关闭全部标签。可重新选择自选股或输入代码后分析。';
+                empty.textContent = '已关闭全部标签。可重新选择自选股 / 行业龙头或输入代码后分析。';
             }
             this.updateExportBtn();
             return;
@@ -1838,7 +2318,7 @@ const StockMultiStrategy = {
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
 
         if (!this.embeddedMode) {
-            const selected = this.getSelectedWatchlistStocks();
+            const selected = this.getSelectedBatchStocks();
             if (selected.length > 0) {
                 return this.analyzeWatchlistBatch(selected);
             }
@@ -1847,7 +2327,7 @@ const StockMultiStrategy = {
         const resolved = this._resolveAnalyzeQuery();
         if (!resolved) {
             if (this.embeddedMode) return;
-            CommonUtils.showToast('请输入股票代码或名称，或勾选自选股', 'warning');
+            CommonUtils.showToast('请输入股票代码或名称，或勾选自选股 / 行业龙头', 'warning');
             const codeInput = document.getElementById('ssaStockCode');
             if (codeInput && codeInput.focus) codeInput.focus();
             return;
