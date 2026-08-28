@@ -645,12 +645,11 @@ const ScreeningPage = {
         };
         tbody.innerHTML = this.urtTradeObserveItems.map((it, index) => {
             const snap = it.snapshot || {};
-            // 代码列 → 智能分析「个股分析」页（与 URT 策略信号 / 龙头中军同口径）
-            const urtAnalysisQ = new URLSearchParams({ tab: 'stock-ai' });
+            // 代码列 → 个股详情「交易分析」Tab
             const urtCode = String(it.code || '').trim();
-            if (urtCode) urtAnalysisQ.set('code', urtCode);
-            if (it.name) urtAnalysisQ.set('name', String(it.name));
-            const href = `analysis.html?${urtAnalysisQ.toString()}`;
+            const href = (window.StockTradeLink && window.StockTradeLink.buildHref)
+                ? window.StockTradeLink.buildHref(urtCode, it.name, { tab: 'analysis' })
+                : `stock.html?tab=analysis&code=${encodeURIComponent(urtCode)}${it.name ? `&name=${encodeURIComponent(it.name)}` : ''}`;
             const traceHref = `stock_urt_trace.html?code=${encodeURIComponent(it.code)}&name=${encodeURIComponent(it.name || '')}`;
             const qfqTag = snap.price_adjust === 'qfq' ? '前复权 ' : '';
             const nearSup = snap.nearest_support;
@@ -5700,11 +5699,10 @@ const ScreeningPage = {
                 const urtCode = String(stock.code || '');
                 const urtMarket = 'CN';
                 const urtAlreadyObserve = this._isUrtInTradeObserve(stock, urtMarket, urtCode);
-                // 代码列 → 智能分析「个股分析」页（与龙头/中军芯片同口径）
-                const urtAnalysisQ = new URLSearchParams({ tab: 'stock-ai' });
-                if (urtCode) urtAnalysisQ.set('code', urtCode);
-                if (stock.name) urtAnalysisQ.set('name', String(stock.name));
-                const urtDetailHref = `analysis.html?${urtAnalysisQ.toString()}`;
+                // 代码列 → 个股详情「交易分析」Tab
+                const urtDetailHref = (window.StockTradeLink && window.StockTradeLink.buildHref)
+                    ? window.StockTradeLink.buildHref(urtCode, stock.name, { tab: 'analysis' })
+                    : `stock.html?tab=analysis&code=${encodeURIComponent(urtCode)}${stock.name ? `&name=${encodeURIComponent(stock.name)}` : ''}`;
                 const urtTraceHref = `stock_urt_trace.html?code=${encodeURIComponent(urtCode)}&name=${encodeURIComponent(stock.name || '')}`;
                 let urtScoreDetailHtml = '<div class="gms-score-detail-inner">得分明细组件未加载</div>';
                 if (window.UrtScoreDetail && typeof window.UrtScoreDetail.buildHtml === 'function') {

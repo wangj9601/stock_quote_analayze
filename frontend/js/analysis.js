@@ -5,6 +5,9 @@ const AnalysisPage = {
 
     // 初始化
     init() {
+        if (window.StockTradeLink && StockTradeLink.redirectFromAnalysisDeepLink()) {
+            return;
+        }
         this.bindEvents();
         if (window.BoardAnalysis) BoardAnalysis.init();
         if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();

@@ -582,7 +582,9 @@ const LeaderMidAnalysis = {
         const boardCell = multi
           ? `<td class="lm-boards" title="${this.escAttr(row.board_labels || '')}">${this.esc(row.board_labels || '--')}</td>`
           : '';
-        const analysisHref = `analysis.html?tab=stock-ai&code=${encodeURIComponent(code)}${name ? `&name=${encodeURIComponent(name)}` : ''}`;
+        const analysisHref = (window.StockTradeLink && window.StockTradeLink.buildHref)
+            ? window.StockTradeLink.buildHref(code, name, { tab: 'analysis' })
+            : `stock.html?tab=analysis&code=${encodeURIComponent(code)}${name ? `&name=${encodeURIComponent(name)}` : ''}`;
         return `<tr class="${row.any_hit ? 'lm-row--hit' : ''}">
           <td><a class="ba-stock-code-link" href="${this.escAttr(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${this.esc(code)}</a>
             <div class="lm-muted">${this.esc(name)}</div></td>

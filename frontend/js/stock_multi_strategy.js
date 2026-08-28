@@ -16,6 +16,13 @@ const StockMultiStrategy = {
     lastSwing: null,
     lastGann: null,
     lastTradePlan: null,
+    embeddedMode: false,
+    MAX_WATCHLIST_BATCH: 0,
+    /** 未勾选「一次分析全部」时的建议上限；0 表示不限制 */
+    WATCHLIST_BATCH_SOFT_LIMIT: 15,
+    stockSessions: {},
+    activeSessionKey: null,
+    watchlistStocks: [],
 
     init() {
         const btn = document.getElementById('ssaAnalyzeBtn');
@@ -51,14 +58,7 @@ const StockMultiStrategy = {
                 this.updateGannTradeObserveBtn();
             });
         }
-        const watchSelect = document.getElementById('ssaWatchlist');
-        if (watchSelect) {
-            watchSelect.addEventListener('change', () => {
-                const val = (watchSelect.value || '').trim();
-                if (val && codeInput) codeInput.value = val;
-                this.updateTradeObserveBtn();
-            });
-        }
+        this.bindWatchlistPanel();
         const dateEl = document.getElementById('ssaTradeDate');
         if (dateEl) {
             dateEl.addEventListener('change', () => this.updateTradeObserveBtn());
@@ -68,9 +68,74 @@ const StockMultiStrategy = {
         this.bindScrollFab();
     },
 
+    /** 个股详情页嵌入式面板：无代码输入框，按钮文案为「刷新」。 */
+    initEmbedded() {
+        if (this._embeddedInited) return;
+        this._embeddedInited = true;
+        this.embeddedMode = true;
+        const btn = document.getElementById('ssaAnalyzeBtn');
+        if (btn) {
+            btn.textContent = '刷新';
+            btn.addEventListener('click', () => this.analyze());
+        }
+        const exportBtn = document.getElementById('ssaExportPdfBtn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => this.exportPdf());
+        }
+        const exportPngBtn = document.getElementById('ssaExportPngBtn');
+        if (exportPngBtn) {
+            exportPngBtn.addEventListener('click', () => this.exportPng());
+        }
+        const observeBtn = document.getElementById('ssaTradeObserveBtn');
+        if (observeBtn) {
+            observeBtn.addEventListener('click', () => this.addTradeObserve());
+        }
+        const gannObserveBtn = document.getElementById('ssaGannTradeObserveBtn');
+        if (gannObserveBtn) {
+            gannObserveBtn.addEventListener('click', () => this.addGannTradeObserve());
+        }
+        const dateEl = document.getElementById('ssaTradeDate');
+        if (dateEl) {
+            dateEl.addEventListener('change', () => this.updateTradeObserveBtn());
+        }
+        this.updateExportBtn();
+        this.updateTradeObserveBtn();
+    },
+
+    /** 嵌入模式：由详情页传入 code/name 触发分析。 */
+    async analyzeForCode(code, name) {
+        const codeInput = document.getElementById('ssaStockCode');
+        if (!codeInput) {
+            this._pendingQuery = { code: String(code || '').trim(), name: String(name || '').trim() };
+            return this.analyze();
+        }
+        const c = String(code || '').trim();
+        const n = String(name || '').trim();
+        codeInput.value = n ? `${c} ${n}` : c;
+        this.embeddedMode = true;
+        return this.analyze();
+    },
+
+    _resolveAnalyzeQuery() {
+        const codeInput = document.getElementById('ssaStockCode');
+        if (codeInput && (codeInput.value || '').trim()) {
+            let query = (codeInput.value || '').trim();
+            const firstToken = query.split(/\s+/)[0];
+            const firstBody = /^(sh|sz|bj|hk)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
+            if (/^\d{4,6}$/.test(firstBody)) query = firstToken;
+            return { query, firstToken };
+        }
+        if (this._pendingQuery && this._pendingQuery.code) {
+            const c = this._pendingQuery.code;
+            const n = this._pendingQuery.name || '';
+            return { query: n ? `${c} ${n}` : c, firstToken: c.split(/\s+/)[0] };
+        }
+        return null;
+    },
+
     /**
      * 从 URL ?code=&name= 填入个股分析输入框并自动分析（仅执行一次）。
-     * 供 analysis.html?tab=stock-ai&code=xxx 深链（如龙头/中军标签跳转）使用。
+     * 供个股详情页交易分析 Tab 或 analysis 页手动分析使用。
      */
     bootstrapFromUrl() {
         if (this._urlBootstrapped) return;
@@ -161,32 +226,479 @@ const StockMultiStrategy = {
         window.setTimeout(() => this.syncScrollFab(), 350);
     },
 
+    bindWatchlistPanel() {
+        if (this._watchlistBound || this.embeddedMode) return;
+        const pickBtn = document.getElementById('ssaWatchlistPickBtn');
+        const overlay = document.getElementById('ssaWatchlistPickerModal');
+        if (!pickBtn || !overlay) return;
+        this._watchlistBound = true;
+        this._watchlistSelectedCodes = new Set();
+        this._watchlistPickerDraft = new Set();
+
+        pickBtn.addEventListener('click', () => {
+            void this.openWatchlistPicker();
+        });
+        ['ssaWatchlistPickerClose', 'ssaWatchlistPickerCancel'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('click', () => this.hideWatchlistPicker());
+        });
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) this.hideWatchlistPicker();
+        });
+        const searchEl = document.getElementById('ssaWatchlistPickerSearch');
+        if (searchEl) {
+            searchEl.addEventListener('input', () => this.renderWatchlistPickerList());
+            searchEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.hideWatchlistPicker();
+                }
+            });
+        }
+        const selAll = document.getElementById('ssaWatchlistPickerSelectAll');
+        if (selAll) {
+            selAll.addEventListener('click', () => this.watchlistPickerSelectAllVisible());
+        }
+        const clearBtn = document.getElementById('ssaWatchlistPickerClear');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.watchlistPickerClearVisible());
+        }
+        const confirmBtn = document.getElementById('ssaWatchlistPickerConfirm');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', () => this.confirmWatchlistPicker());
+        }
+        const listEl = document.getElementById('ssaWatchlistPickerList');
+        if (listEl) {
+            listEl.addEventListener('change', (e) => {
+                const t = e.target;
+                if (!t || !t.matches('input[type="checkbox"][data-code]')) return;
+                const code = t.getAttribute('data-code') || '';
+                if (!code) return;
+                if (t.checked) this._watchlistPickerDraft.add(code);
+                else this._watchlistPickerDraft.delete(code);
+                this.updateWatchlistPickerCount();
+            });
+        }
+        this.updateWatchlistSummary();
+    },
+
+    async openWatchlistPicker() {
+        await this.loadWatchlistOptions();
+        this._watchlistPickerDraft = new Set(this._watchlistSelectedCodes || []);
+        const searchEl = document.getElementById('ssaWatchlistPickerSearch');
+        if (searchEl) searchEl.value = '';
+        this.renderWatchlistPickerList();
+        const overlay = document.getElementById('ssaWatchlistPickerModal');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+        if (searchEl) window.setTimeout(() => searchEl.focus(), 0);
+    },
+
+    hideWatchlistPicker() {
+        const overlay = document.getElementById('ssaWatchlistPickerModal');
+        if (overlay) {
+            overlay.style.display = 'none';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+    },
+
+    _filteredWatchlistItems() {
+        const q = String(document.getElementById('ssaWatchlistPickerSearch')?.value || '')
+            .trim()
+            .toLowerCase();
+        const items = this.watchlistStocks || [];
+        if (!q) return items.slice();
+        return items.filter((item) => {
+            const text = `${item.code || ''} ${item.name || ''}`.toLowerCase();
+            return text.includes(q);
+        });
+    },
+
+    updateWatchlistPickerCount() {
+        const countEl = document.getElementById('ssaWatchlistPickerCount');
+        if (!countEl) return;
+        const total = (this.watchlistStocks || []).length;
+        const filtered = this._filteredWatchlistItems().length;
+        const selected = (this._watchlistPickerDraft || new Set()).size;
+        const q = String(document.getElementById('ssaWatchlistPickerSearch')?.value || '').trim();
+        if (q) {
+            countEl.textContent = `匹配 ${filtered} / 共 ${total} · 已勾选 ${selected}`;
+        } else {
+            countEl.textContent = `共 ${total} 个可选 · 已勾选 ${selected}`;
+        }
+    },
+
+    renderWatchlistPickerList() {
+        const listEl = document.getElementById('ssaWatchlistPickerList');
+        if (!listEl) return;
+        const items = this._filteredWatchlistItems();
+        this.updateWatchlistPickerCount();
+        if (!(this.watchlistStocks || []).length) {
+            listEl.innerHTML = '<div class="lm-board-picker-empty">暂无自选股，请先在自选页添加</div>';
+            return;
+        }
+        if (!items.length) {
+            listEl.innerHTML = '<div class="lm-board-picker-empty">无匹配股票</div>';
+            return;
+        }
+        const draft = this._watchlistPickerDraft || new Set();
+        listEl.innerHTML = items.map((item) => {
+            const code = item.code || '';
+            const name = item.name || '';
+            const checked = draft.has(code) ? ' checked' : '';
+            const title = name ? `${code} ${name}` : code;
+            return `<label class="lm-board-picker-item" title="${this.escAttr(title)}">
+                <input type="checkbox" data-code="${this.escAttr(code)}" data-name="${this.escAttr(name)}"${checked}>
+                <span class="lm-board-picker-item-text">
+                    <span class="lm-board-picker-name">${this.esc(name || code)}</span>
+                    <span class="lm-board-picker-code">${this.esc(code)}</span>
+                </span>
+            </label>`;
+        }).join('');
+    },
+
+    watchlistPickerSelectAllVisible() {
+        this._filteredWatchlistItems().forEach((item) => {
+            if (item.code) this._watchlistPickerDraft.add(item.code);
+        });
+        this.renderWatchlistPickerList();
+    },
+
+    watchlistPickerClearVisible() {
+        this._filteredWatchlistItems().forEach((item) => {
+            if (item.code) this._watchlistPickerDraft.delete(item.code);
+        });
+        this.renderWatchlistPickerList();
+    },
+
+    confirmWatchlistPicker() {
+        this._watchlistSelectedCodes = new Set(this._watchlistPickerDraft || []);
+        this.updateWatchlistSummary();
+        this.hideWatchlistPicker();
+    },
+
+    updateWatchlistSummary() {
+        const el = document.getElementById('ssaWatchlistSummary');
+        if (!el) return;
+        const selected = this.getSelectedWatchlistStocks();
+        const n = selected.length;
+        const total = (this.watchlistStocks || []).length;
+        if (!n) {
+            el.textContent = total
+                ? `未选择自选股（共 ${total} 只），点击「选择自选」`
+                : '未选择自选股，点击「选择自选」';
+            return;
+        }
+        if (n <= 3) {
+            el.textContent = `已选 ${n} 只：${selected.map((s) => (s.name ? `${s.code} ${s.name}` : s.code)).join('、')}`;
+            return;
+        }
+        const preview = selected.slice(0, 2).map((s) => (s.name ? `${s.code} ${s.name}` : s.code)).join('、');
+        el.textContent = `已选 ${n} 只：${preview} 等`;
+    },
+
+    getSelectedWatchlistStocks() {
+        const codes = this._watchlistSelectedCodes || new Set();
+        if (!codes.size) return [];
+        const byCode = new Map((this.watchlistStocks || []).map((s) => [s.code, s]));
+        return Array.from(codes).map((code) => {
+            const hit = byCode.get(code);
+            return { code, name: (hit && hit.name) || '' };
+        }).filter((item) => item.code);
+    },
+
     async loadWatchlistOptions() {
-        const select = document.getElementById('ssaWatchlist');
-        if (!select || select.dataset.loaded === '1') return;
+        if (this._watchlistLoaded) return;
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
         try {
             const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
             if (!resp.ok) return;
             const payload = await resp.json();
-            const list = Array.isArray(payload)
+            const raw = Array.isArray(payload)
                 ? payload
                 : (payload.data || payload.items || payload.stocks || []);
-            if (!Array.isArray(list)) return;
+            if (!Array.isArray(raw)) return;
             const seen = new Set();
-            const opts = ['<option value="">-- 可选自选股 --</option>'];
-            list.forEach((item) => {
+            const items = [];
+            raw.forEach((item) => {
                 const code = String(item.code || item.stock_code || '').trim();
                 if (!code || seen.has(code)) return;
                 seen.add(code);
-                const name = item.name || item.stock_name || '';
-                opts.push(`<option value="${code}">${name ? `${code} ${name}` : code}</option>`);
+                const name = String(item.name || item.stock_name || '').trim();
+                items.push({ code, name });
             });
-            select.innerHTML = opts.join('');
-            select.dataset.loaded = '1';
+            this.watchlistStocks = items;
+            this._watchlistLoaded = true;
+            this.updateWatchlistSummary();
         } catch (e) {
             console.warn('加载自选股失败', e);
         }
+    },
+
+    _sessionKey(code) {
+        let c = String(code || '').trim();
+        if (/^(sh|sz|bj|hk)/i.test(c)) c = c.slice(2);
+        return c || '';
+    },
+
+    _ensureStockTab(key, code, name) {
+        if (!key || this.embeddedMode) return;
+        if (!this.stockSessions) this.stockSessions = {};
+        if (!this.stockSessions[key]) {
+            this.stockSessions[key] = {
+                key,
+                code: code || key,
+                name: name || '',
+                status: 'pending',
+                state: null,
+                dom: null,
+                errorMessage: '',
+            };
+        } else {
+            if (code) this.stockSessions[key].code = code;
+            if (name) this.stockSessions[key].name = name;
+        }
+        const tabsEl = document.getElementById('ssaStockTabs');
+        if (tabsEl) tabsEl.hidden = false;
+    },
+
+    _renderStockTabs() {
+        const host = document.getElementById('ssaStockTabs');
+        if (!host || this.embeddedMode) return;
+        if (!this.stockSessions) this.stockSessions = {};
+        const keys = Object.keys(this.stockSessions);
+        if (!keys.length) {
+            host.hidden = true;
+            host.innerHTML = '';
+            return;
+        }
+        host.hidden = false;
+        const canClose = !this._batchAnalyzing;
+        host.innerHTML = keys.map((key) => {
+            const s = this.stockSessions[key];
+            const label = s.name ? `${s.code} ${s.name}` : s.code;
+            const cls = [
+                'ssa-stock-tab',
+                key === this.activeSessionKey ? 'active' : '',
+                s.status === 'loading' || s.status === 'fetched' ? 'is-loading' : '',
+                s.status === 'error' ? 'is-error' : '',
+            ].filter(Boolean).join(' ');
+            const closeBtn = canClose
+                ? `<span class="ssa-stock-tab-close" data-close-key="${this.escAttr(key)}" title="关闭" role="button" tabindex="0" aria-label="关闭 ${this.escAttr(label)}">×</span>`
+                : '';
+            return `<button type="button" class="${cls}" data-session-key="${this.escAttr(key)}" role="tab" aria-selected="${key === this.activeSessionKey ? 'true' : 'false'}"><span class="ssa-stock-tab-label">${this.esc(label)}</span>${closeBtn}</button>`;
+        }).join('');
+        if (!host.dataset.bound) {
+            host.dataset.bound = '1';
+            host.addEventListener('click', (e) => {
+                const closeEl = e.target.closest('.ssa-stock-tab-close[data-close-key]');
+                if (closeEl) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this._closeStockTab(closeEl.getAttribute('data-close-key'));
+                    return;
+                }
+                const btn = e.target.closest('.ssa-stock-tab[data-session-key]');
+                if (!btn) return;
+                this._switchStockTab(btn.getAttribute('data-session-key'), { persistPrevious: true });
+            });
+        }
+    },
+
+    _closeStockTab(key) {
+        if (!key || this.embeddedMode || this._batchAnalyzing) return;
+        if (!this.stockSessions || !this.stockSessions[key]) return;
+
+        const keys = Object.keys(this.stockSessions);
+        const closingActive = this.activeSessionKey === key;
+        const idx = keys.indexOf(key);
+
+        delete this.stockSessions[key];
+
+        // 同步取消自选勾选状态（若仍在已选集合中）
+        if (this._watchlistSelectedCodes && this._watchlistSelectedCodes.has(key)) {
+            this._watchlistSelectedCodes.delete(key);
+            this.updateWatchlistSummary();
+        }
+
+        const remain = Object.keys(this.stockSessions);
+        if (!remain.length) {
+            this.activeSessionKey = null;
+            this._renderStockTabs();
+            this.hideResultBlocks();
+            const empty = document.getElementById('ssaEmpty');
+            if (empty) {
+                empty.hidden = false;
+                empty.textContent = '已关闭全部标签。可重新选择自选股或输入代码后分析。';
+            }
+            this.updateExportBtn();
+            return;
+        }
+
+        if (closingActive) {
+            const nextKey = remain[Math.min(idx, remain.length - 1)] || remain[0];
+            this._switchStockTab(nextKey, { persistPrevious: false });
+        } else {
+            this._renderStockTabs();
+        }
+    },
+
+    _switchStockTab(key, opts) {
+        if (!key || this.embeddedMode) return;
+        const options = opts || {};
+        const session = this.stockSessions && this.stockSessions[key];
+        if (!session) return;
+
+        // 批量分析进行中：禁止手动切 Tab，避免打断并行生成与结果缓存
+        if (this._batchAnalyzing && options.persistPrevious !== false) {
+            return;
+        }
+
+        if (options.persistPrevious && this.activeSessionKey && this.activeSessionKey !== key) {
+            this._persistActiveSession();
+        }
+        this.activeSessionKey = key;
+        this._renderStockTabs();
+        const empty = document.getElementById('ssaEmpty');
+        const codeInput = document.getElementById('ssaStockCode');
+        if (codeInput && session.code) {
+            codeInput.value = session.name ? `${session.code} ${session.name}` : session.code;
+        }
+        if (session.status === 'loading' || session.status === 'fetched') {
+            this.hideCandidates();
+            this.hideResultBlocks();
+            if (empty) {
+                empty.hidden = false;
+                empty.textContent = this._batchAnalyzing ? '批量分析进行中，请稍候…' : '正在分析…';
+            }
+            return;
+        }
+        if (session.state && session.dom) {
+            this._restoreSession(session);
+            if (empty) empty.hidden = true;
+            return;
+        }
+        this.hideResultBlocks();
+        if (empty) {
+            if (session.status === 'error') {
+                empty.hidden = false;
+                empty.textContent = session.errorMessage || '分析失败';
+            } else {
+                empty.hidden = false;
+                empty.textContent = '暂无分析结果';
+            }
+        }
+    },
+
+    _captureState() {
+        return {
+            lastStrategy: this.lastStrategy,
+            lastStrategyError: this.lastStrategyError,
+            lastStock: this.lastStock,
+            lastTradeDate: this.lastTradeDate,
+            lastLevels: this.lastLevels,
+            lastPattern: this.lastPattern,
+            lastSwing: this.lastSwing,
+            lastGann: this.lastGann,
+            lastTradePlan: this.lastTradePlan,
+        };
+    },
+
+    _applyState(state) {
+        if (!state) return;
+        this.lastStrategy = state.lastStrategy;
+        this.lastStrategyError = state.lastStrategyError;
+        this.lastStock = state.lastStock;
+        this.lastTradeDate = state.lastTradeDate;
+        this.lastLevels = state.lastLevels;
+        this.lastPattern = state.lastPattern;
+        this.lastSwing = state.lastSwing;
+        this.lastGann = state.lastGann;
+        this.lastTradePlan = state.lastTradePlan;
+    },
+
+    _captureDom() {
+        const pick = (id) => {
+            const el = document.getElementById(id);
+            if (!el) return { html: '', hidden: true, className: '', text: '' };
+            return {
+                html: el.innerHTML,
+                hidden: !!el.hidden,
+                className: el.className || '',
+                text: el.textContent || '',
+            };
+        };
+        return {
+            meta: pick('ssaMeta'),
+            strategy: pick('ssaResults'),
+            strategyBlock: pick('ssaStrategyBlock'),
+            levelsHost: pick('ssaLevelsHost'),
+            levelsBlock: pick('ssaLevelsBlock'),
+            levelsStatus: pick('ssaLevelsStatus'),
+            patternHost: pick('ssaPatternHost'),
+            patternBlock: pick('ssaPatternBlock'),
+            patternStatus: pick('ssaPatternStatus'),
+            swingHost: pick('ssaSwingHost'),
+            swingBlock: pick('ssaSwingBlock'),
+            swingStatus: pick('ssaSwingStatus'),
+            gannHost: pick('ssaGannHost'),
+            gannBlock: pick('ssaGannBlock'),
+            gannStatus: pick('ssaGannStatus'),
+            planHost: pick('ssaTradePlanHost'),
+            planBlock: pick('ssaTradePlanBlock'),
+            planStatus: pick('ssaTradePlanStatus'),
+        };
+    },
+
+    _restoreDom(dom) {
+        if (!dom) return;
+        const apply = (id, snap) => {
+            const el = document.getElementById(id);
+            if (!el || !snap) return;
+            el.innerHTML = snap.html || '';
+            el.hidden = !!snap.hidden;
+            if (snap.className) el.className = snap.className;
+        };
+        apply('ssaMeta', dom.meta);
+        apply('ssaResults', dom.strategy);
+        apply('ssaStrategyBlock', dom.strategyBlock);
+        apply('ssaLevelsHost', dom.levelsHost);
+        apply('ssaLevelsBlock', dom.levelsBlock);
+        apply('ssaLevelsStatus', dom.levelsStatus);
+        apply('ssaPatternHost', dom.patternHost);
+        apply('ssaPatternBlock', dom.patternBlock);
+        apply('ssaPatternStatus', dom.patternStatus);
+        apply('ssaSwingHost', dom.swingHost);
+        apply('ssaSwingBlock', dom.swingBlock);
+        apply('ssaSwingStatus', dom.swingStatus);
+        apply('ssaGannHost', dom.gannHost);
+        apply('ssaGannBlock', dom.gannBlock);
+        apply('ssaGannStatus', dom.gannStatus);
+        apply('ssaTradePlanHost', dom.planHost);
+        apply('ssaTradePlanBlock', dom.planBlock);
+        apply('ssaTradePlanStatus', dom.planStatus);
+    },
+
+    _persistActiveSession() {
+        if (!this.activeSessionKey || this.embeddedMode) return;
+        if (!this.stockSessions) this.stockSessions = {};
+        const session = this.stockSessions[this.activeSessionKey];
+        if (!session) return;
+        session.state = this._captureState();
+        session.dom = this._captureDom();
+        if (this.lastStock && this.lastStock.code) session.code = this.lastStock.code;
+        if (this.lastStock && this.lastStock.name) session.name = this.lastStock.name;
+    },
+
+    _restoreSession(session) {
+        this.hideCandidates();
+        this._applyState(session.state);
+        this._restoreDom(session.dom);
+        this.updateExportBtn();
+        this.updateTradeObserveBtn();
+        this.updateGannTradeObserveBtn();
     },
 
     hideCandidates() {
@@ -673,37 +1185,557 @@ const StockMultiStrategy = {
         if (empty) empty.hidden = true;
     },
 
-    async analyze() {
-        if (this.running) return;
-        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
-        const codeInput = document.getElementById('ssaStockCode');
-        const btn = document.getElementById('ssaAnalyzeBtn');
-        const empty = document.getElementById('ssaEmpty');
-        if (!codeInput) return;
+    _persistSessionKey(key) {
+        if (!key || this.embeddedMode) return;
+        if (!this.stockSessions) this.stockSessions = {};
+        const session = this.stockSessions[key];
+        if (!session) return;
+        const prevActive = this.activeSessionKey;
+        this.activeSessionKey = key;
+        session.state = this._captureState();
+        session.dom = this._captureDom();
+        if (this.lastStock && this.lastStock.code) session.code = this.lastStock.code;
+        if (this.lastStock && this.lastStock.name) session.name = this.lastStock.name;
+        this.activeSessionKey = prevActive;
+    },
 
-        let query = (codeInput.value || '').trim();
-        if (!query) {
-            CommonUtils.showToast('请输入股票代码或名称', 'warning');
-            codeInput.focus();
+    async _mapPool(items, concurrency, worker) {
+        const list = Array.isArray(items) ? items : [];
+        const limit = Math.max(1, concurrency || 1);
+        let idx = 0;
+        const runners = Array.from({ length: Math.min(limit, list.length) }, async () => {
+            while (idx < list.length) {
+                const cur = idx;
+                idx += 1;
+                await worker(list[cur], cur);
+            }
+        });
+        await Promise.all(runners);
+    },
+
+    async _fetchAnalysisBundle(code, name, asof) {
+        const query = name ? `${code} ${name}` : code;
+        const q = new URLSearchParams({ code: query });
+        if (asof) q.set('date', asof);
+        const resp = await authFetch(
+            `${this.API_BASE_URL}/api/analysis/multi-strategy-check?${q}`
+        );
+        const payload = await resp.json().catch(() => ({}));
+        const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+        if (candidates.length > 1 || (candidates.length > 0 && !payload.data)) {
+            throw new Error(payload.message || '股票代码不唯一，请使用精确代码');
+        }
+        if (!resp.ok || !payload.success) {
+            throw new Error(payload.message || payload.detail || `分析失败 ${resp.status}`);
+        }
+        const strategyData = payload.data || {};
+        const stock = strategyData.stock || { code, name };
+        const resolvedCode = stock.code || code;
+        const tradeDate = strategyData.trade_date || asof || '';
+
+        const [levelsFetched, patternFetched, swingFetched, gannFetched] = await Promise.all([
+            (typeof KdeLevelsTool !== 'undefined' && KdeLevelsTool.fetchLevels)
+                ? KdeLevelsTool.fetchLevels(resolvedCode, {
+                    adjust: 'qfq',
+                    factor_source: 'auto',
+                    max_levels: 8,
+                }).catch((e) => ({ __error: e.message || '阻力支撑计算失败' }))
+                : Promise.resolve({ __error: '阻力支撑模块未加载' }),
+            (typeof PatternTool !== 'undefined' && PatternTool.fetchSingle)
+                ? PatternTool.fetchSingle(resolvedCode, {
+                    adjust: 'qfq',
+                    asof: tradeDate || undefined,
+                }).catch((e) => ({ __error: e.message || '形态识别失败' }))
+                : Promise.resolve({ __error: '形态识别模块未加载' }),
+            (typeof MarketStructureTool !== 'undefined' && MarketStructureTool.fetchStructure)
+                ? MarketStructureTool.fetchStructure(resolvedCode, {
+                    adjust: 'qfq',
+                    asof: tradeDate || undefined,
+                }).catch((e) => ({ __error: e.message || '波段趋势分析失败' }))
+                : Promise.resolve({ __error: '波段趋势模块未加载' }),
+            (typeof GannTrendTool !== 'undefined' && GannTrendTool.fetchGann)
+                ? GannTrendTool.fetchGann(resolvedCode, {
+                    adjust: 'qfq',
+                    asof: tradeDate || undefined,
+                }).catch((e) => ({ __error: e.message || '江恩趋势分析失败' }))
+                : Promise.resolve({ __error: '江恩趋势模块未加载' }),
+        ]);
+
+        let levels = null;
+        if (levelsFetched && !levelsFetched.__error) {
+            levels = {
+                ok: !!levelsFetched.ok,
+                data: levelsFetched.data || {},
+                error: levelsFetched.ok ? null : (levelsFetched.message || null),
+                fetched: levelsFetched,
+            };
+        } else {
+            levels = {
+                ok: false,
+                data: null,
+                error: (levelsFetched && levelsFetched.__error) || '阻力支撑计算失败',
+                fetched: null,
+            };
+        }
+
+        let pattern = null;
+        if (patternFetched && !patternFetched.__error) {
+            pattern = {
+                ok: true,
+                items: patternFetched.items || [],
+                invalidated_count: patternFetched.invalidated_count || 0,
+                code: patternFetched.code || resolvedCode,
+                name: patternFetched.name || '',
+                asof: patternFetched.asof || tradeDate || '',
+                price_adjust: patternFetched.price_adjust || 'qfq',
+                tactical: patternFetched.tactical || null,
+                error: null,
+                fetched: patternFetched,
+            };
+        } else {
+            pattern = {
+                ok: false,
+                items: [],
+                code: resolvedCode,
+                name: '',
+                asof: tradeDate || '',
+                price_adjust: 'qfq',
+                error: (patternFetched && patternFetched.__error) || '形态识别失败',
+                fetched: null,
+            };
+        }
+
+        let swing = null;
+        if (swingFetched && !swingFetched.__error) {
+            swing = {
+                ok: !!(swingFetched.market_structure && swingFetched.market_structure.ok !== false),
+                data: swingFetched,
+                code: swingFetched.code || resolvedCode,
+                name: swingFetched.name || '',
+                asof: swingFetched.asof || tradeDate || '',
+                error: null,
+                fetched: swingFetched,
+            };
+        } else {
+            swing = {
+                ok: false,
+                data: null,
+                code: resolvedCode,
+                name: '',
+                asof: tradeDate || '',
+                error: (swingFetched && swingFetched.__error) || '波段趋势分析失败',
+                fetched: null,
+            };
+        }
+
+        let gann = null;
+        if (gannFetched && !gannFetched.__error) {
+            const g = gannFetched.gann_trend || {};
+            gann = {
+                ok: !!g.ok,
+                data: gannFetched,
+                code: gannFetched.code || resolvedCode,
+                name: gannFetched.name || '',
+                asof: gannFetched.asof || tradeDate || '',
+                error: null,
+                fetched: gannFetched,
+            };
+        } else {
+            gann = {
+                ok: false,
+                data: null,
+                code: resolvedCode,
+                name: '',
+                asof: tradeDate || '',
+                error: (gannFetched && gannFetched.__error) || '江恩趋势分析失败',
+                fetched: null,
+            };
+        }
+
+        let tradePlan = null;
+        try {
+            const snapshots = {};
+            if (levels && levels.data) snapshots.levels = { data: levels.data };
+            if (pattern) {
+                snapshots.pattern = {
+                    tactical: pattern.tactical || null,
+                    items: pattern.items || [],
+                };
+            }
+            if (swing) snapshots.swing = { data: swing.data || null };
+            if (gann) snapshots.gann = { data: gann.data || null };
+            const body = { code: resolvedCode, snapshots };
+            if (tradeDate) body.date = tradeDate;
+            const planResp = await authFetch(
+                `${this.API_BASE_URL}/api/analysis/stock-integrated-trade-plan`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                }
+            );
+            const planPayload = await planResp.json().catch(() => ({}));
+            if (!planResp.ok || !planPayload.success) {
+                throw new Error(planPayload.message || planPayload.detail || `合成失败 ${planResp.status}`);
+            }
+            const pdata = planPayload.data || {};
+            tradePlan = {
+                ok: true,
+                plan: pdata.plan || {},
+                code: (pdata.stock && pdata.stock.code) || resolvedCode,
+                name: (pdata.stock && pdata.stock.name) || '',
+                trade_date: pdata.trade_date || tradeDate || '',
+                error: null,
+            };
+        } catch (e) {
+            tradePlan = {
+                ok: false,
+                plan: null,
+                code: resolvedCode,
+                name: '',
+                trade_date: tradeDate || '',
+                error: e.message || '综合交易策略合成失败',
+            };
+        }
+
+        return {
+            strategyData,
+            strategyError: null,
+            stock,
+            tradeDate,
+            levels,
+            pattern,
+            swing,
+            gann,
+            tradePlan,
+        };
+    },
+
+    _applyAnalysisBundle(bundle) {
+        if (!bundle) return;
+        this.hideCandidates();
+        this.lastStrategyError = bundle.strategyError || null;
+        this.lastStock = bundle.stock || null;
+        this.lastTradeDate = bundle.tradeDate || null;
+        this.lastLevels = bundle.levels
+            ? {
+                ok: bundle.levels.ok,
+                data: bundle.levels.data,
+                error: bundle.levels.error,
+            }
+            : null;
+        this.lastPattern = bundle.pattern
+            ? {
+                ok: bundle.pattern.ok,
+                items: bundle.pattern.items || [],
+                invalidated_count: bundle.pattern.invalidated_count || 0,
+                code: bundle.pattern.code,
+                name: bundle.pattern.name || '',
+                asof: bundle.pattern.asof || '',
+                price_adjust: bundle.pattern.price_adjust || 'qfq',
+                tactical: bundle.pattern.tactical || null,
+                error: bundle.pattern.error,
+            }
+            : null;
+        this.lastSwing = bundle.swing
+            ? {
+                ok: bundle.swing.ok,
+                data: bundle.swing.data,
+                code: bundle.swing.code,
+                name: bundle.swing.name || '',
+                asof: bundle.swing.asof || '',
+                error: bundle.swing.error,
+            }
+            : null;
+        this.lastGann = bundle.gann
+            ? {
+                ok: bundle.gann.ok,
+                data: bundle.gann.data,
+                code: bundle.gann.code,
+                name: bundle.gann.name || '',
+                asof: bundle.gann.asof || '',
+                error: bundle.gann.error,
+            }
+            : null;
+        this.lastTradePlan = bundle.tradePlan || null;
+
+        if (bundle.strategyData) {
+            this.renderStrategyResult(bundle.strategyData);
+        } else if (bundle.strategyError) {
+            const strategyBlock = document.getElementById('ssaStrategyBlock');
+            const strategyHost = document.getElementById('ssaResults');
+            this.lastStrategy = null;
+            if (strategyBlock && strategyHost) {
+                strategyBlock.hidden = false;
+                strategyHost.innerHTML = `<div class="ssa-block-status is-error">${this.esc(bundle.strategyError)}</div>`;
+            }
+        }
+
+        // 阻力支撑
+        const levelsBlock = document.getElementById('ssaLevelsBlock');
+        const levelsHost = document.getElementById('ssaLevelsHost');
+        if (levelsBlock && levelsHost) {
+            levelsBlock.hidden = false;
+            if (bundle.levels && bundle.levels.fetched && typeof KdeLevelsTool !== 'undefined') {
+                const fetched = bundle.levels.fetched;
+                KdeLevelsTool.renderEmbedded(levelsHost, fetched.data || {}, fetched.ok, fetched.message, {
+                    adjust: 'qfq',
+                    factor_source: 'auto',
+                    max_levels: 8,
+                    onUpdated: (result) => {
+                        this.lastLevels = {
+                            ok: !!result.ok,
+                            data: result.data || {},
+                            error: result.ok ? null : (result.message || '阻力支撑计算失败'),
+                        };
+                        this.updateExportBtn();
+                    },
+                });
+                this.setBlockOk('ssaLevelsStatus', '');
+                const st = document.getElementById('ssaLevelsStatus');
+                if (st) st.hidden = true;
+            } else {
+                levelsHost.innerHTML = '';
+                this.setBlockError('ssaLevelsStatus', (bundle.levels && bundle.levels.error) || '阻力支撑计算失败');
+            }
+        }
+
+        // 形态
+        const patternBlock = document.getElementById('ssaPatternBlock');
+        const patternHost = document.getElementById('ssaPatternHost');
+        if (patternBlock && patternHost) {
+            patternBlock.hidden = false;
+            if (bundle.pattern && bundle.pattern.fetched && typeof PatternTool !== 'undefined') {
+                const fetched = bundle.pattern.fetched;
+                const invN = fetched.invalidated_count || 0;
+                const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PatternTool.adjustLabel(fetched.price_adjust))} · ${this.esc(PatternTool.formatHitMeta((fetched.items || []).length, invN))}`;
+                const levelsData = (this.lastLevels && this.lastLevels.data) || {};
+                const classic = levelsData.classic_levels || levelsData.classic || {};
+                const confluence = classic.confluence_zones || levelsData.confluence_zones || null;
+                PatternTool.renderEmbedded(patternHost, fetched.items || [], meta, fetched.price_adjust, {
+                    asof: fetched.asof || '',
+                    confluenceZones: confluence,
+                    classicLevels: classic,
+                    invalidatedCount: invN,
+                    tactical: fetched.tactical || null,
+                    kdeLevels: {
+                        nearest_resistance: levelsData.nearest_resistance,
+                        nearest_support: levelsData.nearest_support,
+                        resistance_levels: levelsData.resistance_levels,
+                        support_levels: levelsData.support_levels,
+                    },
+                });
+                this.setBlockOk('ssaPatternStatus', '');
+                const st = document.getElementById('ssaPatternStatus');
+                if (st) st.hidden = true;
+            } else {
+                patternHost.innerHTML = '';
+                this.setBlockError('ssaPatternStatus', (bundle.pattern && bundle.pattern.error) || '形态识别失败');
+            }
+        }
+
+        // 波段
+        const swingBlock = document.getElementById('ssaSwingBlock');
+        const swingHost = document.getElementById('ssaSwingHost');
+        if (swingBlock && swingHost) {
+            swingBlock.hidden = false;
+            if (bundle.swing && bundle.swing.fetched && typeof MarketStructureTool !== 'undefined') {
+                MarketStructureTool.renderEmbedded(swingHost, bundle.swing.fetched);
+                this.setBlockOk('ssaSwingStatus', '');
+                const st = document.getElementById('ssaSwingStatus');
+                if (st) st.hidden = true;
+            } else {
+                swingHost.innerHTML = '';
+                this.setBlockError('ssaSwingStatus', (bundle.swing && bundle.swing.error) || '波段趋势分析失败');
+            }
+        }
+
+        // 江恩
+        const gannBlock = document.getElementById('ssaGannBlock');
+        const gannHost = document.getElementById('ssaGannHost');
+        if (gannBlock && gannHost) {
+            gannBlock.hidden = false;
+            if (bundle.gann && bundle.gann.fetched && typeof GannTrendTool !== 'undefined') {
+                GannTrendTool.renderEmbedded(gannHost, bundle.gann.fetched);
+                this.setBlockOk('ssaGannStatus', '');
+                const st = document.getElementById('ssaGannStatus');
+                if (st) st.hidden = true;
+            } else {
+                gannHost.innerHTML = '';
+                this.setBlockError('ssaGannStatus', (bundle.gann && bundle.gann.error) || '江恩趋势分析失败');
+            }
+        }
+
+        // 综合策略
+        const planBlock = document.getElementById('ssaTradePlanBlock');
+        const planHost = document.getElementById('ssaTradePlanHost');
+        if (planBlock && planHost) {
+            planBlock.hidden = false;
+            if (bundle.tradePlan && bundle.tradePlan.ok) {
+                if (typeof StockTradePlan !== 'undefined' && typeof StockTradePlan.render === 'function') {
+                    StockTradePlan.render(planHost, bundle.tradePlan);
+                } else {
+                    const summary = (bundle.tradePlan.plan && bundle.tradePlan.plan.short_term
+                        && bundle.tradePlan.plan.short_term.summary) || '综合策略已生成';
+                    planHost.innerHTML = `<p class="ssa-muted">${this.esc(summary)}</p>`;
+                }
+                this.setBlockOk('ssaTradePlanStatus', '');
+                const st = document.getElementById('ssaTradePlanStatus');
+                if (st) st.hidden = true;
+            } else {
+                planHost.innerHTML = '';
+                this.setBlockError(
+                    'ssaTradePlanStatus',
+                    (bundle.tradePlan && bundle.tradePlan.error) || '综合交易策略合成失败'
+                );
+            }
+        }
+
+        const empty = document.getElementById('ssaEmpty');
+        if (empty) empty.hidden = true;
+        this.updateExportBtn();
+        this.updateTradeObserveBtn();
+        this.updateGannTradeObserveBtn();
+    },
+
+    async analyzeWatchlistBatch(stocks) {
+        let list = (stocks || []).slice();
+        if (!list.length) {
+            CommonUtils.showToast('请勾选至少一只自选股', 'warning');
             return;
         }
-        const firstToken = query.split(/\s+/)[0];
-        const firstBody = /^(sh|sz|bj)/i.test(firstToken) ? firstToken.slice(2) : firstToken;
-        if (/^\d{4,6}$/.test(firstBody)) query = firstToken;
+
+        const allowAllEl = document.getElementById('ssaAnalyzeAllSelected');
+        const allowAll = !allowAllEl || !!allowAllEl.checked;
+        const softLimit = this.WATCHLIST_BATCH_SOFT_LIMIT || 0;
+
+        if (!allowAll && softLimit > 0 && list.length > softLimit) {
+            CommonUtils.showToast(
+                `未勾选「一次分析全部勾选」，本次仅分析前 ${softLimit} 只（已选 ${list.length} 只）`,
+                'warning'
+            );
+            list = list.slice(0, softLimit);
+        } else if (allowAll && list.length >= 40) {
+            const ok = window.confirm(
+                `将一次分析全部 ${list.length} 只自选股，耗时可能较长，是否继续？`
+            );
+            if (!ok) return;
+        }
 
         this.running = true;
+        this._batchAnalyzing = true;
         this.hideCandidates();
-        this.hideResultBlocks();
+        const btn = document.getElementById('ssaAnalyzeBtn');
+        const empty = document.getElementById('ssaEmpty');
         if (btn) {
             btn.disabled = true;
             btn.textContent = '分析中…';
         }
+
+        // 仅保留本次勾选的会话，避免旧 Tab 干扰
+        const nextSessions = {};
+        list.forEach(({ code, name }) => {
+            const key = this._sessionKey(code);
+            nextSessions[key] = {
+                key,
+                code,
+                name: name || '',
+                status: 'loading',
+                state: null,
+                dom: null,
+                bundle: null,
+                errorMessage: '',
+            };
+        });
+        this.stockSessions = nextSessions;
+        this.activeSessionKey = null;
+        this._renderStockTabs();
+        this.hideResultBlocks();
         if (empty) {
             empty.hidden = false;
-            empty.textContent = '正在评估策略、阻力支撑与形态，请稍候…';
+            empty.textContent = `正在并行分析 0/${list.length}…`;
         }
+
+        const dateEl = document.getElementById('ssaTradeDate');
+        const asof = dateEl && dateEl.value ? dateEl.value : '';
+        let doneCount = 0;
+        let okCount = 0;
+        const concurrency = Math.min(3, list.length);
+
+        await this._mapPool(list, concurrency, async ({ code, name }) => {
+            const key = this._sessionKey(code);
+            const session = this.stockSessions[key];
+            try {
+                const bundle = await this._fetchAnalysisBundle(code, name, asof);
+                if (session) {
+                    session.bundle = bundle;
+                    session.status = 'fetched';
+                    session.code = (bundle.stock && bundle.stock.code) || code;
+                    session.name = (bundle.stock && bundle.stock.name) || name || '';
+                    session.errorMessage = '';
+                }
+                okCount += 1;
+            } catch (e) {
+                if (session) {
+                    session.status = 'error';
+                    session.bundle = null;
+                    session.errorMessage = e.message || '分析失败';
+                }
+            } finally {
+                doneCount += 1;
+                if (empty) {
+                    empty.hidden = false;
+                    empty.textContent = `正在并行分析 ${doneCount}/${list.length}…`;
+                }
+                if (btn) btn.textContent = `分析中 ${doneCount}/${list.length}`;
+                this._renderStockTabs();
+            }
+        });
+
+        // 全部请求完成后，依次渲染并缓存 DOM，保证切 Tab 即时展示
+        const keys = list.map(({ code }) => this._sessionKey(code)).filter(Boolean);
+        for (const key of keys) {
+            const session = this.stockSessions[key];
+            if (!session || session.status !== 'fetched' || !session.bundle) continue;
+            this.activeSessionKey = key;
+            this.hideResultBlocks();
+            this._applyAnalysisBundle(session.bundle);
+            this._persistSessionKey(key);
+            session.status = 'ready';
+            // bundle 已物化为 DOM 快照，释放原始 fetched 体积（可选保留 plan/state）
+            session.bundle = null;
+            this._renderStockTabs();
+        }
+
+        this._batchAnalyzing = false;
+        this.running = false;
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '分析';
+        }
+
+        const firstReady = keys.find((k) => this.stockSessions[k] && this.stockSessions[k].status === 'ready');
+        if (firstReady) {
+            this._switchStockTab(firstReady, { persistPrevious: false });
+            if (empty) empty.hidden = true;
+        } else if (empty) {
+            empty.hidden = false;
+            empty.textContent = '批量分析未成功，请重试';
+        }
+
+        CommonUtils.showToast(
+            `批量分析完成：${okCount}/${list.length}`,
+            okCount === list.length ? 'success' : 'warning'
+        );
+        this.updateExportBtn();
+    },
+
+    async _runAnalyzeCore(resolved, opts) {
+        const options = opts || {};
+        let { query, firstToken } = resolved;
+        const codeInput = document.getElementById('ssaStockCode');
+        const empty = document.getElementById('ssaEmpty');
         const meta = document.getElementById('ssaMeta');
-        if (meta) meta.hidden = true;
 
         try {
             const q = new URLSearchParams({ code: query });
@@ -718,7 +1750,7 @@ const StockMultiStrategy = {
             if (candidates.length > 1 || (candidates.length > 0 && !payload.data)) {
                 this.renderCandidates(candidates, payload.message);
                 CommonUtils.showToast(payload.message || '请从候选中选择股票', 'warning');
-                return;
+                throw new Error(payload.message || '请从候选中选择股票');
             }
             if (!resp.ok || !payload.success) {
                 throw new Error(payload.message || payload.detail || `分析失败 ${resp.status}`);
@@ -732,7 +1764,6 @@ const StockMultiStrategy = {
             this.renderStrategyResult(data);
             if (empty) empty.hidden = true;
 
-            // 策略成功后并行拉取阻力支撑、形态、波段趋势、江恩（失败互不影响）
             const resolvedCode = stock.code || query;
             const tradeDate = data.trade_date || asof || '';
             await Promise.all([
@@ -744,13 +1775,14 @@ const StockMultiStrategy = {
             await this.loadTradePlanSection(resolvedCode, tradeDate);
             this.updateExportBtn();
 
-            CommonUtils.showToast(
-                data.any_hit ? `命中 ${data.hit_count || 0} 个策略` : '四策略均未命中',
-                data.any_hit ? 'success' : 'info'
-            );
+            if (!options.quietToast) {
+                CommonUtils.showToast(
+                    data.any_hit ? `命中 ${data.hit_count || 0} 个策略` : '四策略均未命中',
+                    data.any_hit ? 'success' : 'info'
+                );
+            }
         } catch (e) {
             console.error(e);
-            // 策略失败时：若输入已是明确代码，仍尝试阻力支撑与形态
             const dateEl = document.getElementById('ssaTradeDate');
             const asofFallback = dateEl && dateEl.value ? dateEl.value : '';
             const looksLikeCode = /^\d{4,6}$/.test(
@@ -783,19 +1815,97 @@ const StockMultiStrategy = {
                 ]);
                 await this.loadTradePlanSection(firstToken, asofFallback);
                 this.updateExportBtn();
-                CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑、形态、波段与江恩', 'warning');
+                if (!options.quietToast) {
+                    CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑、形态、波段与江恩', 'warning');
+                }
             } else {
                 if (empty) {
                     empty.hidden = false;
                     empty.textContent = e.message || '分析失败';
                 }
-                CommonUtils.showToast(e.message || '分析失败', 'error');
+                if (!options.quietToast) {
+                    CommonUtils.showToast(e.message || '分析失败', 'error');
+                }
+                throw e;
+            }
+        } finally {
+            if (meta && this.lastStrategy) meta.hidden = false;
+        }
+    },
+
+    async analyze() {
+        if (this.running) return;
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        if (!this.embeddedMode) {
+            const selected = this.getSelectedWatchlistStocks();
+            if (selected.length > 0) {
+                return this.analyzeWatchlistBatch(selected);
+            }
+        }
+
+        const resolved = this._resolveAnalyzeQuery();
+        if (!resolved) {
+            if (this.embeddedMode) return;
+            CommonUtils.showToast('请输入股票代码或名称，或勾选自选股', 'warning');
+            const codeInput = document.getElementById('ssaStockCode');
+            if (codeInput && codeInput.focus) codeInput.focus();
+            return;
+        }
+        let { query, firstToken } = resolved;
+        const codeInput = document.getElementById('ssaStockCode');
+        const btn = document.getElementById('ssaAnalyzeBtn');
+        const empty = document.getElementById('ssaEmpty');
+
+        if (!this.embeddedMode) {
+            const key = this._sessionKey(firstToken);
+            this._ensureStockTab(key, firstToken, '');
+            this._switchStockTab(key, { persistPrevious: true });
+            const session = this.stockSessions[key];
+            if (session) session.status = 'loading';
+            this._renderStockTabs();
+        }
+
+        this.running = true;
+        this.hideCandidates();
+        this.hideResultBlocks();
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = this.embeddedMode ? '刷新中…' : '分析中…';
+        }
+        if (empty) {
+            empty.hidden = false;
+            empty.textContent = '正在评估策略、阻力支撑与形态，请稍候…';
+        }
+        const meta = document.getElementById('ssaMeta');
+        if (meta) meta.hidden = true;
+
+        try {
+            await this._runAnalyzeCore(resolved);
+            if (!this.embeddedMode && this.activeSessionKey) {
+                this._persistActiveSession();
+                const session = this.stockSessions[this.activeSessionKey];
+                if (session) {
+                    session.status = 'ready';
+                    session.errorMessage = '';
+                }
+                this._renderStockTabs();
+            }
+        } catch (e) {
+            if (!this.embeddedMode && this.activeSessionKey) {
+                const session = this.stockSessions[this.activeSessionKey];
+                if (session) {
+                    session.status = 'error';
+                    session.errorMessage = e.message || '分析失败';
+                }
+                this._persistActiveSession();
+                this._renderStockTabs();
             }
         } finally {
             this.running = false;
             if (btn) {
                 btn.disabled = false;
-                btn.textContent = '分析';
+                btn.textContent = this.embeddedMode ? '刷新' : '分析';
             }
             this.updateExportBtn();
         }

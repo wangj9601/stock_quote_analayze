@@ -56,7 +56,8 @@ const StockPage = {
     subIndicator1: 'vol', // 副图1指标
     subIndicator2: 'macd', // 副图2指标
     currentMainIndicator: 'ma', // 当前选中的主图指标
-    analysisDataLoaded: false, // 添加标志跟踪智能分析数据是否已加载
+    analysisDataLoaded: false, // 交易分析面板是否已加载
+    legacyAnalysisLoaded: false,
     isInWatchlist: false, // 跟踪股票是否已在自选股中
     //API_BASE_URL: '',
 
@@ -77,6 +78,7 @@ const StockPage = {
 
         try {
             this.bindEvents();
+            this.bootstrapTabFromUrl();
         } catch (e) {
             console.error('[StockPage] bindEvents 失败:', e);
         }
@@ -407,6 +409,17 @@ const StockPage = {
             '1M': '月线'
         };
         return periodNames[period] || period;
+    },
+
+    // 从 URL ?tab= 打开指定内容标签（如 finance、analysis）
+    bootstrapTabFromUrl() {
+        const tab = (getQueryParam('tab') || '').trim();
+        const allowed = ['analysis', 'finance', 'news', 'research', 'flow'];
+        if (!tab || !allowed.includes(tab)) return;
+        const btn = document.querySelector(`.content-tab[data-tab="${tab}"]`);
+        if (!btn) return;
+        this.switchContentTab(tab);
+        this.updateActiveBtn(btn, '.content-tab');
     },
 
     // 切换内容标签
@@ -1212,6 +1225,18 @@ const StockPage = {
     },
 
     // 更新股票信息（限定在 stock-header，避免误改其它区域）
+    updateHistoryLink() {
+        const link = document.getElementById('stockHistoryLink');
+        if (!link) return;
+        const code = String(this.stockCode || '').trim();
+        if (!code) {
+            link.hidden = true;
+            return;
+        }
+        link.href = `stock_history.html?code=${encodeURIComponent(code)}`;
+        link.hidden = false;
+    },
+
     updateStockInfo() {
         const header = document.querySelector('.stock-header');
         if (!header) return;
@@ -1219,6 +1244,7 @@ const StockPage = {
         const codeEl = header.querySelector('.stock-code');
         if (nameEl) nameEl.textContent = this.stockName || '-';
         if (codeEl) codeEl.textContent = this.stockCode || '-';
+        this.updateHistoryLink();
         if (this.stockName && this.stockCode) {
             document.title = `${this.stockName}(${this.stockCode}) - 个股详情`;
         }
@@ -1334,12 +1360,7 @@ const StockPage = {
     loadTabData(tabId) {
         switch (tabId) {
             case 'analysis':
-                // 如果智能分析数据已经加载过，不再重复加载
-                if (!this.analysisDataLoaded) {
-                    this.loadAnalysisData();
-                } else {
-                    console.log('[loadTabData] 智能分析数据已加载，跳过重复加载');
-                }
+                void this.loadTradeAnalysisPanel();
                 break;
             case 'finance':
                 this.loadFinanceData();
@@ -1356,7 +1377,72 @@ const StockPage = {
         }
     },
 
-    // 加载分析数据
+    _loadScriptOnce(src) {
+        return new Promise((resolve, reject) => {
+            if (document.querySelector(`script[src^="${src}"]`)) {
+                resolve();
+                return;
+            }
+            const el = document.createElement('script');
+            el.src = `${src}?v=${Date.now()}`;
+            el.onload = () => resolve();
+            el.onerror = () => reject(new Error(`脚本加载失败: ${src}`));
+            document.body.appendChild(el);
+        });
+    },
+
+    async loadTradeAnalysisPanel(force) {
+        if (!this.stockCode) return;
+        try {
+            if (typeof StockAnalysisPanel === 'undefined') {
+                await this._loadScriptOnce('js/stock_analysis_panel.js');
+            }
+            if (!window.StockAnalysisPanel) {
+                throw new Error('StockAnalysisPanel 未加载');
+            }
+            StockAnalysisPanel.resetForNewCode(this.stockCode);
+            await StockAnalysisPanel.run({
+                container: '#stockTradeAnalysisMount',
+                code: this.stockCode,
+                name: this.stockName,
+                autoRun: true,
+                force: !!force,
+            });
+            this.analysisDataLoaded = true;
+            this.bindLegacyAnalysisToggle();
+        } catch (e) {
+            console.error('[交易分析] 加载失败:', e);
+            CommonUtils.showToast(e.message || '交易分析加载失败', 'error');
+        }
+    },
+
+    bindLegacyAnalysisToggle() {
+        const details = document.getElementById('stockLegacyAnalysis');
+        if (!details || details.dataset.bound === '1') return;
+        details.dataset.bound = '1';
+        details.addEventListener('toggle', () => {
+            if (details.open && !this.legacyAnalysisLoaded) {
+                this.legacyAnalysisLoaded = true;
+                void this.loadLegacyAnalysisData();
+            }
+        });
+    },
+
+    async loadLegacyAnalysisData() {
+        try {
+            const response = await authFetch(`${API_BASE_URL}/api/analysis/stock/${this.stockCode}`);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const result = await response.json();
+            if (!result.success) throw new Error(result.message || '获取失败');
+            const data = result.data || {};
+            this.updateTradingRecommendation(data.trading_recommendation);
+            this.updateTechnicalIndicators(data.technical_indicators);
+        } catch (e) {
+            console.warn('[传统指标] 加载失败', e);
+        }
+    },
+
+    // 加载分析数据（legacy，仅折叠区按需调用）
     async loadAnalysisData() {
         try {
             console.log('[智能分析] 开始加载分析数据...');
@@ -3342,14 +3428,17 @@ const StockPage = {
                 console.warn('[loadChartDataWithCallback] 图表未初始化，直接加载智能分析');
             }
 
-            // 图表数据加载完成后，自动加载智能分析数据
-            console.log('[loadChartDataWithCallback] 图表数据加载完成，开始加载智能分析数据');
-            await this.loadAnalysisData();
+            // 图表数据加载完成后，仅在「交易分析」Tab 时自动加载面板
+            if (this.currentTab === 'analysis') {
+                console.log('[loadChartDataWithCallback] 图表数据加载完成，开始加载交易分析');
+                await this.loadTradeAnalysisPanel();
+            }
 
         } catch (error) {
             console.error('[loadChartDataWithCallback] 图表数据加载失败:', error);
-            // 即使图表加载失败，也尝试加载智能分析数据
-            await this.loadAnalysisData();
+            if (this.currentTab === 'analysis') {
+                await this.loadTradeAnalysisPanel();
+            }
         }
     },
 

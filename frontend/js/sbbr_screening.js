@@ -74,14 +74,17 @@
       .replace(/"/g, '&quot;');
   }
 
-  /** 代码列 → 智能分析「个股分析」页（与 URT / 龙头中军同口径） */
+  /** 代码列 → 个股详情「交易分析」Tab */
   function stockAnalysisHref(code, name) {
-    const q = new URLSearchParams({ tab: 'stock-ai' });
+    if (window.StockTradeLink && typeof window.StockTradeLink.buildHref === 'function') {
+      return window.StockTradeLink.buildHref(code, name, { tab: 'analysis' });
+    }
+    const q = new URLSearchParams({ tab: 'analysis' });
     const c = String(code || '').trim();
     const n = String(name || '').trim();
     if (c) q.set('code', c);
     if (n) q.set('name', n);
-    return `analysis.html?${q.toString()}`;
+    return `stock.html?${q.toString()}`;
   }
 
   let lastSignalRows = [];

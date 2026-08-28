@@ -1368,6 +1368,22 @@ a.ba-stock-code-link:focus {
     font-size: 1.2rem;
     color: #1f2937;
 }
+.ssa-deeplink-hint {
+    margin: 0 0 1rem;
+    padding: 10px 14px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 8px;
+    color: #1e40af;
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+.ssa-deeplink-hint code {
+    font-size: 0.85em;
+    padding: 0 4px;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 4px;
+}
 .ssa-hint {
     margin: 0 0 1.25rem;
     color: #6b7280;
@@ -1397,6 +1413,95 @@ a.ba-stock-code-link:focus {
     border-radius: 6px;
     font-size: 0.95rem;
     min-width: 160px;
+}
+.ssa-watchlist-group {
+    min-width: 260px;
+    flex: 1 1 320px;
+    max-width: none;
+}
+.ssa-watchlist-row {
+    min-height: 38px;
+}
+.ssa-batch-all-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 0.88rem;
+    color: #475569;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+}
+.ssa-batch-all-opt input {
+    min-width: auto;
+    margin: 0;
+    cursor: pointer;
+}
+.ssa-stock-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 12px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.ssa-stock-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px 6px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px 6px 0 0;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 0.88rem;
+    cursor: pointer;
+    max-width: 240px;
+    white-space: nowrap;
+}
+.ssa-stock-tab-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.ssa-stock-tab-close {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    margin-left: 2px;
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1;
+    color: #94a3b8;
+}
+.ssa-stock-tab-close:hover {
+    background: #e2e8f0;
+    color: #b91c1c;
+}
+.ssa-stock-tab.active .ssa-stock-tab-close:hover {
+    background: #dbeafe;
+}
+.ssa-stock-tab:hover {
+    background: #f1f5f9;
+}
+.ssa-stock-tab.active {
+    background: #fff;
+    border-bottom-color: #fff;
+    color: #1e40af;
+    font-weight: 600;
+    margin-bottom: -1px;
+}
+.ssa-stock-tab.is-loading {
+    opacity: 0.75;
+    font-style: italic;
+}
+.ssa-stock-tab.is-error {
+    border-color: #fca5a5;
+    color: #b91c1c;
 }
 .ssa-candidates {
     margin-top: 1rem;

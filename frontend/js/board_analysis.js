@@ -642,7 +642,9 @@ const BoardAnalysis = {
           scoreDisp && scoreDisp !== '--'
             ? `<span class="ba-hit-score">${this.esc(scoreDisp)}</span>`
             : '';
-        const analysisHref = `analysis.html?tab=stock-ai&code=${encodeURIComponent(code)}${name ? `&name=${encodeURIComponent(name)}` : ''}`;
+        const analysisHref = (window.StockTradeLink && window.StockTradeLink.buildHref)
+            ? window.StockTradeLink.buildHref(code, name, { tab: 'analysis' })
+            : `stock.html?tab=analysis&code=${encodeURIComponent(code)}${name ? `&name=${encodeURIComponent(name)}` : ''}`;
         return `<tr title="${this.escAttr(scoreTip)}">
           <td><a class="ba-stock-code-link" href="${this.escAttr(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${this.esc(code)}</a><div class="ba-muted">${this.esc(name)}</div></td>
           <td class="ba-boards" title="${this.escAttr(boardName)}">${this.esc(boardName || '--')}</td>

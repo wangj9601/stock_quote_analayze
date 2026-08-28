@@ -21,14 +21,17 @@
     return '';
   }
 
-  /** 龙头/中军标签 → 智能分析「个股分析」页 */
+  /** 龙头/中军标签 → 个股详情「交易分析」Tab */
   function stockAnalysisHref(code, name) {
-    const q = new URLSearchParams({ tab: 'stock-ai' });
+    if (global.StockTradeLink && typeof global.StockTradeLink.buildHref === 'function') {
+      return global.StockTradeLink.buildHref(code, name, { tab: 'analysis' });
+    }
+    const q = new URLSearchParams({ tab: 'analysis' });
     const c = String(code || '').trim();
     const n = String(name || '').trim();
     if (c) q.set('code', c);
     if (n) q.set('name', n);
-    return `analysis.html?${q.toString()}`;
+    return `stock.html?${q.toString()}`;
   }
 
   function stockChip(s) {

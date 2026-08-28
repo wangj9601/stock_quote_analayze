@@ -132,13 +132,16 @@ const UnifiedTradeObserve = {
     },
 
     analysisHref(code, name, popup) {
+        if (window.StockTradeLink && typeof window.StockTradeLink.buildHref === 'function') {
+            return window.StockTradeLink.buildHref(code, name, { tab: 'analysis', popup: !!popup });
+        }
         const q = new URLSearchParams({
-            tab: 'stock-ai',
+            tab: 'analysis',
             code: String(code || ''),
             name: String(name || ''),
         });
         if (popup) q.set('popup', '1');
-        return `analysis.html?${q.toString()}`;
+        return `stock.html?${q.toString()}`;
     },
 
     /**
@@ -162,7 +165,7 @@ const UnifiedTradeObserve = {
             }
         })();
         const features = 'popup=yes,width=1280,height=860,left=72,top=48,scrollbars=yes,resizable=yes';
-        const w = window.open(url, 'uto_stock_ai', features);
+        const w = window.open(url, 'uto_stock_trade', features);
         if (!w) {
             if (window.CommonUtils) {
                 CommonUtils.showToast('浏览器拦截了弹窗，请允许后重试，或按住 Ctrl 点击在新标签打开', 'warning');

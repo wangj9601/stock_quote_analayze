@@ -8,6 +8,16 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/stock.css">
+    <link rel="stylesheet" href="css/analysis.css">
+    <script>
+        (function () {
+            try {
+                if (/(?:^|[?&])popup=1(?:&|$)/.test(String(location.search || ''))) {
+                    document.documentElement.classList.add('stock-popup-window');
+                }
+            } catch (e) { /* ignore */ }
+        })();
+    </script>
     <!-- ECharts库 - 优先使用本地文件，失败时使用CDN -->
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
@@ -25,6 +35,8 @@
                     <div class="stock-name-section">
                         <h1 class="stock-name">加载中…</h1>
                         <span class="stock-code">--</span>
+                        <a id="stockHistoryLink" class="stock-header-link" href="stock_history.html"
+                            target="_blank" rel="noopener noreferrer" title="查看历史行情" hidden>历史行情</a>
                         <button class="watchlist-toggle">⭐ 自选</button>
                     </div>
                     <div class="stock-price-section">
@@ -135,7 +147,7 @@
         <section class="content-tabs">
             <div class="container">
                 <div class="tab-nav">
-                    <button class="content-tab active" data-tab="analysis">智能分析</button>
+                    <button class="content-tab active" data-tab="analysis">交易分析</button>
                     <button class="content-tab" data-tab="finance">财务数据</button>
                     <button class="content-tab" data-tab="news">新闻公告</button>
                     <button class="content-tab" data-tab="research">研报</button>
@@ -143,107 +155,50 @@
                 </div>
 
                 <div class="tab-content">
-                    <!-- 智能分析 -->
+                    <!-- 交易分析（嵌入 analysis 页个股分析模块） -->
                     <div class="tab-panel active" id="analysis">
-                        <div class="analysis-grid">
-                            <div class="analysis-card" style="display: none;">
-                                <h3>🎯 价格预测</h3>
-                                <div class="prediction-result">
-                                    <div class="prediction-price">
-                                        <span class="target-price">13.50</span>
-                                        <span class="prediction-change positive">+9.41%</span>
+                        <div id="stockTradeAnalysisMount" class="stock-trade-analysis-mount"></div>
+                        <details class="stock-legacy-analysis" id="stockLegacyAnalysis">
+                            <summary>传统指标参考（RSI / MACD / 旧版建议）</summary>
+                            <div class="analysis-grid stock-legacy-analysis-grid" id="stockLegacyAnalysisBody">
+                                <div class="analysis-card">
+                                    <h3>📊 交易建议</h3>
+                                    <div class="recommendation-result">
+                                        <div class="action-badge buy">--</div>
+                                        <div class="recommendation-reasons"></div>
+                                        <div class="risk-level">
+                                            <span>风险等级：</span>
+                                            <span class="risk-badge medium">--</span>
+                                        </div>
                                     </div>
-                                    <div class="prediction-range">
-                                        <span>预测区间：12.80 - 14.20</span>
-                                    </div>
-                                    <div class="confidence">
-                                        <span>置信度：75%</span>
-                                        <span>预测周期：30天</span>
+                                </div>
+                                <div class="analysis-card">
+                                    <h3>📈 其他指标</h3>
+                                    <div class="technical-indicators">
+                                        <div class="indicator-row">
+                                            <span class="indicator-name">RSI(14)</span>
+                                            <span class="indicator-value">--</span>
+                                            <span class="indicator-signal neutral">--</span>
+                                        </div>
+                                        <div class="indicator-row">
+                                            <span class="indicator-name">MACD</span>
+                                            <span class="indicator-value">--</span>
+                                            <span class="indicator-signal neutral">--</span>
+                                        </div>
+                                        <div class="indicator-row">
+                                            <span class="indicator-name">KDJ</span>
+                                            <span class="indicator-value">--</span>
+                                            <span class="indicator-signal neutral">--</span>
+                                        </div>
+                                        <div class="indicator-row">
+                                            <span class="indicator-name">布林带</span>
+                                            <span class="indicator-value">--</span>
+                                            <span class="indicator-signal neutral">--</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-
-                            <div class="analysis-card" id="gmsCard">
-                                <h3>🧬 GMS指标</h3>
-                                <div class="gms-indicators" id="gmsDataContainer">
-                                    <div class="loading-spinner">数据加载中...</div>
-                                </div>
-                            </div>
-
-                            <div class="analysis-card" id="urtCard" style="display:none;">
-                                <h3>📈 URT上升趋势</h3>
-                                <div class="gms-indicators" id="urtDataContainer"></div>
-                            </div>
-
-                            <div class="analysis-card">
-                                <h3>📊 交易建议</h3>
-                                <div class="recommendation-result">
-                                    <div class="action-badge buy">建议买入</div>
-                                    <div class="recommendation-reasons">
-                                        <div class="reason-item positive">✓ 技术指标看多</div>
-                                        <div class="reason-item positive">✓ 成交量持续放大</div>
-                                        <div class="reason-item positive">✓ 突破重要阻力位</div>
-                                        <div class="reason-item warning">⚠ 注意大盘风险</div>
-                                    </div>
-                                    <div class="risk-level">
-                                        <span>风险等级：</span>
-                                        <span class="risk-badge medium">中等</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="analysis-card">
-                                <h3>📈 其他指标</h3>
-                                <div class="technical-indicators">
-                                    <div class="indicator-row">
-                                        <span class="indicator-name">RSI(14)</span>
-                                        <span class="indicator-value">65.4</span>
-                                        <span class="indicator-signal neutral">中性</span>
-                                    </div>
-                                    <div class="indicator-row">
-                                        <span class="indicator-name">MACD</span>
-                                        <span class="indicator-value">0.124</span>
-                                        <span class="indicator-signal bullish">看多</span>
-                                    </div>
-                                    <div class="indicator-row">
-                                        <span class="indicator-name">KDJ</span>
-                                        <span class="indicator-value">75.2</span>
-                                        <span class="indicator-signal bearish">看空</span>
-                                    </div>
-                                    <div class="indicator-row">
-                                        <span class="indicator-name">布林带</span>
-                                        <span class="indicator-value">上轨</span>
-                                        <span class="indicator-signal bullish">看多</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div class="analysis-card">
-                                <h3>🎯 关键价位</h3>
-                                <div class="key-levels" title="成交量加权 KDE 密度峰；各侧最多 2 档，有几档显示几档">
-                                    <div class="level-item level-resistance" data-level-role="resistance-far" hidden>
-                                        <span class="level-label">阻力位2</span>
-                                        <span class="level-value resistance">--</span>
-                                    </div>
-                                    <div class="level-item level-resistance" data-level-role="resistance-near">
-                                        <span class="level-label">阻力位1</span>
-                                        <span class="level-value resistance">--</span>
-                                    </div>
-                                    <div class="level-item current">
-                                        <span class="level-label">当前价</span>
-                                        <span class="level-value">--</span>
-                                    </div>
-                                    <div class="level-item level-support" data-level-role="support-near">
-                                        <span class="level-label">支撑位1</span>
-                                        <span class="level-value support">--</span>
-                                    </div>
-                                    <div class="level-item level-support" data-level-role="support-far" hidden>
-                                        <span class="level-label">支撑位2</span>
-                                        <span class="level-value support">--</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        </details>
                     </div>
 
                     <!-- 财务数据 -->
@@ -409,7 +364,14 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
+    <script src="js/permission.js"></script>
+    <script src="js/stock_trade_link.js"></script>
     <script src="components/header.js"></script>
+    <script>
+        if (window.StockTradeLink && typeof StockTradeLink.applyPopupDocumentClass === 'function') {
+            StockTradeLink.applyPopupDocumentClass();
+        }
+    </script>
     <script>
         // 确保API_BASE_URL已定义（备用方案）
         (function () {
@@ -447,6 +409,11 @@
             if (codeEl && code) codeEl.textContent = code;
             if (nameEl && name) nameEl.textContent = name;
             if (code && name) document.title = `${name}(${code}) - 个股详情`;
+            const histLink = document.getElementById('stockHistoryLink');
+            if (histLink && code) {
+                histLink.href = `stock_history.html?code=${encodeURIComponent(code)}`;
+                histLink.hidden = false;
+            }
 
             if (!code) {
                 console.error('缺少股票代码参数');

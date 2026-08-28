@@ -64,6 +64,12 @@ assert(html.includes('id="ssaExportPngBtn"'), 'analysis.html 应有导出 PNG �
 assert(html.includes('导出 PNG'), '按钮文案为 导出 PNG');
 assert(html.includes('id="ssaExportRoot"'), '应有截图根节点 ssaExportRoot');
 assert(html.includes('id="ssaTradePlanBlock"'), '应有综合交易策略区块');
+assert(html.includes('js/stock_trade_link.js'), '应加载深链脚本');
+assert(html.includes('ssa-deeplink-hint'), '应有深链迁移提示');
+assert(html.includes('id="ssaWatchlistPickBtn"'), '应有选择自选按钮');
+assert(html.includes('id="ssaWatchlistPickerModal"'), '应有自选股选择弹窗');
+assert(html.includes('id="ssaWatchlistPickerSelectAll"'), '应有自选股全选按钮');
+assert(html.includes('id="ssaStockTabs"'), '应有个股分析 Tab 栏');
 assert(html.includes('js/stock_trade_plan.js'), '应加载综合交易策略脚本');
 assert(html.includes('js/stock_analysis_png.js'), '应加载 PNG 导出脚本');
 assert(html.includes('js/vendor/html2canvas.min.js') || fs.existsSync(path.join(root, 'frontend', 'js', 'vendor', 'html2canvas.min.js')), '应提供 html2canvas');
@@ -79,7 +85,24 @@ const js = fs.readFileSync(path.join(root, 'frontend', 'js', 'stock_multi_strate
 assert(js.includes('exportPng()'), '个股分析应绑定 exportPng');
 assert(js.includes('pngFilename()'), '应提供 png 文件名');
 assert(js.includes("getElementById('ssaExportPngBtn')"), '应绑定 PNG 按钮');
-assert(js.includes('loadTradePlanSection'), '应合成综合交易策略');
+assert(js.includes('analyzeWatchlistBatch'), '应支持自选股批量分析');
+assert(js.includes('WATCHLIST_BATCH_SOFT_LIMIT'), '应支持批量分析软上限选项');
+assert(js.includes('_fetchAnalysisBundle'), '批量应并行拉取各股数据');
+assert(html.includes('id="ssaAnalyzeAllSelected"'), '应有一次分析全部勾选选项');
+assert(js.includes('_closeStockTab'), '个股分析 Tab 应支持关闭');
+assert(js.includes('ssa-stock-tab-close'), 'Tab 应有关闭按钮');
+assert(js.includes('openWatchlistPicker'), '应打开自选股弹窗');
+assert(js.includes('confirmWatchlistPicker'), '应确认自选股选择');
+
+const panelJs = fs.readFileSync(path.join(root, 'frontend', 'js', 'stock_analysis_panel.js'), 'utf8');
+assert(panelJs.includes('StockAnalysisPanel'), '应导出 StockAnalysisPanel');
+assert(panelJs.includes('ssaTradePlanBlock'), '面板应含综合交易策略区块');
+
+const stockHtml = fs.readFileSync(path.join(root, 'frontend', 'stock.html'), 'utf8');
+assert(stockHtml.includes('交易分析'), '详情页 Tab 应为交易分析');
+assert(stockHtml.includes('stockTradeAnalysisMount'), '详情页应有交易分析挂载点');
+assert(stockHtml.includes('id="stockHistoryLink"'), '详情页应有历史行情链接');
+assert(stockHtml.includes('stock_history.html'), '历史链接应指向 stock_history.html');
 assert(js.includes('lastTradePlan'), '应缓存综合交易策略结果');
 
 const planJs = fs.readFileSync(path.join(root, 'frontend', 'js', 'stock_trade_plan.js'), 'utf8');

@@ -59,6 +59,25 @@ body {
     font-weight: 500;
 }
 
+.stock-header-link {
+    padding: 0.5rem 1rem;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    color: #475569;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    font-weight: 500;
+    font-size: 0.9rem;
+    white-space: nowrap;
+}
+
+.stock-header-link:hover {
+    background: #f1f5f9;
+    border-color: #cbd5e1;
+    color: #334155;
+}
+
 .watchlist-toggle:hover {
     background: #fbbf24;
     color: white;
@@ -1518,4 +1537,82 @@ mark {
     .gms-weight-table td {
         padding: 4px 8px;
     }
+}
+
+/* 个股详情 · 嵌入式交易分析 */
+.stock-trade-analysis-mount {
+    margin-top: 8px;
+}
+
+.ssa-panel--embedded {
+    padding: 0;
+}
+
+.ssa-panel--embedded .ssa-toolbar--embedded {
+    margin-bottom: 12px;
+}
+
+.ssa-panel--embedded .ssa-form-row {
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.ssa-panel--embedded .ssa-block--collapsible .ssa-details {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px 12px 12px;
+    margin-top: 12px;
+    background: #fafbfc;
+}
+
+.ssa-panel--embedded .ssa-details > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #334155;
+    list-style: none;
+}
+
+.ssa-panel--embedded .ssa-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.ssa-panel--embedded .ssa-block-header--summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.stock-legacy-analysis {
+    margin-top: 20px;
+    padding: 12px 16px;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.stock-legacy-analysis > summary {
+    cursor: pointer;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.stock-legacy-analysis-grid {
+    margin-top: 12px;
+}
+
+/* 弹出窗：隐藏站点导航，聚焦个股与交易分析 */
+html.stock-popup-window .header,
+html.stock-popup-window .main-header,
+html.stock-popup-window #main-header,
+html.stock-popup-window .icp-footer,
+html.stock-popup-window .content-tabs .tab-nav {
+    display: none !important;
+}
+html.stock-popup-window .main-content {
+    padding-top: 8px;
+}
+html.stock-popup-window .stock-header {
+    padding-top: 8px;
 }

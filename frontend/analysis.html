@@ -107,6 +107,10 @@
                 <!-- 个股分析：四策略 + 阻力支撑 + 形态识别 -->
                 <div class="tab-panel" id="stock-ai">
                     <div class="ssa-section" data-perm="channel.analyze.tab.stock_ai">
+                        <div class="ssa-deeplink-hint">
+                            提示：从板块、选股、交易观察等入口点击股票代码，将打开<strong>个股详情 · 交易分析</strong>。
+                            本页仍可作为多股分析工作台（手动输入代码）；带 <code>code</code> 参数的旧链接会自动跳转至详情页。
+                        </div>
                         <div class="ssa-header">
                             <h3>个股策略分析</h3>
                             <p class="ssa-hint">
@@ -116,6 +120,8 @@
                                 <strong>形态识别</strong>（与技术工具同口径）、
                                 <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
+                                自选股支持<strong>多选或全选</strong>；默认勾选「一次分析全部勾选」时，选多少分析多少（数量较多会确认）。
+                                分析后每只股一个 Tab 页签切换查看。
                             </p>
                         </div>
                         <div class="ssa-form">
@@ -124,11 +130,16 @@
                                     <label for="ssaStockCode">股票代码 / 名称</label>
                                     <input type="text" id="ssaStockCode" placeholder="如 600519、00700 或 贵州茅台" autocomplete="off">
                                 </div>
-                                <div class="form-group">
-                                    <label for="ssaWatchlist">从自选选择</label>
-                                    <select id="ssaWatchlist">
-                                        <option value="">-- 可选自选股 --</option>
-                                    </select>
+                                <div class="form-group ssa-watchlist-group">
+                                    <label>从自选选择</label>
+                                    <div class="lm-board-picker-row ssa-watchlist-row">
+                                        <button type="button" class="btn btn-secondary" id="ssaWatchlistPickBtn">选择自选</button>
+                                        <label class="ssa-batch-all-opt" title="勾选后按已选全部分析；取消则超过建议数量时仅分析前若干只">
+                                            <input type="checkbox" id="ssaAnalyzeAllSelected" checked>
+                                            一次分析全部勾选
+                                        </label>
+                                        <span id="ssaWatchlistSummary" class="lm-board-picker-summary">未选择自选股，点击「选择自选」</span>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label for="ssaTradeDate">基准日（可选）</label>
@@ -159,6 +170,7 @@
                             <div class="ssa-candidates-title">匹配到多只股票，请选择：</div>
                             <ul id="ssaCandidateList"></ul>
                         </div>
+                        <div class="ssa-stock-tabs" id="ssaStockTabs" hidden role="tablist" aria-label="个股分析结果"></div>
                         <div id="ssaExportRoot" class="ssa-export-root">
                             <div class="ssa-meta" id="ssaMeta" hidden></div>
 
@@ -1003,6 +1015,27 @@
         </div>
     </div>
 
+    <!-- 个股分析：自选股多选弹窗（对齐板块选择交互） -->
+    <div id="ssaWatchlistPickerModal" class="lm-modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="lm-modal-card" role="dialog" aria-labelledby="ssaWatchlistPickerTitle">
+            <div class="lm-modal-header">
+                <h3 id="ssaWatchlistPickerTitle">选择自选股</h3>
+                <button type="button" class="lm-modal-close" id="ssaWatchlistPickerClose" aria-label="关闭">×</button>
+            </div>
+            <div class="lm-board-picker-toolbar">
+                <input type="search" id="ssaWatchlistPickerSearch" class="lm-board-picker-search" placeholder="搜索股票代码或名称">
+                <span id="ssaWatchlistPickerCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
+                <button type="button" class="btn btn-secondary btn-sm" id="ssaWatchlistPickerSelectAll">全选当前</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="ssaWatchlistPickerClear">清空当前</button>
+            </div>
+            <div id="ssaWatchlistPickerList" class="lm-board-picker-list"></div>
+            <div class="lm-modal-actions">
+                <button type="button" class="btn btn-secondary" id="ssaWatchlistPickerCancel">取消</button>
+                <button type="button" class="btn btn-primary" id="ssaWatchlistPickerConfirm">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ICP备案信息 -->
     <footer class="icp-footer">
         <div class="icp-container">
@@ -1013,6 +1046,7 @@
     </footer>
 
     <script src="js/config.js"></script>
+    <script src="js/stock_trade_link.js"></script>
     <script src="js/common.js"></script>
     <script src="js/board_roles_panel.js"></script>
     <script src="js/board_picker_strong.js"></script>

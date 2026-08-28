@@ -48,7 +48,8 @@ const UTO = sandbox.UnifiedTradeObserve;
 assert(UTO, 'UnifiedTradeObserve 未挂载');
 
 const href = UTO.analysisHref('000938', '紫光股份');
-assert(href.indexOf('tab=stock-ai') >= 0, 'tab');
+assert(href.indexOf('tab=analysis') >= 0, 'tab');
+assert(href.indexOf('stock.html') >= 0, 'stock detail page');
 assert(href.indexOf('code=000938') >= 0, 'code');
 assert(href.indexOf('popup=') < 0, 'href 默认不含 popup，Ctrl+点击走新标签完整页');
 
@@ -70,7 +71,7 @@ UTO.openAnalysisPopup(href, fakeEvent);
 assert(fakeEvent.defaultPrevented, '左键应 preventDefault');
 assertEq(opened.length, 1, '应弹出一次');
 assert(String(opened[0].url).indexOf('popup=1') >= 0, '弹窗 URL 含 popup=1');
-assertEq(opened[0].name, 'uto_stock_ai', '复用同一弹窗名');
+assertEq(opened[0].name, 'uto_stock_trade', '复用同一弹窗名');
 assert(String(opened[0].features).indexOf('width=1280') >= 0, '弹窗尺寸');
 
 opened.length = 0;
