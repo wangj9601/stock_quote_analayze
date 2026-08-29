@@ -24,8 +24,12 @@ const StockMultiStrategy = {
     activeSessionKey: null,
     watchlistStocks: [],
     industryBoardCatalog: [],
+    conceptBoardCatalog: [],
     leaderStockOptions: [],
+    industryLeaderStockOptions: [],
+    conceptLeaderStockOptions: [],
     _industryCatalogLoaded: false,
+    _conceptCatalogLoaded: false,
 
     init() {
         const btn = document.getElementById('ssaAnalyzeBtn');
@@ -444,19 +448,32 @@ const StockMultiStrategy = {
 
     bindLeaderPanel() {
         if (this._leaderBound || this.embeddedMode) return;
-        const pickBtn = document.getElementById('ssaLeaderPickBtn');
+        const industryBtn = document.getElementById('ssaLeaderPickBtn');
+        const conceptBtn = document.getElementById('ssaConceptLeaderPickBtn');
         const overlay = document.getElementById('ssaLeaderPickerModal');
-        if (!pickBtn || !overlay) return;
+        if (!overlay || (!industryBtn && !conceptBtn)) return;
         this._leaderBound = true;
-        this._leaderSelectedBoardCodes = [];
+        this._leaderBoardKind = 'industry';
+        this._industryLeaderSelectedBoardCodes = [];
+        this._conceptLeaderSelectedBoardCodes = [];
+        this._industryLeaderSelectedCodes = new Set();
+        this._conceptLeaderSelectedCodes = new Set();
+        this.industryLeaderStockOptions = [];
+        this.conceptLeaderStockOptions = [];
         this._leaderBoardDraft = new Set();
-        this._leaderSelectedCodes = new Set();
         this._leaderStockDraft = new Set();
         this.leaderStockOptions = [];
 
-        pickBtn.addEventListener('click', () => {
-            void this.openLeaderPicker();
-        });
+        if (industryBtn) {
+            industryBtn.addEventListener('click', () => {
+                void this.openLeaderPicker('industry');
+            });
+        }
+        if (conceptBtn) {
+            conceptBtn.addEventListener('click', () => {
+                void this.openLeaderPicker('concept');
+            });
+        }
         ['ssaLeaderPickerClose', 'ssaLeaderPickerCancel', 'ssaLeaderStockCancel'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('click', () => this.hideLeaderPicker());
@@ -487,18 +504,13 @@ const StockMultiStrategy = {
         if (boardClear) {
             boardClear.addEventListener('click', () => this.leaderBoardClearVisible());
         }
+        const onLoad = () => {
+            void this.loadLeaderStocksFromBoards();
+        };
         const loadBtn = document.getElementById('ssaLeaderLoadStocksBtn');
-        if (loadBtn) {
-            loadBtn.addEventListener('click', () => {
-                void this.loadLeaderStocksFromBoards();
-            });
-        }
+        if (loadBtn) loadBtn.addEventListener('click', onLoad);
         const loadBtnTop = document.getElementById('ssaLeaderLoadStocksBtnTop');
-        if (loadBtnTop) {
-            loadBtnTop.addEventListener('click', () => {
-                void this.loadLeaderStocksFromBoards();
-            });
-        }
+        if (loadBtnTop) loadBtnTop.addEventListener('click', onLoad);
         const backBtn = document.getElementById('ssaLeaderBackToBoards');
         if (backBtn) {
             backBtn.addEventListener('click', () => this.showLeaderBoardStep());
@@ -511,14 +523,12 @@ const StockMultiStrategy = {
         if (stockClear) {
             stockClear.addEventListener('click', () => this.leaderStockClearVisible());
         }
+        const onConfirm = () => this.confirmLeaderPicker();
         const confirmBtn = document.getElementById('ssaLeaderStockConfirm');
-        if (confirmBtn) {
-            confirmBtn.addEventListener('click', () => this.confirmLeaderPicker());
-        }
+        if (confirmBtn) confirmBtn.addEventListener('click', onConfirm);
         const confirmBtnTop = document.getElementById('ssaLeaderStockConfirmTop');
-        if (confirmBtnTop) {
-            confirmBtnTop.addEventListener('click', () => this.confirmLeaderPicker());
-        }
+        if (confirmBtnTop) confirmBtnTop.addEventListener('click', onConfirm);
+
         const boardList = document.getElementById('ssaLeaderBoardList');
         if (boardList) {
             boardList.addEventListener('change', (e) => {
@@ -543,12 +553,39 @@ const StockMultiStrategy = {
                 this.updateLeaderStockCount();
             });
         }
-        this.updateLeaderSummary();
+        this.updateLeaderSummary('industry');
+        this.updateLeaderSummary('concept');
     },
 
-    async openLeaderPicker() {
-        await this.loadIndustryBoardCatalog();
-        this._leaderBoardDraft = new Set(this._leaderSelectedBoardCodes || []);
+    _normalizeLeaderKind(kind) {
+        return kind === 'concept' ? 'concept' : 'industry';
+    },
+
+    _leaderKindLabel(kind) {
+        return this._normalizeLeaderKind(kind) === 'concept' ? '概念' : '行业';
+    },
+
+    _leaderIncludeMidChecked(kind) {
+        const id = this._normalizeLeaderKind(kind) === 'concept'
+            ? 'ssaConceptLeaderIncludeMid'
+            : 'ssaLeaderIncludeMid';
+        return !!document.getElementById(id)?.checked;
+    },
+
+    async openLeaderPicker(kind) {
+        this._leaderBoardKind = this._normalizeLeaderKind(kind);
+        await this.loadBoardCatalog(this._leaderBoardKind);
+        const savedBoards = this._leaderBoardKind === 'concept'
+            ? (this._conceptLeaderSelectedBoardCodes || [])
+            : (this._industryLeaderSelectedBoardCodes || []);
+        const savedCodes = this._leaderBoardKind === 'concept'
+            ? (this._conceptLeaderSelectedCodes || new Set())
+            : (this._industryLeaderSelectedCodes || new Set());
+        this.leaderStockOptions = this._leaderBoardKind === 'concept'
+            ? (this.conceptLeaderStockOptions || [])
+            : (this.industryLeaderStockOptions || []);
+        this._leaderBoardDraft = new Set(savedBoards);
+        this._leaderStockDraft = new Set(savedCodes);
         const boardSearch = document.getElementById('ssaLeaderBoardSearch');
         if (boardSearch) boardSearch.value = '';
         const stockSearch = document.getElementById('ssaLeaderStockSearch');
@@ -576,12 +613,14 @@ const StockMultiStrategy = {
         const stocks = document.getElementById('ssaLeaderStepStocks');
         if (boards) boards.hidden = false;
         if (stocks) stocks.hidden = true;
+        const label = this._leaderKindLabel(this._leaderBoardKind);
         const hint = document.getElementById('ssaLeaderPickerHint');
         if (hint) {
-            hint.textContent = '步骤 1：勾选行业板块 →「加载龙头」；步骤 2：勾选股票后确定。可选「含中军」。';
+            hint.textContent =
+                `步骤 1：勾选${label}板块 →「加载龙头」；步骤 2：勾选股票后确定。可选「含中军」。`;
         }
         const title = document.getElementById('ssaLeaderPickerTitle');
-        if (title) title.textContent = '选择行业龙头股 · 选板块';
+        if (title) title.textContent = `选择${label}龙头股 · 选板块`;
     },
 
     showLeaderStockStep() {
@@ -589,38 +628,63 @@ const StockMultiStrategy = {
         const stocks = document.getElementById('ssaLeaderStepStocks');
         if (boards) boards.hidden = true;
         if (stocks) stocks.hidden = false;
+        const label = this._leaderKindLabel(this._leaderBoardKind);
         const hint = document.getElementById('ssaLeaderPickerHint');
         if (hint) {
             const n = (this.leaderStockOptions || []).length;
-            const includeMid = !!document.getElementById('ssaLeaderIncludeMid')?.checked;
-            hint.textContent = `步骤 2：已加载 ${n} 只（${includeMid ? '龙头+中军' : '仅龙头'}），勾选后确定。`;
+            const includeMid = this._leaderIncludeMidChecked(this._leaderBoardKind);
+            hint.textContent =
+                `步骤 2：已加载 ${n} 只（${includeMid ? '龙头+中军' : '仅龙头'}），勾选后确定。`;
         }
         const title = document.getElementById('ssaLeaderPickerTitle');
-        if (title) title.textContent = '选择行业龙头股 · 选股票';
+        if (title) title.textContent = `选择${label}龙头股 · 选股票`;
     },
 
-    async loadIndustryBoardCatalog() {
-        if (this._industryCatalogLoaded) return;
+    async loadBoardCatalog(kind) {
+        const k = this._normalizeLeaderKind(kind);
+        if (k === 'concept') {
+            if (this._conceptCatalogLoaded) return;
+        } else if (this._industryCatalogLoaded) {
+            return;
+        }
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        const path = k === 'concept' ? 'concept_board' : 'industry_board';
+        const label = this._leaderKindLabel(k);
         try {
             const resp = await authFetch(
-                `${this.API_BASE_URL}/api/market/industry_board/list?board_code_source=tonghuashun`
+                `${this.API_BASE_URL}/api/market/${path}/list?board_code_source=tonghuashun`
             );
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const payload = await resp.json();
-            this.industryBoardCatalog = Array.isArray(payload.data) ? payload.data : [];
-            this._industryCatalogLoaded = true;
+            const list = Array.isArray(payload.data) ? payload.data : [];
+            if (k === 'concept') {
+                this.conceptBoardCatalog = list;
+                this._conceptCatalogLoaded = true;
+            } else {
+                this.industryBoardCatalog = list;
+                this._industryCatalogLoaded = true;
+            }
         } catch (e) {
-            console.warn('加载行业板块失败', e);
-            CommonUtils.showToast('加载行业板块失败', 'error');
+            console.warn(`加载${label}板块失败`, e);
+            CommonUtils.showToast(`加载${label}板块失败`, 'error');
         }
+    },
+
+    async loadIndustryBoardCatalog() {
+        return this.loadBoardCatalog('industry');
+    },
+
+    _leaderBoardCatalog() {
+        return this._leaderBoardKind === 'concept'
+            ? (this.conceptBoardCatalog || [])
+            : (this.industryBoardCatalog || []);
     },
 
     _filteredLeaderBoards() {
         const q = String(document.getElementById('ssaLeaderBoardSearch')?.value || '')
             .trim()
             .toLowerCase();
-        const items = this.industryBoardCatalog || [];
+        const items = this._leaderBoardCatalog();
         if (!q) return items.slice();
         return items.filter((b) => {
             const text = `${b.board_code || ''} ${b.board_name || ''}`.toLowerCase();
@@ -631,7 +695,7 @@ const StockMultiStrategy = {
     updateLeaderBoardCount() {
         const countEl = document.getElementById('ssaLeaderBoardCount');
         if (!countEl) return;
-        const total = (this.industryBoardCatalog || []).length;
+        const total = this._leaderBoardCatalog().length;
         const filtered = this._filteredLeaderBoards().length;
         const selected = (this._leaderBoardDraft || new Set()).size;
         const q = String(document.getElementById('ssaLeaderBoardSearch')?.value || '').trim();
@@ -644,9 +708,10 @@ const StockMultiStrategy = {
         const listEl = document.getElementById('ssaLeaderBoardList');
         if (!listEl) return;
         const items = this._filteredLeaderBoards();
+        const label = this._leaderKindLabel(this._leaderBoardKind);
         this.updateLeaderBoardCount();
-        if (!(this.industryBoardCatalog || []).length) {
-            listEl.innerHTML = '<div class="lm-board-picker-empty">暂无行业板块数据</div>';
+        if (!this._leaderBoardCatalog().length) {
+            listEl.innerHTML = `<div class="lm-board-picker-empty">暂无${label}板块数据</div>`;
             return;
         }
         if (!items.length) {
@@ -687,8 +752,9 @@ const StockMultiStrategy = {
 
     async loadLeaderStocksFromBoards() {
         const boardCodes = Array.from(this._leaderBoardDraft || []);
+        const label = this._leaderKindLabel(this._leaderBoardKind);
         if (!boardCodes.length) {
-            CommonUtils.showToast('请先勾选至少一个行业板块', 'warning');
+            CommonUtils.showToast(`请先勾选至少一个${label}板块`, 'warning');
             return;
         }
         if (boardCodes.length > 40) {
@@ -697,7 +763,8 @@ const StockMultiStrategy = {
             );
             if (!ok) return;
         }
-        const includeMid = !!document.getElementById('ssaLeaderIncludeMid')?.checked;
+        const includeMid = this._leaderIncludeMidChecked(this._leaderBoardKind);
+        const boardPath = this._leaderBoardKind === 'concept' ? 'concept_board' : 'industry_board';
         const loadBtns = [
             document.getElementById('ssaLeaderLoadStocksBtn'),
             document.getElementById('ssaLeaderLoadStocksBtnTop'),
@@ -710,18 +777,19 @@ const StockMultiStrategy = {
             const byCode = new Map();
             const concurrency = 6;
             let idx = 0;
+            const catalog = this._leaderBoardCatalog();
             const worker = async () => {
                 while (idx < boardCodes.length) {
                     const i = idx;
                     idx += 1;
                     const boardCode = boardCodes[i];
-                    const board = (this.industryBoardCatalog || []).find(
+                    const board = catalog.find(
                         (x) => String(x.board_code) === String(boardCode)
                     );
                     const boardName = board ? (board.board_name || boardCode) : boardCode;
                     try {
                         const url =
-                            `${this.API_BASE_URL}/api/market/industry_board/` +
+                            `${this.API_BASE_URL}/api/market/${boardPath}/` +
                             `${encodeURIComponent(boardCode)}/roles?board_code_source=tonghuashun`;
                         const resp = await authFetch(url);
                         if (!resp.ok) continue;
@@ -744,6 +812,7 @@ const StockMultiStrategy = {
                                     role,
                                     board_name: boardName,
                                     board_code: boardCode,
+                                    board_kind: this._leaderBoardKind,
                                 });
                                 return;
                             }
@@ -767,14 +836,23 @@ const StockMultiStrategy = {
             this.leaderStockOptions = Array.from(byCode.values()).sort((a, b) =>
                 String(a.code).localeCompare(String(b.code))
             );
-            this._leaderSelectedBoardCodes = boardCodes.slice();
+            if (this._leaderBoardKind === 'concept') {
+                this.conceptLeaderStockOptions = this.leaderStockOptions.slice();
+                this._conceptLeaderSelectedBoardCodes = boardCodes.slice();
+            } else {
+                this.industryLeaderStockOptions = this.leaderStockOptions.slice();
+                this._industryLeaderSelectedBoardCodes = boardCodes.slice();
+            }
+            const prevSelected = this._leaderBoardKind === 'concept'
+                ? (this._conceptLeaderSelectedCodes || new Set())
+                : (this._industryLeaderSelectedCodes || new Set());
             this._leaderStockDraft = new Set(
-                (this._leaderSelectedCodes && this._leaderSelectedCodes.size)
-                    ? Array.from(this._leaderSelectedCodes).filter((c) => byCode.has(c))
+                prevSelected.size
+                    ? Array.from(prevSelected).filter((c) => byCode.has(c))
                     : this.leaderStockOptions.map((s) => s.code)
             );
             if (!this.leaderStockOptions.length) {
-                CommonUtils.showToast('所选板块暂无龙头/中军数据', 'warning');
+                CommonUtils.showToast(`所选${label}板块暂无龙头/中军数据`, 'warning');
                 return;
             }
             this.showLeaderStockStep();
@@ -864,21 +942,36 @@ const StockMultiStrategy = {
     },
 
     confirmLeaderPicker() {
-        this._leaderSelectedCodes = new Set(this._leaderStockDraft || []);
-        this.updateLeaderSummary();
+        const selected = new Set(this._leaderStockDraft || []);
+        const boards = Array.from(this._leaderBoardDraft || []);
+        if (this._leaderBoardKind === 'concept') {
+            this._conceptLeaderSelectedCodes = selected;
+            this.conceptLeaderStockOptions = (this.leaderStockOptions || []).slice();
+            this._conceptLeaderSelectedBoardCodes = boards;
+        } else {
+            this._industryLeaderSelectedCodes = selected;
+            this.industryLeaderStockOptions = (this.leaderStockOptions || []).slice();
+            this._industryLeaderSelectedBoardCodes = boards;
+        }
+        this.updateLeaderSummary(this._leaderBoardKind);
         this.hideLeaderPicker();
     },
 
-    updateLeaderSummary() {
-        const el = document.getElementById('ssaLeaderSummary');
+    updateLeaderSummary(kind) {
+        const k = this._normalizeLeaderKind(kind || this._leaderBoardKind || 'industry');
+        const elId = k === 'concept' ? 'ssaConceptLeaderSummary' : 'ssaLeaderSummary';
+        const el = document.getElementById(elId);
         if (!el) return;
-        const selected = this.getSelectedLeaderStocks();
+        const label = this._leaderKindLabel(k);
+        const selected = this.getSelectedLeaderStocks(k);
         const n = selected.length;
-        const boards = (this._leaderSelectedBoardCodes || []).length;
+        const boards = k === 'concept'
+            ? (this._conceptLeaderSelectedBoardCodes || []).length
+            : (this._industryLeaderSelectedBoardCodes || []).length;
         if (!n) {
             el.textContent = boards
-                ? `未勾选龙头股（已备选板块 ${boards} 个），点击「选择行业龙头」`
-                : '未选择行业龙头，点击「选择行业龙头」';
+                ? `未勾选龙头股（已备选板块 ${boards} 个），点击「选择${label}龙头」`
+                : `未选择${label}龙头，点击「选择${label}龙头」`;
             return;
         }
         if (n <= 3) {
@@ -889,17 +982,35 @@ const StockMultiStrategy = {
         el.textContent = `已选 ${n} 只：${preview} 等`;
     },
 
-    getSelectedLeaderStocks() {
-        const codes = this._leaderSelectedCodes || new Set();
-        if (!codes.size) return [];
-        const byCode = new Map((this.leaderStockOptions || []).map((s) => [s.code, s]));
-        return Array.from(codes).map((code) => {
-            const hit = byCode.get(code);
-            return { code, name: (hit && hit.name) || '' };
-        }).filter((item) => item.code);
+    getSelectedLeaderStocks(kind) {
+        const k = kind ? this._normalizeLeaderKind(kind) : null;
+        const packs = [];
+        if (!k || k === 'industry') {
+            packs.push({
+                codes: this._industryLeaderSelectedCodes || new Set(),
+                options: this.industryLeaderStockOptions || [],
+            });
+        }
+        if (!k || k === 'concept') {
+            packs.push({
+                codes: this._conceptLeaderSelectedCodes || new Set(),
+                options: this.conceptLeaderStockOptions || [],
+            });
+        }
+        const map = new Map();
+        packs.forEach(({ codes, options }) => {
+            if (!codes || !codes.size) return;
+            const byCode = new Map(options.map((s) => [s.code, s]));
+            codes.forEach((code) => {
+                if (!code || map.has(code)) return;
+                const hit = byCode.get(code);
+                map.set(code, { code, name: (hit && hit.name) || '' });
+            });
+        });
+        return Array.from(map.values());
     },
 
-    /** 自选 + 行业龙头去重合并，供批量分析 */
+    /** 自选 + 行业龙头 + 概念龙头 去重合并，供批量分析 */
     getSelectedBatchStocks() {
         const map = new Map();
         this.getSelectedWatchlistStocks().forEach((s) => {
@@ -993,14 +1104,24 @@ const StockMultiStrategy = {
 
         delete this.stockSessions[key];
 
-        // 同步取消自选 / 行业龙头勾选状态（若仍在已选集合中）
+        // 同步取消自选 / 行业龙头 / 概念龙头勾选状态（若仍在已选集合中）
         if (this._watchlistSelectedCodes && this._watchlistSelectedCodes.has(key)) {
             this._watchlistSelectedCodes.delete(key);
             this.updateWatchlistSummary();
         }
-        if (this._leaderSelectedCodes && this._leaderSelectedCodes.has(key)) {
-            this._leaderSelectedCodes.delete(key);
-            this.updateLeaderSummary();
+        let leaderChanged = false;
+        if (this._industryLeaderSelectedCodes && this._industryLeaderSelectedCodes.has(key)) {
+            this._industryLeaderSelectedCodes.delete(key);
+            leaderChanged = true;
+            this.updateLeaderSummary('industry');
+        }
+        if (this._conceptLeaderSelectedCodes && this._conceptLeaderSelectedCodes.has(key)) {
+            this._conceptLeaderSelectedCodes.delete(key);
+            leaderChanged = true;
+            this.updateLeaderSummary('concept');
+        }
+        if (leaderChanged) {
+            // summaries already refreshed above
         }
 
         const remain = Object.keys(this.stockSessions);
@@ -1011,7 +1132,7 @@ const StockMultiStrategy = {
             const empty = document.getElementById('ssaEmpty');
             if (empty) {
                 empty.hidden = false;
-                empty.textContent = '已关闭全部标签。可重新选择自选股 / 行业龙头或输入代码后分析。';
+                empty.textContent = '已关闭全部标签。可重新选择自选股 / 行业龙头 / 概念龙头或输入代码后分析。';
             }
             this.updateExportBtn();
             return;
@@ -1176,9 +1297,49 @@ const StockMultiStrategy = {
         this.hideCandidates();
         this._applyState(session.state);
         this._restoreDom(session.dom);
+        // innerHTML 恢复会丢掉 KDE/VP「应用」监听，需按当前标的重新绑定
+        this._rebindLevelsControls();
         this.updateExportBtn();
         this.updateTradeObserveBtn();
         this.updateGannTradeObserveBtn();
+    },
+
+    _levelsStockCode() {
+        if (this.lastStock && this.lastStock.code) return String(this.lastStock.code).trim();
+        const d = this.lastLevels && this.lastLevels.data;
+        if (d && (d.stock_code || d.code)) return String(d.stock_code || d.code).trim();
+        const input = document.getElementById('ssaStockCode');
+        if (input && input.value) {
+            const token = String(input.value).trim().split(/\s+/)[0] || '';
+            const body = /^(sh|sz|bj|hk)/i.test(token) ? token.slice(2) : token;
+            if (/^\d{4,6}$/.test(body)) return token;
+        }
+        return '';
+    },
+
+    _rebindLevelsControls() {
+        const host = document.getElementById('ssaLevelsHost');
+        if (!host || typeof KdeLevelsTool === 'undefined') return;
+        if (typeof KdeLevelsTool.rebindEmbeddedControls !== 'function') return;
+        if (!host.querySelector('.ssa-kde-lookback-apply') && !host.querySelector('.ssa-vp-lookback-apply')) {
+            return;
+        }
+        const code = this._levelsStockCode();
+        KdeLevelsTool.rebindEmbeddedControls(host, {
+            code,
+            adjust: 'qfq',
+            factor_source: 'auto',
+            max_levels: 8,
+            onUpdated: (result) => {
+                this.lastLevels = {
+                    ok: !!result.ok,
+                    data: result.data || {},
+                    error: result.ok ? null : (result.message || '阻力支撑计算失败'),
+                };
+                this.updateExportBtn();
+                this._persistActiveSession();
+            },
+        });
     },
 
     hideCandidates() {
@@ -1959,6 +2120,10 @@ const StockMultiStrategy = {
             if (bundle.levels && bundle.levels.fetched && typeof KdeLevelsTool !== 'undefined') {
                 const fetched = bundle.levels.fetched;
                 KdeLevelsTool.renderEmbedded(levelsHost, fetched.data || {}, fetched.ok, fetched.message, {
+                    code: this._levelsStockCode()
+                        || (fetched.data && (fetched.data.stock_code || fetched.data.code))
+                        || (bundle.stock && bundle.stock.code)
+                        || '',
                     adjust: 'qfq',
                     factor_source: 'auto',
                     max_levels: 8,
@@ -1969,6 +2134,7 @@ const StockMultiStrategy = {
                             error: result.ok ? null : (result.message || '阻力支撑计算失败'),
                         };
                         this.updateExportBtn();
+                        this._persistActiveSession();
                     },
                 });
                 this.setBlockOk('ssaLevelsStatus', '');
@@ -2327,7 +2493,7 @@ const StockMultiStrategy = {
         const resolved = this._resolveAnalyzeQuery();
         if (!resolved) {
             if (this.embeddedMode) return;
-            CommonUtils.showToast('请输入股票代码或名称，或勾选自选股 / 行业龙头', 'warning');
+            CommonUtils.showToast('请输入股票代码或名称，或勾选自选股 / 行业龙头 / 概念龙头', 'warning');
             const codeInput = document.getElementById('ssaStockCode');
             if (codeInput && codeInput.focus) codeInput.focus();
             return;
@@ -2412,6 +2578,10 @@ const StockMultiStrategy = {
                 throw new Error(fetched.message || '阻力支撑计算失败');
             }
             KdeLevelsTool.renderEmbedded(host, fetched.data || {}, fetched.ok, fetched.message, {
+                code: code
+                    || this._levelsStockCode()
+                    || (fetched.data && (fetched.data.stock_code || fetched.data.code))
+                    || '',
                 adjust: 'qfq',
                 factor_source: 'auto',
                 max_levels: 8,
@@ -2422,6 +2592,7 @@ const StockMultiStrategy = {
                         error: result.ok ? null : (result.message || '阻力支撑计算失败'),
                     };
                     this.updateExportBtn();
+                    this._persistActiveSession();
                 },
             });
             this.lastLevels = {

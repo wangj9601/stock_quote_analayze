@@ -1045,8 +1045,6 @@ class StockAnalysisService:
             return {
                 "success": True,
                 "data": {
-                    "stock_code": code,
-                    "stock_name": stock_name,
                     **levels,
                     "classic_levels": classic,
                     "confluence_zones": conf,
@@ -1063,6 +1061,9 @@ class StockAnalysisService:
                     "factor_fetched": bool(meta.get("factor_fetched")),
                     "factor_source": meta.get("factor_source"),
                     "description": desc,
+                    # 放在 **levels 之后，避免被 levels 同名键覆盖
+                    "stock_code": code,
+                    "stock_name": stock_name,
                 },
             }
         except Exception as e:

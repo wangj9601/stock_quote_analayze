@@ -120,7 +120,7 @@
                                 <strong>形态识别</strong>（与技术工具同口径）、
                                 <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
-                                自选股与<strong>行业龙头</strong>均支持多选或全选；默认勾选「一次分析全部勾选」时，选多少分析多少（数量较多会确认）。
+                                自选股、<strong>行业龙头</strong>与<strong>概念龙头</strong>均支持多选或全选；默认勾选「一次分析全部勾选」时，选多少分析多少（数量较多会确认）。
                                 分析后每只股一个 Tab 页签切换查看。
                             </p>
                         </div>
@@ -150,6 +150,17 @@
                                             含中军
                                         </label>
                                         <span id="ssaLeaderSummary" class="lm-board-picker-summary">未选择行业龙头，点击「选择行业龙头」</span>
+                                    </div>
+                                </div>
+                                <div class="form-group ssa-watchlist-group">
+                                    <label>从概念龙头选择</label>
+                                    <div class="lm-board-picker-row ssa-watchlist-row">
+                                        <button type="button" class="btn btn-secondary" id="ssaConceptLeaderPickBtn">选择概念龙头</button>
+                                        <label class="ssa-batch-all-opt" title="勾选后加载龙头时一并纳入概念板中军股">
+                                            <input type="checkbox" id="ssaConceptLeaderIncludeMid">
+                                            含中军
+                                        </label>
+                                        <span id="ssaConceptLeaderSummary" class="lm-board-picker-summary">未选择概念龙头，点击「选择概念龙头」</span>
                                     </div>
                                 </div>
                                 <div class="form-group">
@@ -228,7 +239,7 @@
                         </div>
 
                         <div class="ssa-empty" id="ssaEmpty">
-                            输入股票代码或名称，也可从自选 / 行业龙头选择后点击「分析」。
+                            输入股票代码或名称，也可从自选 / 行业龙头 / 概念龙头选择后点击「分析」。
                         </div>
                     </div>
                     <div class="ssa-scroll-fab" id="ssaScrollFab" aria-label="页面快速滚动">
@@ -1055,11 +1066,11 @@
                 <button type="button" class="lm-modal-close" id="ssaLeaderPickerClose" aria-label="关闭">×</button>
             </div>
             <p class="ssa-leader-picker-hint" id="ssaLeaderPickerHint">
-                步骤 1：勾选行业板块 →「加载龙头」；步骤 2：勾选股票后确定。可选「含中军」。
+                步骤 1：勾选板块 →「加载龙头」；步骤 2：勾选股票后确定。可选「含中军」。
             </p>
             <div id="ssaLeaderStepBoards" class="ssa-leader-step">
                 <div class="lm-board-picker-toolbar">
-                    <input type="search" id="ssaLeaderBoardSearch" class="lm-board-picker-search" placeholder="搜索行业板块名称或代码">
+                    <input type="search" id="ssaLeaderBoardSearch" class="lm-board-picker-search" placeholder="搜索板块名称或代码">
                     <span id="ssaLeaderBoardCount" class="lm-board-picker-count" aria-live="polite">共 0 个可选</span>
                     <button type="button" class="btn btn-secondary btn-sm" id="ssaLeaderBoardSelectAll">全选当前</button>
                     <button type="button" class="btn btn-secondary btn-sm" id="ssaLeaderBoardClear">清空当前</button>

@@ -252,7 +252,9 @@ const KdeLevelsTool = {
         if (!container) return;
         const fmt = (v) => this._fmtPrice(v);
         const d = data || {};
-        const code = d.stock_code || '';
+        // options.code 优先：会话 DOM 恢复后 data 可能缺 stock_code；亦兼容 code 字段
+        const code = String(options.code || d.stock_code || d.code || '').trim();
+        if (code) container.dataset.stockCode = code;
         const name = d.stock_name || '';
         const title = name ? `${code} ${name}` : (code || '结果');
         const adjustBrief = d.price_adjust === 'qfq' ? '前复权' : '不复权';
@@ -651,7 +653,7 @@ const KdeLevelsTool = {
             });
         }
 
-        this._bindEmbeddedVpControls(container, {
+        const bindCtx = {
             code,
             adjust: options.adjust != null
                 ? (options.adjust === 'qfq' ? 'qfq' : 'none')
@@ -659,16 +661,43 @@ const KdeLevelsTool = {
             factor_source: options.factor_source || 'auto',
             max_levels: options.max_levels != null ? options.max_levels : 8,
             onUpdated: typeof options.onUpdated === 'function' ? options.onUpdated : null,
+        };
+        this._bindEmbeddedVpControls(container, bindCtx);
+        this._bindEmbeddedKdeControls(container, bindCtx);
+    },
+
+    /**
+     * 会话用 innerHTML 恢复后，事件监听会丢失；仅重新绑定回看「应用」控件。
+     * @param {HTMLElement} container
+     * @param {object} ctx  同 renderEmbedded 的 bind 上下文（须含 code）
+     */
+    rebindEmbeddedControls(container, ctx = {}) {
+        if (!container) return;
+        const code = String(
+            (ctx && ctx.code)
+            || container.dataset.stockCode
+            || ''
+        ).trim();
+        if (code) container.dataset.stockCode = code;
+        // 克隆替换，避免重复 addEventListener（会话恢复或多次 rebind）
+        [
+            '.ssa-kde-lookback-apply', '.ssa-kde-lookback-days', '.ssa-kde-from-date',
+            '.ssa-vp-lookback-apply', '.ssa-vp-lookback-days', '.ssa-vp-from-date',
+        ].forEach((sel) => {
+            const el = container.querySelector(sel);
+            if (el && el.parentNode) {
+                el.parentNode.replaceChild(el.cloneNode(true), el);
+            }
         });
-        this._bindEmbeddedKdeControls(container, {
+        const bindCtx = {
             code,
-            adjust: options.adjust != null
-                ? (options.adjust === 'qfq' ? 'qfq' : 'none')
-                : (d.price_adjust === 'qfq' ? 'qfq' : 'none'),
-            factor_source: options.factor_source || 'auto',
-            max_levels: options.max_levels != null ? options.max_levels : 8,
-            onUpdated: typeof options.onUpdated === 'function' ? options.onUpdated : null,
-        });
+            adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+            factor_source: (ctx && ctx.factor_source) || 'auto',
+            max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
+            onUpdated: ctx && typeof ctx.onUpdated === 'function' ? ctx.onUpdated : null,
+        };
+        this._bindEmbeddedVpControls(container, bindCtx);
+        this._bindEmbeddedKdeControls(container, bindCtx);
     },
 
     _readEmbeddedVpParams(container) {
@@ -764,7 +793,18 @@ const KdeLevelsTool = {
     },
 
     async _applyEmbeddedLookback(container, ctx, which) {
-        const code = (ctx && ctx.code) || '';
+        let code = String(
+            (ctx && ctx.code)
+            || (container && container.dataset && container.dataset.stockCode)
+            || ''
+        ).trim();
+        if (!code) {
+            const input = document.getElementById('ssaStockCode');
+            const raw = input && input.value ? String(input.value).trim() : '';
+            const token = raw.split(/\s+/)[0] || '';
+            const body = /^(sh|sz|bj|hk)/i.test(token) ? token.slice(2) : token;
+            if (/^\d{4,6}$/.test(body)) code = token;
+        }
         if (!code) {
             if (window.CommonUtils) CommonUtils.showToast('缺少股票代码，请先完成分析', 'warning');
             return;
@@ -773,6 +813,14 @@ const KdeLevelsTool = {
 
         const vpParams = this._readEmbeddedVpParams(container);
         const kdeParams = this._readEmbeddedKdeParams(container);
+        if (which === 'kde' && !kdeParams.kde_from_date && kdeParams.kde_lookback == null) {
+            if (window.CommonUtils) CommonUtils.showToast('请填写 KDE 回看天数或起始日期', 'warning');
+            return;
+        }
+        if (which === 'vp' && !vpParams.vp_from_date && vpParams.vp_lookback == null) {
+            if (window.CommonUtils) CommonUtils.showToast('请填写 VP 回看天数或起始日期', 'warning');
+            return;
+        }
         const applyBtn = container.querySelector(
             which === 'kde' ? '.ssa-kde-lookback-apply' : '.ssa-vp-lookback-apply'
         );
@@ -810,6 +858,7 @@ const KdeLevelsTool = {
                 throw new Error(fetched.message || (which === 'kde' ? 'KDE 回看重算失败' : 'VP 回看重算失败'));
             }
             this.renderEmbedded(container, fetched.data || {}, fetched.ok, fetched.message, {
+                code,
                 adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
                 factor_source: (ctx && ctx.factor_source) || 'auto',
                 max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
