@@ -142,20 +142,26 @@ const StockMultiStrategy = {
     },
 
     /**
-     * 从 URL ?code=&name= 填入个股分析输入框并自动分析（仅执行一次）。
-     * 供个股详情页交易分析 Tab 或 analysis 页手动分析使用。
+     * 从 URL 启动分析（仅执行一次）：
+     * - ?batch=watchlist：自选股「全部交易分析」，每只一个 Tab
+     * - ?code=&name=：单只自动分析
      */
     bootstrapFromUrl() {
         if (this._urlBootstrapped) return;
-        let code = '';
-        let name = '';
+        let params;
         try {
-            const params = new URLSearchParams(window.location.search || '');
-            code = (params.get('code') || '').trim();
-            name = (params.get('name') || '').trim();
+            params = new URLSearchParams(window.location.search || '');
         } catch (e) {
             return;
         }
+        const batch = (params.get('batch') || '').trim();
+        if (batch === 'watchlist') {
+            this._urlBootstrapped = true;
+            void this._bootstrapWatchlistBatch(params);
+            return;
+        }
+        const code = (params.get('code') || '').trim();
+        const name = (params.get('name') || '').trim();
         if (!code) return;
         this._urlBootstrapped = true;
         const input = document.getElementById('ssaStockCode');
@@ -163,6 +169,67 @@ const StockMultiStrategy = {
             input.value = name ? `${code} ${name}` : code;
         }
         void this.analyze();
+    },
+
+    /** 读取并清除自选批量分析载荷（跨标签页 localStorage） */
+    _consumeWatchlistBatchStorage() {
+        const key = 'ssa_watchlist_batch';
+        let raw = null;
+        try {
+            raw = localStorage.getItem(key);
+            if (raw != null) localStorage.removeItem(key);
+        } catch (e) {
+            return [];
+        }
+        if (!raw) return [];
+        try {
+            const data = JSON.parse(raw);
+            const ts = Number(data && data.ts) || 0;
+            if (ts && (Date.now() - ts) > 5 * 60 * 1000) return [];
+            const stocks = Array.isArray(data && data.stocks) ? data.stocks : [];
+            return stocks
+                .map((s) => ({
+                    code: String((s && s.code) || '').trim(),
+                    name: String((s && s.name) || '').trim(),
+                }))
+                .filter((s) => s.code);
+        } catch (e) {
+            return [];
+        }
+    },
+
+    /**
+     * 自选股批量入口：勾选「一次分析全部」、按只建 Tab 并并行分析。
+     */
+    async _bootstrapWatchlistBatch(params) {
+        const allowAllEl = document.getElementById('ssaAnalyzeAllSelected');
+        if (allowAllEl) allowAllEl.checked = true;
+
+        let stocks = this._consumeWatchlistBatchStorage();
+        if (!stocks.length) {
+            const codesRaw = (params.get('codes') || '').trim();
+            const codes = codesRaw
+                ? codesRaw.split(/[,，\s]+/).map((c) => c.trim()).filter(Boolean)
+                : [];
+            await this.loadWatchlistOptions();
+            const byCode = new Map(
+                (this.watchlistStocks || []).map((s) => [String(s.code), s])
+            );
+            stocks = codes.map((code) => {
+                const hit = byCode.get(code);
+                return { code, name: (hit && hit.name) || '' };
+            });
+        }
+        if (!stocks.length) {
+            if (window.CommonUtils) {
+                CommonUtils.showToast('未找到待分析的自选股', 'warning');
+            }
+            return;
+        }
+
+        this._watchlistSelectedCodes = new Set(stocks.map((s) => String(s.code)));
+        this.updateWatchlistSummary();
+        await this.analyzeWatchlistBatch(stocks, { skipLargeConfirm: true });
     },
 
     bindScrollFab() {
@@ -2244,7 +2311,8 @@ const StockMultiStrategy = {
         this.updateGannTradeObserveBtn();
     },
 
-    async analyzeWatchlistBatch(stocks) {
+    async analyzeWatchlistBatch(stocks, options) {
+        const opts = options || {};
         let list = (stocks || []).slice();
         if (!list.length) {
             CommonUtils.showToast('请勾选至少一只自选股', 'warning');
@@ -2261,7 +2329,7 @@ const StockMultiStrategy = {
                 'warning'
             );
             list = list.slice(0, softLimit);
-        } else if (allowAll && list.length >= 40) {
+        } else if (allowAll && list.length >= 40 && !opts.skipLargeConfirm) {
             const ok = window.confirm(
                 `将一次分析全部 ${list.length} 只自选股，耗时可能较长，是否继续？`
             );

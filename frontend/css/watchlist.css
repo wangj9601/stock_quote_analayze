@@ -43,6 +43,24 @@
     gap: 1rem;
 }
 
+.analyze-all-btn {
+    background: transparent;
+    color: var(--color-primary, #1890ff);
+    border: 1px solid var(--color-primary, #1890ff);
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+}
+
+.analyze-all-btn:hover {
+    background: rgba(24, 144, 255, 0.08);
+    transform: translateY(-1px);
+}
+
 .add-stock-btn {
     background: var(--color-primary);
     color: #ffffff;

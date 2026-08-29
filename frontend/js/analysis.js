@@ -133,8 +133,9 @@ const AnalysisPage = {
                 break;
             case 'stock-ai':
                 if (window.StockMultiStrategy) {
-                    StockMultiStrategy.loadWatchlistOptions();
-                    StockMultiStrategy.bootstrapFromUrl();
+                    // 先拉自选列表（codes 兜底可补名称），再处理 URL 批量/单只启动
+                    void Promise.resolve(StockMultiStrategy.loadWatchlistOptions())
+                        .finally(() => StockMultiStrategy.bootstrapFromUrl());
                 }
                 break;
             case 'trade-observe':

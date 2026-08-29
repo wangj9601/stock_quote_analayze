@@ -140,6 +140,15 @@ const WatchlistPage = {
             this.showAddStockModal();
         });
 
+        // 全部交易分析：新标签打开个股分析，每只自选一个 Tab
+        const analyzeAllBtn = document.getElementById('watchlistAnalyzeAllBtn')
+            || document.querySelector('.analyze-all-btn');
+        if (analyzeAllBtn) {
+            analyzeAllBtn.addEventListener('click', () => {
+                this.openAllTradeAnalysis();
+            });
+        }
+
         // 导入按钮
         const importBtn = document.querySelector('.import-btn');
         if (importBtn) {
@@ -1090,11 +1099,73 @@ const WatchlistPage = {
     }
 };
 
-// 全局函数：跳转到股票详情
+// 全局函数：新标签页打开股票详情（保留自选页）
 function goToStock(code, name) {
-    //window.location.href = `stock.html?code=${code}`;
-    window.location.href = `stock.html?code=${code}&name=${encodeURIComponent(name)}`;
+    const url = `stock.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name || '')}`;
+    const win = window.open(url, '_blank');
+    if (!win) {
+        // 弹窗被拦截时回退为当前页跳转
+        window.location.href = url;
+    }
 }
+
+/** 自选股 → 个股分析批量载荷（localStorage，跨标签页可读） */
+WatchlistPage.BATCH_STORAGE_KEY = 'ssa_watchlist_batch';
+
+/**
+ * 当前用于「全部交易分析」的股票列表：
+ * - 分组为 default/全部：全部自选
+ * - 其它分组：仅当前分组
+ */
+WatchlistPage.getStocksForTradeAnalysis = function getStocksForTradeAnalysis() {
+    const all = Array.isArray(this.stocksData) ? this.stocksData : [];
+    const group = this.selectedGroup;
+    if (!group || group === 'default' || group === 'all') {
+        return all.slice();
+    }
+    return all.filter((s) => (s.group || 'default') === group);
+};
+
+/**
+ * 新标签打开个股分析页，分析区按每只自选一个 Tab 批量跑交易分析。
+ */
+WatchlistPage.openAllTradeAnalysis = function openAllTradeAnalysis() {
+    const stocks = this.getStocksForTradeAnalysis()
+        .map((s) => ({
+            code: String(s.code || '').trim(),
+            name: String(s.name || '').trim(),
+        }))
+        .filter((s) => s.code);
+    if (!stocks.length) {
+        if (window.CommonUtils) CommonUtils.showToast('当前没有可分析的自选股', 'warning');
+        return;
+    }
+    if (stocks.length >= 40) {
+        const ok = window.confirm(
+            `将分析 ${stocks.length} 只自选股（每只一个 Tab），耗时可能较长，是否继续？`
+        );
+        if (!ok) return;
+    }
+    try {
+        localStorage.setItem(
+            this.BATCH_STORAGE_KEY,
+            JSON.stringify({ ts: Date.now(), stocks })
+        );
+    } catch (e) {
+        console.warn('写入批量分析载荷失败', e);
+        if (window.CommonUtils) CommonUtils.showToast('无法写入分析参数，请检查浏览器存储权限', 'error');
+        return;
+    }
+    // codes 作兜底（localStorage 异常时仍可启动）；popup=1 隐藏顶栏便于专注分析
+    const codesQs = stocks.map((s) => encodeURIComponent(s.code)).join(',');
+    const url = `analysis.html?tab=stock-ai&batch=watchlist&popup=1&codes=${codesQs}`;
+    const win = window.open(url, '_blank');
+    if (!win) {
+        window.location.href = url;
+    } else if (window.CommonUtils) {
+        CommonUtils.showToast(`已打开个股分析：${stocks.length} 只自选`, 'success');
+    }
+};
 
 function goToStockHistory(code, name) {
     window.location.href = `stock_history.html?code=${code}`;
