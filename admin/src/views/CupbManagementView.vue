@@ -227,7 +227,7 @@
           </el-table>
         </div>
         <div class="toolbar" style="margin-top: 8px">
-          <el-button :disabled="!trialItems.length" @click="exportTrialCsv">导出试算 CSV</el-button>
+          <el-button :disabled="!trialItems.length" @click="exportTrialCsv">导出试算表</el-button>
         </div>
       </el-tab-pane>
 
@@ -253,7 +253,7 @@
           </el-select>
           <el-input v-model="signalQuery.code" clearable placeholder="代码" style="width: 120px" />
           <el-button type="primary" :loading="loadingSignals" @click="loadSignals">查询</el-button>
-          <el-button :disabled="!signalItems.length" @click="exportSignalsCsv">导出 CSV</el-button>
+          <el-button :disabled="!signalItems.length" @click="exportSignalsCsv">导出信号表</el-button>
         </div>
         <div class="meta-line">共 {{ signalTotal }} 条</div>
         <CupbGradeVolumeRulesPanel />
@@ -367,6 +367,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { QuestionFilled } from '@element-plus/icons-vue'
+import * as XLSX from 'xlsx'
 import cupbApi, { type CupbScopeBody } from '@/services/cupbApi'
 import BoardPickerDialog from '@/components/common/BoardPickerDialog.vue'
 import CupbGradeVolumeRulesPanel from '@/components/cupb/CupbGradeVolumeRulesPanel.vue'
@@ -615,57 +616,100 @@ async function loadSignals() {
   }
 }
 
-const CSV_COLS = [
-  'code',
-  'name',
-  'status',
-  'ever_confirmed',
-  'first_confirm_date',
-  'grade',
-  'volume_score',
-  'board_labels',
-  'price_adjust',
-  'last_close',
-  'left_rim_price',
-  'cup_bottom_price',
-  'right_rim_price',
-  'handle_low_price',
-  'rim',
-  'cup_depth_pct',
-  'handle_retrace_pct',
-  'left_rim_date',
-  'cup_bottom_date',
-  'right_rim_date',
-  'handle_low_date',
-  'confirm_date',
+/** 试算/信号导出列：中文表头 + Excel 列宽（字符宽度） */
+const EXPORT_COLS: { key: string; title: string; width: number }[] = [
+  { key: 'code', title: '代码', width: 10 },
+  { key: 'name', title: '名称', width: 14 },
+  { key: 'status', title: '状态', width: 10 },
+  { key: 'ever_confirmed', title: '曾确认', width: 8 },
+  { key: 'first_confirm_date', title: '历史确认日', width: 14 },
+  { key: 'grade', title: '等级', width: 8 },
+  { key: 'volume_score', title: '量价', width: 8 },
+  { key: 'board_labels', title: '所属板块', width: 20 },
+  { key: 'price_adjust', title: '复权方式', width: 10 },
+  { key: 'last_close', title: '收盘', width: 10 },
+  { key: 'left_rim_price', title: '左沿', width: 10 },
+  { key: 'cup_bottom_price', title: '杯底', width: 10 },
+  { key: 'right_rim_price', title: '右沿', width: 10 },
+  { key: 'handle_low_price', title: '柄低', width: 10 },
+  { key: 'rim', title: '杯口', width: 10 },
+  { key: 'cup_depth_pct', title: '杯深%', width: 10 },
+  { key: 'handle_retrace_pct', title: '柄回撤%', width: 12 },
+  { key: 'left_rim_date', title: '左沿日', width: 12 },
+  { key: 'cup_bottom_date', title: '杯底日', width: 12 },
+  { key: 'right_rim_date', title: '右沿日', width: 12 },
+  { key: 'handle_low_date', title: '柄低日', width: 12 },
+  { key: 'confirm_date', title: '确认日', width: 12 },
 ]
 
-function exportCsv(filename: string, rows: any[]) {
-  if (!rows.length) return
-  const lines = [CSV_COLS.join(',')]
-  for (const r of rows) {
-    lines.push(
-      CSV_COLS.map((c) => {
-        const v = r[c] == null ? '' : String(r[c])
-        return `"${v.replace(/"/g, '""')}"`
-      }).join(',')
-    )
+function formatExportCell(key: string, row: any): string | number {
+  const raw = row?.[key]
+  if (raw == null || raw === '') return ''
+  if (key === 'status') {
+    const s = String(raw)
+    if (s === 'confirmed') return '已确认'
+    if (s === 'forming') return '形成中'
+    return s
   }
-  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  if (key === 'ever_confirmed') {
+    if (raw === true || raw === 'true' || raw === 1 || raw === '1') return '是'
+    if (raw === false || raw === 'false' || raw === 0 || raw === '0') return '否'
+    return String(raw)
+  }
+  if (key === 'price_adjust') {
+    const p = String(raw)
+    if (p === 'qfq') return '前复权'
+    if (p === 'none' || p === 'raw') return '不复权'
+    return p
+  }
+  if (key === 'board_labels') {
+    if (Array.isArray(raw)) return raw.map((x) => String(x)).filter(Boolean).join('、')
+    return String(raw)
+  }
+  if (typeof raw === 'boolean') return raw ? '是' : '否'
+  return raw as string | number
+}
+
+/**
+ * 导出试算/信号：中文列名。
+ * - .xlsx：可保存列宽，Excel/WPS 打开即对齐
+ * - .csv：UTF-8 BOM + 中文表头（便于其它工具）
+ */
+function exportCsv(basename: string, rows: any[]) {
+  if (!rows.length) return
+  const headers = EXPORT_COLS.map((c) => c.title)
+  const dataRows = rows.map((r) => EXPORT_COLS.map((c) => formatExportCell(c.key, r)))
+  const aoa = [headers, ...dataRows]
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa)
+  ws['!cols'] = EXPORT_COLS.map((c) => ({ wch: c.width }))
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '杯底试算')
+  XLSX.writeFile(wb, `${basename}.xlsx`)
+
+  const csvLines = [
+    headers.map((h) => `"${String(h).replace(/"/g, '""')}"`).join(','),
+    ...dataRows.map((cells) =>
+      cells.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')
+    ),
+  ]
+  const blob = new Blob(['\ufeff' + csvLines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = filename
+  a.download = `${basename}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
 
 function exportTrialCsv() {
-  exportCsv(`cupb_trial_${trialMeta.value?.trade_date || 'export'}.csv`, trialItems.value)
+  exportCsv(`cupb_trial_${trialMeta.value?.trade_date || 'export'}`, trialItems.value)
+  ElMessage.success('已导出试算表：Excel（含列宽）+ CSV（中文列名）')
 }
 
 function exportSignalsCsv() {
-  exportCsv(`cupb_signals_${signalQuery.trade_date}.csv`, signalItems.value)
+  exportCsv(`cupb_signals_${signalQuery.trade_date || 'export'}`, signalItems.value)
+  ElMessage.success('已导出信号表：Excel（含列宽）+ CSV（中文列名）')
 }
 
 onMounted(() => {

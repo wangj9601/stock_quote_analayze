@@ -132,6 +132,7 @@ const MarketsPage = {
         }
         const sectorDetailModal = document.getElementById('sectorDetailModal');
         if (sectorDetailModal) {
+        this._sectorDetailCtx = null;
             sectorDetailModal.addEventListener('click', (e) => {
                 if (e.target === sectorDetailModal) this.hideSectorDetailModal();
             });
@@ -841,27 +842,86 @@ const MarketsPage = {
     },
 
     /**
-     * 触发同花顺行业/概念板全量斜率后台刷新；不在打开列表时同步全算。
-     * 启动后轮询列表，直至出现斜率或超时。
+     * 刷新同花顺行业/概念板斜率。
+     * @param {string} kind industry|concept
+     * @param {{ boardCode?: string, boardCodes?: string[], triggerBtn?: HTMLElement }} [opts]
+     *   传入 boardCode/boardCodes 时仅重算指定板块（同步等待）；否则全量后台刷新并轮询。
      */
-    async refreshSectorSlopes(kind = 'industry') {
+    async refreshSectorSlopes(kind = 'industry', opts = {}) {
         const ui = this._boardKindUi(kind);
-        const btn = document.getElementById(ui.refreshBtnId);
-        if (btn && btn.disabled) return;
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '计算中…';
+        const codes = [];
+        if (opts && opts.boardCode) {
+            const c = String(opts.boardCode).trim();
+            if (c) codes.push(c);
+        }
+        if (opts && Array.isArray(opts.boardCodes)) {
+            opts.boardCodes.forEach((c) => {
+                const s = String(c || '').trim();
+                if (s && !codes.includes(s)) codes.push(s);
+            });
+        }
+        const singleOrFew = codes.length > 0;
+        const toolbarBtn = document.getElementById(ui.refreshBtnId);
+        const triggerBtn = (opts && opts.triggerBtn) || (!singleOrFew ? toolbarBtn : null);
+        const restoreLabel = singleOrFew ? '重算斜率' : '刷新斜率';
+
+        if (triggerBtn && triggerBtn.disabled) return;
+        if (triggerBtn) {
+            triggerBtn.disabled = true;
+            triggerBtn.textContent = '计算中…';
         }
         try {
+            const qs = new URLSearchParams({
+                board_code_source: 'tonghuashun',
+                board_kind: ui.kind,
+                sync: singleOrFew ? 'true' : 'false',
+            });
+            if (singleOrFew) {
+                qs.set('board_codes', codes.join(','));
+            }
             const response = await fetch(
-                `${this.API_BASE_URL}${ui.refreshApi}`
-                + `?board_code_source=tonghuashun&board_kind=${ui.kind}&sync=false`,
+                `${this.API_BASE_URL}${ui.refreshApi}?${qs.toString()}`,
                 { method: 'POST' }
             );
             const result = await response.json();
             if (!result.success) {
-                throw new Error(result.message || '启动斜率刷新失败');
+                throw new Error(result.message || (singleOrFew ? '单板斜率重算失败' : '启动斜率刷新失败'));
             }
+
+            if (singleOrFew) {
+                const written = Number(result.written != null ? result.written : 0);
+                const total = Number(result.total != null ? result.total : codes.length);
+                await this.loadSectorData(ui.kind);
+                // 若详情弹窗正打开同一板块，刷新详情
+                const detail = this._sectorDetailCtx;
+                if (
+                    detail
+                    && detail.kind === ui.kind
+                    && codes.includes(String(detail.boardCode || ''))
+                ) {
+                    this.showSectorDetail(
+                        detail.boardName || '',
+                        detail.boardCode || '',
+                        detail.boardSource || 'tonghuashun',
+                        detail.kind
+                    );
+                }
+                if (written > 0) {
+                    CommonUtils.showToast(
+                        codes.length === 1
+                            ? `已重算斜率：${codes[0]}`
+                            : `已重算斜率：${written}/${total} 个板块`,
+                        'success'
+                    );
+                } else {
+                    CommonUtils.showToast(
+                        result.message || '未写入有效斜率（成分不足或数据不足）',
+                        'warning'
+                    );
+                }
+                return;
+            }
+
             CommonUtils.showToast(
                 result.message || '已启动后台斜率计算，完成后列表将自动更新',
                 'success'
@@ -879,17 +939,17 @@ const MarketsPage = {
                 } catch (_e) { /* loadSectorData 已 toast */ }
                 const after = this._countSectorSlopes(this[ui.dataKey]);
                 if (after > before || (before === 0 && after > 0)) {
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = '刷新斜率';
+                    if (triggerBtn) {
+                        triggerBtn.disabled = false;
+                        triggerBtn.textContent = restoreLabel;
                     }
                     CommonUtils.showToast(`斜率已更新：${after} 个板块`, 'success');
                     return;
                 }
                 if (attempts >= maxAttempts) {
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = '刷新斜率';
+                    if (triggerBtn) {
+                        triggerBtn.disabled = false;
+                        triggerBtn.textContent = restoreLabel;
                     }
                     CommonUtils.showToast('斜率仍在计算或未写入，请稍后手动刷新列表', 'info');
                     return;
@@ -903,9 +963,14 @@ const MarketsPage = {
         } catch (error) {
             console.error('刷新板块斜率失败:', error);
             CommonUtils.showToast(error.message || '刷新板块斜率失败', 'error');
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '刷新斜率';
+            if (triggerBtn) {
+                triggerBtn.disabled = false;
+                triggerBtn.textContent = restoreLabel;
+            }
+        } finally {
+            if (singleOrFew && triggerBtn) {
+                triggerBtn.disabled = false;
+                triggerBtn.textContent = restoreLabel;
             }
         }
     },
@@ -1078,8 +1143,9 @@ const MarketsPage = {
                     <td>${memberCount}</td>
                     <td class="${this.getChangeClass(sector.sector_slope)}">${this.formatSlope(sector.sector_slope)}</td>
                     <td>${this.boardEnvChipHtml(sector)}</td>
-                    <td>
+                    <td class="sector-row-actions">
                         <button type="button" class="btn btn-secondary sector-row-detail-btn">详情</button>
+                        <button type="button" class="btn btn-secondary sector-row-slope-btn" title="仅重算该板块斜率">重算斜率</button>
                     </td>
                 </tr>
             `;
@@ -1096,6 +1162,16 @@ const MarketsPage = {
                 );
             };
             tr.addEventListener('click', openDetail);
+            const slopeBtn = tr.querySelector('.sector-row-slope-btn');
+            if (slopeBtn) {
+                slopeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.refreshSectorSlopes(ui.kind, {
+                        boardCode: tr.dataset.boardCode || '',
+                        triggerBtn: slopeBtn,
+                    });
+                });
+            }
         });
     },
 
@@ -1154,7 +1230,10 @@ const MarketsPage = {
                             <span class="stock-change">${this.boardEnvChipHtml(sector)}</span>
                         </div>
                     </div>
-                    <button type="button" class="sector-detail-btn">查看详情</button>
+                    <div class="sector-card-actions">
+                        <button type="button" class="sector-detail-btn">查看详情</button>
+                        <button type="button" class="sector-slope-btn" title="仅重算该板块斜率">重算斜率</button>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -1170,11 +1249,23 @@ const MarketsPage = {
                 e.stopPropagation();
                 open();
             });
-            card.addEventListener('click', open);
+            card.querySelector('.sector-slope-btn')?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const btn = e.currentTarget;
+                this.refreshSectorSlopes(ui.kind, {
+                    boardCode: card.dataset.boardCode || '',
+                    triggerBtn: btn,
+                });
+            });
+            card.addEventListener('click', (e) => {
+                if (e.target.closest('button')) return;
+                open();
+            });
         });
     },
 
     hideSectorDetailModal() {
+        this._sectorDetailCtx = null;
         const modal = document.getElementById('sectorDetailModal');
         if (modal) modal.classList.remove('show');
     },
@@ -1241,6 +1332,12 @@ const MarketsPage = {
         if (!modal || !body) return;
 
         modal.classList.add('show');
+        this._sectorDetailCtx = {
+            kind: ui.kind,
+            boardCode: boardCode || '',
+            boardName: boardName || '',
+            boardSource: boardSource || 'tonghuashun',
+        };
         if (title) title.textContent = boardName || boardCode || '板块详情';
         if (sub) {
             sub.textContent = `${ui.label} · ${boardCode || '--'} · ${boardSource || 'tonghuashun'}`;
@@ -1303,6 +1400,10 @@ const MarketsPage = {
             </div>
             <div class="sector-detail-section">
                 <h3>板块斜率与强弱</h3>
+                
+                <div class="sector-detail-actions">
+                    <button type="button" class="btn btn-secondary sector-detail-slope-btn" title="仅重算当前板块斜率">重算斜率</button>
+                </div>
                 <div class="sector-detail-grid">
                     ${item('斜率(ln)', this.formatSlope(d.sector_slope), this.getChangeClass(d.sector_slope))}
                     ${item('板环境', this.boardEnvChipHtml(d))}
@@ -1322,6 +1423,19 @@ const MarketsPage = {
                 <div class="sector-detail-meta">${this.escapeHtml(d.update_time || '--')}</div>
             </div>
         `;
+
+        const slopeBtn = body.querySelector('.sector-detail-slope-btn');
+        if (slopeBtn) {
+            const kind = (d.board_kind === 'concept') ? 'concept' : 'industry';
+            const code = d.board_code || (this._sectorDetailCtx && this._sectorDetailCtx.boardCode) || '';
+            slopeBtn.addEventListener('click', () => {
+                this.refreshSectorSlopes(kind, {
+                    boardCode: code,
+                    triggerBtn: slopeBtn,
+                });
+            });
+        }
+
     },
 
     // 加载热门数据

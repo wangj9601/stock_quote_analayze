@@ -1475,3 +1475,49 @@
     flex-wrap: wrap;
     margin-bottom: 1rem;
   }
+
+/* 单板重算斜率 */
+.sector-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+}
+.sector-row-actions .btn {
+    padding: 4px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.sector-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+.sector-card-actions .sector-detail-btn,
+.sector-card-actions .sector-slope-btn {
+    flex: 1;
+    min-width: 72px;
+}
+.sector-slope-btn {
+    background: #fff;
+    border: 1px solid var(--color-border, #d9d9d9);
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--color-text, #333);
+}
+.sector-slope-btn:hover {
+    border-color: var(--color-primary, #1890ff);
+    color: var(--color-primary, #1890ff);
+}
+.sector-slope-btn:disabled,
+.sector-row-slope-btn:disabled,
+.sector-detail-slope-btn:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+.sector-detail-actions {
+    margin: 0 0 10px;
+}
