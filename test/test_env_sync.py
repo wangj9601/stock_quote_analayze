@@ -69,6 +69,9 @@ def test_expand_modules_granular():
     assert expand_modules(["quotes"]) == ["historical_quotes", "historical_quotes_hk"]
     assert expand_modules(["adj_factors"]) == ["stock_adj_factor"]
     assert expand_modules(["stock_adj_factor"]) == ["stock_adj_factor"]
+    assert expand_modules(["fina_indicator"]) == ["stock_fina_indicator"]
+    assert expand_modules(["stock_fina_indicator"]) == ["stock_fina_indicator"]
+    assert expand_modules(["fina_info"]) == ["stock_fina_indicator"]
     assert expand_modules(["permissions"]) == [
         "frontend_permissions",
         "frontend_roles",
@@ -83,11 +86,14 @@ def test_expand_modules_granular():
     assert "frontend_permissions" not in expand_modules(None)
     assert needs_date_range(["historical_quotes"]) is True
     assert needs_date_range(["stock_adj_factor"]) is False
+    assert needs_date_range(["stock_fina_indicator"]) is False
     assert needs_date_range(["stock_basic_info"]) is False
     assert set(ALL_RESOURCES) >= set(DEFAULT_RESOURCES)
     assert "frontend_permissions" in ALL_RESOURCES
     assert "stock_adj_factor" in ALL_RESOURCES
+    assert "stock_fina_indicator" in ALL_RESOURCES
     assert "stock_adj_factor" not in expand_modules(None)
+    assert "stock_fina_indicator" not in expand_modules(None)
     try:
         expand_modules(["no_such"])
         assert False
@@ -115,8 +121,68 @@ def test_filter_modules_for_bundle():
     assert filter_modules_for_bundle("adj_factors", ["stock_adj_factor", "historical_quotes"]) == [
         "stock_adj_factor"
     ]
+    assert filter_modules_for_bundle(
+        "fina_indicator", ["stock_fina_indicator", "stock_adj_factor"]
+    ) == ["stock_fina_indicator"]
     assert filter_modules_for_bundle("unknown_bundle", mods) == []
 
+
+def test_fina_indicator_export_import(db):
+    from backend_api.env_sync.services import export_modules, import_modules
+    from backend_api.models import StockFinaIndicator
+
+    db.add(
+        StockFinaIndicator(
+            code="000001",
+            end_date="20241231",
+            ann_date="20250430",
+            eps=1.2,
+            basic_eps_yoy=25.0,
+            roe=15.0,
+        )
+    )
+    db.add(
+        StockFinaIndicator(
+            code="000001",
+            end_date="20231231",
+            eps=1.0,
+            basic_eps_yoy=10.0,
+        )
+    )
+    db.commit()
+
+    payload = export_modules(db, ["stock_fina_indicator"])
+    assert "fina_indicator" in payload["bundles"]
+    rows = payload["bundles"]["fina_indicator"]["items"]["stock_fina_indicator"]
+    assert len(rows) == 2
+
+    ranged = export_modules(
+        db,
+        ["stock_fina_indicator"],
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+    )
+    ranged_rows = ranged["bundles"]["fina_indicator"]["items"]["stock_fina_indicator"]
+    assert len(ranged_rows) == 1
+    assert ranged_rows[0]["end_date"] == "20241231"
+
+    db.query(StockFinaIndicator).delete()
+    db.commit()
+    assert db.query(StockFinaIndicator).count() == 0
+
+    import_modules(db, payload["bundles"], modules=["stock_fina_indicator"])
+    assert db.query(StockFinaIndicator).count() == 2
+    row = (
+        db.query(StockFinaIndicator)
+        .filter(
+            StockFinaIndicator.code == "000001",
+            StockFinaIndicator.end_date == "20241231",
+        )
+        .first()
+    )
+    assert row is not None
+    assert row.eps == 1.2
+    assert row.basic_eps_yoy == 25.0
 
 def test_quotes_require_date_range(db):
     from backend_api.env_sync.services import export_modules

@@ -12,13 +12,16 @@ from backend_api.env_sync import expand_modules, needs_date_range, split_resourc
 from backend_api.env_sync.services.market_data import (
     export_adj_factors,
     export_board_data,
+    export_fina_indicator,
     export_quotes,
     export_stock_basic,
     import_adj_factors,
     import_board_data,
+    import_fina_indicator,
     import_quotes,
     import_stock_basic,
     max_adj_factor_sync_days,
+    max_fina_sync_days,
     max_quote_sync_days,
     validate_date_range,
 )
@@ -56,8 +59,9 @@ def export_modules(
     parts = split_resources(resources)
     has_quotes = bool(parts["quotes"])
     has_adj = bool(parts["adj_factors"])
+    has_fina = bool(parts["fina"])
 
-    # 行情强制日期（默认跨度 366 天）；复权因子日期可选（不填=全库，填写默认可跨约 11 年）
+    # 行情强制日期（默认跨度 366 天）；复权因子/财务指标日期可选（不填=全库）
     if has_quotes:
         date_range = validate_date_range(
             start_date,
@@ -66,13 +70,20 @@ def export_modules(
             max_days=max_quote_sync_days(),
             label="行情",
         )
-    elif has_adj or start_date or end_date:
+    elif has_adj or has_fina or start_date or end_date:
+        # 复权与财务共用可选日期；跨度取更宽的上限，避免勾选财务时被复权上限误伤
+        lim = max_adj_factor_sync_days()
+        if has_fina:
+            lim = max(lim, max_fina_sync_days())
+        label = "财务指标" if has_fina and not has_adj else (
+            "复权因子" if has_adj and not has_fina else "数据"
+        )
         date_range = validate_date_range(
             start_date,
             end_date,
             require=False,
-            max_days=max_adj_factor_sync_days(),
-            label="复权因子",
+            max_days=lim,
+            label=label,
         )
     else:
         date_range = validate_date_range(
@@ -143,6 +154,19 @@ def export_modules(
                 env_label=label,
             ),
         )
+    if parts["fina"]:
+        fina_start = date_range["start"]
+        fina_end = date_range["end"]
+        bundles["fina_indicator"] = _stage(
+            "fina_indicator",
+            lambda: export_fina_indicator(
+                db,
+                start=fina_start,
+                end=fina_end,
+                tables=set(parts["fina"]),
+                env_label=label,
+            ),
+        )
     if parts["permissions"]:
         bundles["permissions_resources"] = _stage(
             "permissions_resources",
@@ -157,7 +181,7 @@ def export_modules(
             "start_date": date_range["start"].isoformat(),
             "end_date": date_range["end"].isoformat(),
         }
-    elif has_adj:
+    elif has_adj or has_fina:
         out["date_range"] = {"mode": "full"}
     return out
 
@@ -170,7 +194,7 @@ def import_modules(
 ) -> Dict[str, Any]:
     """
     bundles: {
-      strategy_configs|trade_observe|stock_basic|board_data|quotes|adj_factors|permissions_resources: SyncBundle
+      strategy_configs|trade_observe|stock_basic|board_data|quotes|adj_factors|fina_indicator|permissions_resources: SyncBundle
     }
     modules: 可选，限制导入细项；为空则导入包内全部 items。
     """
@@ -205,6 +229,11 @@ def import_modules(
         tables = set(parts["adj_factors"]) if parts else None
         results["adj_factors"] = import_adj_factors(
             db, bundles["adj_factors"], tables=tables
+        )
+    if "fina_indicator" in (bundles or {}):
+        tables = set(parts["fina"]) if parts else None
+        results["fina_indicator"] = import_fina_indicator(
+            db, bundles["fina_indicator"], tables=tables
         )
     if "permissions_resources" in (bundles or {}):
         tables = parts["permissions"] if parts else None

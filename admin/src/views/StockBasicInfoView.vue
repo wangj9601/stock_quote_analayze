@@ -226,8 +226,7 @@
               />
             </el-col>
             <el-col :xs="24" :sm="12" :md="5">
-              <el-select v-model="rsQuery.min_rating" style="width: 100%" clearable placeholder="最低评级">
-                <el-option label="全部" :value="null" />
+              <el-select v-model="rsQuery.min_rating" style="width: 100%" clearable placeholder="最低评级（清空=全部）">
                 <el-option label="≥90 很强" :value="90" />
                 <el-option label="≥70 偏强" :value="70" />
                 <el-option label="≥50 中性+" :value="50" />

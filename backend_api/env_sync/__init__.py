@@ -13,6 +13,7 @@ MODULE_STOCK_BASIC = "stock_basic"
 MODULE_BOARD_DATA = "board_data"
 MODULE_QUOTES = "quotes"
 MODULE_ADJ_FACTORS = "adj_factors"
+MODULE_FINA_INDICATOR = "fina_indicator"
 MODULE_PERMISSIONS_RESOURCES = "permissions_resources"
 
 # —— 策略配置细项（与 strategy_configs.STRATEGY_TABLES 一致）——
@@ -65,6 +66,11 @@ RESOURCE_ADJ_FACTORS = [
     "stock_adj_factor",
 ]
 
+# —— 财务指标（日期可选：不填=全库；填写则按报告期 end_date YYYYMMDD 过滤）——
+RESOURCE_FINA = [
+    "stock_fina_indicator",
+]
+
 # —— 权限与角色（不含用户及用户级覆盖）——
 RESOURCE_PERMISSIONS = [
     "frontend_permissions",
@@ -72,9 +78,9 @@ RESOURCE_PERMISSIONS = [
     "role_permissions",
 ]
 
-# 行情必须带日期；复权因子日期可选（不填全库）
+# 行情必须带日期；复权因子/财务指标日期可选（不填全库）
 DATE_RANGE_REQUIRED = frozenset(RESOURCE_QUOTES)
-DATE_RANGE_OPTIONAL = frozenset(RESOURCE_ADJ_FACTORS)
+DATE_RANGE_OPTIONAL = frozenset(RESOURCE_ADJ_FACTORS) | frozenset(RESOURCE_FINA)
 
 ALL_RESOURCES = (
     RESOURCE_STRATEGY
@@ -83,6 +89,7 @@ ALL_RESOURCES = (
     + RESOURCE_BOARD
     + RESOURCE_QUOTES
     + RESOURCE_ADJ_FACTORS
+    + RESOURCE_FINA
     + RESOURCE_PERMISSIONS
 )
 
@@ -97,6 +104,7 @@ BUNDLE_RESOURCES: Dict[str, List[str]] = {
     MODULE_BOARD_DATA: list(RESOURCE_BOARD),
     MODULE_QUOTES: list(RESOURCE_QUOTES),
     MODULE_ADJ_FACTORS: list(RESOURCE_ADJ_FACTORS),
+    MODULE_FINA_INDICATOR: list(RESOURCE_FINA),
     MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
 }
 
@@ -108,6 +116,7 @@ GROUP_EXPAND: Dict[str, List[str]] = {
     MODULE_BOARD_DATA: list(RESOURCE_BOARD),
     MODULE_QUOTES: list(RESOURCE_QUOTES),
     MODULE_ADJ_FACTORS: list(RESOURCE_ADJ_FACTORS),
+    MODULE_FINA_INDICATOR: list(RESOURCE_FINA),
     MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
     "gms_config_all": [
         "gms_strategy_configs",
@@ -139,6 +148,7 @@ GROUP_EXPAND: Dict[str, List[str]] = {
     "basic_info": list(RESOURCE_BASIC),
     "board_info": list(RESOURCE_BOARD),
     # quotes 已由 MODULE_QUOTES 覆盖
+    "fina_info": list(RESOURCE_FINA),
     "permissions": list(RESOURCE_PERMISSIONS),
 }
 
@@ -317,6 +327,21 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
         ],
     },
     {
+        "group": "fina",
+        "name": "财务指标（日期可选，不填则全库）",
+        "requires_date_range": False,
+        "date_range_optional": True,
+        "items": [
+            {
+                "code": "stock_fina_indicator",
+                "name": "A股财务指标",
+                "desc": "StockFinaIndicator（CAN SLIM C/A）；不填日期=全表；填写则按报告期 end_date（YYYYMMDD）落在区间内",
+                "requires_date_range": False,
+                "date_range_optional": True,
+            },
+        ],
+    },
+    {
         "group": "permissions",
         "name": "权限与角色",
         "items": [
@@ -375,6 +400,7 @@ def split_resources(resources: Sequence[str]) -> Dict[str, List[str]]:
         "board": [r for r in resources if r in RESOURCE_BOARD],
         "quotes": [r for r in resources if r in RESOURCE_QUOTES],
         "adj_factors": [r for r in resources if r in RESOURCE_ADJ_FACTORS],
+        "fina": [r for r in resources if r in RESOURCE_FINA],
         "permissions": [r for r in resources if r in RESOURCE_PERMISSIONS],
     }
 
@@ -445,6 +471,11 @@ def catalog_for_api() -> Dict[str, Any]:
                 "code": "adj_factors",
                 "name": "复权因子（全部）",
                 "desc": "stock_adj_factor（A股/港股同表）；日期可选，不填则全库",
+            },
+            {
+                "code": "fina_indicator",
+                "name": "财务指标（全部）",
+                "desc": "stock_fina_indicator；日期可选，不填则全库",
             },
             {
                 "code": "permissions",

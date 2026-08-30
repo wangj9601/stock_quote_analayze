@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-head">
           <span>环境数据同步</span>
-          <el-tag type="info" size="small">策略/观察/基本信息/板块/行情/权限</el-tag>
+          <el-tag type="info" size="small">策略/观察/基本信息/板块/行情/财务/权限</el-tag>
         </div>
       </template>
       <p class="hint">
@@ -337,7 +337,10 @@ async function loadAll() {
       'historical_quotes',
       'historical_quotes_hk',
     ]
-    dateRangeOptional.value = mods.date_range_optional || ['stock_adj_factor']
+    dateRangeOptional.value = mods.date_range_optional || [
+      'stock_adj_factor',
+      'stock_fina_indicator',
+    ]
   } catch (e: any) {
     ElMessage.error(e.message || '加载失败')
   } finally {

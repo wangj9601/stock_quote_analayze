@@ -22,6 +22,7 @@ from backend_api.models import (
     StockAdjFactor,
     StockBasicInfo,
     StockBasicInfoHK,
+    StockFinaIndicator,
 )
 from backend_api.utils.board_code_source import (
     DEFAULT_BOARD_CODE_SOURCE,
@@ -30,6 +31,7 @@ from backend_api.utils.board_code_source import (
 
 QUOTE_TABLES = ("historical_quotes", "historical_quotes_hk")
 ADJ_FACTOR_TABLES = ("stock_adj_factor",)
+FINA_TABLES = ("stock_fina_indicator",)
 BASIC_TABLES = ("stock_basic_info", "stock_basic_info_hk")
 BOARD_TABLES = (
     "industry_board_basic_info",
@@ -41,7 +43,27 @@ BOARD_TABLES = (
 DEFAULT_QUOTE_MAX_DAYS = 366
 # 复权因子体积远小于日 K：默认约 11 年（>10 年），可用环境变量覆盖
 DEFAULT_ADJ_FACTOR_MAX_DAYS = 4018
+# 财务报告期跨度默认约 15 年
+DEFAULT_FINA_MAX_DAYS = 5500
 UPSERT_CHUNK = 800
+
+FINA_FIELDS = [
+    "code",
+    "end_date",
+    "ann_date",
+    "ts_code",
+    "eps",
+    "q_eps",
+    "basic_eps_yoy",
+    "dt_eps_yoy",
+    "q_eps_yoy",
+    "q_profit_yoy",
+    "q_netprofit_yoy",
+    "q_sales_yoy",
+    "roe",
+    "roe_waa",
+    "update_time",
+]
 
 
 def max_quote_sync_days() -> int:
@@ -63,6 +85,15 @@ def max_adj_factor_sync_days() -> int:
         )
     except ValueError:
         return DEFAULT_ADJ_FACTOR_MAX_DAYS
+
+
+def max_fina_sync_days() -> int:
+    import os
+
+    try:
+        return max(1, int(os.getenv("ENV_SYNC_FINA_MAX_DAYS") or DEFAULT_FINA_MAX_DAYS))
+    except ValueError:
+        return DEFAULT_FINA_MAX_DAYS
 
 
 def validate_date_range(
@@ -1055,6 +1086,221 @@ def iter_adj_factor_push_chunks(
     for i in range(0, total, chunk_rows):
         part = dict(base)
         part["items"] = {"stock_adj_factor": rows[i : i + chunk_rows]}
+        part["chunk"] = {
+            "offset": i,
+            "size": min(chunk_rows, total - i),
+            "total": total,
+        }
+        out.append(part)
+    return out
+
+
+def _ymd(d: Optional[date]) -> Optional[str]:
+    if not d:
+        return None
+    return d.strftime("%Y%m%d")
+
+
+def export_fina_indicator(
+    db: Session,
+    *,
+    start: Optional[date] = None,
+    end: Optional[date] = None,
+    tables: Optional[Set[str]] = None,
+    env_label: str = "local",
+) -> Dict[str, Any]:
+    """导出 stock_fina_indicator；日期可选，按报告期 end_date（YYYYMMDD）过滤。"""
+    items: Dict[str, Any] = {}
+    want = tables or set(FINA_TABLES)
+    use_range = bool(start and end)
+    start_ymd = _ymd(start)
+    end_ymd = _ymd(end)
+    meta: Dict[str, Any] = (
+        {"start_date": start.isoformat(), "end_date": end.isoformat(), "filter": "end_date"}
+        if use_range
+        else {"mode": "full"}
+    )
+
+    if "stock_fina_indicator" in want:
+        q = db.query(StockFinaIndicator)
+        if use_range and start_ymd and end_ymd:
+            q = q.filter(
+                StockFinaIndicator.end_date >= start_ymd,
+                StockFinaIndicator.end_date <= end_ymd,
+            )
+        q = q.order_by(StockFinaIndicator.code, StockFinaIndicator.end_date)
+        items["stock_fina_indicator"] = [_row_dict(r, FINA_FIELDS) for r in q.all()]
+
+    bundle = make_bundle(module="fina_indicator", items=items, env_label=env_label)
+    bundle["date_range"] = meta
+    return bundle
+
+
+def _prepare_fina_rows(
+    raw_rows: List[Dict],
+    result: Dict[str, Any],
+) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    for raw in raw_rows:
+        code = str(raw.get("code") or "").strip()
+        end_date = str(raw.get("end_date") or "").strip()
+        if not code or not end_date or len(end_date) != 8:
+            result["skipped"] += 1
+            continue
+
+        def _f(key: str) -> Optional[float]:
+            v = raw.get(key)
+            if v is None or v == "":
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        prepared.append(
+            {
+                "code": code,
+                "end_date": end_date,
+                "ann_date": (str(raw.get("ann_date") or "").strip() or None),
+                "ts_code": (str(raw.get("ts_code") or "").strip() or None),
+                "eps": _f("eps"),
+                "q_eps": _f("q_eps"),
+                "basic_eps_yoy": _f("basic_eps_yoy"),
+                "dt_eps_yoy": _f("dt_eps_yoy"),
+                "q_eps_yoy": _f("q_eps_yoy"),
+                "q_profit_yoy": _f("q_profit_yoy"),
+                "q_netprofit_yoy": _f("q_netprofit_yoy"),
+                "q_sales_yoy": _f("q_sales_yoy"),
+                "roe": _f("roe"),
+                "roe_waa": _f("roe_waa"),
+                "update_time": parse_dt(raw.get("update_time")) or datetime.now(),
+            }
+        )
+    return prepared
+
+
+def _import_fina_orm(
+    db: Session,
+    prepared: List[Dict[str, Any]],
+    result: Dict[str, Any],
+) -> None:
+    for row in prepared:
+        code, end_date = row["code"], row["end_date"]
+        try:
+            with db.begin_nested():
+                existing = (
+                    db.query(StockFinaIndicator)
+                    .filter(
+                        StockFinaIndicator.code == code,
+                        StockFinaIndicator.end_date == end_date,
+                    )
+                    .first()
+                )
+                payload = {k: v for k, v in row.items() if k not in ("code", "end_date")}
+                if existing:
+                    for k, v in payload.items():
+                        setattr(existing, k, v)
+                    result["updated"] += 1
+                else:
+                    db.add(StockFinaIndicator(**row))
+                    result["created"] += 1
+        except Exception as e:
+            result["errors"].append(f"stock_fina_indicator/{code}/{end_date}: {e}")
+
+
+def _import_fina_pg_bulk(
+    db: Session,
+    prepared: List[Dict[str, Any]],
+    result: Dict[str, Any],
+) -> None:
+    sql = text(
+        """
+        INSERT INTO stock_fina_indicator (
+            code, end_date, ann_date, ts_code,
+            eps, q_eps, basic_eps_yoy, dt_eps_yoy, q_eps_yoy,
+            q_profit_yoy, q_netprofit_yoy, q_sales_yoy,
+            roe, roe_waa, update_time
+        ) VALUES (
+            :code, :end_date, :ann_date, :ts_code,
+            :eps, :q_eps, :basic_eps_yoy, :dt_eps_yoy, :q_eps_yoy,
+            :q_profit_yoy, :q_netprofit_yoy, :q_sales_yoy,
+            :roe, :roe_waa, :update_time
+        )
+        ON CONFLICT (code, end_date) DO UPDATE SET
+            ann_date = EXCLUDED.ann_date,
+            ts_code = EXCLUDED.ts_code,
+            eps = EXCLUDED.eps,
+            q_eps = EXCLUDED.q_eps,
+            basic_eps_yoy = EXCLUDED.basic_eps_yoy,
+            dt_eps_yoy = EXCLUDED.dt_eps_yoy,
+            q_eps_yoy = EXCLUDED.q_eps_yoy,
+            q_profit_yoy = EXCLUDED.q_profit_yoy,
+            q_netprofit_yoy = EXCLUDED.q_netprofit_yoy,
+            q_sales_yoy = EXCLUDED.q_sales_yoy,
+            roe = EXCLUDED.roe,
+            roe_waa = EXCLUDED.roe_waa,
+            update_time = EXCLUDED.update_time
+        """
+    )
+    for i in range(0, len(prepared), UPSERT_CHUNK):
+        chunk = prepared[i : i + UPSERT_CHUNK]
+        try:
+            db.connection().execute(sql, chunk)
+            result["updated"] += len(chunk)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            result["errors"].append(
+                f"stock_fina_indicator bulk chunk@{i}: {e}; fallback orm"
+            )
+            _import_fina_orm(db, chunk, result)
+            db.commit()
+
+
+def import_fina_indicator(
+    db: Session,
+    bundle: Dict[str, Any],
+    *,
+    tables: Optional[Set[str]] = None,
+) -> Dict[str, Any]:
+    result = empty_result()
+    items = (bundle or {}).get("items") or {}
+    want = tables or set(FINA_TABLES)
+
+    if "stock_fina_indicator" not in want:
+        return result
+
+    prepared = _prepare_fina_rows(items.get("stock_fina_indicator") or [], result)
+    if not prepared:
+        return result
+
+    bind = db.get_bind()
+    dialect = getattr(getattr(bind, "dialect", None), "name", "") or ""
+    if dialect == "postgresql":
+        _import_fina_pg_bulk(db, prepared, result)
+    else:
+        _import_fina_orm(db, prepared, result)
+        db.commit()
+    return result
+
+
+def iter_fina_indicator_push_chunks(
+    bundle: Dict[str, Any],
+    *,
+    chunk_rows: int,
+) -> List[Dict[str, Any]]:
+    """将 fina_indicator bundle 按行数切开，供 Push 分多次 POST。"""
+    chunk_rows = max(1, int(chunk_rows))
+    items = (bundle or {}).get("items") or {}
+    rows = list(items.get("stock_fina_indicator") or [])
+    if len(rows) <= chunk_rows:
+        return [bundle]
+    base = {k: v for k, v in bundle.items() if k != "items"}
+    out: List[Dict[str, Any]] = []
+    total = len(rows)
+    for i in range(0, total, chunk_rows):
+        part = dict(base)
+        part["items"] = {"stock_fina_indicator": rows[i : i + chunk_rows]}
         part["chunk"] = {
             "offset": i,
             "size": min(chunk_rows, total - i),
