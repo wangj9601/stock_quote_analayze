@@ -609,3 +609,217 @@ async def execute_import_file(
     )
     return {"success": result["failed"] == 0, "data": result}
 
+
+@router.get("/rs-ratings")
+async def list_rs_ratings(
+    keyword: str = Query("", description="代码或名称关键字"),
+    date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD；缺省取最新有数据日"),
+    min_rating: Optional[int] = Query(None, ge=1, le=99, description="最低 RS 评级过滤"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _: Any = Depends(get_current_admin),
+):
+    """A 股股价相对强度列表：按 rs_rating 降序（最高在前），无评级排后。"""
+    from backend_core.indicators.rs_rating.config import strength_label
+
+    asof = (date or "").strip()[:10] or None
+    if not asof:
+        row = db.execute(
+            text(
+                """
+                SELECT MAX(date) FROM rs_ratings
+                WHERE market_type = 'CN' AND rs_rating IS NOT NULL
+                """
+            )
+        ).fetchone()
+        asof = str(row[0]).strip()[:10] if row and row[0] else None
+        if not asof:
+            row2 = db.execute(
+                text("SELECT MAX(date) FROM rs_ratings WHERE market_type = 'CN'")
+            ).fetchone()
+            asof = str(row2[0]).strip()[:10] if row2 and row2[0] else None
+    if not asof:
+        return {
+            "success": True,
+            "data": [],
+            "total": 0,
+            "page": page,
+            "page_size": page_size,
+            "asof": None,
+            "message": "尚无 RS 预计算数据",
+        }
+
+    where_parts = ["r.market_type = 'CN'", "r.date = :asof"]
+    params: Dict[str, Any] = {"asof": asof}
+    kw = (keyword or "").strip()
+    if kw:
+        where_parts.append("(r.code ILIKE :kw OR COALESCE(b.name, '') ILIKE :kw)")
+        params["kw"] = f"%{kw}%"
+    if min_rating is not None:
+        where_parts.append("r.rs_rating >= :min_rating")
+        params["min_rating"] = int(min_rating)
+
+    where_sql = " AND ".join(where_parts)
+    total = (
+        db.execute(
+            text(
+                f"""
+                SELECT COUNT(1)
+                FROM rs_ratings r
+                LEFT JOIN stock_basic_info b ON b.code = r.code
+                WHERE {where_sql}
+                """
+            ),
+            params,
+        ).scalar()
+        or 0
+    )
+    offset = (page - 1) * page_size
+    params["limit"] = page_size
+    params["offset"] = offset
+    rows = db.execute(
+        text(
+            f"""
+            SELECT
+                r.code,
+                b.name,
+                r.date,
+                r.rs_rating,
+                r.rs_raw,
+                r.roc_63,
+                r.roc_126,
+                r.roc_189,
+                r.roc_252,
+                r.universe_size,
+                r.coverage_ratio
+            FROM rs_ratings r
+            LEFT JOIN stock_basic_info b ON b.code = r.code
+            WHERE {where_sql}
+            ORDER BY r.rs_rating DESC NULLS LAST, r.rs_raw DESC NULLS LAST, r.code ASC
+            LIMIT :limit OFFSET :offset
+            """
+        ),
+        params,
+    ).mappings().all()
+
+    data = []
+    for r in rows:
+        rating = r.get("rs_rating")
+        data.append(
+            {
+                "code": r.get("code"),
+                "name": r.get("name"),
+                "date": str(r.get("date") or "")[:10],
+                "rs_rating": int(rating) if rating is not None else None,
+                "rs_raw": r.get("rs_raw"),
+                "roc_63": r.get("roc_63"),
+                "roc_126": r.get("roc_126"),
+                "roc_189": r.get("roc_189"),
+                "roc_252": r.get("roc_252"),
+                "universe_size": r.get("universe_size"),
+                "coverage_ratio": r.get("coverage_ratio"),
+                "strength_label": strength_label(
+                    int(rating) if rating is not None else None
+                ),
+            }
+        )
+    return {
+        "success": True,
+        "data": data,
+        "total": int(total),
+        "page": page,
+        "page_size": page_size,
+        "asof": asof,
+    }
+
+
+@router.get("/rs-ratings/history")
+async def list_rs_rating_history_admin(
+    code: str = Query(..., min_length=1, description="A 股代码"),
+    start_date: Optional[str] = Query(None, description="起始日 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日 YYYY-MM-DD"),
+    limit: int = Query(120, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: Any = Depends(get_current_admin),
+):
+    """管理端：单只股票 RS 历史追溯（日期降序）。"""
+    from backend_core.indicators.rs_rating.service import list_rs_rating_history
+
+    code_n = str(code or "").strip()
+    if code_n.isdigit():
+        code_n = code_n.zfill(6)
+    if len(code_n) != 6 or not code_n.isdigit():
+        raise HTTPException(status_code=400, detail="请提供 6 位 A 股代码")
+    return list_rs_rating_history(
+        db,
+        code_n,
+        start_date=start_date,
+        end_date=end_date,
+        limit=limit,
+    )
+
+
+class RsForcePrecomputeBody(BaseModel):
+    trade_date: Optional[str] = Field(
+        None, description="单日 YYYY-MM-DD；缺省取行情最新交易日"
+    )
+    start_date: Optional[str] = Field(None, description="区间起点（需与 end_date 同用）")
+    end_date: Optional[str] = Field(None, description="区间终点（需与 start_date 同用）")
+
+
+@router.post("/rs-ratings/precompute")
+async def post_rs_ratings_force_precompute(
+    body: RsForcePrecomputeBody,
+    db: Session = Depends(get_db),
+    admin: Any = Depends(get_current_admin),
+):
+    """管理端：强制重算指定交易日（或短区间）全市场 RS 截面。"""
+    from backend_core.indicators.rs_rating.force_precompute import (
+        resolve_force_trade_dates,
+        start_precompute,
+    )
+
+    try:
+        dates = resolve_force_trade_dates(
+            trade_date=body.trade_date,
+            start_date=body.start_date,
+            end_date=body.end_date,
+        )
+        task_id = start_precompute(dates)
+        _write_operation_log(
+            db,
+            log_type="rs_rating_force_precompute",
+            message=(
+                f"RS 强制预计算启动 dates={','.join(dates)} "
+                f"by {getattr(admin, 'username', 'admin')}"
+            ),
+            status="成功",
+            affected=len(dates),
+            error=None,
+        )
+        return {
+            "success": True,
+            "task_id": task_id,
+            "trade_dates": dates,
+            "message": f"已启动全市场强制预计算（{len(dates)} 日）",
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+
+@router.get("/rs-ratings/precompute/{task_id}")
+async def get_rs_ratings_force_precompute(
+    task_id: str,
+    _: Any = Depends(get_current_admin),
+):
+    """管理端：查询强制预计算任务进度。"""
+    from backend_core.indicators.rs_rating.force_precompute import get_task
+
+    task = get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+    return {"success": True, "data": task}
+

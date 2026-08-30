@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股价相对强度 RS 历史追溯</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/stock.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+</head>
+
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+
+    <div class="container">
+        <div class="gms-trace-card">
+            <div class="gms-trace-title">股价相对强度 · RS Rating 历史追溯</div>
+            <p style="margin:0 0 12px;color:#64748b;font-size:13px;">
+                前复权多周期截面百分位（1–99）。日常数据来自日终预计算；缺失或算法变更时可
+                <strong>强制重算指定区间内各交易日的全市场截面</strong>（单次最多 10 个交易日；不是只算当前这一只股票）。
+            </p>
+            <div class="toolbar">
+                <div class="toolbar-row">
+                    <label>股票代码: <input type="text" id="codeInput" placeholder="如 600519" style="width:100px;"></label>
+                    <label>起始日: <input type="date" id="startDateInput"></label>
+                    <label>结束日: <input type="date" id="endDateInput"></label>
+                    <label>条数: <input type="number" id="limitInput" value="120" min="10" max="500" style="width:70px;"></label>
+                    <button id="searchBtn" type="button">查询</button>
+                    <a href="stock.html" class="btn-secondary" id="backToStockBtn">返回个股</a>
+                </div>
+                <div class="toolbar-row" style="margin-top:8px;">
+                    <label>重算起: <input type="date" id="forceStartInput"></label>
+                    <label>重算止: <input type="date" id="forceEndInput"></label>
+                    <button id="forceBtn" type="button" title="对该区间内各交易日全市场重算 RS 截面（最多10日）">强制重算区间（全市场）</button>
+                    <span id="forceStatus" style="margin-left:8px;color:#64748b;font-size:13px;"></span>
+                </div>
+            </div>
+            <div id="metaMsg" class="loading-msg" style="display:none;"></div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无 RS 历史记录（请确认已跑过日终 rs_rating_cn 预计算）</div>
+            <div class="table-wrapper">
+                <table class="trace-table" id="traceTable">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>RS</th>
+                            <th>强弱</th>
+                            <th>RS_Raw</th>
+                            <th>近63日</th>
+                            <th>近126日</th>
+                            <th>近189日</th>
+                            <th>近252日</th>
+                            <th>宇宙</th>
+                            <th>覆盖率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="traceBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script>
+    (function () {
+      function apiBase() {
+        if (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) {
+          return window.API_BASE_URL.replace(/\/+$/, '');
+        }
+        if (typeof Config !== 'undefined' && Config && typeof Config.getApiBaseUrl === 'function') {
+          return String(Config.getApiBaseUrl() || '').replace(/\/+$/, '');
+        }
+        return '';
+      }
+      function authHeaders() {
+        const token = localStorage.getItem('token') || localStorage.getItem('access_token') || '';
+        const h = { 'Content-Type': 'application/json' };
+        if (token) h.Authorization = `Bearer ${token}`;
+        return h;
+      }
+      function escapeHtml(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+      function fmtPct(v) {
+        if (v == null || v === '') return '-';
+        const x = Number(v);
+        return Number.isFinite(x) ? (x * 100).toFixed(2) + '%' : '-';
+      }
+      function fmtRaw(v) {
+        if (v == null || v === '') return '-';
+        const x = Number(v);
+        return Number.isFinite(x) ? x.toFixed(4) : '-';
+      }
+      function rsClass(r) {
+        if (r == null) return '';
+        if (r >= 70) return 'strength-high';
+        if (r >= 50) return 'strength-mid';
+        return 'strength-low';
+      }
+
+      async function loadHistory() {
+        const code = (document.getElementById('codeInput').value || '').trim();
+        const start = (document.getElementById('startDateInput').value || '').trim();
+        const end = (document.getElementById('endDateInput').value || '').trim();
+        const limit = document.getElementById('limitInput').value || '120';
+        const loading = document.getElementById('loadingMsg');
+        const empty = document.getElementById('emptyMsg');
+        const meta = document.getElementById('metaMsg');
+        const body = document.getElementById('traceBody');
+        if (!code) {
+          if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+            CommonUtils.showToast('请输入股票代码', 'warning');
+          } else {
+            alert('请输入股票代码');
+          }
+          return;
+        }
+        loading.style.display = 'block';
+        empty.style.display = 'none';
+        meta.style.display = 'none';
+        body.innerHTML = '';
+        try {
+          const q = new URLSearchParams({ code, limit: String(limit) });
+          if (start) q.set('start_date', start);
+          if (end) q.set('end_date', end);
+          const resp = await fetch(`${apiBase()}/api/analysis/rs-rating/history?${q}`, {
+            headers: authHeaders(),
+          });
+          const payload = await resp.json().catch(() => ({}));
+          if (!resp.ok || !payload.success) {
+            throw new Error(payload.message || `查询失败 ${resp.status}`);
+          }
+          const rows = Array.isArray(payload.data) ? payload.data : [];
+          const name = payload.name || '';
+          meta.textContent = `${payload.code || code}${name ? ' ' + name : ''} · 共 ${payload.count || rows.length} 条 · 口径 ${payload.price_adjust || 'qfq'}`;
+          meta.style.display = 'block';
+          document.getElementById('backToStockBtn').href =
+            `stock.html?code=${encodeURIComponent(payload.code || code)}&name=${encodeURIComponent(name)}&tab=analysis`;
+          if (!rows.length) {
+            empty.style.display = 'block';
+            return;
+          }
+          body.innerHTML = rows.map((r) => {
+            const rating = r.rs_rating;
+            return `<tr>
+              <td>${escapeHtml(r.date || '-')}</td>
+              <td class="${rsClass(rating)}">${rating == null ? '--' : escapeHtml(String(rating))}</td>
+              <td>${escapeHtml(r.strength_label || '-')}</td>
+              <td>${fmtRaw(r.rs_raw)}</td>
+              <td>${fmtPct(r.roc_63)}</td>
+              <td>${fmtPct(r.roc_126)}</td>
+              <td>${fmtPct(r.roc_189)}</td>
+              <td>${fmtPct(r.roc_252)}</td>
+              <td>${r.universe_size == null ? '-' : escapeHtml(String(r.universe_size))}</td>
+              <td>${r.coverage_ratio == null ? '-' : (Number(r.coverage_ratio) * 100).toFixed(1) + '%'}</td>
+            </tr>`;
+          }).join('');
+        } catch (e) {
+          empty.style.display = 'block';
+          empty.textContent = e.message || '加载失败';
+          if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+            CommonUtils.showToast(e.message || '加载失败', 'error');
+          }
+        } finally {
+          loading.style.display = 'none';
+        }
+      }
+
+      document.getElementById('searchBtn').addEventListener('click', () => loadHistory());
+      document.getElementById('codeInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') loadHistory();
+      });
+
+      let forcePollTimer = null;
+      function setForceStatus(text) {
+        const el = document.getElementById('forceStatus');
+        if (el) el.textContent = text || '';
+      }
+      async function pollForceTask(taskId) {
+        try {
+          const resp = await fetch(`${apiBase()}/api/analysis/rs-rating/precompute/${encodeURIComponent(taskId)}`, {
+            headers: authHeaders(),
+          });
+          const payload = await resp.json().catch(() => ({}));
+          if (!resp.ok || !payload.success) {
+            throw new Error(payload.message || `查询任务失败 ${resp.status}`);
+          }
+          const t = payload.data || {};
+          const pct = t.progress != null ? `${t.progress}%` : '';
+          setForceStatus(`${t.message || t.status || ''} ${pct}`.trim());
+          if (t.status === 'completed') {
+            forcePollTimer = null;
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+              CommonUtils.showToast(t.message || '强制预计算完成', 'success');
+            }
+            await loadHistory();
+            return;
+          }
+          if (t.status === 'failed') {
+            forcePollTimer = null;
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+              CommonUtils.showToast(t.message || t.error || '强制预计算失败', 'error');
+            }
+            return;
+          }
+          forcePollTimer = setTimeout(() => pollForceTask(taskId), 2000);
+        } catch (e) {
+          forcePollTimer = null;
+          setForceStatus(e.message || '轮询失败');
+        }
+      }
+      document.getElementById('forceBtn').addEventListener('click', async () => {
+        let forceStart = (document.getElementById('forceStartInput').value || '').trim();
+        let forceEnd = (document.getElementById('forceEndInput').value || '').trim();
+        if (!forceStart && !forceEnd) {
+          forceStart = (document.getElementById('startDateInput').value || '').trim();
+          forceEnd = (document.getElementById('endDateInput').value || '').trim();
+        }
+        if ((forceStart && !forceEnd) || (!forceStart && forceEnd)) {
+          const msg = '请同时填写重算起止日期，或留空以使用下方查询区间';
+          setForceStatus(msg);
+          if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+            CommonUtils.showToast(msg, 'warning');
+          } else {
+            alert(msg);
+          }
+          return;
+        }
+        if (forceStart && forceEnd && forceStart > forceEnd) {
+          const msg = '重算起始日不能晚于结束日';
+          setForceStatus(msg);
+          if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+            CommonUtils.showToast(msg, 'warning');
+          } else {
+            alert(msg);
+          }
+          return;
+        }
+        const tip = forceStart && forceEnd
+          ? `将对 ${forceStart} ~ ${forceEnd} 区间内各交易日执行全市场 RS 截面重算（单次最多 10 个交易日，耗时可能较长）。确认？`
+          : '将对行情最新交易日执行全市场 RS 截面重算（耗时可能数分钟）。确认？';
+        if (!window.confirm(tip)) return;
+        if (forcePollTimer) {
+          clearTimeout(forcePollTimer);
+          forcePollTimer = null;
+        }
+        const btn = document.getElementById('forceBtn');
+        btn.disabled = true;
+        setForceStatus('启动中…');
+        try {
+          const body = {};
+          if (forceStart && forceEnd) {
+            body.start_date = forceStart;
+            body.end_date = forceEnd;
+          }
+          const resp = await fetch(`${apiBase()}/api/analysis/rs-rating/precompute`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify(body),
+          });
+          const payload = await resp.json().catch(() => ({}));
+          if (!resp.ok || !payload.success) {
+            throw new Error(payload.message || `启动失败 ${resp.status}`);
+          }
+          setForceStatus(payload.message || '已启动');
+          await pollForceTask(payload.task_id);
+        } catch (e) {
+          setForceStatus(e.message || '启动失败');
+          if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+            CommonUtils.showToast(e.message || '启动失败', 'error');
+          }
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      const params = new URLSearchParams(window.location.search || '');
+      const code = params.get('code');
+      if (code) {
+        document.getElementById('codeInput').value = code;
+        loadHistory();
+      }
+    })();
+    </script>
+</body>
+
+</html>

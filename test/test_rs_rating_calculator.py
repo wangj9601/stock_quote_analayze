@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import sys
 from pathlib import Path
 
@@ -16,7 +17,31 @@ from backend_core.indicators.rs_rating.calculator import (
     rank_cross_section,
     roc,
 )
-from backend_core.indicators.rs_rating.config import strength_label
+from backend_core.indicators.rs_rating.config import PRICE_ADJUST, strength_label
+from backend_core.indicators.rs_rating.qfq_closes import apply_qfq_closes
+
+
+def test_price_adjust_is_qfq():
+    assert PRICE_ADJUST == "qfq"
+
+
+def test_apply_qfq_closes_scale():
+    bars = [
+        {"date": dt.date(2024, 1, 2), "close": 10.0},
+        {"date": dt.date(2024, 1, 3), "close": 12.0},
+    ]
+    factors = [
+        (dt.date(2024, 1, 2), 1.0),
+        (dt.date(2024, 1, 3), 2.0),
+    ]
+    out = apply_qfq_closes(bars, factors)
+    assert out is not None
+    assert abs(out[0] - 5.0) < 1e-9
+    assert abs(out[1] - 12.0) < 1e-9
+
+
+def test_apply_qfq_closes_no_factor():
+    assert apply_qfq_closes([{"date": dt.date(2024, 1, 2), "close": 10.0}], []) is None
 
 
 def test_roc_basic():
@@ -32,10 +57,8 @@ def test_roc_insufficient():
 
 
 def test_compute_rs_raw_weights():
-    # 构造精确可知的序列：最后一根为 1.0，往前各窗口起点不同
     n = 253
     closes = [1.0] * n
-    # P_{t-63}=0.5 → ROC63=1.0；其余窗口起点仍为 1.0 → ROC=0
     closes[-(63 + 1)] = 0.5
     out = compute_rs_raw(closes)
     assert out is not None
@@ -62,7 +85,6 @@ def test_rank_cross_section_and_ties():
     by_code = {r["code"]: r for r in ranked}
     assert by_code["a"]["rs_rating"] == 1
     assert by_code["d"]["rs_rating"] == 99
-    # b,c 并列平均秩 → 同一百分位与评级
     assert by_code["b"]["rs_rating"] == by_code["c"]["rs_rating"]
     assert by_code["b"]["percentile"] == by_code["c"]["percentile"]
 
@@ -84,6 +106,9 @@ def test_strength_label():
 
 
 if __name__ == "__main__":
+    test_price_adjust_is_qfq()
+    test_apply_qfq_closes_scale()
+    test_apply_qfq_closes_no_factor()
     test_roc_basic()
     test_roc_insufficient()
     test_compute_rs_raw_weights()

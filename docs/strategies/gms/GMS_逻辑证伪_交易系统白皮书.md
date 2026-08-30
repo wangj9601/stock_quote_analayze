@@ -283,6 +283,8 @@ TradeExecutionLog（复盘：是否严格执行、是否情绪化）
 | 板块资金流走弱 | 板级主力净流入等 | 拟与斜率组合软降权 | **未采集**（字段预留，二期） |
 | 个股相对强度消失 | 个股 5 日涨幅 &lt; 板块指数 5 日涨幅 | L1 减仓观察 | 未实现 |
 
+> 注：上表「个股相对强度」指相对**板块短期涨幅**的规则草案，**不是**系统已落地的 IBD 风格 **RS Rating（1–99，前复权全市场截面）**。后者见 [`docs/indicators/股价相对强度_RS_Rating.md`](../../indicators/股价相对强度_RS_Rating.md)。
+
 选股结果字段：`primary_board_code/name`、`sector_slope`、`board_change_percent`、`board_weak`、`board_strong`/`board_env`、`board_main_net_inflow`（预留）。
 
 **斜率口径与数据路径（§6.3 补充）：**

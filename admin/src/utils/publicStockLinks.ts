@@ -9,3 +9,7 @@ export function stockDetailUrl(code: string, name?: string): string {
 export function stockHistoryUrl(code: string): string {
   return `/stock_history.html?code=${encodeURIComponent(String(code || '').trim())}`
 }
+
+export function stockRsTraceUrl(code: string): string {
+  return `/stock_rs_trace.html?code=${encodeURIComponent(String(code || '').trim())}`
+}

@@ -237,6 +237,135 @@ def get_rs_rating(
         )
 
 
+@router.get("/rs-rating/history")
+def get_rs_rating_history(
+    code: Optional[str] = Query(None, description="股票代码或名称"),
+    stock_code: Optional[str] = Query(None, description="同 code，兼容别名"),
+    start_date: Optional[str] = Query(None, description="起始日 YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="结束日 YYYY-MM-DD"),
+    limit: int = Query(120, ge=1, le=500, description="最多返回条数"),
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    """个股 RS Rating 历史序列（读预计算表，日期降序）。"""
+    raw = (code or stock_code or "").strip()
+    if not raw:
+        return JSONResponse(
+            {"success": False, "message": "请提供股票代码或名称"},
+            status_code=400,
+        )
+    try:
+        from backend_api.stock.stock_analysis_routes import resolve_levels_stock_identifier
+        from backend_core.indicators.rs_rating.service import list_rs_rating_history
+
+        resolved = resolve_levels_stock_identifier(db, raw)
+        status = resolved.get("status")
+        if status == "ambiguous":
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "匹配到多只股票，请选择",
+                    "candidates": resolved.get("candidates") or [],
+                },
+                status_code=400,
+            )
+        if status == "not_found" or not resolved.get("code"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "未找到匹配股票",
+                },
+                status_code=404,
+            )
+        code_n = str(resolved["code"]).strip()
+        if len(code_n) != 6 or not code_n.isdigit():
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": "相对强度 RS Rating 暂仅支持 A 股",
+                    "reason": "market_unsupported",
+                },
+                status_code=400,
+            )
+        result = list_rs_rating_history(
+            db,
+            code_n,
+            start_date=start_date,
+            end_date=end_date,
+            limit=limit,
+        )
+        if resolved.get("name") and not result.get("name"):
+            result["name"] = resolved.get("name")
+        return result
+    except Exception as e:
+        logger.exception("rs-rating history 查询失败: %s", e)
+        return JSONResponse(
+            {"success": False, "message": str(e)},
+            status_code=500,
+        )
+
+
+class RsForcePrecomputeRequest(BaseModel):
+    trade_date: Optional[str] = Field(
+        None, description="单日 YYYY-MM-DD；缺省取行情最新交易日"
+    )
+    start_date: Optional[str] = Field(None, description="区间起点（需与 end_date 同用）")
+    end_date: Optional[str] = Field(None, description="区间终点（需与 start_date 同用）")
+
+
+@router.post("/rs-rating/precompute")
+def post_rs_rating_force_precompute(
+    body: RsForcePrecomputeRequest = Body(...),
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    """强制重算指定交易日（或短区间）的全市场 RS 截面；异步任务。"""
+    from backend_core.indicators.rs_rating.force_precompute import (
+        resolve_force_trade_dates,
+        start_precompute,
+    )
+
+    try:
+        dates = resolve_force_trade_dates(
+            trade_date=body.trade_date,
+            start_date=body.start_date,
+            end_date=body.end_date,
+        )
+        task_id = start_precompute(dates)
+        return {
+            "success": True,
+            "task_id": task_id,
+            "trade_dates": dates,
+            "message": (
+                f"已启动全市场强制预计算（{len(dates)} 日）。"
+                "RS 为截面排名，不可只算单票。"
+            ),
+        }
+    except ValueError as e:
+        return JSONResponse({"success": False, "message": str(e)}, status_code=400)
+    except RuntimeError as e:
+        return JSONResponse({"success": False, "message": str(e)}, status_code=409)
+    except Exception as e:
+        logger.exception("rs-rating force precompute 启动失败: %s", e)
+        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+
+
+@router.get("/rs-rating/precompute/{task_id}")
+def get_rs_rating_force_precompute(
+    task_id: str,
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    """查询强制预计算任务进度。"""
+    from backend_core.indicators.rs_rating.force_precompute import get_task
+
+    task = get_task(task_id)
+    if not task:
+        return JSONResponse(
+            {"success": False, "message": "任务不存在或已过期"},
+            status_code=404,
+        )
+    return {"success": True, "data": task}
+
+
 @router.get("/multi-strategy-check")
 def get_multi_strategy_check(
     code: Optional[str] = Query(None, description="股票代码或名称"),

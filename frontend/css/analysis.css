@@ -1880,6 +1880,48 @@ body.ssa-png-capturing .ms-zigzag-svg,
 .ssa-rs-roc strong { font-size: 14px; color: #0f172a; }
 .ssa-rs-roc em { font-size: 10px; color: #94a3b8; font-style: normal; }
 .ssa-rs-hint { margin: 10px 0 0; }
+.ssa-rs-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+    align-items: center;
+}
+.ssa-rs-trace-link,
+.ssa-rs-trace-toggle {
+    font-size: 12px;
+    color: #1d4ed8;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+}
+.ssa-rs-history {
+    margin-top: 10px;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 8px;
+}
+.ssa-rs-history-status {
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 6px;
+}
+.ssa-rs-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.ssa-rs-history-table th,
+.ssa-rs-history-table td {
+    border: 1px solid #e2e8f0;
+    padding: 4px 6px;
+    text-align: left;
+}
+.ssa-rs-history-table th {
+    background: #f1f5f9;
+    color: #475569;
+}
 @media (max-width: 720px) {
     .ssa-rs-rocs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

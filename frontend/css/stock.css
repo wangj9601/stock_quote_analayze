@@ -1616,3 +1616,49 @@ html.stock-popup-window .main-content {
 html.stock-popup-window .stock-header {
     padding-top: 8px;
 }
+
+/* 顶底滚动 FAB：analysis.css 已有 .ssa-scroll-fab；此处作兜底与弹出窗微调 */
+.ssa-scroll-fab {
+    position: fixed;
+    right: 1.25rem;
+    bottom: 1.75rem;
+    z-index: 900;
+}
+.ssa-scroll-fab__btn {
+    min-width: 3.25rem;
+    height: 2.5rem;
+    padding: 0 0.65rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #1e40af;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.ssa-scroll-fab__btn:hover {
+    background: #1e40af;
+    border-color: #1e40af;
+    color: #fff;
+}
+.ssa-scroll-fab__btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+}
+@media (max-width: 640px) {
+    .ssa-scroll-fab {
+        right: 0.75rem;
+        bottom: 1.1rem;
+    }
+    .ssa-scroll-fab__btn {
+        min-width: 2.85rem;
+        height: 2.35rem;
+        font-size: 0.72rem;
+    }
+}
+html.stock-popup-window .ssa-scroll-fab {
+    bottom: 1.1rem;
+}

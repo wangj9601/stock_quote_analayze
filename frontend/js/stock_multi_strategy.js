@@ -2718,6 +2718,7 @@ const StockMultiStrategy = {
             }
             const data = payload.data || {};
             this.renderRsRating(host, data, payload.reason, payload.message);
+            this._syncRsTraceLink(data.code || code, data.name || '');
             this.lastRs = { ok: true, data, reason: payload.reason || null, error: null };
             this.setBlockOk('ssaRsStatus', '');
             const st = document.getElementById('ssaRsStatus');
@@ -2725,6 +2726,7 @@ const StockMultiStrategy = {
         } catch (e) {
             console.warn('个股分析·相对强度失败', e);
             host.innerHTML = `<p class="ssa-rs-empty">${this.esc(e.message || '相对强度暂不可用')}</p>`;
+            this._syncRsTraceLink(code, '');
             this.lastRs = { ok: false, data: null, error: e.message || '相对强度加载失败' };
             this.setBlockError('ssaRsStatus', e.message || '相对强度暂不可用（需日终预计算）');
         }
@@ -2755,6 +2757,9 @@ const StockMultiStrategy = {
             reason === 'rating_unpublished'
                 ? message || '当日覆盖率不足，未发布 1–99 评级'
                 : '';
+        const code = data.code || '';
+        const name = data.name || '';
+        const traceHref = `stock_rs_trace.html?code=${encodeURIComponent(code)}`;
         host.innerHTML = `
             <div class="ssa-rs-card">
               <div class="ssa-rs-main">
@@ -2763,6 +2768,10 @@ const StockMultiStrategy = {
                   <div class="ssa-rs-label">${this.esc(label || (rating == null ? '无评级' : ''))}</div>
                   <div class="ssa-rs-date">基准日 ${this.esc(data.trade_date || '--')} · 宇宙 ${this.esc(String(data.universe_size ?? '--'))}</div>
                   ${note ? `<div class="ssa-rs-note">${this.esc(note)}</div>` : ''}
+                  <div class="ssa-rs-actions">
+                    <a class="ssa-rs-trace-link" href="${this.esc(traceHref)}" target="_blank" rel="noopener noreferrer">历史追溯</a>
+                    <button type="button" class="ssa-rs-trace-toggle" id="ssaRsHistoryToggle">展开近期历史</button>
+                  </div>
                 </div>
               </div>
               <div class="ssa-rs-rocs">
@@ -2771,9 +2780,91 @@ const StockMultiStrategy = {
                 <div class="ssa-rs-roc"><span>近189日</span><strong>${fmtPct(data.roc_189)}</strong><em>权重20%</em></div>
                 <div class="ssa-rs-roc"><span>近252日</span><strong>${fmtPct(data.roc_252)}</strong><em>权重20%</em></div>
               </div>
-              <p class="ssa-rs-hint">IBD 风格截面百分位：RS 90 表示过去一年（偏近季）表现超过约 90% 的 A 股。非 RSI、非板块比价 Z。</p>
+              <div class="ssa-rs-history" id="ssaRsHistoryPanel" hidden>
+                <div class="ssa-rs-history-status" id="ssaRsHistoryStatus"></div>
+                <div class="table-scroll">
+                  <table class="ssa-rs-history-table" id="ssaRsHistoryTable">
+                    <thead>
+                      <tr><th>日期</th><th>RS</th><th>强弱</th><th>RS_Raw</th><th>近63日</th><th>近126日</th></tr>
+                    </thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+              </div>
+              <p class="ssa-rs-hint">IBD 风格截面百分位（前复权收盘）：RS 90 表示过去一年（偏近季）表现超过约 90% 的 A 股。非 RSI、非板块比价 Z。</p>
             </div>
         `;
+        this._syncRsTraceLink(code, name);
+        const toggle = host.querySelector('#ssaRsHistoryToggle');
+        if (toggle && code) {
+            toggle.addEventListener('click', () => this.toggleRsHistoryInline(code, toggle));
+        }
+    },
+
+    _syncRsTraceLink(code, name) {
+        const link = document.getElementById('ssaRsTraceLink');
+        if (!link) return;
+        const c = String(code || '').trim();
+        if (!c) {
+            link.hidden = true;
+            return;
+        }
+        link.hidden = false;
+        link.href = `stock_rs_trace.html?code=${encodeURIComponent(c)}`;
+        link.title = name ? `${c} ${name} 历史追溯` : `${c} 历史追溯`;
+    },
+
+    async toggleRsHistoryInline(code, toggleBtn) {
+        const panel = document.getElementById('ssaRsHistoryPanel');
+        const status = document.getElementById('ssaRsHistoryStatus');
+        const table = document.getElementById('ssaRsHistoryTable');
+        if (!panel || !table) return;
+        if (!panel.hidden) {
+            panel.hidden = true;
+            if (toggleBtn) toggleBtn.textContent = '展开近期历史';
+            return;
+        }
+        panel.hidden = false;
+        if (toggleBtn) toggleBtn.textContent = '收起近期历史';
+        if (status) status.textContent = '加载中…';
+        try {
+            const q = new URLSearchParams({ code: code || '', limit: '30' });
+            const resp = await authFetch(
+                `${this.API_BASE_URL}/api/analysis/rs-rating/history?${q}`
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok || !payload.success) {
+                throw new Error(payload.message || `历史加载失败 ${resp.status}`);
+            }
+            const rows = Array.isArray(payload.data) ? payload.data : [];
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            if (!rows.length) {
+                tbody.innerHTML = '';
+                if (status) status.textContent = '暂无历史记录';
+                return;
+            }
+            if (status) status.textContent = `近 ${rows.length} 条（新→旧）`;
+            const fmtPct = (v) => {
+                if (v == null || Number.isNaN(Number(v))) return '--';
+                return `${(Number(v) * 100).toFixed(2)}%`;
+            };
+            tbody.innerHTML = rows
+                .map((r) => {
+                    const rating = r.rs_rating;
+                    return `<tr>
+                      <td>${this.esc(r.date || '--')}</td>
+                      <td>${rating == null ? '--' : this.esc(String(rating))}</td>
+                      <td>${this.esc(r.strength_label || '--')}</td>
+                      <td>${r.rs_raw == null ? '--' : Number(r.rs_raw).toFixed(4)}</td>
+                      <td>${fmtPct(r.roc_63)}</td>
+                      <td>${fmtPct(r.roc_126)}</td>
+                    </tr>`;
+                })
+                .join('');
+        } catch (e) {
+            if (status) status.textContent = e.message || '历史加载失败';
+        }
     },
 
     async loadLevelsSection(code) {

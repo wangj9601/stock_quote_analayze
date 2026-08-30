@@ -145,6 +145,107 @@ class StockBasicService {
     if (opts?.only_empty === false) q.set('only_empty', 'false')
     return apiService.post(`/stock-basic/sync-industry?${q.toString()}`)
   }
+
+  /** A 股相对强度 RS 列表（默认最高排最前） */
+  async getRsRatings(params: {
+    keyword?: string
+    date?: string
+    min_rating?: number | null
+    page: number
+    page_size: number
+  }): Promise<{
+    success: boolean
+    data: Array<{
+      code: string
+      name: string | null
+      date: string
+      rs_rating: number | null
+      rs_raw: number | null
+      roc_63: number | null
+      roc_126: number | null
+      roc_189: number | null
+      roc_252: number | null
+      strength_label: string | null
+      universe_size: number | null
+      coverage_ratio: number | null
+    }>
+    total: number
+    page: number
+    page_size: number
+    asof: string | null
+  }> {
+    const q = new URLSearchParams()
+    q.set('page', String(params.page))
+    q.set('page_size', String(params.page_size))
+    if (params.keyword) q.set('keyword', params.keyword)
+    if (params.date) q.set('date', params.date)
+    if (params.min_rating != null) q.set('min_rating', String(params.min_rating))
+    return apiService.get(`/stock-basic/rs-ratings?${q.toString()}`)
+  }
+
+  /** 单只股票 RS 历史追溯 */
+  async getRsRatingHistory(params: {
+    code: string
+    start_date?: string
+    end_date?: string
+    limit?: number
+  }): Promise<{
+    success: boolean
+    code: string
+    name?: string | null
+    count: number
+    data: Array<{
+      code: string
+      date: string
+      rs_rating: number | null
+      rs_raw: number | null
+      roc_63: number | null
+      roc_126: number | null
+      roc_189: number | null
+      roc_252: number | null
+      strength_label: string | null
+      universe_size: number | null
+      coverage_ratio: number | null
+    }>
+    message?: string
+  }> {
+    const q = new URLSearchParams()
+    q.set('code', params.code)
+    if (params.start_date) q.set('start_date', params.start_date)
+    if (params.end_date) q.set('end_date', params.end_date)
+    q.set('limit', String(params.limit ?? 120))
+    return apiService.get(`/stock-basic/rs-ratings/history?${q.toString()}`)
+  }
+
+  /** 强制重算指定日/短区间的全市场 RS 截面 */
+  async startRsForcePrecompute(body: {
+    trade_date?: string
+    start_date?: string
+    end_date?: string
+  }): Promise<{
+    success: boolean
+    task_id: string
+    trade_dates: string[]
+    message?: string
+  }> {
+    return apiService.post(`/stock-basic/rs-ratings/precompute`, body)
+  }
+
+  async getRsForcePrecomputeTask(taskId: string): Promise<{
+    success: boolean
+    data: {
+      task_id: string
+      status: string
+      progress: number
+      message?: string
+      error?: string | null
+      trade_dates?: string[]
+      trade_date?: string | null
+      summaries?: unknown[]
+    }
+  }> {
+    return apiService.get(`/stock-basic/rs-ratings/precompute/${encodeURIComponent(taskId)}`)
+  }
 }
 
 export const stockBasicService = new StockBasicService()

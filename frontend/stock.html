@@ -482,6 +482,26 @@
             }
         })();
     </script>
+
+    <!-- 顶底快速滚动（长页） -->
+    <div class="ssa-scroll-fab" id="stockScrollFab" aria-label="页面快速滚动">
+        <button type="button" class="ssa-scroll-fab__btn" id="stockScrollToggleBtn" title="直达底部">Bottom</button>
+    </div>
+    <script src="js/page_scroll_fab.js"></script>
+    <script>
+        (function () {
+            function tryBind() {
+                if (window.PageScrollFab && typeof window.PageScrollFab.bind === 'function') {
+                    window.PageScrollFab.bind({ btnId: 'stockScrollToggleBtn' });
+                }
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', tryBind);
+            } else {
+                tryBind();
+            }
+        })();
+    </script>
 </body>
 
 </html>

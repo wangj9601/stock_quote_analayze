@@ -12,7 +12,7 @@ export class StockBasicPage extends BaseAdminPage {
 
   async expectLoaded(): Promise<void> {
     await this.expectOneVisible([
-      this.page.getByRole('heading', { name: '股票基本信息管理' }),
+      this.page.getByRole('heading', { name: '股票基本信息' }),
       this.page.getByRole('tab', { name: '基本信息查询' })
     ])
   }

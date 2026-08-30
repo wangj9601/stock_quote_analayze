@@ -141,7 +141,7 @@ const menuItems: MenuItem[] = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
   { path: '/access-management', name: '用户与权限', icon: Lock },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
-  { path: '/stock-basic', name: '股票基本信息管理', icon: Tickets },
+  { path: '/stock-basic', name: '股票基本信息', icon: Tickets },
   { path: '/board-constituents', name: '板块成分股维护', icon: Histogram },
   { path: '/selection-results', name: '选股管理', icon: Select },
   { path: '/gms-watchlist', name: 'GMS策略版本', icon: Star },

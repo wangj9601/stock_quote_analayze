@@ -16,6 +16,9 @@ LOOKBACK_CALENDAR_DAYS = 420
 
 MARKET_TYPE = "CN"
 
+# 价格口径：前复权（库内因子现算）
+PRICE_ADJUST = "qfq"
+
 
 def coverage_threshold() -> float:
     return float(COVERAGE_THRESHOLD)

@@ -1,4 +1,7 @@
-"""RS Rating 全市场日终预计算（供采集流程节点调用）。"""
+"""RS Rating 全市场日终预计算（供采集流程节点调用）。
+
+价格口径：前复权（库内 stock_adj_factor 现算，不打外网）。
+"""
 
 from __future__ import annotations
 
@@ -7,11 +10,12 @@ import logging
 import time
 from typing import Any, Dict, List, Optional, Sequence
 
-from sqlalchemy import bindparam, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .calculator import compute_rs_raw, rank_cross_section
-from .config import LOOKBACK_CALENDAR_DAYS, MARKET_TYPE, RS_WINDOWS, coverage_threshold
+from .config import LOOKBACK_CALENDAR_DAYS, MARKET_TYPE, PRICE_ADJUST, RS_WINDOWS, coverage_threshold
+from .qfq_closes import build_qfq_close_map
 from .storage import upsert_rs_ratings
 from .universe import list_candidate_codes
 
@@ -44,51 +48,6 @@ def resolve_trade_date(session: Session, trade_date: Optional[str] = None) -> st
     return _normalize_date_str(row[0])
 
 
-def _preload_closes(
-    session: Session,
-    codes: Sequence[str],
-    trade_date: str,
-    *,
-    lookback_calendar_days: int = LOOKBACK_CALENDAR_DAYS,
-) -> Dict[str, List[float]]:
-    """批量预加载升序 close 序列（截至 trade_date）。"""
-    if not codes:
-        return {}
-    min_date = (
-        dt.datetime.strptime(trade_date[:10], "%Y-%m-%d")
-        - dt.timedelta(days=lookback_calendar_days)
-    ).strftime("%Y-%m-%d")
-    out: Dict[str, List[float]] = {}
-    for i in range(0, len(codes), PRELOAD_BATCH):
-        batch = list(codes[i : i + PRELOAD_BATCH])
-        stmt = text(
-            """
-            SELECT code, date, close
-            FROM historical_quotes
-            WHERE code IN :codes
-              AND date >= :min_date
-              AND date <= :trade_date
-              AND close IS NOT NULL
-              AND close > 0
-            ORDER BY code, date
-            """
-        ).bindparams(bindparam("codes", expanding=True))
-        rows = session.execute(
-            stmt,
-            {"codes": batch, "min_date": min_date, "trade_date": trade_date[:10]},
-        ).fetchall()
-        for code, _date, close in rows:
-            c = str(code).strip()
-            try:
-                px = float(close)
-            except (TypeError, ValueError):
-                continue
-            if px <= 0:
-                continue
-            out.setdefault(c, []).append(px)
-    return out
-
-
 def run_rs_rating_precompute(
     *,
     trade_date: Optional[str] = None,
@@ -103,14 +62,16 @@ def run_rs_rating_precompute(
         candidates = list_candidate_codes(db, date_s, codes=codes)
         pool_size = len(candidates)
         logger.info(
-            "RS Rating precompute start date=%s candidates=%s",
+            "RS Rating precompute start date=%s candidates=%s price_adjust=%s",
             date_s,
             pool_size,
+            PRICE_ADJUST,
         )
         if pool_size == 0:
             return {
                 "ok": True,
                 "trade_date": date_s,
+                "price_adjust": PRICE_ADJUST,
                 "candidate_count": 0,
                 "universe_size": 0,
                 "coverage_ratio": 0.0,
@@ -119,7 +80,13 @@ def run_rs_rating_precompute(
                 "elapsed_sec": round(time.time() - t0, 2),
             }
 
-        closes_map = _preload_closes(db, candidates, date_s)
+        closes_map, qfq_stats = build_qfq_close_map(
+            db,
+            candidates,
+            date_s,
+            lookback_calendar_days=LOOKBACK_CALENDAR_DAYS,
+            batch_size=PRELOAD_BATCH,
+        )
         need_bars = max(RS_WINDOWS) + 1
         raw_rows: List[Dict[str, Any]] = []
         for code in candidates:
@@ -143,11 +110,13 @@ def run_rs_rating_precompute(
         summary = {
             "ok": True,
             "trade_date": date_s,
+            "price_adjust": PRICE_ADJUST,
             "candidate_count": pool_size,
             "universe_size": universe_size,
             "coverage_ratio": round(coverage, 4),
             "publish_ratings": publish,
             "saved": saved,
+            "qfq_stats": qfq_stats,
             "elapsed_sec": round(time.time() - t0, 2),
         }
         if not publish:
