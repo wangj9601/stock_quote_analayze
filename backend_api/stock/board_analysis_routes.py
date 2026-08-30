@@ -157,6 +157,86 @@ def get_board_signals(
         )
 
 
+@router.get("/rs-rating")
+def get_rs_rating(
+    code: Optional[str] = Query(None, description="股票代码或名称"),
+    stock_code: Optional[str] = Query(None, description="同 code，兼容别名"),
+    date: Optional[str] = Query(None, description="基准日 YYYY-MM-DD，可选"),
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    """个股 IBD 风格相对强度 RS Rating（读预计算表，不现算全市场）。"""
+    raw = (code or stock_code or "").strip()
+    if not raw:
+        return JSONResponse(
+            {"success": False, "message": "请提供股票代码或名称"},
+            status_code=400,
+        )
+    try:
+        from backend_api.stock.stock_analysis_routes import resolve_levels_stock_identifier
+        from backend_core.indicators.rs_rating.service import get_rs_rating_for_stock
+
+        resolved = resolve_levels_stock_identifier(db, raw)
+        status = resolved.get("status")
+        if status == "ambiguous":
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "匹配到多只股票，请选择",
+                    "candidates": resolved.get("candidates") or [],
+                },
+                status_code=400,
+            )
+        if status == "not_found" or not resolved.get("code"):
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": resolved.get("message") or "未找到匹配股票",
+                },
+                status_code=404,
+            )
+        # 港股暂不支持
+        market = (resolved.get("market") or resolved.get("market_type") or "CN").upper()
+        code_n = str(resolved["code"]).strip()
+        if len(code_n) != 6 or not code_n.isdigit() or market == "HK":
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": "相对强度 RS Rating 暂仅支持 A 股",
+                    "reason": "market_unsupported",
+                },
+                status_code=400,
+            )
+        result = get_rs_rating_for_stock(db, code_n, asof=date)
+        if not result.get("success") and result.get("reason") == "not_found":
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": result.get("message") or "尚未预计算",
+                    "reason": result.get("reason"),
+                    "code": code_n,
+                    "name": resolved.get("name"),
+                    "data": None,
+                },
+                status_code=404,
+            )
+        data = result.get("data") or {}
+        if resolved.get("name") and "name" not in data:
+            data["name"] = resolved.get("name")
+        return {
+            "success": True,
+            "message": result.get("message") or "ok",
+            "reason": result.get("reason"),
+            "data": data,
+        }
+    except Exception as e:
+        logger.exception("rs-rating 查询失败: %s", e)
+        return JSONResponse(
+            {"success": False, "message": str(e)},
+            status_code=500,
+        )
+
+
 @router.get("/multi-strategy-check")
 def get_multi_strategy_check(
     code: Optional[str] = Query(None, description="股票代码或名称"),

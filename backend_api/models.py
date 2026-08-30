@@ -884,6 +884,24 @@ class InfiniteCostIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class RSRatings(Base):
+    """IBD 风格股价相对强度评级（截面百分位 1–99，仅 A 股预计算）"""
+    __tablename__ = 'rs_ratings'
+    code = Column(StockCodeTextPK(), primary_key=True)
+    date = Column(String, primary_key=True)
+    market_type = Column(String, primary_key=True)  # V1: 'CN'
+    rs_raw = Column(Float)
+    rs_rating = Column(Integer)  # 1–99；覆盖率不足时可为 NULL
+    roc_63 = Column(Float)
+    roc_126 = Column(Float)
+    roc_189 = Column(Float)
+    roc_252 = Column(Float)
+    universe_size = Column(Integer)
+    coverage_ratio = Column(Float)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class MeanFrequencyResonanceIndicators(Base):
     """均值频率共振量化交易指标数据表（A股和港股共用）"""
     __tablename__ = 'mean_frequency_resonance_indicators'

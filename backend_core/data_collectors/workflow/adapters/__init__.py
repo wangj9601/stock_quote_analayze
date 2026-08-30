@@ -461,6 +461,15 @@ def _rpe_cn() -> Any:
     return True
 
 
+def _rs_rating_cn() -> Any:
+    from backend_core.indicators.rs_rating.scheduled_precompute import scheduled_rs_rating_cn
+
+    result = scheduled_rs_rating_cn()
+    if isinstance(result, dict) and result.get("ok") is False:
+        raise RuntimeError(result.get("error") or "RS Rating 预计算失败")
+    return result
+
+
 def _market_news() -> Any:
     from backend_core.data_collectors.news_collector import NewsCollector
 
@@ -516,6 +525,7 @@ exec_urt_cn = _wrap_plain(_urt_cn, "URT信号预计算(A股)")
 exec_urt_hk = _wrap_plain(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
 exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
+exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_market_news = _wrap_plain(_market_news, "市场新闻采集")
 exec_watchlist_history = _wrap_plain(_watchlist_history, "自选股历史")
 exec_triple_volume_scan = _wrap_plain(_triple_volume_scan, "3倍量扫描")

@@ -15,6 +15,8 @@ psycopg2-binary==2.9.10
 # 数据处理
 pandas==2.2.0
 numpy==1.26.4
+# RPE/个股分析 KDE 阻力支撑；缺省会退回直方图
+scipy>=1.7.0,<2
 akshare==1.17.70
 baostock>=0.8.8
 openpyxl>=3.1.5,<4.0.0

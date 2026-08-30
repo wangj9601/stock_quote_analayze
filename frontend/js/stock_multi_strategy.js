@@ -12,6 +12,7 @@ const StockMultiStrategy = {
     lastStock: null,
     lastTradeDate: null,
     lastLevels: null,
+    lastRs: null,
     lastPattern: null,
     lastSwing: null,
     lastGann: null,
@@ -1267,6 +1268,7 @@ const StockMultiStrategy = {
             lastStock: this.lastStock,
             lastTradeDate: this.lastTradeDate,
             lastLevels: this.lastLevels,
+            lastRs: this.lastRs,
             lastPattern: this.lastPattern,
             lastSwing: this.lastSwing,
             lastGann: this.lastGann,
@@ -1281,6 +1283,7 @@ const StockMultiStrategy = {
         this.lastStock = state.lastStock;
         this.lastTradeDate = state.lastTradeDate;
         this.lastLevels = state.lastLevels;
+        this.lastRs = state.lastRs;
         this.lastPattern = state.lastPattern;
         this.lastSwing = state.lastSwing;
         this.lastGann = state.lastGann;
@@ -1302,6 +1305,9 @@ const StockMultiStrategy = {
             meta: pick('ssaMeta'),
             strategy: pick('ssaResults'),
             strategyBlock: pick('ssaStrategyBlock'),
+            rsHost: pick('ssaRsHost'),
+            rsBlock: pick('ssaRsBlock'),
+            rsStatus: pick('ssaRsStatus'),
             levelsHost: pick('ssaLevelsHost'),
             levelsBlock: pick('ssaLevelsBlock'),
             levelsStatus: pick('ssaLevelsStatus'),
@@ -1332,6 +1338,9 @@ const StockMultiStrategy = {
         apply('ssaMeta', dom.meta);
         apply('ssaResults', dom.strategy);
         apply('ssaStrategyBlock', dom.strategyBlock);
+        apply('ssaRsHost', dom.rsHost);
+        apply('ssaRsBlock', dom.rsBlock);
+        apply('ssaRsStatus', dom.rsStatus);
         apply('ssaLevelsHost', dom.levelsHost);
         apply('ssaLevelsBlock', dom.levelsBlock);
         apply('ssaLevelsStatus', dom.levelsStatus);
@@ -1422,6 +1431,7 @@ const StockMultiStrategy = {
         this.lastStock = null;
         this.lastTradeDate = null;
         this.lastLevels = null;
+        this.lastRs = null;
         this.lastPattern = null;
         this.lastSwing = null;
         this.lastGann = null;
@@ -1443,6 +1453,7 @@ const StockMultiStrategy = {
         return !!(
             this.lastStrategy ||
             this.lastLevels ||
+            this.lastRs ||
             this.lastPattern ||
             this.lastSwing ||
             this.lastGann ||
@@ -1805,26 +1816,29 @@ const StockMultiStrategy = {
     },
 
     hideResultBlocks() {
-        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
+        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
         const planHost = document.getElementById('ssaTradePlanHost');
+        const rsHost = document.getElementById('ssaRsHost');
         const levelsHost = document.getElementById('ssaLevelsHost');
         const patternHost = document.getElementById('ssaPatternHost');
         const swingHost = document.getElementById('ssaSwingHost');
         const gannHost = document.getElementById('ssaGannHost');
         if (planHost) planHost.innerHTML = '';
+        if (rsHost) rsHost.innerHTML = '';
         if (levelsHost) levelsHost.innerHTML = '';
         if (patternHost) patternHost.innerHTML = '';
         if (swingHost) swingHost.innerHTML = '';
         if (gannHost) gannHost.innerHTML = '';
+        const rsStatus = document.getElementById('ssaRsStatus');
         const levelsStatus = document.getElementById('ssaLevelsStatus');
         const patternStatus = document.getElementById('ssaPatternStatus');
         const swingStatus = document.getElementById('ssaSwingStatus');
         const gannStatus = document.getElementById('ssaGannStatus');
         const planStatus = document.getElementById('ssaTradePlanStatus');
-        [levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
+        [rsStatus, levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
             if (status) {
                 status.textContent = '';
                 status.hidden = false;
@@ -1941,7 +1955,21 @@ const StockMultiStrategy = {
         const resolvedCode = stock.code || code;
         const tradeDate = strategyData.trade_date || asof || '';
 
-        const [levelsFetched, patternFetched, swingFetched, gannFetched] = await Promise.all([
+        const [rsFetched, levelsFetched, patternFetched, swingFetched, gannFetched] = await Promise.all([
+            authFetch(
+                `${this.API_BASE_URL}/api/analysis/rs-rating?${new URLSearchParams({
+                    code: resolvedCode,
+                    ...(tradeDate ? { date: tradeDate } : {}),
+                })}`
+            )
+                .then(async (r) => {
+                    const body = await r.json().catch(() => ({}));
+                    if (!r.ok || !body.success) {
+                        return { __error: body.message || `相对强度加载失败 ${r.status}` };
+                    }
+                    return body;
+                })
+                .catch((e) => ({ __error: e.message || '相对强度加载失败' })),
             (typeof KdeLevelsTool !== 'undefined' && KdeLevelsTool.fetchLevels)
                 ? KdeLevelsTool.fetchLevels(resolvedCode, {
                     adjust: 'qfq',
@@ -1968,6 +1996,23 @@ const StockMultiStrategy = {
                 }).catch((e) => ({ __error: e.message || '江恩趋势分析失败' }))
                 : Promise.resolve({ __error: '江恩趋势模块未加载' }),
         ]);
+
+        let rs = null;
+        if (rsFetched && !rsFetched.__error) {
+            rs = {
+                ok: true,
+                data: rsFetched.data || {},
+                reason: rsFetched.reason || null,
+                error: null,
+            };
+        } else {
+            rs = {
+                ok: false,
+                data: null,
+                reason: null,
+                error: (rsFetched && rsFetched.__error) || '相对强度加载失败',
+            };
+        }
 
         let levels = null;
         if (levelsFetched && !levelsFetched.__error) {
@@ -2111,6 +2156,7 @@ const StockMultiStrategy = {
             strategyError: null,
             stock,
             tradeDate,
+            rs,
             levels,
             pattern,
             swing,
@@ -2125,6 +2171,14 @@ const StockMultiStrategy = {
         this.lastStrategyError = bundle.strategyError || null;
         this.lastStock = bundle.stock || null;
         this.lastTradeDate = bundle.tradeDate || null;
+        this.lastRs = bundle.rs
+            ? {
+                ok: bundle.rs.ok,
+                data: bundle.rs.data,
+                reason: bundle.rs.reason || null,
+                error: bundle.rs.error,
+            }
+            : null;
         this.lastLevels = bundle.levels
             ? {
                 ok: bundle.levels.ok,
@@ -2176,6 +2230,23 @@ const StockMultiStrategy = {
             if (strategyBlock && strategyHost) {
                 strategyBlock.hidden = false;
                 strategyHost.innerHTML = `<div class="ssa-block-status is-error">${this.esc(bundle.strategyError)}</div>`;
+            }
+        }
+
+        // 相对强度 RS
+        const rsBlock = document.getElementById('ssaRsBlock');
+        const rsHost = document.getElementById('ssaRsHost');
+        if (rsBlock && rsHost) {
+            if (bundle.rs && bundle.rs.ok && bundle.rs.data) {
+                rsBlock.hidden = false;
+                this.renderRsRating(rsHost, bundle.rs.data, bundle.rs.reason, null);
+                this.setBlockOk('ssaRsStatus', '');
+                const st = document.getElementById('ssaRsStatus');
+                if (st) st.hidden = true;
+            } else {
+                rsBlock.hidden = false;
+                rsHost.innerHTML = `<p class="ssa-rs-empty">${this.esc((bundle.rs && bundle.rs.error) || '相对强度暂不可用')}</p>`;
+                this.setBlockError('ssaRsStatus', (bundle.rs && bundle.rs.error) || '相对强度暂不可用');
             }
         }
 
@@ -2481,6 +2552,7 @@ const StockMultiStrategy = {
             const resolvedCode = stock.code || query;
             const tradeDate = data.trade_date || asof || '';
             await Promise.all([
+                this.loadRsRatingSection(resolvedCode, tradeDate),
                 this.loadLevelsSection(resolvedCode),
                 this.loadPatternSection(resolvedCode, tradeDate),
                 this.loadSwingSection(resolvedCode, tradeDate),
@@ -2522,6 +2594,7 @@ const StockMultiStrategy = {
                     strategyHost.innerHTML = `<div class="ssa-block-status is-error">${this.esc(e.message || '策略分析失败')}</div>`;
                 }
                 await Promise.all([
+                    this.loadRsRatingSection(firstToken, asofFallback),
                     this.loadLevelsSection(firstToken),
                     this.loadPatternSection(firstToken, asofFallback),
                     this.loadSwingSection(firstToken, asofFallback),
@@ -2623,6 +2696,84 @@ const StockMultiStrategy = {
             }
             this.updateExportBtn();
         }
+    },
+
+    async loadRsRatingSection(code, asof) {
+        const block = document.getElementById('ssaRsBlock');
+        const host = document.getElementById('ssaRsHost');
+        if (!block || !host) return;
+        this.setBlockLoading('ssaRsBlock', 'ssaRsStatus', '正在加载相对强度…');
+        try {
+            const q = new URLSearchParams({ code: code || '' });
+            if (asof) q.set('date', asof);
+            const resp = await authFetch(
+                `${this.API_BASE_URL}/api/analysis/rs-rating?${q}`
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (payload.candidates && payload.candidates.length > 1) {
+                throw new Error(payload.message || '股票代码不唯一，请使用精确代码');
+            }
+            if (!resp.ok || !payload.success) {
+                throw new Error(payload.message || `相对强度加载失败 ${resp.status}`);
+            }
+            const data = payload.data || {};
+            this.renderRsRating(host, data, payload.reason, payload.message);
+            this.lastRs = { ok: true, data, reason: payload.reason || null, error: null };
+            this.setBlockOk('ssaRsStatus', '');
+            const st = document.getElementById('ssaRsStatus');
+            if (st) st.hidden = true;
+        } catch (e) {
+            console.warn('个股分析·相对强度失败', e);
+            host.innerHTML = `<p class="ssa-rs-empty">${this.esc(e.message || '相对强度暂不可用')}</p>`;
+            this.lastRs = { ok: false, data: null, error: e.message || '相对强度加载失败' };
+            this.setBlockError('ssaRsStatus', e.message || '相对强度暂不可用（需日终预计算）');
+        }
+        this.updateExportBtn();
+    },
+
+    renderRsRating(host, data, reason, message) {
+        if (!host) return;
+        const rating = data.rs_rating;
+        const label = data.strength_label || '';
+        const tone =
+            rating == null
+                ? 'neutral'
+                : rating >= 70
+                  ? 'strong'
+                  : rating >= 50
+                    ? 'mid'
+                    : 'weak';
+        const fmtPct = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return '--';
+            return `${(Number(v) * 100).toFixed(2)}%`;
+        };
+        const ratingHtml =
+            rating == null
+                ? `<span class="ssa-rs-score ssa-rs-score--na">--</span>`
+                : `<span class="ssa-rs-score ssa-rs-score--${tone}">${this.esc(String(rating))}</span>`;
+        const note =
+            reason === 'rating_unpublished'
+                ? message || '当日覆盖率不足，未发布 1–99 评级'
+                : '';
+        host.innerHTML = `
+            <div class="ssa-rs-card">
+              <div class="ssa-rs-main">
+                ${ratingHtml}
+                <div class="ssa-rs-meta">
+                  <div class="ssa-rs-label">${this.esc(label || (rating == null ? '无评级' : ''))}</div>
+                  <div class="ssa-rs-date">基准日 ${this.esc(data.trade_date || '--')} · 宇宙 ${this.esc(String(data.universe_size ?? '--'))}</div>
+                  ${note ? `<div class="ssa-rs-note">${this.esc(note)}</div>` : ''}
+                </div>
+              </div>
+              <div class="ssa-rs-rocs">
+                <div class="ssa-rs-roc"><span>近63日</span><strong>${fmtPct(data.roc_63)}</strong><em>权重40%</em></div>
+                <div class="ssa-rs-roc"><span>近126日</span><strong>${fmtPct(data.roc_126)}</strong><em>权重20%</em></div>
+                <div class="ssa-rs-roc"><span>近189日</span><strong>${fmtPct(data.roc_189)}</strong><em>权重20%</em></div>
+                <div class="ssa-rs-roc"><span>近252日</span><strong>${fmtPct(data.roc_252)}</strong><em>权重20%</em></div>
+              </div>
+              <p class="ssa-rs-hint">IBD 风格截面百分位：RS 90 表示过去一年（偏近季）表现超过约 90% 的 A 股。非 RSI、非板块比价 Z。</p>
+            </div>
+        `;
     },
 
     async loadLevelsSection(code) {

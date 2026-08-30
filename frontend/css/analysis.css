@@ -1822,6 +1822,67 @@ body.ssa-png-capturing .ms-zigzag-svg,
 .ssa-block-status.is-ok {
     color: #64748b;
 }
+.ssa-rs-host {
+    margin-top: 0.25rem;
+}
+.ssa-rs-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 12px 14px;
+    background: #f8fafc;
+}
+.ssa-rs-main {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+.ssa-rs-score {
+    font-size: 2.4rem;
+    font-weight: 700;
+    line-height: 1;
+    min-width: 3.2rem;
+    text-align: center;
+}
+.ssa-rs-score--strong { color: #b91c1c; }
+.ssa-rs-score--mid { color: #c2410c; }
+.ssa-rs-score--weak { color: #166534; }
+.ssa-rs-score--na { color: #94a3b8; }
+.ssa-rs-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: #0f172a;
+}
+.ssa-rs-date,
+.ssa-rs-note,
+.ssa-rs-hint,
+.ssa-rs-empty {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 2px;
+}
+.ssa-rs-note { color: #b45309; }
+.ssa-rs-rocs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+}
+.ssa-rs-roc {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.ssa-rs-roc span { font-size: 11px; color: #64748b; }
+.ssa-rs-roc strong { font-size: 14px; color: #0f172a; }
+.ssa-rs-roc em { font-size: 10px; color: #94a3b8; font-style: normal; }
+.ssa-rs-hint { margin: 10px 0 0; }
+@media (max-width: 720px) {
+    .ssa-rs-rocs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .ssa-levels-host .kde-levels-result,
 .ssa-pattern-host .pattern-result-wrap,
 .ssa-swing-host .ms-result-wrap {

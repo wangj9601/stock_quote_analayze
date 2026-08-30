@@ -28,8 +28,9 @@ CN_CLOSE_TEMPLATE_NODES = [
     (8, "cn_annual", "A股年K"),
     (9, "cn_index_realtime", "A股指数实时"),
     (10, "cn_industry_board", "行业板块实时"),
-    (11, "gms_signals_cn", "GMS信号预计算"),
-    (12, "urt_signals_cn", "URT信号预计算"),
+    (11, "rs_rating_cn", "A股相对强度RS预计算"),
+    (12, "gms_signals_cn", "GMS信号预计算"),
+    (13, "urt_signals_cn", "URT信号预计算"),
 ]
 
 

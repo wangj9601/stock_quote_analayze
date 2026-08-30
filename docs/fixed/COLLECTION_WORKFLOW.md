@@ -51,3 +51,21 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 - 流程运行期间无法从管理端启动单任务采集；单任务运行期间无法启动流程。
 
 `GET /active-execution` 返回 `active` 数组与 `active_count`，便于监控并发流程。
+
+## 预置「A股收盘后标准流程」要点
+
+推荐顺序（节选）：
+
+1. … `cn_historical`（日 K；内部算 MA/RSI 等）
+2. … 周期 K / 指数 / `cn_industry_board`
+3. **`rs_rating_cn`**：A 股相对强度 RS Rating 全市场预计算（写 `rs_ratings`）
+4. `gms_signals_cn` → `urt_signals_cn`
+
+新增 RS 节点迁移：
+
+```bash
+python migrations/add_rs_ratings_table.py
+python migrations/add_rs_rating_workflow_node.py
+```
+
+说明见 `docs/indicators/股价相对强度_RS_Rating.md`。已有库若流程里尚无该节点，跑第二条迁移即可插入到 `cn_industry_board` 之后。
