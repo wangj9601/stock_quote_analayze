@@ -884,6 +884,48 @@ class InfiniteCostIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class StockFinaIndicator(Base):
+    """A 股财务指标（报告期），供 CAN SLIM C/A 全市场筛选。"""
+    __tablename__ = "stock_fina_indicator"
+
+    code = Column(StockCodeTextPK(), primary_key=True)
+    end_date = Column(String(8), primary_key=True)  # YYYYMMDD 报告期
+    ann_date = Column(String(8), nullable=True)
+    ts_code = Column(String(16), nullable=True)
+    eps = Column(Float, nullable=True)
+    q_eps = Column(Float, nullable=True)
+    basic_eps_yoy = Column(Float, nullable=True)
+    dt_eps_yoy = Column(Float, nullable=True)
+    q_eps_yoy = Column(Float, nullable=True)
+    q_profit_yoy = Column(Float, nullable=True)
+    q_netprofit_yoy = Column(Float, nullable=True)
+    q_sales_yoy = Column(Float, nullable=True)
+    roe = Column(Float, nullable=True)
+    roe_waa = Column(Float, nullable=True)
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class IndexHistoricalQuotes(Base):
+    """A 股指数日线历史（CAN SLIM M 等）。"""
+    __tablename__ = "index_historical_quotes"
+
+    ts_code = Column(String(16), primary_key=True)
+    trade_date = Column(Date, primary_key=True)
+    code = Column(String(16), nullable=True, index=True)
+    name = Column(String(64), nullable=True)
+    open = Column(Float, nullable=True)
+    high = Column(Float, nullable=True)
+    low = Column(Float, nullable=True)
+    close = Column(Float, nullable=True)
+    pre_close = Column(Float, nullable=True)
+    change = Column(Float, nullable=True)
+    pct_chg = Column(Float, nullable=True)
+    vol = Column(Float, nullable=True)
+    amount = Column(Float, nullable=True)
+    collected_source = Column(String(32), nullable=True, default="tushare")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class RSRatings(Base):
     """IBD 风格股价相对强度评级（截面百分位 1–99，仅 A 股预计算）"""
     __tablename__ = 'rs_ratings'

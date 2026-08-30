@@ -4764,6 +4764,8 @@ const ScreeningPage = {
             suffix = 'volume-shrink-breakout';
         } else if (strategy === 'urt') {
             suffix = 'urt';
+        } else if (strategy === 'canslim') {
+            suffix = 'canslim';
         } else {
             suffix = 'cyb';
         }
@@ -4891,6 +4893,16 @@ const ScreeningPage = {
             } else if (strategy === 'urt') {
                 const params = await this.buildUrtQuerySearchParams();
                 url = `${apiBaseUrl}/api/screening/urt-strategy?${params.toString()}`;
+            } else if (strategy === 'canslim') {
+                const params = new URLSearchParams();
+                const mf = document.getElementById('canslimMarketFilter');
+                params.set('market_filter', mf && mf.checked ? 'true' : 'false');
+                const rsEl = document.getElementById('canslimRsMin');
+                const rsVal = rsEl ? parseInt(rsEl.value, 10) : NaN;
+                if (!isNaN(rsVal) && rsVal > 0) params.set('rs_min', String(rsVal));
+                const dEl = document.getElementById('canslimDate');
+                if (dEl && dEl.value) params.set('asof', dEl.value);
+                url = `${apiBaseUrl}/api/screening/canslim?${params.toString()}`;
             } else {
                 throw new Error('未知的策略类型');
             }
@@ -4935,6 +4947,13 @@ const ScreeningPage = {
                     this._updateUrtTraceStaleHint(result);
                 }
                 this.renderResults(result.data, result.search_date, strategy, emptyMsg, gmsPaging);
+                if (strategy === 'canslim') {
+                    const hint = document.getElementById('canslimMarketHint');
+                    if (hint) {
+                        const m = result.market || {};
+                        hint.textContent = m.reason || '';
+                    }
+                }
                 if (strategy === 'gms') {
                     this._refreshGmsTradeObserveButtonsInSignalTable();
                 }
@@ -5031,6 +5050,8 @@ const ScreeningPage = {
                 colSpan = 16;
             } else if (strategy === 'urt') {
                 colSpan = 14;
+            } else if (strategy === 'canslim') {
+                colSpan = 15;
             } else {
                 colSpan = 12;
             }
@@ -5437,6 +5458,8 @@ const ScreeningPage = {
             suffix = 'volume-shrink-breakout';
         } else if (strategy === 'urt') {
             suffix = 'urt';
+        } else if (strategy === 'canslim') {
+            suffix = 'canslim';
         } else {
             suffix = 'cyb';
         }
@@ -5473,6 +5496,8 @@ const ScreeningPage = {
                 colSpan = 16;
             } else if (strategy === 'urt') {
                 colSpan = 14;
+            } else if (strategy === 'canslim') {
+                colSpan = 15;
             } else {
                 colSpan = 12;
             }
@@ -5582,6 +5607,37 @@ const ScreeningPage = {
                             <div class="action-links">
                                 <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
                                 <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name)}" class="action-link" target="_blank">详情</a>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            } else if (strategy === 'canslim') {
+                const pass = (letter) => {
+                    const b = stock[letter];
+                    if (!b) return '--';
+                    return b.ok ? '✓' : '×';
+                };
+                const fmt = (v, d = 1) => (v == null || v === '' || Number.isNaN(Number(v)) ? '--' : Number(v).toFixed(d));
+                html += `
+                    <tr>
+                        <td><span class="stock-code">${stock.code}</span></td>
+                        <td><span class="stock-name">${stock.name || ''}</span></td>
+                        <td>${stock.rs_rating != null ? stock.rs_rating : '--'}</td>
+                        <td>${fmt(stock.q_eps_yoy, 1)}</td>
+                        <td>${fmt(stock.roe, 1)}</td>
+                        <td>${fmt(stock.near_high_pct, 1)}</td>
+                        <td>${fmt(stock.circ_shares_yi, 2)}</td>
+                        <td>${fmt(stock.volume_ratio, 2)}</td>
+                        <td>${stock.cupb_status || '--'}</td>
+                        <td title="${(stock.C && stock.C.reason) || ''}">${pass('C')}</td>
+                        <td title="${(stock.A && stock.A.reason) || ''}">${pass('A')}</td>
+                        <td title="${(stock.N && stock.N.reason) || ''}">${pass('N')}</td>
+                        <td title="${(stock.S && stock.S.reason) || ''}">${pass('S')}</td>
+                        <td title="${(stock.L && stock.L.reason) || ''}">${pass('L')}</td>
+                        <td>
+                            <div class="action-links">
+                                <a href="stock_history.html?code=${stock.code}" class="action-link" target="_blank">历史</a>
+                                <a href="stock.html?code=${stock.code}&name=${encodeURIComponent(stock.name || '')}" class="action-link" target="_blank">详情</a>
                             </div>
                         </td>
                     </tr>

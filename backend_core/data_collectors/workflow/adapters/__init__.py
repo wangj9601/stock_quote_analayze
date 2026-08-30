@@ -470,6 +470,53 @@ def _rs_rating_cn() -> Any:
     return result
 
 
+def _fina_indicator_cn() -> Any:
+    """A 股财务指标增量采集（CAN SLIM C/A）。Tushare 优先，可回退 AkShare。"""
+    import logging
+    import os
+
+    from backend_core.data_collectors.tushare.fina_indicator import (
+        run_fina_indicator_collect_auto,
+    )
+
+    log = logging.getLogger(__name__)
+    years = _env_int("CANSLIM_FINA_YEARS_BACK", 4)
+    max_stocks_raw = (os.getenv("CANSLIM_FINA_MAX_STOCKS") or "").strip()
+    max_stocks = int(max_stocks_raw) if max_stocks_raw.isdigit() else None
+    source = (os.getenv("CANSLIM_FINA_SOURCE") or "auto").strip().lower()
+    log.info(
+        "节点 fina_indicator_cn 开始 source=%s years_back=%s max_stocks=%s",
+        source,
+        years,
+        max_stocks,
+    )
+    result = run_fina_indicator_collect_auto(years_back=years, max_stocks=max_stocks)
+    log.info(
+        "节点 fina_indicator_cn 结束 success=%s source=%s ok=%s fail=%s rows=%s",
+        (result or {}).get("success") if isinstance(result, dict) else None,
+        (result or {}).get("source") if isinstance(result, dict) else None,
+        (result or {}).get("ok") if isinstance(result, dict) else None,
+        (result or {}).get("fail") if isinstance(result, dict) else None,
+        (result or {}).get("rows") if isinstance(result, dict) else None,
+    )
+    if isinstance(result, dict) and not result.get("success"):
+        raise RuntimeError(result.get("error") or "fina_indicator 采集失败")
+    return result
+
+
+def _index_daily_cn() -> Any:
+    """A 股指数日线。默认优先 AkShare，失败可回退 Tushare。"""
+    from backend_core.data_collectors.tushare.index_daily import (
+        run_index_daily_collect_auto,
+    )
+
+    years = _env_int("CANSLIM_INDEX_YEARS_BACK", 3)
+    result = run_index_daily_collect_auto(years_back=years)
+    if isinstance(result, dict) and not result.get("success"):
+        raise RuntimeError("index_daily 采集失败")
+    return result
+
+
 def _market_news() -> Any:
     from backend_core.data_collectors.news_collector import NewsCollector
 
@@ -526,6 +573,8 @@ exec_urt_hk = _wrap_plain(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
 exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
+exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")
+exec_index_daily_cn = _wrap_plain(_index_daily_cn, "A股指数日线采集")
 exec_market_news = _wrap_plain(_market_news, "市场新闻采集")
 exec_watchlist_history = _wrap_plain(_watchlist_history, "自选股历史")
 exec_triple_volume_scan = _wrap_plain(_triple_volume_scan, "3倍量扫描")

@@ -34,6 +34,7 @@
             <button class="strategy-tab" data-strategy="urt" id="urtTab" data-perm="channel.screening.tab.urt">上升趋势</button>
             <button class="strategy-tab" data-strategy="sbbr" id="sbbrTab" data-perm="channel.screening.tab.sbbr">做小做底</button>
             <button class="strategy-tab" data-strategy="rpe" id="rpeTab" data-perm="channel.screening.tab.rpe">比价效应</button>
+            <button class="strategy-tab" data-strategy="canslim" id="canslimTab" data-perm="channel.screening.tab.canslim">CAN SLIM</button>
         </div>
 
         <!-- 创业板中线选股策略标签页内容 -->
@@ -1972,6 +1973,81 @@
                             </tr>
                         </thead>
                         <tbody id="rpeFormalBody"><tr><td colspan="9" class="empty-state">暂无</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CAN SLIM 第一期 -->
+        <div id="canslim-content" class="strategy-content" data-perm="channel.screening.tab.canslim">
+            <div class="strategy-info-card">
+                <h2>策略说明（第一期）</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围：</strong>A 股（排除 ST / 退市名）</li>
+                    <li><strong>C</strong> 最新单季 EPS 同比 ≥ 25%（读库 stock_fina_indicator）</li>
+                    <li><strong>A</strong> 近 3 年年报增速 + ROE ≥ 17%</li>
+                    <li><strong>N</strong> 接近 52 周新高（≥85%）或 CUPB forming/confirmed</li>
+                    <li><strong>S</strong> 流通股本 ≤ 20 亿股；阳线日量 ≥ MAVOL20</li>
+                    <li><strong>L</strong> RS Rating ≥ 80</li>
+                    <li><strong>M</strong> 沪深300 收盘 &gt; MA50 且 MA50 上行（可关闭）</li>
+                    <li><strong>I</strong> 第一期不参与过滤</li>
+                </ul>
+            </div>
+
+            <div class="screening-actions" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+                <label style="cursor:pointer;">
+                    <input type="checkbox" id="canslimMarketFilter" checked style="margin-right:4px;">启用大盘过滤(M)
+                </label>
+                <label>
+                    RS≥
+                    <input type="number" id="canslimRsMin" class="param-input" value="80" min="1" max="99" style="width:64px;">
+                </label>
+                <label>
+                    基准日
+                    <input type="date" id="canslimDate" class="param-input" title="留空=最新交易日">
+                </label>
+                <button id="refreshBtn-canslim" class="refresh-btn" data-strategy="canslim"
+                    data-perm="channel.screening.tab.canslim.btn.refresh">刷新筛选</button>
+                <span id="searchDate-canslim" class="search-date"></span>
+                <span id="canslimMarketHint" class="gms-meta-text" style="color:#64748b;"></span>
+            </div>
+
+            <div id="loadingIndicator-canslim" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选（CAN SLIM），请稍候...</span>
+            </div>
+            <div id="errorMessage-canslim" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-canslim" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-canslim" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-canslim" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>RS</th>
+                                <th>季增%</th>
+                                <th>ROE%</th>
+                                <th>距新高%</th>
+                                <th>流通股(亿)</th>
+                                <th>量比</th>
+                                <th>CUPB</th>
+                                <th>C</th>
+                                <th>A</th>
+                                <th>N</th>
+                                <th>S</th>
+                                <th>L</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-canslim">
+                            <tr>
+                                <td colspan="15" class="empty-state">点击「刷新筛选」开始筛选</td>
+                            </tr>
+                        </tbody>
                     </table>
                 </div>
             </div>

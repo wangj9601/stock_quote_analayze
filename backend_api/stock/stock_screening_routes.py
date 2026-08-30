@@ -2815,6 +2815,63 @@ async def get_high_tight_flag_strategy(
         )
 
 
+@router.get("/canslim")
+async def get_canslim_strategy(
+    asof: Optional[str] = Query(None, description="基准日 YYYY-MM-DD，默认最新交易日"),
+    market_filter: bool = Query(True, description="是否启用大盘 M 过滤"),
+    rs_min: Optional[int] = Query(None, description="RS Rating 最低分，默认配置 80"),
+    stock_code: Optional[str] = Query(None, description="可选：仅筛单只股票"),
+    db: Session = Depends(get_db),
+):
+    """
+    CAN SLIM 第一期选股：C+A+N+S+L 合取，M 为大盘开关，I 不参与过滤。
+    依赖库内 stock_fina_indicator、rs_ratings、index_historical_quotes 等；不现场打外网。
+    """
+    try:
+        from backend_core.strategies.canslim.frontend_interface import CanSlimFrontendInterface
+
+        codes = None
+        if stock_code and str(stock_code).strip():
+            codes = [str(stock_code).strip().zfill(6)]
+
+        iface = CanSlimFrontendInterface(db)
+        result = iface.screen(
+            asof=asof,
+            codes=codes,
+            market_filter=market_filter,
+            rs_min=rs_min,
+        )
+        data = result.get("data") or []
+        return JSONResponse(
+            {
+                "success": bool(result.get("success", True)),
+                "data": data,
+                "total": int(result.get("total") or len(data)),
+                "search_date": result.get("asof") or datetime.now().strftime("%Y-%m-%d"),
+                "strategy_name": "CAN SLIM",
+                "market": result.get("market"),
+                "message": result.get("message"),
+            }
+        )
+    except Exception as e:
+        logger.error("执行 CAN SLIM 选股失败: %s", e)
+        import traceback
+
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"CAN SLIM 选股失败: {str(e)}",
+        )
+
+
+@router.get("/canslim/config")
+async def get_canslim_config(db: Session = Depends(get_db)):
+    """返回 CAN SLIM 默认阈值配置（只读）。"""
+    from backend_core.strategies.canslim.config import get_default_canslim_config
+
+    return JSONResponse({"success": True, "data": get_default_canslim_config()})
+
+
 @router.get("/keep-increasing-strategy")
 async def get_keep_increasing_strategy(
     db: Session = Depends(get_db)

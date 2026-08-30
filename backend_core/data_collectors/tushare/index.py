@@ -1,10 +1,16 @@
-import tushare as ts
-from .base import TushareCollector
+"""Tushare 指数行情采集器（兼容旧入口，委托 index_daily）。"""
 
-class IndexQuoteCollector(TushareCollector):
-    """指数行情采集器"""
-    def collect_index_quotes(self):
-        # 示例：获取上证指数行情
-        df = ts.pro_bar(ts_code='000001.SH', asset='I')
-        self.logger.info(f"采集到 {len(df)} 条指数行情数据")
-        # 这里可以根据实际需求保存到数据库
+from typing import Any, Dict, Optional
+
+from .index_daily import IndexDailyCollector, run_index_daily_collect
+
+
+class IndexQuoteCollector(IndexDailyCollector):
+    """指数行情采集器（写入 index_historical_quotes）。"""
+
+    def collect_index_quotes(self, **kwargs: Any) -> Dict[str, Any]:
+        return self.collect(**kwargs)
+
+
+def collect_index_quotes(**kwargs: Any) -> Dict[str, Any]:
+    return run_index_daily_collect(**kwargs)

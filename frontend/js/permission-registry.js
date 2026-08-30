@@ -21,6 +21,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.screening.tab.urt', name: '上升趋势', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 90 },
   { code: 'channel.screening.tab.sbbr', name: '做小做底', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 100 },
   { code: 'channel.screening.tab.rpe', name: '比价效应', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 110 },
+  { code: 'channel.screening.tab.canslim', name: 'CAN SLIM', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 120 },
 
   { code: 'channel.screening.tab.cyb_midline.btn.refresh', name: '刷新筛选', level: 3, parent_code: 'channel.screening.tab.cyb_midline', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.gms.btn.refresh', name: 'GMS刷新', level: 3, parent_code: 'channel.screening.tab.gms', channel_code: 'screening', sort_order: 10 },
@@ -39,6 +40,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.screening.tab.sbbr.btn.add_reserve', name: '加入储备', level: 3, parent_code: 'channel.screening.tab.sbbr', channel_code: 'screening', sort_order: 30 },
   { code: 'channel.screening.tab.rpe.btn.refresh', name: 'RPE刷新', level: 3, parent_code: 'channel.screening.tab.rpe', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.rpe.btn.calc_qfq', name: 'RPE按前复权重算策略信号', level: 3, parent_code: 'channel.screening.tab.rpe', channel_code: 'screening', sort_order: 20 },
+  { code: 'channel.screening.tab.canslim.btn.refresh', name: 'CAN SLIM刷新', level: 3, parent_code: 'channel.screening.tab.canslim', channel_code: 'screening', sort_order: 10 },
 
   { code: 'channel.analyze.tab.board', name: '板块分析', level: 2, parent_code: 'channel.analyze', channel_code: 'analyze', sort_order: 5 },
   { code: 'channel.analyze.tab.board.btn.run', name: '开始板块分析', level: 3, parent_code: 'channel.analyze.tab.board', channel_code: 'analyze', sort_order: 10 },
@@ -89,5 +91,6 @@ window.PERMISSION_TAB_MAP = {
   'volume-shrink-breakout': 'channel.screening.tab.vsb',
   urt: 'channel.screening.tab.urt',
   sbbr: 'channel.screening.tab.sbbr',
-  rpe: 'channel.screening.tab.rpe'
+  rpe: 'channel.screening.tab.rpe',
+  canslim: 'channel.screening.tab.canslim'
 };

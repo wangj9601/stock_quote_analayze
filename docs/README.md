@@ -31,6 +31,7 @@
 | [sbbr/](strategies/sbbr/) | SBBR 做小做底 | 业务简化版、信号计算规则（总市值 20~200 亿 + 流通股 5~10 亿股、箱体+KDE、上方支撑确认） |
 | [double_bottom/](strategies/double_bottom/) | DBLB 双底 | 信号计算规则 |
 | [cup_bottom/](strategies/cup_bottom/) | CUPB 带柄杯底 | [信号计算规则](strategies/cup_bottom/CUPB_带柄杯底_信号计算规则.md)、[业务简化版](strategies/cup_bottom/CUPB_带柄杯底_业务简化版.md) |
+| [canslim/](strategies/canslim/) | CAN SLIM（第一期） | [业务简化版](strategies/canslim/CANSLIM_业务简化版.md)、[信号计算规则](strategies/canslim/CANSLIM_信号计算规则.md) |
 | [vsb/](strategies/vsb/) | VSB 3 倍量缩量突破 | 设计与使用手册 |
 | [pvfars/](strategies/pvfars/) | PVFRS/PVFARS 量价频共振 | 指标设计、演化指南、重构说明 |
 | [specs/one-yang-three-lines-strategy/](specs/one-yang-three-lines-strategy/) | 一阳穿三线 | requirements / design / tasks |
