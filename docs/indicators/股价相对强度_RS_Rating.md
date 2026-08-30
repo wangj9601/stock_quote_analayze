@@ -54,8 +54,26 @@ RS_Rating = round(percentile_rank × 98 + 1)   # 整数 1–99
 |------|------|
 | 正常交易日 | **每日 1 次**，挂在 A 股收盘采集流程中、日 K 入库之后 |
 | 休市 | 随流程 `skip_on_holiday=CN` **跳过** |
-| 补采 / 改算法 / 补因子后 | 对目标交易日**按需重跑** `rs_rating_cn` |
+| 补采 / 改算法 / 补因子后 | 对目标交易日**按需重跑** `rs_rating_cn`，或跑批量脚本 |
 | 盘中 | **不必**；口径为日线收盘截面 |
+
+### 批量脚本（离线回填）
+
+```bash
+# 缺省：行情最新交易日起向前约一年
+python scripts/batch_rs_rating_precompute.py
+
+# 指定区间
+python scripts/batch_rs_rating_precompute.py --start 2025-01-01 --end 2025-06-30
+
+# 仅列出交易日
+python scripts/batch_rs_rating_precompute.py --dry-run
+
+# 某日失败仍继续
+python scripts/batch_rs_rating_precompute.py --continue-on-error
+```
+
+按交易日逐日调用 `run_rs_rating_precompute`（全市场），与 HTTP 强制重算上限无关。
 
 ## 日终触发（采集流程节点）
 
