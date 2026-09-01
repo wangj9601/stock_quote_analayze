@@ -45,6 +45,14 @@ RS_Rating = round(percentile_rank × 98 + 1)   # 整数 1–99
 - 另需：足够窗口的前复权收盘序列（约 ≥253 根）及库内港股复权因子（优先 `akshare_sina_hk_qfq`，否则 `akshare_em_hk_qfq`）
 - **独立落库**：`rs_ratings_hk`（主键 `(code, date)`，与 A 股表分离）
 - 港股截面只在港股宇宙内排名，**不与 A 股混排**
+- **前置条件**：`stock_adj_factor` 须已有足量港股因子；若日志出现 `skipped_no_factor≈全市场` / `coverage 0%`，先补齐因子再跑 RS：
+
+```bash
+python migrations/backfill_missing_adj_factors.py --market HK --dry-run
+python migrations/backfill_missing_adj_factors.py --market HK --trade-date 2025-01-07
+# 补齐后再批算
+python scripts/batch_rs_rating_hk_precompute.py --start 2025-01-01 --end 2025-06-30
+```
 
 ## 解读档（仅展示，不参与计算）
 
