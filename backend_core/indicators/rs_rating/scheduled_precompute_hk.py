@@ -20,6 +20,8 @@ from .config import (
     MARKET_TYPE_HK,
     PRICE_ADJUST,
     RS_WINDOWS,
+    coverage_allows_publish,
+    coverage_for_publish,
     coverage_threshold,
 )
 from .qfq_closes import build_qfq_close_map_hk
@@ -112,8 +114,10 @@ def run_rs_rating_precompute_hk(
         qfq_ready = int(qfq_stats.get("qfq_codes") or len(closes_map) or 0)
         coverage_base = qfq_ready if qfq_ready > 0 else pool_size
         coverage = (universe_size / coverage_base) if coverage_base else 0.0
+        # 实际 coverage 入库；发布判定：>0.88 时按 0.90 计
+        coverage_publish = coverage_for_publish(coverage, MARKET_TYPE_HK)
         thr = coverage_threshold(MARKET_TYPE_HK)
-        publish = coverage >= thr
+        publish = coverage_allows_publish(coverage, MARKET_TYPE_HK)
         ranked = rank_cross_section(raw_rows, publish_ratings=publish)
         for r in ranked:
             r["universe_size"] = universe_size
@@ -129,6 +133,7 @@ def run_rs_rating_precompute_hk(
             "qfq_ready_count": qfq_ready,
             "universe_size": universe_size,
             "coverage_ratio": round(coverage, 4),
+            "coverage_for_publish": round(coverage_publish, 4),
             "coverage_base": "qfq_ready",
             "publish_ratings": publish,
             "saved": saved,
@@ -138,8 +143,10 @@ def run_rs_rating_precompute_hk(
         }
         if not publish:
             logger.warning(
-                "RS Rating HK coverage %.2f%% < %.0f%% (base=qfq_ready=%s) — ratings not published",
+                "RS Rating HK coverage %.2f%% (publish_as %.2f%%) < %.0f%% "
+                "(base=qfq_ready=%s) — ratings not published",
                 coverage * 100,
+                coverage_publish * 100,
                 thr * 100,
                 qfq_ready,
             )

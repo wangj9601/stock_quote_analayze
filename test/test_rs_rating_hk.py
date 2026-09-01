@@ -33,12 +33,20 @@ def test_hk_config_constants():
     from backend_core.indicators.rs_rating.config import (
         LOOKBACK_CALENDAR_DAYS,
         LOOKBACK_CALENDAR_DAYS_HK,
+        coverage_allows_publish,
+        coverage_for_publish,
         coverage_threshold,
     )
 
     assert LOOKBACK_CALENDAR_DAYS_HK > LOOKBACK_CALENDAR_DAYS
     assert coverage_threshold("HK") == coverage_threshold(MARKET_TYPE_HK)
     assert coverage_threshold("CN") == 0.90
+    # 港股：>0.88 按 0.90 计，允许发布；恰好 0.88 仍不发布
+    assert coverage_for_publish(0.8877, "HK") == 0.90
+    assert coverage_allows_publish(0.8877, "HK") is True
+    assert coverage_allows_publish(0.88, "HK") is False
+    assert coverage_for_publish(0.87, "HK") == 0.87
+    assert coverage_allows_publish(0.8877, "CN") is False  # A 股无近阈值放宽
 
 
 def test_normalize_hk_code():

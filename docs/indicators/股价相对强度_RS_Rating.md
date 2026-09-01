@@ -43,8 +43,9 @@ RS_Rating = round(percentile_rank × 98 + 1)   # 整数 1–99
 - 当日 `historical_quotes_hk` 有行情、代码 5 位
 - `stock_basic_info_hk` 存在且 `collect_enabled`
 - 另需：足够窗口的前复权收盘序列（约 ≥253 根）及库内港股复权因子（优先 `akshare_sina_hk_qfq`，否则 `akshare_em_hk_qfq`）
-- 回看日历日：港股 **`LOOKBACK_CALENDAR_DAYS_HK=600`**（A 股仍为 420；港股休市更多，420 日中位数约 225 根，达不到 253）
+- 回看日历日：港股 **`LOOKBACK_CALENDAR_DAYS_HK=750`**（A 股仍为 420；港股休市更多，420 日中位数约 225 根，达不到 253；600 仍偏紧故加长至约两年半）
 - 覆盖率分母：港股用 **已具备前复权序列的股票数**（`qfq_ready`），不是全日候选；无因子者无法入评
+- 发布门槛：名义仍为 **90%**；实际覆盖率 **> 88%** 时按 90% 计并发布 `rs_rating`（`COVERAGE_NEAR_PASS_HK`）
 - **独立落库**：`rs_ratings_hk`（主键 `(code, date)`，与 A 股表分离）
 - 港股截面只在港股宇宙内排名，**不与 A 股混排**
 - **前置条件**：`stock_adj_factor` 须已有足量港股因子；若日志出现 `skipped_no_factor≈全市场` / `coverage 0%`，先补齐因子再跑 RS：
