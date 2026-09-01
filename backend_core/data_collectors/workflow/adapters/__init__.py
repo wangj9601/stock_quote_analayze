@@ -110,6 +110,30 @@ def _cn_index_realtime() -> Any:
     return {"rows": 0 if df is None else len(df)}
 
 
+def _cn_index_historical() -> Any:
+    from backend_core.data_collectors.akshare.cn_index_historical_collector import (
+        CNIndexHistoricalCollector,
+    )
+
+    return CNIndexHistoricalCollector().collect_daily_to_historical()
+
+
+def _cn_board_historical() -> Any:
+    from backend_core.data_collectors.akshare.board_daily_archive import (
+        run_board_daily_archive,
+    )
+
+    result = run_board_daily_archive()
+    if isinstance(result, dict) and not result.get("success"):
+        ths = result.get("ths") or {}
+        details = ths.get("details") or []
+        if details and ths.get("boards_ok", 0) == 0:
+            fb = result.get("realtime_fallback") or {}
+            if fb.get("success", 0) == 0:
+                raise RuntimeError("同花顺板块历史归档失败")
+    return result
+
+
 def _cn_industry_board() -> Any:
     from backend_core.data_collectors.akshare.realtime_stock_industry_board_ak import (
         RealtimeStockIndustryBoardCollector,
@@ -546,7 +570,9 @@ def _triple_volume_scan() -> Any:
 exec_cn_realtime = _wrap_cn(_cn_realtime, "A股实时采集")
 exec_cn_historical = _wrap_cn(_cn_historical, "A股日K采集")
 exec_cn_index_realtime = _wrap_cn(_cn_index_realtime, "A股指数实时")
+exec_cn_index_historical = _wrap_cn(_cn_index_historical, "A股指数历史归档")
 exec_cn_industry_board = _wrap_cn(_cn_industry_board, "行业板块实时")
+exec_cn_board_historical = _wrap_cn(_cn_board_historical, "同花顺板块历史归档")
 exec_cn_industry_constituents = _wrap_plain(_cn_industry_constituents, "行业板块成分股")
 exec_cn_turnover = _wrap_plain(_cn_turnover, "历史换手率")
 exec_stock_shares = _wrap_plain(_stock_shares, "股本同步")

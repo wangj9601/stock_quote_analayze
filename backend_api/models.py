@@ -668,6 +668,39 @@ class ConceptBoardDailyMetrics(Base):
     member_count_used = Column(Integer)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
+
+class IndustryBoardHistoricalQuotes(Base):
+    """同花顺行业板块指数日 K（OHLC）。"""
+    __tablename__ = "industry_board_historical_quotes"
+    board_code = Column(String(20), primary_key=True)
+    trade_date = Column(Date, primary_key=True)
+    board_name = Column(String(100))
+    open = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    close = Column(Float)
+    volume = Column(Float)
+    amount = Column(Float)
+    collected_source = Column(String(32), default="tonghuashun")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class ConceptBoardHistoricalQuotes(Base):
+    """同花顺概念板块指数日 K（OHLC）。"""
+    __tablename__ = "concept_board_historical_quotes"
+    board_code = Column(String(20), primary_key=True)
+    trade_date = Column(Date, primary_key=True)
+    board_name = Column(String(100))
+    open = Column(Float)
+    high = Column(Float)
+    low = Column(Float)
+    close = Column(Float)
+    volume = Column(Float)
+    amount = Column(Float)
+    collected_source = Column(String(32), default="tonghuashun")
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class HKIndexBasicInfo(Base):
     """港股指数基础信息表"""
     __tablename__ = "hk_index_basic_info"

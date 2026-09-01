@@ -28,6 +28,8 @@ from backend_core.data_collectors.akshare.hk_realtime import HKRealtimeQuoteColl
 from backend_core.data_collectors.akshare.hk_historical import HKHistoricalQuoteCollector
 from backend_core.data_collectors.akshare.hk_index_realtime import HKIndexRealtimeCollector
 from backend_core.data_collectors.akshare.hk_index_historical_collector import HKIndexHistoricalCollector
+from backend_core.data_collectors.akshare.cn_index_historical_collector import CNIndexHistoricalCollector
+from backend_core.data_collectors.akshare.board_daily_archive import BoardDailyArchiveCollector
 from backend_core.data_collectors.akshare.watchlist_history_collector import collect_watchlist_history
 from backend_core.data_collectors.news_collector import NewsCollector
 from backend_core.data_collectors.akshare.weekly_collector import WeeklyDataGenerator
@@ -80,6 +82,8 @@ hk_realtime_collector = HKRealtimeQuoteCollector(DATA_COLLECTORS.get('akshare', 
 hk_historical_collector = HKHistoricalQuoteCollector(DATA_COLLECTORS.get('akshare', {}))
 hk_index_collector = HKIndexRealtimeCollector()
 hk_index_historical_collector = HKIndexHistoricalCollector()
+cn_index_historical_collector = CNIndexHistoricalCollector()
+board_daily_archive_collector = BoardDailyArchiveCollector()
 weekly_generator = WeeklyDataGenerator()
 hk_weekly_generator = HKWeeklyDataGenerator()
 monthly_generator = MonthlyDataGenerator()
@@ -192,6 +196,41 @@ def collect_akshare_index_realtime():
         logging.info(f"[定时任务] AKShare 指数实时行情采集完成，采集到 {row_count} 条数据")
     except Exception as e:
         logging.error(f"[定时任务] 实时行情采集异常: {e}")
+
+def collect_cn_index_historical():
+    try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _cn_session_closed_today():
+            logging.info(f"[定时任务] A股 {today_str} 为休市日，跳过指数历史归档。")
+            return
+        logging.info("[定时任务] A股指数历史归档开始...")
+        result = cn_index_historical_collector.collect_daily_to_historical()
+        if result and result.get('success', 0) > 0:
+            logging.info(f"[定时任务] A股指数历史归档完成: {result.get('message', '')}")
+        else:
+            logging.warning(f"[定时任务] A股指数历史归档: {result.get('message', '未知')}")
+    except Exception as e:
+        logging.error(f"[定时任务] A股指数历史归档异常: {e}")
+
+def collect_cn_board_historical():
+    try:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        if _cn_session_closed_today():
+            logging.info(f"[定时任务] A股 {today_str} 为休市日，跳过同花顺板块历史归档。")
+            return
+        logging.info("[定时任务] 同花顺板块历史归档开始...")
+        result = board_daily_archive_collector.run()
+        if result and result.get('success'):
+            ths = result.get('ths') or {}
+            logging.info(
+                "[定时任务] 同花顺板块历史归档完成 boards_ok=%s rows=%s",
+                ths.get('boards_ok'),
+                ths.get('rows'),
+            )
+        else:
+            logging.warning("[定时任务] 同花顺板块历史归档未写入有效数据")
+    except Exception as e:
+        logging.error(f"[定时任务] 同花顺板块历史归档异常: {e}")
 
 def collect_tushare_historical():
     try:
@@ -1039,11 +1078,21 @@ if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
         hour=_cron('SCHED_AKSHARE_INDEX_REALTIME_HOUR', '11,15'),
         minute=_cron_int('SCHED_AKSHARE_INDEX_REALTIME_MINUTE', 59),
         id='akshare_index_realtime')
+    scheduler.add_job(collect_cn_index_historical, 'cron',
+        day_of_week=_cron('SCHED_CN_INDEX_HISTORICAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_CN_INDEX_HISTORICAL_HOUR', 15),
+        minute=_cron_int('SCHED_CN_INDEX_HISTORICAL_MINUTE', 40),
+        id='cn_index_historical')
     scheduler.add_job(collect_akshare_industry_board_realtime, 'cron',
         day_of_week=_cron('SCHED_AKSHARE_INDUSTRY_DOW', 'mon-fri'),
         hour=_cron('SCHED_AKSHARE_INDUSTRY_HOUR', '11,16'),
         minute=_cron_int('SCHED_AKSHARE_INDUSTRY_MINUTE', 3),
         id='akshare_industry_board_realtime')
+    scheduler.add_job(collect_cn_board_historical, 'cron',
+        day_of_week=_cron('SCHED_CN_BOARD_HISTORICAL_DOW', 'mon-fri'),
+        hour=_cron_int('SCHED_CN_BOARD_HISTORICAL_HOUR', 16),
+        minute=_cron_int('SCHED_CN_BOARD_HISTORICAL_MINUTE', 10),
+        id='cn_board_historical')
     if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
         _register_industry_board_constituents_job()
     else:
