@@ -15,9 +15,14 @@ COVERAGE_THRESHOLD = 0.90
 LOOKBACK_CALENDAR_DAYS = 420
 
 MARKET_TYPE = "CN"
+MARKET_TYPE_HK = "HK"
 
 # 价格口径：前复权（库内因子现算）
 PRICE_ADJUST = "qfq"
+
+# A 股 / 港股复权因子源（日终批算只读库，不打外网）
+CN_FACTOR_SOURCES: Tuple[str, ...] = ("akshare_sina_qfq", "baostock_qfq")
+HK_FACTOR_SOURCES: Tuple[str, ...] = ("akshare_sina_hk_qfq", "akshare_em_hk_qfq")
 
 
 def coverage_threshold() -> float:

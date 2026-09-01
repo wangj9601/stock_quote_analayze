@@ -76,6 +76,7 @@ def resolve_force_trade_dates(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     max_days: int = MAX_FORCE_DAYS,
+    market: str = "CN",
 ) -> List[str]:
     """解析待强制重算的交易日列表（升序）。"""
     from backend_api.database import SessionLocal
@@ -83,7 +84,12 @@ def resolve_force_trade_dates(
         _normalize_date_str,
         resolve_trade_date,
     )
+    from backend_core.indicators.rs_rating.scheduled_precompute_hk import (
+        resolve_trade_date_hk,
+    )
 
+    mt = (market or "CN").strip().upper()
+    quotes_table = "historical_quotes_hk" if mt == "HK" else "historical_quotes"
     td = (trade_date or "").strip()[:10] or None
     sd = (start_date or "").strip()[:10] or None
     ed = (end_date or "").strip()[:10] or None
@@ -98,9 +104,9 @@ def resolve_force_trade_dates(
                 raise ValueError("start_date 不能晚于 end_date")
             rows = db.execute(
                 text(
-                    """
+                    f"""
                     SELECT DISTINCT date::text AS d
-                    FROM historical_quotes
+                    FROM {quotes_table}
                     WHERE date >= :sd AND date <= :ed
                     ORDER BY d ASC
                     """
@@ -109,24 +115,40 @@ def resolve_force_trade_dates(
             ).fetchall()
             dates = [_normalize_date_str(r[0]) for r in rows if r and r[0]]
             if not dates:
-                raise ValueError(f"区间 {sd}~{ed} 在 historical_quotes 中无交易日")
+                raise ValueError(f"区间 {sd}~{ed} 在 {quotes_table} 中无交易日")
             if len(dates) > cap:
                 raise ValueError(
                     f"区间内共 {len(dates)} 个交易日，强制重算上限为 {cap} 天；请缩小区间"
                 )
             return dates
 
-        date_s = resolve_trade_date(db, td)
+        if mt == "HK":
+            date_s = resolve_trade_date_hk(db, td)
+        else:
+            date_s = resolve_trade_date(db, td)
         return [date_s]
     finally:
         db.close()
 
 
-def _run(task_id: str, trade_dates: List[str]) -> None:
+def _run(task_id: str, trade_dates: List[str], market: str = "CN") -> None:
     from backend_core.indicators.rs_rating.scheduled_precompute import run_rs_rating_precompute
+    from backend_core.indicators.rs_rating.scheduled_precompute_hk import (
+        run_rs_rating_precompute_hk,
+    )
+
+    mt = (market or "CN").strip().upper()
+    runner = run_rs_rating_precompute_hk if mt == "HK" else run_rs_rating_precompute
+    label = "港股" if mt == "HK" else "A股"
 
     try:
-        _update(task_id, status="running", message="开始全市场前复权截面预计算…", progress=0)
+        _update(
+            task_id,
+            status="running",
+            market=mt,
+            message=f"开始{label}全市场前复权截面预计算…",
+            progress=0,
+        )
         summaries: List[Dict[str, Any]] = []
         total = len(trade_dates)
         for i, d in enumerate(trade_dates):
@@ -134,10 +156,10 @@ def _run(task_id: str, trade_dates: List[str]) -> None:
                 task_id,
                 current=i,
                 progress=int(round(i * 100 / total)) if total else 0,
-                message=f"正在计算 {d}（全市场）…",
+                message=f"正在计算 {d}（{label}全市场）…",
                 trade_date=d,
             )
-            summary = run_rs_rating_precompute(trade_date=d)
+            summary = runner(trade_date=d)
             summaries.append(summary)
             if not summary.get("ok"):
                 raise RuntimeError(summary.get("error") or f"{d} 预计算失败")
@@ -148,12 +170,17 @@ def _run(task_id: str, trade_dates: List[str]) -> None:
             current=total,
             total=total,
             summaries=summaries,
-            message=f"已完成 {total} 个交易日全市场预计算",
+            message=f"已完成 {total} 个交易日{label}全市场预计算",
             trade_date=trade_dates[-1] if trade_dates else None,
         )
-        logger.info("RS force precompute done task_id=%s days=%s", task_id, trade_dates)
+        logger.info(
+            "RS force precompute done task_id=%s market=%s days=%s",
+            task_id,
+            mt,
+            trade_dates,
+        )
     except Exception as e:
-        logger.exception("RS force precompute failed task_id=%s", task_id)
+        logger.exception("RS force precompute failed task_id=%s market=%s", task_id, mt)
         _update(
             task_id,
             status="failed",
@@ -162,10 +189,13 @@ def _run(task_id: str, trade_dates: List[str]) -> None:
         )
 
 
-def start_precompute(trade_dates: List[str]) -> str:
+def start_precompute(trade_dates: List[str], *, market: str = "CN") -> str:
     dates = [str(d).strip()[:10] for d in trade_dates if str(d).strip()]
     if not dates:
         raise ValueError("请至少指定一个交易日")
+    mt = (market or "CN").strip().upper()
+    if mt not in ("CN", "HK"):
+        raise ValueError("market 仅支持 CN 或 HK")
     seen = set()
     uniq: List[str] = []
     for d in dates:
@@ -178,6 +208,10 @@ def start_precompute(trade_dates: List[str]) -> str:
     if running:
         raise RuntimeError(f"已有预计算任务进行中: {running}")
     task_id = create_task(uniq)
-    th = threading.Thread(target=_run, args=(task_id, uniq), daemon=True)
+    with _lock:
+        t = _tasks.get(task_id)
+        if t is not None:
+            t["market"] = mt
+    th = threading.Thread(target=_run, args=(task_id, uniq, mt), daemon=True)
     th.start()
     return task_id

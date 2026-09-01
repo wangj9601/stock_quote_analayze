@@ -72,3 +72,20 @@ python migrations/add_rs_rating_workflow_node.py
 ```
 
 说明见 [`docs/indicators/股价相对强度_RS_Rating.md`](../indicators/股价相对强度_RS_Rating.md)。已有库若流程里尚无该节点，跑第二条迁移即可插入到 `cn_industry_board` 之后。
+
+## 预置「港股收盘后标准流程」要点（RS）
+
+推荐顺序（节选）：
+
+1. … `hk_historical` → 周期 K → `hk_index_historical`
+2. **`rs_rating_hk`**：港股相对强度 RS 全市场预计算  
+   - 输入：`historical_quotes_hk` + 港股复权因子源 → 前复权 ROC  
+   - 输出：写入独立表 **`rs_ratings_hk`**（与 A 股分表、分截面）  
+3. `urt_signals_hk` → `gms_signals_hk`
+
+```bash
+python migrations/add_rs_ratings_hk_table.py
+python migrations/add_rs_rating_hk_workflow_node.py
+```
+
+已有「港股收盘后标准流程」若尚无该节点，跑第二条迁移即可插到 `hk_index_historical` 之后。

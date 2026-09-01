@@ -27,17 +27,19 @@ HK_CLOSE_TEMPLATE_NODES = [
     (6, "hk_annual", "港股年K"),
     (7, "hk_index_realtime", "港股指数实时"),
     (8, "hk_index_historical", "港股指数历史归档"),
-    (9, "urt_signals_hk", "URT信号预计算(港股)"),
-    (10, "gms_signals_hk", "GMS信号预计算(港股)"),
+    (9, "rs_rating_hk", "港股相对强度RS预计算"),
+    (10, "urt_signals_hk", "URT信号预计算(港股)"),
+    (11, "gms_signals_hk", "GMS信号预计算(港股)"),
 ]
 
 HK_STRATEGY_NODES = [
+    ("rs_rating_hk", "港股相对强度RS预计算"),
     ("urt_signals_hk", "URT信号预计算(港股)"),
     ("gms_signals_hk", "GMS信号预计算(港股)"),
 ]
 
 DESCRIPTION = (
-    "对齐生产港股收盘链路：实时→日K→周期K→指数→URT/GMS 策略预计算。"
+    "对齐生产港股收盘链路：实时→日K→周期K→指数→RS/URT/GMS 策略预计算。"
     "默认 cron 17:00（港股日K约 16:55 完成后）；启用后请将 "
     "ENABLE_LEGACY_COLLECTION_CRON=false 以避免与分散 cron 重复执行。"
 )

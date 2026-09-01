@@ -35,9 +35,12 @@ def test_node_registry_contains_core_nodes():
     assert "gms_signals_cn" in keys
     assert "gms_signals_hk" in keys
     assert "urt_signals_hk" in keys
+    assert "rs_rating_cn" in keys
+    assert "rs_rating_hk" in keys
     assert get_node("cn_realtime") is not None
     assert get_node("gms_signals_hk") is not None
     assert get_node("urt_signals_hk") is not None
+    assert get_node("rs_rating_hk") is not None
     assert get_node("not_exists_xyz") is None
     meta = list_nodes_meta()
     assert all("executor" not in m for m in meta)

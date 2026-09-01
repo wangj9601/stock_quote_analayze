@@ -11,10 +11,17 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-# 与 adj_quotes 一致：auto = 新浪优先，其次 BaoStock
+# 与 adj_quotes 一致：A 股 auto = 新浪优先，其次 BaoStock；港股 = 新浪优先，东财备用
 SOURCE_SINA = "akshare_sina_qfq"
 SOURCE_BAOSTOCK = "baostock_qfq"
+SOURCE_SINA_HK = "akshare_sina_hk_qfq"
+SOURCE_EM_HK = "akshare_em_hk_qfq"
 PREFERRED_SOURCES = (SOURCE_SINA, SOURCE_BAOSTOCK)
+PREFERRED_SOURCES_HK = (SOURCE_SINA_HK, SOURCE_EM_HK)
+
+QUOTES_TABLE_CN = "historical_quotes"
+QUOTES_TABLE_HK = "historical_quotes_hk"
+_ALLOWED_QUOTES_TABLES = frozenset({QUOTES_TABLE_CN, QUOTES_TABLE_HK})
 
 
 def _parse_date(v: Any) -> Optional[dt.date]:
@@ -45,19 +52,23 @@ def preload_raw_bars(
     *,
     lookback_calendar_days: int,
     batch_size: int = 500,
+    quotes_table: str = QUOTES_TABLE_CN,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """批量预加载不复权 bars：[{date, close}, ...] 升序。"""
     if not codes:
         return {}
+    table = str(quotes_table or QUOTES_TABLE_CN).strip()
+    if table not in _ALLOWED_QUOTES_TABLES:
+        raise ValueError(f"不支持的行情表: {quotes_table}")
     min_date = (
         dt.datetime.strptime(trade_date[:10], "%Y-%m-%d")
         - dt.timedelta(days=lookback_calendar_days)
     ).strftime("%Y-%m-%d")
     out: Dict[str, List[Dict[str, Any]]] = {}
     stmt = text(
-        """
+        f"""
         SELECT code, date, close
-        FROM historical_quotes
+        FROM {table}
         WHERE code IN :codes
           AND date >= :min_date
           AND date <= :trade_date
@@ -90,13 +101,17 @@ def preload_adj_factors(
     codes: Sequence[str],
     *,
     batch_size: int = 500,
+    preferred_sources: Sequence[str] = PREFERRED_SOURCES,
 ) -> Dict[str, List[Tuple[dt.date, float]]]:
     """
-    批量加载库内因子；每只股票优先新浪，否则 BaoStock（不混源）。
+    批量加载库内因子；每只股票按 preferred_sources 优先级选源（不混源）。
     日终批算只读库，不打外网。
     """
     if not codes:
         return {}
+    sources = tuple(str(s).strip() for s in preferred_sources if str(s).strip())
+    if not sources:
+        sources = PREFERRED_SOURCES
     by_code_src: Dict[str, Dict[str, List[Tuple[dt.date, float]]]] = {}
     stmt = text(
         """
@@ -116,7 +131,7 @@ def preload_adj_factors(
         batch = list(codes[i : i + batch_size])
         rows = session.execute(
             stmt,
-            {"codes": batch, "sources": list(PREFERRED_SOURCES)},
+            {"codes": batch, "sources": list(sources)},
         ).fetchall()
         for code, source, td, fac in rows:
             c = str(code).strip()
@@ -133,7 +148,7 @@ def preload_adj_factors(
     out: Dict[str, List[Tuple[dt.date, float]]] = {}
     for code, src_map in by_code_src.items():
         chosen: Optional[List[Tuple[dt.date, float]]] = None
-        for pref in PREFERRED_SOURCES:
+        for pref in sources:
             seq = src_map.get(pref)
             if seq:
                 chosen = seq
@@ -190,6 +205,8 @@ def build_qfq_close_map(
     *,
     lookback_calendar_days: int,
     batch_size: int = 500,
+    quotes_table: str = QUOTES_TABLE_CN,
+    preferred_sources: Sequence[str] = PREFERRED_SOURCES,
 ) -> Tuple[Dict[str, List[float]], Dict[str, int]]:
     """
     返回 (code -> 前复权收盘升序, 统计)。
@@ -201,8 +218,14 @@ def build_qfq_close_map(
         trade_date,
         lookback_calendar_days=lookback_calendar_days,
         batch_size=batch_size,
+        quotes_table=quotes_table,
     )
-    factors = preload_adj_factors(session, list(raw.keys()), batch_size=batch_size)
+    factors = preload_adj_factors(
+        session,
+        list(raw.keys()),
+        batch_size=batch_size,
+        preferred_sources=preferred_sources,
+    )
     qfq_map: Dict[str, List[float]] = {}
     skipped_no_factor = 0
     skipped_qfq_fail = 0
@@ -222,10 +245,12 @@ def build_qfq_close_map(
         "qfq_codes": len(qfq_map),
         "skipped_no_factor": skipped_no_factor,
         "skipped_qfq_fail": skipped_qfq_fail,
+        "quotes_table": quotes_table,
     }
     logger.info(
-        "RS qfq preload trade_date=%s raw=%s factors=%s qfq=%s no_factor=%s fail=%s",
+        "RS qfq preload trade_date=%s table=%s raw=%s factors=%s qfq=%s no_factor=%s fail=%s",
         trade_date,
+        quotes_table,
         stats["raw_codes"],
         stats["factor_codes"],
         stats["qfq_codes"],
@@ -233,3 +258,23 @@ def build_qfq_close_map(
         skipped_qfq_fail,
     )
     return qfq_map, stats
+
+
+def build_qfq_close_map_hk(
+    session: Session,
+    codes: Sequence[str],
+    trade_date: str,
+    *,
+    lookback_calendar_days: int,
+    batch_size: int = 500,
+) -> Tuple[Dict[str, List[float]], Dict[str, int]]:
+    """港股前复权收盘序列：historical_quotes_hk + 港股因子源。"""
+    return build_qfq_close_map(
+        session,
+        codes,
+        trade_date,
+        lookback_calendar_days=lookback_calendar_days,
+        batch_size=batch_size,
+        quotes_table=QUOTES_TABLE_HK,
+        preferred_sources=PREFERRED_SOURCES_HK,
+    )

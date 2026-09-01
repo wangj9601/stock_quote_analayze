@@ -977,6 +977,23 @@ class RSRatings(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
+class RSRatingsHK(Base):
+    """港股 IBD 风格股价相对强度评级（截面百分位 1–99，独立表）"""
+    __tablename__ = "rs_ratings_hk"
+    code = Column(StockCodeTextPK(), primary_key=True)
+    date = Column(String, primary_key=True)
+    rs_raw = Column(Float)
+    rs_rating = Column(Integer)  # 1–99；覆盖率不足时可为 NULL
+    roc_63 = Column(Float)
+    roc_126 = Column(Float)
+    roc_189 = Column(Float)
+    roc_252 = Column(Float)
+    universe_size = Column(Integer)
+    coverage_ratio = Column(Float)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
 class MeanFrequencyResonanceIndicators(Base):
     """均值频率共振量化交易指标数据表（A股和港股共用）"""
     __tablename__ = 'mean_frequency_resonance_indicators'

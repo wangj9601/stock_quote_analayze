@@ -494,6 +494,15 @@ def _rs_rating_cn() -> Any:
     return result
 
 
+def _rs_rating_hk() -> Any:
+    from backend_core.indicators.rs_rating.scheduled_precompute_hk import scheduled_rs_rating_hk
+
+    result = scheduled_rs_rating_hk()
+    if isinstance(result, dict) and result.get("ok") is False:
+        raise RuntimeError(result.get("error") or "港股 RS Rating 预计算失败")
+    return result
+
+
 def _fina_indicator_cn() -> Any:
     """A 股财务指标增量采集（CAN SLIM C/A）。Tushare 优先，可回退 AkShare。"""
     import logging
@@ -599,6 +608,7 @@ exec_urt_hk = _wrap_plain(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
 exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
+exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
 exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")
 exec_index_daily_cn = _wrap_plain(_index_daily_cn, "A股指数日线采集")
 exec_market_news = _wrap_plain(_market_news, "市场新闻采集")

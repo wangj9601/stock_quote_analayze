@@ -37,6 +37,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_fina_indicator_cn,
     exec_index_daily_cn,
     exec_rs_rating_cn,
+    exec_rs_rating_hk,
     exec_sbbr_cn,
     exec_stock_shares,
     exec_triple_volume_scan,
@@ -146,6 +147,7 @@ NODE_DEFS: List[CollectionNodeDef] = [
     _n("sbbr_signals_cn", "SBBR信号预计算(A股)", "strategy", exec_sbbr_cn),
     _n("rpe_signals_cn", "RPE信号预计算(A股)", "strategy", exec_rpe_cn),
     _n("rs_rating_cn", "A股相对强度RS预计算", "strategy", exec_rs_rating_cn),
+    _n("rs_rating_hk", "港股相对强度RS预计算", "strategy", exec_rs_rating_hk),
     _n("triple_volume_scan", "3倍量爆量扫描", "strategy", exec_triple_volume_scan),
     _n(
         "fina_indicator_cn",

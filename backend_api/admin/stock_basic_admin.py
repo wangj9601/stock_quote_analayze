@@ -736,7 +736,7 @@ async def list_rs_ratings(
 
 @router.get("/rs-ratings/history")
 async def list_rs_rating_history_admin(
-    code: str = Query(..., min_length=1, description="A 股代码"),
+    code: str = Query(..., min_length=1, description="A 股 6 位或港股 5 位代码"),
     start_date: Optional[str] = Query(None, description="起始日 YYYY-MM-DD"),
     end_date: Optional[str] = Query(None, description="结束日 YYYY-MM-DD"),
     limit: int = Query(120, ge=1, le=500),
@@ -746,17 +746,29 @@ async def list_rs_rating_history_admin(
     """管理端：单只股票 RS 历史追溯（日期降序）。"""
     from backend_core.indicators.rs_rating.service import list_rs_rating_history
 
-    code_n = str(code or "").strip()
+    code_n = str(code or "").strip().upper()
+    if code_n.startswith("HK") and len(code_n) > 2:
+        code_n = code_n[2:]
     if code_n.isdigit():
-        code_n = code_n.zfill(6)
-    if len(code_n) != 6 or not code_n.isdigit():
+        if len(code_n) <= 5:
+            code_n = code_n.zfill(5)
+            market = "HK"
+        else:
+            code_n = code_n.zfill(6)
+            market = "CN"
+    else:
+        raise HTTPException(status_code=400, detail="请提供 A 股 6 位或港股 5 位代码")
+    if market == "CN" and (len(code_n) != 6 or not code_n.isdigit()):
         raise HTTPException(status_code=400, detail="请提供 6 位 A 股代码")
+    if market == "HK" and (len(code_n) != 5 or not code_n.isdigit()):
+        raise HTTPException(status_code=400, detail="请提供 5 位港股代码")
     return list_rs_rating_history(
         db,
         code_n,
         start_date=start_date,
         end_date=end_date,
         limit=limit,
+        market_type=market,
     )
 
 
@@ -766,6 +778,9 @@ class RsForcePrecomputeBody(BaseModel):
     )
     start_date: Optional[str] = Field(None, description="区间起点（需与 end_date 同用）")
     end_date: Optional[str] = Field(None, description="区间终点（需与 start_date 同用）")
+    market: Optional[str] = Field(
+        "CN", description="市场：CN=A股；HK=港股（写入 rs_ratings_hk）"
+    )
 
 
 @router.post("/rs-ratings/precompute")
@@ -781,17 +796,21 @@ async def post_rs_ratings_force_precompute(
     )
 
     try:
+        market = (body.market or "CN").strip().upper()
+        if market not in ("CN", "HK"):
+            raise HTTPException(status_code=400, detail="market 仅支持 CN 或 HK")
         dates = resolve_force_trade_dates(
             trade_date=body.trade_date,
             start_date=body.start_date,
             end_date=body.end_date,
+            market=market,
         )
-        task_id = start_precompute(dates)
+        task_id = start_precompute(dates, market=market)
         _write_operation_log(
             db,
             log_type="rs_rating_force_precompute",
             message=(
-                f"RS 强制预计算启动 dates={','.join(dates)} "
+                f"RS 强制预计算启动 market={market} dates={','.join(dates)} "
                 f"by {getattr(admin, 'username', 'admin')}"
             ),
             status="成功",
@@ -802,8 +821,14 @@ async def post_rs_ratings_force_precompute(
             "success": True,
             "task_id": task_id,
             "trade_dates": dates,
-            "message": f"已启动全市场强制预计算（{len(dates)} 日）",
+            "market": market,
+            "message": (
+                f"已启动{'港股' if market == 'HK' else 'A股'}全市场强制预计算"
+                f"（{len(dates)} 日）"
+            ),
         }
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:

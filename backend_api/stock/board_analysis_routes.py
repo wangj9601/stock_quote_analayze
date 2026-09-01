@@ -195,19 +195,26 @@ def get_rs_rating(
                 },
                 status_code=404,
             )
-        # 港股暂不支持
+        # 港股走独立表 rs_ratings_hk；A 股走 rs_ratings
         market = (resolved.get("market") or resolved.get("market_type") or "CN").upper()
         code_n = str(resolved["code"]).strip()
-        if len(code_n) != 6 or not code_n.isdigit() or market == "HK":
+        is_hk = market == "HK" or (len(code_n) == 5 and code_n.isdigit())
+        is_cn = market != "HK" and len(code_n) == 6 and code_n.isdigit()
+        if not is_hk and not is_cn:
             return JSONResponse(
                 {
                     "success": False,
-                    "message": "相对强度 RS Rating 暂仅支持 A 股",
+                    "message": "相对强度 RS Rating 仅支持 A 股（6 位）或港股（5 位）",
                     "reason": "market_unsupported",
                 },
                 status_code=400,
             )
-        result = get_rs_rating_for_stock(db, code_n, asof=date)
+        result = get_rs_rating_for_stock(
+            db,
+            code_n,
+            asof=date,
+            market_type="HK" if is_hk else "CN",
+        )
         if not result.get("success") and result.get("reason") == "not_found":
             return JSONResponse(
                 {
@@ -278,11 +285,14 @@ def get_rs_rating_history(
                 status_code=404,
             )
         code_n = str(resolved["code"]).strip()
-        if len(code_n) != 6 or not code_n.isdigit():
+        market = (resolved.get("market") or resolved.get("market_type") or "CN").upper()
+        is_hk = market == "HK" or (len(code_n) == 5 and code_n.isdigit())
+        is_cn = market != "HK" and len(code_n) == 6 and code_n.isdigit()
+        if not is_hk and not is_cn:
             return JSONResponse(
                 {
                     "success": False,
-                    "message": "相对强度 RS Rating 暂仅支持 A 股",
+                    "message": "相对强度 RS Rating 仅支持 A 股（6 位）或港股（5 位）",
                     "reason": "market_unsupported",
                 },
                 status_code=400,
@@ -293,6 +303,7 @@ def get_rs_rating_history(
             start_date=start_date,
             end_date=end_date,
             limit=limit,
+            market_type="HK" if is_hk else "CN",
         )
         if resolved.get("name") and not result.get("name"):
             result["name"] = resolved.get("name")
@@ -311,6 +322,9 @@ class RsForcePrecomputeRequest(BaseModel):
     )
     start_date: Optional[str] = Field(None, description="区间起点（需与 end_date 同用）")
     end_date: Optional[str] = Field(None, description="区间终点（需与 start_date 同用）")
+    market: Optional[str] = Field(
+        "CN", description="市场：CN=A股写入 rs_ratings；HK=港股写入 rs_ratings_hk"
+    )
 
 
 @router.post("/rs-rating/precompute")
@@ -325,18 +339,28 @@ def post_rs_rating_force_precompute(
     )
 
     try:
+        market = (body.market or "CN").strip().upper()
+        if market not in ("CN", "HK"):
+            return JSONResponse(
+                {"success": False, "message": "market 仅支持 CN 或 HK"},
+                status_code=400,
+            )
         dates = resolve_force_trade_dates(
             trade_date=body.trade_date,
             start_date=body.start_date,
             end_date=body.end_date,
+            market=market,
         )
-        task_id = start_precompute(dates)
+        task_id = start_precompute(dates, market=market)
+        table = "rs_ratings_hk" if market == "HK" else "rs_ratings"
         return {
             "success": True,
             "task_id": task_id,
             "trade_dates": dates,
+            "market": market,
             "message": (
-                f"已启动全市场强制预计算（{len(dates)} 日）。"
+                f"已启动{'港股' if market == 'HK' else 'A股'}全市场强制预计算"
+                f"（{len(dates)} 日，写入 {table}）。"
                 "RS 为截面排名，不可只算单票。"
             ),
         }
