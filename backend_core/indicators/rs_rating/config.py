@@ -10,9 +10,13 @@ RS_WEIGHTS: Tuple[float, ...] = (0.4, 0.2, 0.2, 0.2)
 
 # 相对候选池的有效 RS_Raw 覆盖率；低于此值不发布 1–99 评级
 COVERAGE_THRESHOLD = 0.90
+# 港股：分母用「已有前复权序列」的股票数（无因子无法入评，不宜与全日候选硬比 90%）
+COVERAGE_THRESHOLD_HK = 0.90
 
 # 日历回看天数（覆盖约 252 个交易日并留余量）
 LOOKBACK_CALENDAR_DAYS = 420
+# 港股休市更多、窗口内有效 K 线更稀；420 日中位数约 225 根，达不到 253，故加长
+LOOKBACK_CALENDAR_DAYS_HK = 600
 
 MARKET_TYPE = "CN"
 MARKET_TYPE_HK = "HK"
@@ -25,7 +29,11 @@ CN_FACTOR_SOURCES: Tuple[str, ...] = ("akshare_sina_qfq", "baostock_qfq")
 HK_FACTOR_SOURCES: Tuple[str, ...] = ("akshare_sina_hk_qfq", "akshare_em_hk_qfq")
 
 
-def coverage_threshold() -> float:
+def coverage_threshold(market: str = MARKET_TYPE) -> float:
+    """A 股相对全日候选池；港股相对「已具备前复权序列」的股票（无因子者无法入评）。"""
+    m = str(market or MARKET_TYPE).strip().upper()
+    if m == MARKET_TYPE_HK:
+        return float(COVERAGE_THRESHOLD_HK)
     return float(COVERAGE_THRESHOLD)
 
 

@@ -37,8 +37,8 @@ if load_dotenv is not None:
 def _get_hk_indicator_mode() -> str:
     """
     港股历史采集后指标计算模式：
-    - watchlist: 仅计算自选港股的 MA/MAVOL/PVFRS/KDJ/BOLL/MACD/RSI
-    - full: 计算全部港股的 MA/MAVOL/PVFRS（不计算 KDJ/BOLL/MACD/RSI）
+    - watchlist: 仅计算自选港股的 MA/MAVOL/KDJ/BOLL/MACD/RSI（不含 PVFRS）
+    - full: 计算全部港股的 MA/MAVOL（不含 PVFRS）
     """
     mode = (os.getenv("HK_HISTORICAL_INDICATOR_MODE", "watchlist") or "watchlist").strip().lower()
     return mode if mode in ("watchlist", "full") else "watchlist"
@@ -452,7 +452,6 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                             target_stocks.append(str(code))
                     funcs = [
                         self._calculate_and_save_ma_mavol_hk,
-                        self._calculate_and_save_mean_frequency_hk,
                         self._calculate_and_save_kdj_hk,
                         self._calculate_and_save_boll_hk,
                         self._calculate_and_save_macd_hk,
@@ -460,7 +459,7 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     ]
                     self.logger.info(
                         f"港股指标模式=watchlist，本次将为 {len(target_stocks)} 只自选港股计算 "
-                        f"MA/MAVOL/PVFRS/KDJ/BOLL/MACD/RSI，目标日期={target_date}"
+                        f"MA/MAVOL/KDJ/BOLL/MACD/RSI（已停用 PVFRS），目标日期={target_date}"
                     )
                 else:
                     # 全量港股：与 manual_scripts/mavol_indicators_backfill.py 保持一致，
@@ -473,11 +472,10 @@ class HKHistoricalQuoteCollector(AKShareCollector):
                     target_stocks = [str(r[0]) for r in full_rows if r and r[0]]
                     funcs = [
                         self._calculate_and_save_ma_mavol_hk,
-                        self._calculate_and_save_mean_frequency_hk,
                     ]
                     self.logger.info(
                         f"港股指标模式=full，本次将为 {len(target_stocks)} 只港股计算 "
-                        f"MA/MAVOL/PVFRS，目标日期={target_date}"
+                        f"MA/MAVOL（已停用 PVFRS），目标日期={target_date}"
                     )
 
                 if target_stocks:

@@ -15,7 +15,13 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .calculator import compute_rs_raw, rank_cross_section
-from .config import LOOKBACK_CALENDAR_DAYS, MARKET_TYPE_HK, PRICE_ADJUST, RS_WINDOWS, coverage_threshold
+from .config import (
+    LOOKBACK_CALENDAR_DAYS_HK,
+    MARKET_TYPE_HK,
+    PRICE_ADJUST,
+    RS_WINDOWS,
+    coverage_threshold,
+)
 from .qfq_closes import build_qfq_close_map_hk
 from .storage_hk import upsert_rs_ratings_hk
 from .universe_hk import list_candidate_codes_hk
@@ -63,10 +69,11 @@ def run_rs_rating_precompute_hk(
         candidates = list_candidate_codes_hk(db, date_s, codes=codes)
         pool_size = len(candidates)
         logger.info(
-            "RS Rating HK precompute start date=%s candidates=%s price_adjust=%s",
+            "RS Rating HK precompute start date=%s candidates=%s price_adjust=%s lookback=%s",
             date_s,
             pool_size,
             PRICE_ADJUST,
+            LOOKBACK_CALENDAR_DAYS_HK,
         )
         if pool_size == 0:
             return {
@@ -86,7 +93,7 @@ def run_rs_rating_precompute_hk(
             db,
             candidates,
             date_s,
-            lookback_calendar_days=LOOKBACK_CALENDAR_DAYS,
+            lookback_calendar_days=LOOKBACK_CALENDAR_DAYS_HK,
             batch_size=PRELOAD_BATCH,
         )
         need_bars = max(RS_WINDOWS) + 1
@@ -101,8 +108,12 @@ def run_rs_rating_precompute_hk(
             raw_rows.append({"code": code, **computed})
 
         universe_size = len(raw_rows)
-        coverage = (universe_size / pool_size) if pool_size else 0.0
-        publish = coverage >= coverage_threshold()
+        # 港股覆盖率相对「已能前复权」的股票；无因子者不参与分母
+        qfq_ready = int(qfq_stats.get("qfq_codes") or len(closes_map) or 0)
+        coverage_base = qfq_ready if qfq_ready > 0 else pool_size
+        coverage = (universe_size / coverage_base) if coverage_base else 0.0
+        thr = coverage_threshold(MARKET_TYPE_HK)
+        publish = coverage >= thr
         ranked = rank_cross_section(raw_rows, publish_ratings=publish)
         for r in ranked:
             r["universe_size"] = universe_size
@@ -115,18 +126,22 @@ def run_rs_rating_precompute_hk(
             "trade_date": date_s,
             "price_adjust": PRICE_ADJUST,
             "candidate_count": pool_size,
+            "qfq_ready_count": qfq_ready,
             "universe_size": universe_size,
             "coverage_ratio": round(coverage, 4),
+            "coverage_base": "qfq_ready",
             "publish_ratings": publish,
             "saved": saved,
             "qfq_stats": qfq_stats,
+            "lookback_calendar_days": LOOKBACK_CALENDAR_DAYS_HK,
             "elapsed_sec": round(time.time() - t0, 2),
         }
         if not publish:
             logger.warning(
-                "RS Rating HK coverage %.2f%% < %.0f%% — ratings not published",
+                "RS Rating HK coverage %.2f%% < %.0f%% (base=qfq_ready=%s) — ratings not published",
                 coverage * 100,
-                coverage_threshold() * 100,
+                thr * 100,
+                qfq_ready,
             )
         logger.info("RS Rating HK precompute done: %s", summary)
         return summary

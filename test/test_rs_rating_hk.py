@@ -30,6 +30,15 @@ def test_hk_config_constants():
     assert HK_FACTOR_SOURCES == PREFERRED_SOURCES_HK
     assert "akshare_sina_hk_qfq" in HK_FACTOR_SOURCES
     assert QUOTES_TABLE_HK == "historical_quotes_hk"
+    from backend_core.indicators.rs_rating.config import (
+        LOOKBACK_CALENDAR_DAYS,
+        LOOKBACK_CALENDAR_DAYS_HK,
+        coverage_threshold,
+    )
+
+    assert LOOKBACK_CALENDAR_DAYS_HK > LOOKBACK_CALENDAR_DAYS
+    assert coverage_threshold("HK") == coverage_threshold(MARKET_TYPE_HK)
+    assert coverage_threshold("CN") == 0.90
 
 
 def test_normalize_hk_code():
