@@ -1,9 +1,19 @@
 @echo off
 setlocal enabledelayedexpansion
+
+REM 双击时用 cmd /k 保持窗口，避免出错时闪退
+if /i not "%~1"=="__run__" (
+    chcp 65001 >nul
+    cmd /k "%~f0" __run__ %*
+    exit /b
+)
+
 chcp 65001 >nul
 cd /d "%~dp0"
 
-REM 默认：一键 add + commit + push（双击即用）
+shift
+
+REM 默认：一键 add + commit + push
 REM 仅 push：git_push.bat push
 set "MODE=all"
 set "COMMIT_MSG="
@@ -49,7 +59,7 @@ if "!MODE!"=="all" goto :do_commit
 goto :before_push
 
 :do_commit
-echo [1/3] 正在暂存所有改动 (git add .)...
+echo [1/3] 正在暂存所有改动: git add .
 git add .
 if errorlevel 1 (
     echo [失败] git add 未成功。
@@ -58,41 +68,41 @@ if errorlevel 1 (
 echo.
 
 git diff --cached --quiet
-if errorlevel 1 (
-    echo [2/3] 正在提交 (git commit)...
-    if not defined COMMIT_MSG (
-        set /p "COMMIT_MSG=请输入提交说明（留空则自动生成）: "
-    )
-    if not defined COMMIT_MSG (
-        for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd"') do set "TODAY=%%i"
-        set "COMMIT_MSG=commit at !TODAY!"
-        echo 使用默认提交说明: !COMMIT_MSG!
-    )
-    git commit -m "!COMMIT_MSG!"
-    if errorlevel 1 (
-        echo [失败] git commit 未成功。
-        goto :end
-    )
-    echo.
-) else (
-    echo [2/3] 没有需要提交的改动，跳过 commit。
-    echo.
+if errorlevel 1 goto :do_git_commit
+echo [2/3] 没有需要提交的改动，跳过 commit。
+echo.
+goto :before_push
+
+:do_git_commit
+echo [2/3] 正在提交: git commit
+if not defined COMMIT_MSG (
+    for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd_HHmmss"') do set "TODAY=%%t"
+    set "COMMIT_MSG=commit at !TODAY!"
 )
+echo 提交说明: !COMMIT_MSG!
+git commit -m "!COMMIT_MSG!"
+set "COMMIT_RC=!errorlevel!"
+if !COMMIT_RC! neq 0 (
+    echo [失败] git commit 未成功，错误码: !COMMIT_RC!
+    goto :end
+)
+echo.
 
 :before_push
 if "!MODE!"=="all" (
-    echo [3/3] 正在推送到远程...
+    echo [3/3] 正在推送到远程: git push
 ) else (
     git status --porcelain | findstr /r "." >nul 2>&1
     if not errorlevel 1 (
         echo [提示] 工作区有未提交的改动，本次 push 不会包含这些文件。
-        echo        一键提交并推送请直接双击本脚本，或运行: git_push.bat
+        echo        一键提交并推送请直接双击本脚本。
         echo        带说明: git_push.bat "你的提交说明"
         echo.
     )
 )
 
 call :do_push
+set "PUSH_RC=!errorlevel!"
 goto :after_push
 
 :do_push
@@ -106,7 +116,7 @@ if errorlevel 1 (
 exit /b %errorlevel%
 
 :after_push
-if errorlevel 1 (
+if !PUSH_RC! neq 0 (
     echo.
     echo [失败] git push 未成功，请检查网络、权限或是否需要先 pull/解决冲突。
 ) else (
@@ -124,5 +134,6 @@ git status -sb
 
 :end
 echo.
-pause
+echo 按任意键关闭窗口...
+pause >nul
 endlocal
