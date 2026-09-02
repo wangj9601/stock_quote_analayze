@@ -12,7 +12,7 @@ from threading import Lock
 import datetime
 import pandas as pd
 import math
-from typing import Any, Optional, cast as typing_cast
+from typing import Any, Dict, Optional, cast as typing_cast
 from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
 from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
 
@@ -604,9 +604,138 @@ def get_volume_aberration_list(
         db.close()
 
 
+def _fmt_quote_num(val):
+    try:
+        if val is None:
+            return None
+        return f"{float(val):.2f}"
+    except Exception:
+        return None
+
+
+def _lookup_stock_name(db: Session, code: str) -> Optional[str]:
+    try:
+        row = db.query(StockBasicInfo.name).filter(StockBasicInfo.code == code).first()
+        if row and row[0]:
+            return str(row[0])
+        rt = (
+            db.query(StockRealtimeQuote.name)
+            .filter(StockRealtimeQuote.code == code)
+            .order_by(desc(StockRealtimeQuote.trade_date))
+            .first()
+        )
+        if rt and rt[0]:
+            return str(rt[0])
+    except Exception:
+        pass
+    return None
+
+
+def _lookup_free_float_shares(db: Session, code: str) -> Optional[float]:
+    """从 stock_basic_info 取流通股本（股），供换手率计算。"""
+    try:
+        row = (
+            db.query(StockBasicInfo.free_float_shares)
+            .filter(StockBasicInfo.code == code)
+            .first()
+        )
+        if row and row[0] is not None and float(row[0]) > 0:
+            return float(row[0])
+    except Exception as exc:
+        print(f"[realtime_quote_by_code] 读取流通股本失败 code={code}: {exc}")
+    return None
+
+
+def _quote_from_akshare_em(code: str, *, name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """AkShare 东方财富全市场快照中取单只；失败返回 None。"""
+    try:
+        df = get_cached_spot_df()
+        if df is None or df.empty:
+            return None
+        code_col = "代码" if "代码" in df.columns else ("code" if "code" in df.columns else None)
+        if not code_col:
+            return None
+        matched = df[df[code_col].astype(str).str.zfill(6) == str(code).zfill(6)]
+        if matched.empty:
+            return None
+        row = matched.iloc[0]
+
+        def _get(*keys):
+            for k in keys:
+                if k in row.index and not _is_na(row.get(k)):
+                    return row.get(k)
+            return None
+
+        current = _get("最新价", "current")
+        pre_close = _get("昨收", "pre_close")
+        change_amount = _get("涨跌额", "change")
+        if change_amount is None and current is not None and pre_close is not None:
+            try:
+                change_amount = float(current) - float(pre_close)
+            except (TypeError, ValueError):
+                change_amount = None
+        volume = _get("成交量", "volume")
+        turnover = _get("成交额", "turnover", "amount")
+        average_price = None
+        try:
+            if turnover is not None and volume is not None and float(volume) > 0:
+                avg = float(turnover) / float(volume)
+                px = float(current) if current is not None else None
+                if px and px > 0 and avg > px * 8:
+                    avg = float(turnover) / (float(volume) * 100.0)
+                average_price = avg
+        except (TypeError, ValueError):
+            average_price = None
+
+        return {
+            "code": code,
+            "name": name or _get("名称", "name"),
+            "current_price": current,
+            "change_amount": change_amount,
+            "change_percent": _get("涨跌幅", "change_percent"),
+            "open": _get("今开", "开盘", "open"),
+            "pre_close": pre_close,
+            "high": _get("最高", "high"),
+            "low": _get("最低", "low"),
+            "volume": volume,
+            "turnover": turnover,
+            "turnover_rate": _get("换手率", "rate", "turnover_rate"),
+            "pe_dynamic": _get("市盈率-动态", "市盈率", "pe_dynamic"),
+            "average_price": average_price,
+            "source": "akshare_em",
+        }
+    except Exception as exc:
+        print(f"[realtime_quote_by_code] AkShare东财回退失败: {exc}")
+        return None
+
+
+def _format_realtime_quote_result(raw: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "code": raw.get("code"),
+        "name": raw.get("name"),
+        "current_price": _fmt_quote_num(raw.get("current_price")),
+        "change_amount": _fmt_quote_num(raw.get("change_amount")),
+        "change_percent": _fmt_quote_num(raw.get("change_percent")),
+        "open": _fmt_quote_num(raw.get("open")),
+        "pre_close": _fmt_quote_num(raw.get("pre_close")),
+        "high": _fmt_quote_num(raw.get("high")),
+        "low": _fmt_quote_num(raw.get("low")),
+        "volume": _fmt_quote_num(raw.get("volume")),
+        "turnover": _fmt_quote_num(raw.get("turnover")),
+        "turnover_rate": _fmt_quote_num(raw.get("turnover_rate")),
+        "pe_dynamic": _fmt_quote_num(raw.get("pe_dynamic")),
+        "average_price": _fmt_quote_num(raw.get("average_price")),
+        "source": raw.get("source"),
+    }
+
+
 # 根据股票代码获取实时行情
 @router.get("/realtime_quote_by_code")
 async def get_realtime_quote_by_code(code: str = Query(None, description="股票代码"), db: Session = Depends(get_db)):
+    """
+    个股详情页实时行情。
+    A 股优先级：同花顺 Fuyao REST snapshot → AkShare 东方财富 → 本地实时/历史表。
+    """
     print(f"[realtime_quote_by_code] 输入参数: code={code}")
     if not code:
         print("[realtime_quote_by_code] 缺少参数")
@@ -615,66 +744,79 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
         # 先判断股票类型
         if is_hk_stock(code, db):
             print(f"[realtime_quote_by_code] 检测到港股代码: {code}，调用港股接口")
-            # 导入港股接口函数
             from stock.hk_stock_manage import get_hk_realtime_quote_by_code
-            # 调用港股接口
             return await get_hk_realtime_quote_by_code(code, db)
-        
-        # A股逻辑继续
-        def fmt(val):
-            try:
-                if val is None:
-                    return None
-                return f"{float(val):.2f}"
-            except Exception:
-                return None
 
-        # 1. 优先尝试从实时行情表获取最新数据
-        # 先找到该股票最新的交易日期
+        stock_name = _lookup_stock_name(db, code)
+        free_float_shares = _lookup_free_float_shares(db, code)
+
+        # 1. 同花顺 Fuyao REST：GET /api/a-share/prices/snapshot
+        try:
+            from backend_api.utils.fuyao_client import fetch_realtime_quote_by_code as fetch_fuyao_quote
+
+            fuyao_quote = fetch_fuyao_quote(
+                code,
+                name=stock_name,
+                free_float_shares=free_float_shares,
+            )
+            if fuyao_quote and fuyao_quote.get("current_price") is not None:
+                if not fuyao_quote.get("name"):
+                    fuyao_quote["name"] = stock_name
+                result = _format_realtime_quote_result(fuyao_quote)
+                print(f"[realtime_quote_by_code] 从fuyao输出数据: {result}")
+                return JSONResponse({"success": True, "data": result})
+        except Exception as exc:
+            print(f"[realtime_quote_by_code] Fuyao 访问异常，回退东财: {exc}")
+
+        # 2. AkShare 东方财富
+        em_quote = _quote_from_akshare_em(code, name=stock_name)
+        if em_quote and em_quote.get("current_price") is not None:
+            result = _format_realtime_quote_result(em_quote)
+            print(f"[realtime_quote_by_code] 从akshare_em输出数据: {result}")
+            return JSONResponse({"success": True, "data": result})
+
+        # 3. 本地库兜底：实时表 → 历史表
         db_stock_data = db.query(StockRealtimeQuote).filter(
             StockRealtimeQuote.code == code
         ).order_by(desc(StockRealtimeQuote.trade_date)).first()
-        
+
         source = "realtime_db"
-        
-        # 2. 如果实时行情表没有，从历史行情表获取最近一天的数据
+
         if not db_stock_data:
             latest_history = db.query(HistoricalQuotes).filter(
                 HistoricalQuotes.code == code
             ).order_by(desc(HistoricalQuotes.date)).first()
-            
+
             if latest_history:
                 db_stock_data = latest_history
                 source = "history_db"
-                # 统一字段名映射 (HistoricalQuotes 使用 date, change, change_percent)
-                # StockRealtimeQuote 使用 trade_date, change_percent
-                pass
 
         if not db_stock_data:
             print(f"[realtime_quote_by_code] 数据库中未找到股票代码: {code}")
             return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
 
-        # 构建统一的结果格式
-        # 注意：HistoricalQuotes 中的字段名和 StockRealtimeQuote 有些不同，需要适配
         if source == "realtime_db":
             result = {
                 "code": code,
-                "name": db_stock_data.name,
-                "current_price": fmt(db_stock_data.current_price),
-                "change_amount": fmt((db_stock_data.current_price - db_stock_data.pre_close) if db_stock_data.current_price and db_stock_data.pre_close else None),
-                "change_percent": fmt(db_stock_data.change_percent),
-                "open": fmt(db_stock_data.open),
-                "pre_close": fmt(db_stock_data.pre_close),
-                "high": fmt(db_stock_data.high),
-                "low": fmt(db_stock_data.low),
-                "volume": fmt(db_stock_data.volume), # 后端存的是"手"还是"张"？前端期望显示时除以10000
-                "turnover": fmt(db_stock_data.amount),
-                "turnover_rate": fmt(db_stock_data.turnover_rate),
-                "pe_dynamic": fmt(db_stock_data.pe_dynamic),
-                "average_price": fmt(None),
+                "name": db_stock_data.name or stock_name,
+                "current_price": _fmt_quote_num(db_stock_data.current_price),
+                "change_amount": _fmt_quote_num(
+                    (db_stock_data.current_price - db_stock_data.pre_close)
+                    if db_stock_data.current_price and db_stock_data.pre_close
+                    else None
+                ),
+                "change_percent": _fmt_quote_num(db_stock_data.change_percent),
+                "open": _fmt_quote_num(db_stock_data.open),
+                "pre_close": _fmt_quote_num(db_stock_data.pre_close),
+                "high": _fmt_quote_num(db_stock_data.high),
+                "low": _fmt_quote_num(db_stock_data.low),
+                "volume": _fmt_quote_num(db_stock_data.volume),
+                "turnover": _fmt_quote_num(db_stock_data.amount),
+                "turnover_rate": _fmt_quote_num(db_stock_data.turnover_rate),
+                "pe_dynamic": _fmt_quote_num(db_stock_data.pe_dynamic),
+                "average_price": None,
+                "source": source,
             }
-            # 计算均价：成交额(元) / 成交量。
-            # volume 有时为「手」、有时为「股」；若均价相对现价偏离过大，按手×100 再算。
             if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
                 amt = float(db_stock_data.amount)
                 vol = float(db_stock_data.volume)
@@ -682,23 +824,24 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                 avg = amt / vol
                 if px and px > 0 and avg > px * 8:
                     avg = amt / (vol * 100.0)
-                result["average_price"] = fmt(avg)
-        else: # history_db
+                result["average_price"] = _fmt_quote_num(avg)
+        else:
             result = {
                 "code": code,
-                "name": db_stock_data.name,
-                "current_price": fmt(db_stock_data.close),
-                "change_amount": fmt(db_stock_data.change),
-                "change_percent": fmt(db_stock_data.change_percent),
-                "open": fmt(db_stock_data.open),
-                "pre_close": fmt(db_stock_data.pre_close),
-                "high": fmt(db_stock_data.high),
-                "low": fmt(db_stock_data.low),
-                "volume": fmt(db_stock_data.volume),
-                "turnover": fmt(db_stock_data.amount),
-                "turnover_rate": fmt(db_stock_data.turnover_rate),
+                "name": db_stock_data.name or stock_name,
+                "current_price": _fmt_quote_num(db_stock_data.close),
+                "change_amount": _fmt_quote_num(db_stock_data.change),
+                "change_percent": _fmt_quote_num(db_stock_data.change_percent),
+                "open": _fmt_quote_num(db_stock_data.open),
+                "pre_close": _fmt_quote_num(db_stock_data.pre_close),
+                "high": _fmt_quote_num(db_stock_data.high),
+                "low": _fmt_quote_num(db_stock_data.low),
+                "volume": _fmt_quote_num(db_stock_data.volume),
+                "turnover": _fmt_quote_num(db_stock_data.amount),
+                "turnover_rate": _fmt_quote_num(db_stock_data.turnover_rate),
                 "pe_dynamic": None,
-                "average_price": fmt(None),
+                "average_price": None,
+                "source": source,
             }
             if db_stock_data.amount and db_stock_data.volume and db_stock_data.volume > 0:
                 amt = float(db_stock_data.amount)
@@ -707,7 +850,7 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                 avg = amt / vol
                 if px and px > 0 and avg > px * 8:
                     avg = amt / (vol * 100.0)
-                result["average_price"] = fmt(avg)
+                result["average_price"] = _fmt_quote_num(avg)
 
         print(f"[realtime_quote_by_code] 从{source}输出数据: {result}")
         return JSONResponse({"success": True, "data": result})

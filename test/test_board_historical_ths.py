@@ -5,8 +5,28 @@ import pandas as pd
 
 from backend_core.data_collectors.akshare.board_historical_ths import (
     BoardHistoricalThsCollector,
+    _parse_ths_line_payload,
+    normalize_board_name,
     normalize_ths_index_df,
 )
+
+
+def test_normalize_board_name():
+    assert normalize_board_name(" 电池化学 品 ") == "电池化学品"
+    assert normalize_board_name("半导体设 备") == "半导体设备"
+    assert normalize_board_name(" 微盘股") == "微盘股"
+
+
+def test_parse_ths_line_payload():
+    text = (
+        'quotebridge_v4_line_bk_884218_01_2026({"data":'
+        '"20260105,100,110,90,105,1000,50000.000,,,,0;'
+        '20260106,105,120,100,115,2000,80000.000,,,,0;"})'
+    )
+    df = _parse_ths_line_payload(text)
+    assert len(df) == 2
+    assert float(df.iloc[0]["收盘价"]) == 105.0
+    assert float(df.iloc[1]["成交量"]) == 2000.0
 
 
 def test_normalize_ths_index_df():
@@ -73,6 +93,43 @@ def test_board_historical_ths_upsert(monkeypatch):
     assert upserts[0]["board_code"] == "881101"
     assert upserts[0]["close"] == 105.0
     assert upserts[0]["collected_source"] == "tonghuashun"
+
+
+def test_collect_board_uses_code_first(monkeypatch):
+    calls = {}
+
+    def _fake_by_code(code, start, end):
+        calls["by_code"] = (code, start, end)
+        return normalize_ths_index_df(
+            pd.DataFrame(
+                [
+                    {
+                        "日期": "2026-09-01",
+                        "开盘价": 1,
+                        "最高价": 2,
+                        "最低价": 1,
+                        "收盘价": 1.5,
+                        "成交量": 10,
+                        "成交额": 100,
+                    }
+                ]
+            )
+        )
+
+    monkeypatch.setattr(
+        "backend_core.data_collectors.akshare.board_historical_ths.fetch_ths_board_index_by_code",
+        _fake_by_code,
+    )
+    monkeypatch.setattr(
+        "backend_core.data_collectors.akshare.board_historical_ths.BoardHistoricalThsCollector.upsert_rows",
+        lambda self, *args, **kwargs: 1,
+    )
+    collector = BoardHistoricalThsCollector(request_interval=0)
+    result = collector.collect_board(
+        "industry", "884218", "机器人", "20260901", "20260902"
+    )
+    assert result["ok"] is True
+    assert calls["by_code"][0] == "884218"
 
 
 def test_load_boards_filters_tonghuashun(monkeypatch):
