@@ -101,9 +101,9 @@
             <el-form-item label="信号质量">
               <el-select v-model="form.signal_quality_mode" class="w-full">
                 <el-option label="标准（排除均线多头分中段）" value="standard" />
-                <el-option label="精选（近支撑≤2% + 排除弱项）" value="premium" />
+                <el-option label="精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）" value="premium" />
               </el-select>
-              <span class="hint">标准模式默认排除 f_ma_bull∈[4,7)；精选在标准基础上再筛近支撑与过高得分</span>
+              <span class="hint">标准模式默认排除 f_ma_bull∈[4,7)；精选再筛近支撑、过高得分、贴身HVZ强压</span>
             </el-form-item>
           </el-col>
           <el-col :span="12">

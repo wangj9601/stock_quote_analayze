@@ -39,7 +39,7 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | `use_trace` | 优先读缓存 | `true` | 优先 `urt_signal_trace`；无则实时引擎 |
 | `exit_mode` | 出场模式 | `hit_rate` | `hit_rate` / `risk_exit` |
 | `strategy_config_id` | 参数版本 | 默认版本 | 含硬筛、得分、`risk` 风控 |
-| `signal_quality_mode` | 信号质量 | **`standard`** | `standard`=排除均线多头分弱项区间；`premium`=近支撑≤2% + 排除弱项（见 §2.3） |
+| `signal_quality_mode` | 信号质量 | **`standard`** | `standard`=排除均线多头分弱项区间；`premium`=近支撑≤2% + 排除弱项 + 贴身HVZ≤1%（见 §2.3） |
 | `stock_pool_mode` | 股票池 | `all` | 全市场 / GMS观察股 / 自选 / 行业 / 概念 / 单股 / 自定义 |
 | `cn_board_segment` | A 股板块 | 全部 | MAIN / CYB / SZ_SME / KCB / BJ |
 
@@ -68,13 +68,14 @@ URT 回测目前 **仅 A 股**，无港股 / ETF 分支。支持三种出场模�
 | 模式 | 说明 | trace 后滤 |
 |------|------|------------|
 | `standard`（默认） | 排除均线多头分 **∈ [4, 7)**（A/B 验证弱项区间） | 是 |
-| `premium`（精选） | 在标准基础上再加：距支撑 **≤2%**、排除得分 **≥90** | 是 |
+| `premium`（精选） | 在标准基础上再加：距支撑 **≤2%**、排除得分 **≥90**、排除贴身 **HVZ 强压 ≤1%**（A/B E3） | 是 |
 
 - **实时扫描 / 新预计算**：弱项闸在 `signal_detector` 打分后硬否决，不再产生 `[4,7)` 买点。  
 - **读旧 trace**：仍可能含弱项行，由 `signal_filters.build_signal_filter_from_cfg` 后滤；筛后为空**不会**触发全市场实时重扫。  
+- **精选 HVZ 闸**：依赖共振带 `chips_hvz` 元数据；回测 / 选股在缺元数据时会按需补算 confluence（见 `needs_confluence_enrichment`）。  
 - 汇总字段：`summary.signal_quality_mode` / `signal_quality_mode_label`；PDF/任务详情可见。
 
-批量 A/B 脚本：`manual_scripts/urt_ab_backtest.py`（`--group default` 参数 A/B；`--group factor` 因子 C 组）。
+批量 A/B 脚本：`manual_scripts/urt_ab_backtest.py`（`--group default` 参数 A/B；`--group factor` 因子 C 组；`--group confluence` 强共振融合）。
 
 ### 2.2 买入规则
 

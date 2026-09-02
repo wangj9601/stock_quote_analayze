@@ -301,6 +301,7 @@ admin/  # /urt-management 参数配置页
 | `exclude_ma_bull_score_lo` / `hi` | 弱项区间 | **4.0 / 7.0** | — | 左闭右开；A/B 验证 |
 | `premium_signal_near_support_max_pct` | 精选：距支撑上限 | **2.0** | — | 仅 `signal_quality_mode=premium` |
 | `premium_signal_exclude_score_ge` | 精选：排除高分 | **90.0** | — | 同上 |
+| `premium_signal_exclude_hvz_near_max_pct` | 精选：排除贴身 HVZ | **1.0** | — | 距压力带 ≤ 该% 且 `chips_hvz` |
 | `yang_rule_a.window` | 规则 A 窗口（日） | 4 | 表单固定 4；JSON 可改 | 与 `min_up_days` 组成「N 日至少 M 阳」 |
 | `yang_rule_a.min_up_days` | 规则 A 最少阳线数 | 3 | 管理端 **1～4** | 满足 A **或** B 即过连阳硬筛 |
 | `yang_rule_b.window` | 规则 B 窗口（日） | 5 | 表单固定 5；JSON 可改 | 同上 |

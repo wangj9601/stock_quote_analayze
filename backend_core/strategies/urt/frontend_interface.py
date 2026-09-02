@@ -95,19 +95,33 @@ class URTFrontendInterface:
             quality_mode = "standard"
         from .signal_filters import (
             build_signal_filter_from_cfg,
+            needs_confluence_enrichment,
             passes_signal_factor_filter,
             signal_quality_mode_label,
         )
 
         quality_filter = build_signal_filter_from_cfg(cfg, quality_mode)
+        do_confluence_enrich = needs_confluence_enrichment(cfg, quality_filter)
 
         def _apply_quality_filter(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             if not quality_filter or not rows:
                 return rows
             from backend_core.strategies.urt.signal_detector import build_buy_logic
 
+            work = list(rows)
+            if do_confluence_enrich:
+                from backend_core.strategies.urt.backtest_runner import (
+                    _enrich_signal_confluence_structure,
+                )
+
+                cache: Dict[tuple, Dict[str, Any]] = {}
+                work = [
+                    _enrich_signal_confluence_structure(db, r, cfg, cache=cache)
+                    for r in work
+                ]
+
             out: List[Dict[str, Any]] = []
-            for row in rows:
+            for row in work:
                 r = dict(row)
                 is_buy = bool(r.get("buy_signal"))
                 if skip_screening_filters:

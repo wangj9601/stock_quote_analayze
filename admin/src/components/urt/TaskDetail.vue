@@ -343,7 +343,7 @@ const signalQualityLabel = computed(() => {
   const cfg = t?.config || {}
   if (summary.signal_quality_mode_label) return String(summary.signal_quality_mode_label)
   const mode = String(cfg.signal_quality_mode || summary.signal_quality_mode || 'standard').toLowerCase()
-  if (mode === 'premium') return '精选（近支撑≤2% + 排除弱项）'
+  if (mode === 'premium') return '精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）'
   return '标准（排除均线多头分中段）'
 })
 

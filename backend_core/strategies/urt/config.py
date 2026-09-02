@@ -82,6 +82,8 @@ class URTConfigManager:
             # 回测/选股「精选模式」附加后滤（trace 读缓存时生效）
             "premium_signal_near_support_max_pct": 2.0,
             "premium_signal_exclude_score_ge": 90.0,
+            # 精选：排除贴身 HVZ 强压（距压力带中心/下沿 ≤ 该百分比）；A/B E3 均盈亏更优
+            "premium_signal_exclude_hvz_near_max_pct": 1.0,
             "use_turnover": True,
             "use_volume_ratio": False,
             "min_turnover": 3.0,
@@ -269,6 +271,7 @@ class URTConfigManager:
             "exclude_ma_bull_score_hi",
             "premium_signal_near_support_max_pct",
             "premium_signal_exclude_score_ge",
+            "premium_signal_exclude_hvz_near_max_pct",
             "use_turnover",
             "use_volume_ratio",
             "min_turnover",

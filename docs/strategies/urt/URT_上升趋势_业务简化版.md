@@ -125,7 +125,7 @@
 | 模式 | 说明 |
 |------|------|
 | `standard`（默认） | 实时硬闸 + 读 trace 后滤：排除均线多头分 **∈ [4, 7)** |
-| `premium`（精选） | 在标准上再加：距支撑 **≤2%**、排除得分 **≥90** |
+| `premium`（精选） | 在标准上再加：距支撑 **≤2%**、排除得分 **≥90**、排除贴身 **HVZ 强压 ≤1%** |
 
 - 全市场 / 港股：后滤直接减少列表条数。  
 - 自选 / 行业 / 概念 / 单股：列表仍含未过筛明细；不满足精选的行 **`buy_signal` 置为 false**。
@@ -240,6 +240,7 @@
 | `exclude_ma_bull_score_lo` / `hi` | **4.0 / 7.0** |
 | `premium_signal_near_support_max_pct` | **2.0**（精选模式） |
 | `premium_signal_exclude_score_ge` | **90.0**（精选模式） |
+| `premium_signal_exclude_hvz_near_max_pct` | **1.0**（精选：贴身 HVZ 强压） |
 
 ### 8.2 买后纪律（主要在回测 `risk_exit`）
 

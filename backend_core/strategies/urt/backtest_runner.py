@@ -25,6 +25,7 @@ from .backtest_factor_report import (
 )
 from .signal_filters import (
     build_signal_filter_from_cfg,
+    needs_confluence_enrichment,
     passes_signal_factor_filter,
     signal_quality_mode_label,
 )
@@ -584,6 +585,68 @@ def _history_bars_until(db: Session, code: str, until_date: str, limit: int) -> 
     return out
 
 
+def _structure_patch_from_levels(levels: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "support_levels": levels.get("support_levels") or [],
+        "resistance_levels": levels.get("resistance_levels") or [],
+        "nearest_support": levels.get("nearest_support"),
+        "nearest_resistance": levels.get("nearest_resistance"),
+        "kde_ok": levels.get("kde_ok"),
+        "kde_reason": levels.get("kde_reason"),
+        "structure_level_source": levels.get("structure_level_source"),
+        "confluence_ok": levels.get("confluence_ok"),
+        "confluence_zones": levels.get("confluence_zones"),
+        "confluence_support_zone": levels.get("confluence_support_zone"),
+        "confluence_resistance_zone": levels.get("confluence_resistance_zone"),
+        "nearest_confluence_support": levels.get("nearest_confluence_support"),
+        "nearest_confluence_resistance": levels.get("nearest_confluence_resistance"),
+        "atr": levels.get("atr"),
+        "rr": levels.get("rr"),
+        "rr_reason": levels.get("rr_reason"),
+    }
+
+
+def _enrich_signal_confluence_structure(
+    db: Session,
+    sig: Dict[str, Any],
+    cfg: Dict[str, Any],
+    *,
+    cache: Dict[tuple, Dict[str, Any]],
+) -> Dict[str, Any]:
+    """为旧 trace 补算 confluence 带（含 chips_void / tier / 区间）。"""
+    sig = dict(sig if isinstance(sig, dict) else {})
+    code = str(sig.get("code") or "")
+    d = str(sig.get("signal_date") or sig.get("date") or "")[:10]
+    if not code or not d:
+        return sig
+    key = (code, d)
+    if key not in cache:
+        from .signal_detector import _compute_structure_levels
+
+        hist_n = int(cfg.get("kde_lookback_max") or 750)
+        hist_n = min(max(hist_n, 80), 800)
+        bars = _history_bars_until(db, code, d, hist_n)
+        px = sig.get("close")
+        if px is None and bars:
+            try:
+                px = float(bars[0].get("close") or 0) or None
+            except (TypeError, ValueError):
+                px = None
+        levels = _compute_structure_levels(bars, cfg, price=px) if bars and px else {}
+        cache[key] = _structure_patch_from_levels(levels if isinstance(levels, dict) else {})
+    patch = cache[key]
+    sd = dict(sig.get("score_detail") or {})
+    st = dict(sd.get("structure") or {})
+    st.update(patch)
+    sd["structure"] = st
+    sig["score_detail"] = sd
+    if patch.get("nearest_support") is not None:
+        sig["nearest_support"] = patch.get("nearest_support")
+    if patch.get("nearest_resistance") is not None:
+        sig["nearest_resistance"] = patch.get("nearest_resistance")
+    return sig
+
+
 def run_urt_backtest(
     db: Session,
     *,
@@ -632,6 +695,8 @@ def run_urt_backtest(
     effective_signal_filter = signal_filter
     if effective_signal_filter is None:
         effective_signal_filter = build_signal_filter_from_cfg(cfg, quality_mode)
+    do_confluence_enrich = needs_confluence_enrichment(cfg, effective_signal_filter)
+    confluence_cache: Dict[tuple, Dict[str, Any]] = {}
 
     resolved_id = strategy_config_id
     if resolved_id is None:
@@ -777,6 +842,12 @@ def run_urt_backtest(
                 if float(s.get("volume_multiple") or 0) >= vol_need
             ]
 
+        if do_confluence_enrich:
+            signals = [
+                _enrich_signal_confluence_structure(db, s, cfg, cache=confluence_cache)
+                for s in signals
+            ]
+
         if effective_signal_filter:
             signals = [s for s in signals if passes_signal_factor_filter(s, effective_signal_filter)]
 
@@ -905,16 +976,29 @@ def run_urt_backtest(
                         sig_close = entry_price
                     recomputed = _compute_structure_levels(hist_bars, cfg, price=sig_close)
                     if recomputed.get("nearest_support") is not None:
-                        sig_st = {
-                            **sig_st,
-                            "nearest_support": recomputed.get("nearest_support"),
-                            "nearest_resistance": recomputed.get("nearest_resistance")
-                            or sig_st.get("nearest_resistance"),
-                            "kde_ok": recomputed.get("kde_ok"),
-                            "kde_reason": recomputed.get("kde_reason"),
-                            "structure_level_source": recomputed.get("structure_level_source"),
-                            "confluence_ok": recomputed.get("confluence_ok"),
-                        }
+                        st_patch = dict((sig.get("score_detail") or {}).get("structure") or {})
+                        st_patch.update(
+                            {
+                                "nearest_support": recomputed.get("nearest_support"),
+                                "nearest_resistance": recomputed.get("nearest_resistance")
+                                or st_patch.get("nearest_resistance"),
+                                "kde_ok": recomputed.get("kde_ok"),
+                                "kde_reason": recomputed.get("kde_reason"),
+                                "structure_level_source": recomputed.get("structure_level_source"),
+                                "confluence_ok": recomputed.get("confluence_ok"),
+                                "confluence_zones": recomputed.get("confluence_zones"),
+                                "confluence_support_zone": recomputed.get("confluence_support_zone"),
+                                "confluence_resistance_zone": recomputed.get("confluence_resistance_zone"),
+                            }
+                        )
+                        sig_st = extract_signal_structure_levels(
+                            {
+                                **sig,
+                                "nearest_support": recomputed.get("nearest_support"),
+                                "nearest_resistance": recomputed.get("nearest_resistance"),
+                                "score_detail": {**(sig.get("score_detail") or {}), "structure": st_patch},
+                            }
+                        )
                         structure_source = (
                             recomputed.get("structure_level_source") or "kde_recomputed"
                         )
@@ -943,6 +1027,8 @@ def run_urt_backtest(
                     entry_price=entry_price,
                     nearest_support=sig_st.get("nearest_support"),
                     nearest_resistance=sig_st.get("nearest_resistance"),
+                    support_zone_low=sig_st.get("support_zone_low"),
+                    resistance_zone_high=sig_st.get("resistance_zone_high"),
                     cfg=cfg,
                     target_pct=float(target_lo),
                     structure_source=structure_source,

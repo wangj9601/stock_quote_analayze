@@ -39,6 +39,7 @@
   "exclude_ma_bull_score_hi": 7.0,
   "premium_signal_near_support_max_pct": 2.0,
   "premium_signal_exclude_score_ge": 90.0,
+  "premium_signal_exclude_hvz_near_max_pct": 1.0,
   "use_turnover": true,
   "use_volume_ratio": false,
   "min_turnover": 3.0,

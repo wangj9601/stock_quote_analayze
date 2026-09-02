@@ -103,8 +103,11 @@
 | `exclude_ma_bull_score_lo` / `hi` | **4.0 / 7.0** | 左闭右开区间 |
 | `premium_signal_near_support_max_pct` | **2.0** | 精选：距支撑上限（%） |
 | `premium_signal_exclude_score_ge` | **90.0** | 精选：排除得分下限 |
+| `premium_signal_exclude_hvz_near_max_pct` | **1.0** | 精选：排除贴身 HVZ 强压（距压力 ≤%） |
 
 实现：`backend_core/strategies/urt/signal_filters.py`；回测 runner 支持 `config_overrides` / `signal_filter`。
+
+强共振融合 A/B（`--group confluence`，同区间全市场结构出场）：**E3 ma_mid+HVZ≤1%** 均盈亏 **3.45%**（基线 3.20%）；void 过滤与区间带出场未写入默认。
 
 ---
 
@@ -122,6 +125,7 @@
 ```bash
 python manual_scripts/urt_ab_backtest.py --group default --out test/_tmp_urt_ab_results.json
 python manual_scripts/urt_ab_backtest.py --group factor --out test/_tmp_urt_ab_factor_results.json
+python manual_scripts/urt_ab_backtest.py --group confluence --out test/_tmp_urt_ab_confluence_results.json
 ```
 
 ---

@@ -819,6 +819,8 @@ def evaluate_buy_signal(
             "nearest_confluence_support": structure.get("nearest_confluence_support"),
             "nearest_confluence_resistance": structure.get("nearest_confluence_resistance"),
             "confluence_zones": structure.get("confluence_zones"),
+            "confluence_support_zone": structure.get("confluence_support_zone"),
+            "confluence_resistance_zone": structure.get("confluence_resistance_zone"),
             "rr": structure.get("rr"),
             "rr_reason": structure.get("rr_reason"),
             "rr_downside_floored": structure.get("rr_downside_floored"),
@@ -943,10 +945,47 @@ def evaluate_buy_signal(
     return payload
 
 
+def _zone_band_price(zone: Any, key: str) -> Optional[float]:
+    if not isinstance(zone, dict):
+        return None
+    try:
+        v = float(zone.get(key))
+        return v if v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _match_confluence_zone_by_center(
+    zones: Any,
+    center: Any,
+    *,
+    tol_pct: float = 0.005,
+) -> Optional[Dict[str, Any]]:
+    try:
+        c0 = float(center)
+    except (TypeError, ValueError):
+        return None
+    if c0 <= 0:
+        return None
+    for z in zones or []:
+        if not isinstance(z, dict):
+            continue
+        try:
+            c = float(z.get("center"))
+        except (TypeError, ValueError):
+            continue
+        if c <= 0:
+            continue
+        if abs(c - c0) / c0 <= tol_pct:
+            return z
+    return None
+
+
 def extract_signal_structure_levels(sig: Dict[str, Any]) -> Dict[str, Any]:
     """从买点行 / score_detail.structure 取信号日关键支撑阻力。"""
     sd = sig.get("score_detail") if isinstance(sig.get("score_detail"), dict) else {}
     st = sd.get("structure") if isinstance(sd.get("structure"), dict) else {}
+    cz = st.get("confluence_zones") if isinstance(st.get("confluence_zones"), dict) else {}
     ns = sig.get("nearest_support")
     if ns is None:
         ns = st.get("nearest_support")
@@ -958,6 +997,16 @@ def extract_signal_structure_levels(sig: Dict[str, Any]) -> Dict[str, Any]:
         rr = st.get("rr")
     kde_ok = sig.get("kde_ok") if sig.get("kde_ok") is not None else st.get("kde_ok")
     kde_reason = sig.get("kde_reason") if sig.get("kde_reason") is not None else st.get("kde_reason")
+    sz = st.get("confluence_support_zone") if isinstance(st.get("confluence_support_zone"), dict) else None
+    rz = st.get("confluence_resistance_zone") if isinstance(st.get("confluence_resistance_zone"), dict) else None
+    if sz is None and ns is not None:
+        sz = _match_confluence_zone_by_center(cz.get("supports"), ns)
+    if sz is None and isinstance(cz.get("nearest_support_zone"), dict):
+        sz = cz.get("nearest_support_zone")
+    if rz is None and nr is not None:
+        rz = _match_confluence_zone_by_center(cz.get("resistances"), nr)
+    if rz is None and isinstance(cz.get("nearest_resistance_zone"), dict):
+        rz = cz.get("nearest_resistance_zone")
     return {
         "nearest_support": ns,
         "nearest_resistance": nr,
@@ -972,6 +1021,12 @@ def extract_signal_structure_levels(sig: Dict[str, Any]) -> Dict[str, Any]:
         "confluence_ok": (
             sig.get("confluence_ok") if sig.get("confluence_ok") is not None else st.get("confluence_ok")
         ),
+        "confluence_support_zone": sz,
+        "confluence_resistance_zone": rz,
+        "support_zone_low": _zone_band_price(sz, "low"),
+        "support_zone_high": _zone_band_price(sz, "high"),
+        "resistance_zone_low": _zone_band_price(rz, "low"),
+        "resistance_zone_high": _zone_band_price(rz, "high"),
     }
 
 
@@ -1055,6 +1110,8 @@ def resolve_structure_exit_levels(
     entry_price: float,
     nearest_support: Any = None,
     nearest_resistance: Any = None,
+    support_zone_low: Any = None,
+    resistance_zone_high: Any = None,
     cfg: Optional[Dict[str, Any]] = None,
     target_pct: float = 0.10,
     structure_source: Optional[str] = None,
@@ -1063,6 +1120,7 @@ def resolve_structure_exit_levels(
     结构出场价位：
     - 止损：支撑 × (1 - structure_stop_buffer_pct)；无支撑则回退百分比止损
     - 止盈：阻力（上行空间足够）否则 entry×(1+target_pct)
+    - structure_use_zone_band_exit：止损取支撑带 low、止盈取压力带 high（A/B 实验）
     - P3：回退止损可用 structure_fallback_stop_loss_pct（默认 8）替代 risk 上限
     """
     cfg = cfg or {}
@@ -1137,14 +1195,44 @@ def resolve_structure_exit_levels(
     if support is not None and not src:
         out["structure_source"] = "kde"
 
+    use_zone_band = cfg.get("structure_use_zone_band_exit") is True
+    stop_ref = support
+    if use_zone_band:
+        try:
+            zlow = float(support_zone_low) if support_zone_low is not None else None
+        except (TypeError, ValueError):
+            zlow = None
+        if zlow is not None and zlow > 0:
+            stop_ref = zlow
+            out["stop_zone_band"] = True
+            out["support_zone_low"] = zlow
+    target_ref = resist
+    if use_zone_band:
+        try:
+            zhigh = float(resistance_zone_high) if resistance_zone_high is not None else None
+        except (TypeError, ValueError):
+            zhigh = None
+        if zhigh is not None and zhigh > 0:
+            target_ref = zhigh
+            out["target_zone_band"] = True
+            out["resistance_zone_high"] = zhigh
+
+    if stop_ref is not None and stop_ref > 0:
+        support = stop_ref
+    if target_ref is not None and target_ref > 0:
+        resist = target_ref
+
     if support is not None and support > 0:
         stop_px = round(support * (1.0 - buf), 4)
         # 止损须严格低于入场，否则回退百分比
         if stop_px < entry:
             out["stop_price"] = stop_px
-            out["stop_basis"] = (
+            basis = (
                 "weak_structure_support" if str(out.get("structure_source") or "").startswith("weak_") else "structure_support"
             )
+            if out.get("stop_zone_band"):
+                basis = "zone_band_support_low"
+            out["stop_basis"] = basis
             out["structure_fallback"] = False
             out["fallback_reason"] = None
         else:
@@ -1161,11 +1249,14 @@ def resolve_structure_exit_levels(
     pct_target = round(entry * (1.0 + float(target_pct)), 4)
     if resist is not None and resist > entry * (1.0 + min_up):
         out["target_price"] = round(resist, 4)
-        out["target_basis"] = (
+        tb = (
             "weak_structure_resistance"
             if str(out.get("structure_source") or "").startswith("weak_")
             else "structure_resistance"
         )
+        if out.get("target_zone_band"):
+            tb = "zone_band_resistance_high"
+        out["target_basis"] = tb
     else:
         out["target_price"] = pct_target
         out["target_basis"] = "pct_target" if resist is None else "pct_target_low_upside"

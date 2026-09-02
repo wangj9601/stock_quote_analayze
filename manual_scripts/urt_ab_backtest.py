@@ -25,6 +25,94 @@ START_DEFAULT = "2026-05-27"
 END_DEFAULT = "2026-08-12"
 
 
+SCENARIOS_CONFLUENCE: List[Dict[str, Any]] = [
+    {
+        "id": "E0_baseline",
+        "label": "基线(对照)",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": None,
+    },
+    {
+        "id": "E1_no_ma_bull_mid",
+        "label": "排除均线多头分[4,7)",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {"exclude_ma_bull_range": [4.0, 7.0]},
+    },
+    {
+        "id": "E2_strong_void_filter",
+        "label": "ma_mid+强共振非void",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "require_support_tier_strong": True,
+            "exclude_chips_void_support": True,
+        },
+    },
+    {
+        "id": "E3_hvz_near_gate",
+        "label": "ma_mid+排除贴身HVZ≤1%",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "exclude_hvz_near_resistance_max_pct": 1.0,
+        },
+    },
+    {
+        "id": "E4_zone_band_exit",
+        "label": "区间带出场(low/high)",
+        "min_score": 70.0,
+        "config_overrides": {"structure_use_zone_band_exit": True},
+        "signal_filter": None,
+    },
+    {
+        "id": "E5_ma_mid_zone_band",
+        "label": "ma_mid+区间带出场",
+        "min_score": 70.0,
+        "config_overrides": {"structure_use_zone_band_exit": True},
+        "signal_filter": {"exclude_ma_bull_range": [4.0, 7.0]},
+    },
+    {
+        "id": "E6_void_hvz",
+        "label": "ma_mid+void+HVZ闸",
+        "min_score": 70.0,
+        "config_overrides": None,
+        "signal_filter": {
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "require_support_tier_strong": True,
+            "exclude_chips_void_support": True,
+            "exclude_hvz_near_resistance_max_pct": 1.0,
+        },
+    },
+    {
+        "id": "E7_combo_ma_void_band",
+        "label": "ma_mid+void+区间带",
+        "min_score": 70.0,
+        "config_overrides": {"structure_use_zone_band_exit": True},
+        "signal_filter": {
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "require_support_tier_strong": True,
+            "exclude_chips_void_support": True,
+        },
+    },
+    {
+        "id": "E8_full_combo",
+        "label": "全组合(void+HVZ+ma+带)",
+        "min_score": 70.0,
+        "config_overrides": {"structure_use_zone_band_exit": True},
+        "signal_filter": {
+            "exclude_ma_bull_range": [4.0, 7.0],
+            "require_support_tier_strong": True,
+            "exclude_chips_void_support": True,
+            "exclude_hvz_near_resistance_max_pct": 1.0,
+        },
+    },
+]
+
+
 SCENARIOS_FACTOR: List[Dict[str, Any]] = [
     {
         "id": "D0_baseline",
@@ -211,6 +299,7 @@ def run_scenario(
         "avg_bars_held": sm.get("avg_bars_held"),
         "trail_exits": _exit_share(sm, "fallback_trail"),
         "structure_stop": _exit_share(sm, "structure_stop"),
+        "structure_target": _exit_share(sm, "structure_target"),
         "horizon_end": _exit_share(sm, "horizon_end"),
         "max_gain_gap": cmpd.get("max_gain_vs_actual_pnl_gap"),
         "horizon_gap": cmpd.get("horizon_vs_actual_pnl_gap"),
@@ -273,14 +362,21 @@ def main() -> int:
     parser.add_argument("--out", default="", help="可选：JSON 结果输出路径")
     parser.add_argument(
         "--group",
-        choices=("default", "factor"),
-        default="factor",
-        help="default=参数A/B；factor=因子筛选C组",
+        choices=("default", "factor", "confluence"),
+        default="confluence",
+        help="default=参数A/B；factor=因子筛选C组；confluence=强共振融合实验",
     )
     args = parser.parse_args()
 
-    scenarios = SCENARIOS if args.group == "default" else SCENARIOS_FACTOR
-    group_label = "参数A/B" if args.group == "default" else "因子筛选C组"
+    if args.group == "default":
+        scenarios = SCENARIOS
+        group_label = "参数A/B"
+    elif args.group == "factor":
+        scenarios = SCENARIOS_FACTOR
+        group_label = "因子筛选C组"
+    else:
+        scenarios = SCENARIOS_CONFLUENCE
+        group_label = "强共振融合实验"
 
     print(f"区间: {args.start} ~ {args.end} · 全市场 · 结构出场 · {group_label} · use_trace=True")
     db = SessionLocal()
@@ -295,8 +391,8 @@ def main() -> int:
     best = pick_best(rows)
     if best:
         print(f"\n均盈亏最优: {best['label']} ({best['id']}) → {_num(best['avg_pnl_pct'])}%")
-    baseline = next((r for r in rows if r["id"] in ("A0_baseline", "D0_baseline")), None)
-    if baseline and best and best["id"] != "A0_baseline":
+    baseline = next((r for r in rows if r["id"] in ("A0_baseline", "D0_baseline", "E0_baseline")), None)
+    if baseline and best and best["id"] not in ("A0_baseline", "D0_baseline", "E0_baseline"):
         try:
             delta = float(best["avg_pnl_pct"]) - float(baseline["avg_pnl_pct"])
             print(f"相对基线提升: {delta:+.2f} pp")
@@ -305,9 +401,12 @@ def main() -> int:
 
     if args.out:
         out_path = Path(args.out)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
-        print(f"\n已写入 {out_path}")
+    else:
+        suffix = args.group
+        out_path = project_root / "test" / f"_tmp_urt_ab_{suffix}_results.json"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n已写入 {out_path}")
 
     return 0
 
