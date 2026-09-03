@@ -12,6 +12,82 @@
       <el-radio-button label="concept">概念板块</el-radio-button>
     </el-radio-group>
 
+    <el-card shadow="never" class="code-map-card">
+      <template #header>
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <span class="font-semibold">同花顺 ↔ 东财 代码映射</span>
+            <span class="text-xs text-gray-500 ml-2">
+              {{ boardType === 'concept' ? '概念板' : '行业板' }}采集源切换时用映射对齐；支持同名自动重建与手工维护
+            </span>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <el-input
+              v-model="codeMapKeyword"
+              placeholder="名称/同花顺码/BK"
+              clearable
+              class="w-44"
+              size="small"
+              @keyup.enter="loadCodeMaps"
+            />
+            <el-button size="small" :loading="codeMapLoading" @click="loadCodeMaps">刷新</el-button>
+            <el-button size="small" type="primary" plain :loading="codeMapRebuilding" @click="rebuildCodeMaps">
+              按同名重建
+            </el-button>
+            <el-button size="small" type="primary" @click="openCodeMapDialog()">手工映射</el-button>
+          </div>
+        </div>
+      </template>
+      <el-table :data="codeMapRows" size="small" max-height="260" v-loading="codeMapLoading">
+        <el-table-column prop="board_name" label="板块名称" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="ths_board_code" label="同花顺码" width="110" />
+        <el-table-column prop="em_board_code" label="东财码" width="110" />
+        <el-table-column prop="match_method" label="方式" width="100" />
+        <el-table-column prop="is_active" label="启用" width="70">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.is_active ? 'success' : 'info'">
+              {{ row.is_active ? '是' : '否' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="88" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.is_active"
+              link
+              type="danger"
+              size="small"
+              @click="deactivateCodeMap(row)"
+            >
+              停用
+            </el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <div class="text-xs text-gray-450 mt-2 text-gray-500">共 {{ codeMapRows.length }} 条（当前筛选）</div>
+    </el-card>
+
+    <el-dialog v-model="codeMapDialogVisible" title="手工维护代码映射" width="480px" destroy-on-close>
+      <el-form label-width="100px">
+        <el-form-item label="板块名称">
+          <el-input v-model="codeMapForm.board_name" placeholder="可选，便于查阅" />
+        </el-form-item>
+        <el-form-item label="同花顺码" required>
+          <el-input v-model="codeMapForm.ths_board_code" :placeholder="boardType === 'concept' ? '如 885801' : '如 881178'" />
+        </el-form-item>
+        <el-form-item label="东财码" required>
+          <el-input v-model="codeMapForm.em_board_code" placeholder="如 BK0740" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="codeMapForm.note" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="codeMapDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="codeMapSaving" @click="saveCodeMap">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-card shadow="never" class="stock-lookup-card">
       <div class="flex flex-wrap items-center gap-2">
         <span class="text-sm text-gray-600 shrink-0">股票反查所属板块：</span>
@@ -530,6 +606,7 @@ import {
   type BoardSummary,
   type BoardConstituentRow,
   type BoardCodeSourceOption,
+  type IndustryBoardCodeMapRow,
 } from '@/services/boardConstituents.service'
 
 function formatApiError(e: unknown, fallback: string): string {
@@ -570,6 +647,19 @@ const stockLookupLoading = ref(false)
 const stockLookupBoards = ref<BoardSummary[]>([])
 const stockLookupHint = ref('')
 const stockLookupSearched = ref(false)
+
+const codeMapKeyword = ref('')
+const codeMapRows = ref<IndustryBoardCodeMapRow[]>([])
+const codeMapLoading = ref(false)
+const codeMapRebuilding = ref(false)
+const codeMapSaving = ref(false)
+const codeMapDialogVisible = ref(false)
+const codeMapForm = reactive({
+  board_name: '',
+  ths_board_code: '',
+  em_board_code: '',
+  note: '',
+})
 
 const stockKeyword = ref('')
 const stockPage = ref(1)
@@ -646,7 +736,109 @@ function onBoardTypeChange() {
   stockLookupHint.value = ''
   stockLookupSearched.value = false
   void loadBoards()
+  void loadCodeMaps()
 }
+
+async function loadCodeMaps() {
+  codeMapLoading.value = true
+  try {
+    const res = await boardConstituentsService.listIndustryCodeMaps({
+      keyword: codeMapKeyword.value.trim() || undefined,
+      activeOnly: false,
+      boardKind: boardType.value,
+      limit: 2000,
+    })
+    codeMapRows.value = res.data || []
+  } catch (e: unknown) {
+    ElMessage.error(formatApiError(e, '加载代码映射失败'))
+  } finally {
+    codeMapLoading.value = false
+  }
+}
+
+async function rebuildCodeMaps() {
+  const kindLabel = boardType.value === 'concept' ? '概念' : '行业'
+  try {
+    await ElMessageBox.confirm(
+      `将按 ${kindLabel} basic_info 同名精确匹配重建自动映射（保留手工/导入映射）。是否继续？`,
+      '按同名重建',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  codeMapRebuilding.value = true
+  try {
+    const res = await boardConstituentsService.rebuildIndustryCodeMaps(true, boardType.value)
+    const s = res.data
+    ElMessage.success(
+      `重建完成：候选 ${s?.pair_candidates ?? 0}，新增 ${s?.inserted ?? 0}，更新 ${s?.updated ?? 0}，跳过手工 ${s?.skipped_manual ?? 0}`,
+    )
+    await loadCodeMaps()
+  } catch (e: unknown) {
+    ElMessage.error(formatApiError(e, '重建映射失败'))
+  } finally {
+    codeMapRebuilding.value = false
+  }
+}
+
+function openCodeMapDialog() {
+  codeMapForm.board_name = selectedBoard.value?.board_name || ''
+  codeMapForm.ths_board_code =
+    selectedBoard.value?.board_code_source === 'tonghuashun'
+      ? selectedBoard.value.board_code
+      : ''
+  codeMapForm.em_board_code =
+    selectedBoard.value?.board_code_source === 'eastmoney'
+      ? selectedBoard.value.board_code
+      : ''
+  codeMapForm.note = ''
+  codeMapDialogVisible.value = true
+}
+
+async function saveCodeMap() {
+  const ths = codeMapForm.ths_board_code.trim()
+  const em = codeMapForm.em_board_code.trim()
+  if (!ths || !em) {
+    ElMessage.warning('请填写同花顺码与东财码')
+    return
+  }
+  codeMapSaving.value = true
+  try {
+    await boardConstituentsService.upsertIndustryCodeMap({
+      ths_board_code: ths,
+      em_board_code: em,
+      board_name: codeMapForm.board_name.trim() || undefined,
+      board_kind: boardType.value,
+      note: codeMapForm.note.trim() || undefined,
+    })
+    ElMessage.success('映射已保存')
+    codeMapDialogVisible.value = false
+    await loadCodeMaps()
+  } catch (e: unknown) {
+    ElMessage.error(formatApiError(e, '保存映射失败'))
+  } finally {
+    codeMapSaving.value = false
+  }
+}
+
+async function deactivateCodeMap(row: IndustryBoardCodeMapRow) {
+  try {
+    await ElMessageBox.confirm(`停用映射 ${row.ths_board_code} ↔ ${row.em_board_code}？`, '确认', {
+      type: 'warning',
+    })
+  } catch {
+    return
+  }
+  try {
+    await boardConstituentsService.deactivateIndustryCodeMap(row.id)
+    ElMessage.success('已停用')
+    await loadCodeMaps()
+  } catch (e: unknown) {
+    ElMessage.error(formatApiError(e, '停用失败'))
+  }
+}
+
 
 function onBoardSearch() {
   boardPage.value = 1
@@ -1333,6 +1525,7 @@ async function syncAllBoards() {
 
 onMounted(() => {
   void loadBoards()
+  void loadCodeMaps()
   void boardConstituentsService.getBoardCodeSources().then((res) => {
     boardCodeSourceOptions.value = res.data || []
   }).catch(() => {

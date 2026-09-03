@@ -138,8 +138,17 @@ def test_fetch_industry_board_list_with_metrics_merges_quote_and_slope(monkeypat
 
     class _FakeSlopeStore:
         @staticmethod
-        def load_board_sector_slopes(db, codes, board_kind="industry"):
+        def load_board_sector_slopes(db, codes, board_kind="industry", window=None, **kwargs):
             assert "881101" in codes
+            if window is not None and int(window) == 10:
+                return {
+                    "881101": {
+                        "sector_slope": 0.002,
+                        "sector_slope_window": 10,
+                        "slope_asof_date": date(2026, 8, 7),
+                        "member_count_used": 100,
+                    }
+                }
             return {
                 "881101": {
                     "sector_slope": -0.012345,
@@ -218,7 +227,9 @@ def test_industry_board_list_sorts_strong_before_weak(monkeypatch):
         ),
     )
 
-    def _slopes(db, codes, board_kind="industry"):
+    def _slopes(db, codes, board_kind="industry", window=None, **kwargs):
+        if window is not None and int(window) == 10:
+            return {}
         return {
             "881A": {"sector_slope": -0.0049, "sector_slope_window": 60},
             "881B": {"sector_slope": 0.0080, "sector_slope_window": 60},
@@ -266,10 +277,10 @@ def test_fetch_industry_board_detail_weak_and_roles(monkeypatch):
 
     monkeypatch.setattr(
         "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-        lambda db, codes, board_kind="industry": {
+        lambda db, codes, board_kind="industry", window=None, **kwargs: {
             "881101": {
                 "sector_slope": None,
-                "sector_slope_window": 60,
+                "sector_slope_window": 60 if window != 10 else 10,
                 "slope_asof_date": None,
                 "member_count_used": None,
             }
@@ -342,7 +353,7 @@ def test_fetch_industry_board_detail_maps_leaders_mids_from_real_extract(monkeyp
 
     monkeypatch.setattr(
         "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-        lambda db, codes, board_kind="industry": {
+        lambda db, codes, board_kind="industry", window=None, **kwargs: {
             "881101": {"sector_slope": 0.01, "sector_slope_window": 60}
         },
     )
@@ -441,7 +452,7 @@ def test_fetch_industry_board_detail_computes_and_stores_missing_slope(monkeypat
 
     monkeypatch.setattr(
         "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-        lambda db, codes, board_kind="industry": {},
+        lambda db, codes, board_kind="industry", window=None, **kwargs: {},
     )
     called = {}
 

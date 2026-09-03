@@ -525,6 +525,25 @@
     color: var(--color-text-secondary);
 }
 
+.sectors-table th.th-sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sectors-table th.th-sortable:hover {
+    color: #2563eb;
+}
+
+.sectors-table th.th-sortable.is-sorted {
+    color: #1d4ed8;
+}
+
+.sectors-table th.th-sortable .sort-indicator {
+    font-size: 0.75em;
+    opacity: 0.85;
+    margin-left: 2px;
+}
+
 .sectors-table tbody tr {
     cursor: pointer;
     transition: background 0.15s ease;

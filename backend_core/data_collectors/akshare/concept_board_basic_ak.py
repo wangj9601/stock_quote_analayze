@@ -165,6 +165,16 @@ class ConceptBoardBasicCollector:
                         "partial",
                         str(ths_err),
                     )
+            # 同步后按同名补全同花顺↔东财映射（不覆盖手工）
+            try:
+                from backend_api.utils.industry_board_code_map import rebuild_name_exact_maps
+
+                map_stats = rebuild_name_exact_maps(
+                    session, board_kind="concept", replace_auto=False
+                )
+                print(f"[概念板块] 代码映射补全: {map_stats}")
+            except Exception as map_err:
+                print(f"[概念板块] 代码映射补全跳过: {map_err}")
             session.commit()
             msg = f"概念板块列表同步 {count} 条（东财+同花顺={ths_count}）"
             print(f"[概念板块] {msg}")

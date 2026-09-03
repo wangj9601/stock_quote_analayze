@@ -24,12 +24,17 @@ from backend_api.utils.board_code_source import (
 logger = logging.getLogger(__name__)
 
 DEFAULT_SECTOR_SLOPE_WINDOW = 60
+# 短线趋势：近 10 个交易日（约两周）；5 日过噪，20 日偏短中线
+DEFAULT_SECTOR_SLOPE_SHORT_WINDOW = 10
+DEFAULT_SLOPE_WINDOWS = (DEFAULT_SECTOR_SLOPE_WINDOW, DEFAULT_SECTOR_SLOPE_SHORT_WINDOW)
 DEFAULT_LOOKBACK = 120
 MIN_MEMBERS = 5
 # 斜率业务仅同花顺；与管理端默认来源一致（非 LEGACY 空值→东财）
 ALLOWED_SLOPE_BOARD_CODE_SOURCE = DEFAULT_BOARD_CODE_SOURCE  # tonghuashun
 # 入库/展示默认对 ln(I_t) 回归（见模块 docstring）
 DEFAULT_SLOPE_TRANSFORM = "log"
+# 短线走强阈值略高于中线，降低噪声误标
+DEFAULT_SLOPE_SHORT_STRONG_THRESHOLD = 0.0015
 
 TABLE_BY_KIND = {
     "industry": "industry_board_daily_metrics",
@@ -84,7 +89,7 @@ def ensure_board_daily_metrics_table(db, board_kind: str = "industry") -> None:
                 sector_slope_window INTEGER NOT NULL DEFAULT 60,
                 member_count_used INTEGER,
                 updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-                PRIMARY KEY (board_code, slope_asof_date)
+                PRIMARY KEY (board_code, slope_asof_date, sector_slope_window)
             )
             """
         )
@@ -120,9 +125,16 @@ def compute_board_sector_slope_detail(
     member_limit: Optional[int] = None,
 ) -> Dict[str, Any]:
     """合成板块量权基准并算斜率，返回详情（失败时 sector_slope=None）。"""
-    from backend_core.strategies.rpe.sector_benchmark import compute_vwap_benchmark, sector_slope
-
-    out: Dict[str, Any] = {
+    rows = compute_board_sector_slope_details_for_windows(
+        loader,
+        board_code,
+        board_kind=board_kind,
+        end_date=end_date,
+        windows=[int(window)],
+        lookback=lookback,
+        member_limit=member_limit,
+    )
+    return rows[0] if rows else {
         "board_code": board_code,
         "board_kind": board_kind or "industry",
         "sector_slope": None,
@@ -131,36 +143,77 @@ def compute_board_sector_slope_detail(
         "slope_asof_date": None,
         "member_count_used": 0,
     }
+
+
+def compute_board_sector_slope_details_for_windows(
+    loader,
+    board_code: str,
+    *,
+    board_kind: str = "industry",
+    end_date: Optional[str] = None,
+    windows: Optional[Sequence[int]] = None,
+    lookback: int = DEFAULT_LOOKBACK,
+    member_limit: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    """一次加载成分面板，按多个窗口分别算 ln(I_t) 斜率。"""
+    from backend_core.strategies.rpe.sector_benchmark import compute_vwap_benchmark, sector_slope
+
+    wins = [int(w) for w in (windows or DEFAULT_SLOPE_WINDOWS) if int(w) > 0]
+    if not wins:
+        wins = [DEFAULT_SECTOR_SLOPE_WINDOW]
+    base: Dict[str, Any] = {
+        "board_code": board_code,
+        "board_kind": board_kind or "industry",
+        "sector_slope": None,
+        "slope_transform": DEFAULT_SLOPE_TRANSFORM,
+        "slope_asof_date": None,
+        "member_count_used": 0,
+    }
+    out: List[Dict[str, Any]] = []
     try:
         members = loader.load_board_members(board_code, board_kind=board_kind)
         if len(members) < MIN_MEMBERS:
-            return out
+            return [{**base, "sector_slope_window": w} for w in wins]
         codes = [m["code"] for m in members if m.get("code")]
         lim = normalize_member_limit(member_limit)
         if lim is not None:
             codes = codes[: max(MIN_MEMBERS, lim)]
-        out["member_count_used"] = len(codes)
+        member_count = len(codes)
         panel = loader.load_sector_panel(codes, end_date=end_date, lookback=lookback)
         if len(panel) < MIN_MEMBERS:
-            return out
+            return [
+                {**base, "sector_slope_window": w, "member_count_used": member_count}
+                for w in wins
+            ]
         date_members = loader.build_date_members(panel)
         benchmark = compute_vwap_benchmark(date_members)
-        if len(benchmark) < max(10, int(window) // 2):
-            return out
-        slope = sector_slope(
-            benchmark, int(window), transform=DEFAULT_SLOPE_TRANSFORM
-        )
-        out["sector_slope"] = float(slope) if slope is not None else None
         last_d = benchmark[-1].get("date") if benchmark else None
         asof = _parse_asof(str(last_d) if last_d else None) or _parse_asof(end_date)
         if asof is None:
             asof = date.today()
-        out["slope_asof_date"] = asof
+        for w in wins:
+            row = {
+                **base,
+                "sector_slope_window": int(w),
+                "member_count_used": member_count,
+                "slope_asof_date": asof,
+            }
+            if len(benchmark) < max(10 if w >= 20 else 5, int(w) // 2):
+                out.append(row)
+                continue
+            slope = sector_slope(
+                benchmark, int(w), transform=DEFAULT_SLOPE_TRANSFORM
+            )
+            row["sector_slope"] = float(slope) if slope is not None else None
+            out.append(row)
         return out
     except Exception as e:
-        logger.debug("compute_board_sector_slope_detail %s failed: %s", board_code, e)
-        return out
-
+        logger.debug(
+            "compute_board_sector_slope_details_for_windows %s failed: %s",
+            board_code,
+            e,
+        )
+        return [{**base, "sector_slope_window": w} for w in wins]
 
 def upsert_board_sector_slopes(
     db,
@@ -195,9 +248,8 @@ def upsert_board_sector_slopes(
                         :board_code, :slope_asof_date, :sector_slope,
                         :sector_slope_window, :member_count_used, :updated_at
                     )
-                    ON CONFLICT (board_code, slope_asof_date) DO UPDATE SET
+                    ON CONFLICT (board_code, slope_asof_date, sector_slope_window) DO UPDATE SET
                         sector_slope = EXCLUDED.sector_slope,
-                        sector_slope_window = EXCLUDED.sector_slope_window,
                         member_count_used = EXCLUDED.member_count_used,
                         updated_at = EXCLUDED.updated_at
                     """
@@ -239,15 +291,12 @@ def load_board_sector_slopes(
         return {}
     table = _table_for_kind(board_kind)
     asof = _parse_asof(asof_date)
+    # 未指定窗口时默认读中线 60 日，避免与短线窗口行互相覆盖
+    win = int(window) if window is not None else DEFAULT_SECTOR_SLOPE_WINDOW
     out: Dict[str, Dict[str, Any]] = {}
     try:
         ensure_board_daily_metrics_table(db, board_kind)
-        # DISTINCT ON 取每板最新 asof（可选窗口过滤）
-        win_clause = ""
-        params: Dict[str, Any] = {"codes": codes}
-        if window is not None:
-            win_clause = "AND sector_slope_window = :window"
-            params["window"] = int(window)
+        params: Dict[str, Any] = {"codes": codes, "window": win}
         if asof is not None:
             params["asof"] = asof
             date_clause = "AND slope_asof_date <= :asof"
@@ -260,8 +309,8 @@ def load_board_sector_slopes(
                    slope_asof_date, member_count_used, updated_at
             FROM {table}
             WHERE board_code IN :codes
+              AND sector_slope_window = :window
               {date_clause}
-              {win_clause}
             ORDER BY board_code, slope_asof_date DESC
             """
         ).bindparams(bindparam("codes", expanding=True))
@@ -384,6 +433,7 @@ def refresh_board_sector_slopes(
     board_code_source: str = ALLOWED_SLOPE_BOARD_CODE_SOURCE,
     end_date: Optional[str] = None,
     window: int = DEFAULT_SECTOR_SLOPE_WINDOW,
+    windows: Optional[Sequence[int]] = None,
     lookback: int = DEFAULT_LOOKBACK,
     member_limit: Optional[int] = None,
     commit: bool = True,
@@ -391,7 +441,7 @@ def refresh_board_sector_slopes(
     """对同花顺行业/概念板计算斜率并 upsert。
 
     仅 board_code_source=tonghuashun；其它来源跳过。返回 (成功写入条数, 尝试板数)。
-    失败单板跳过，不抛到外层。board_kind 支持 industry / concept。
+    默认同时写入中线(60)与短线(10)；若显式传 window 且未传 windows，则仅算该窗口。
     """
     from backend_core.strategies.rpe.data_loader import RPEDataLoader
 
@@ -404,6 +454,16 @@ def refresh_board_sector_slopes(
             ALLOWED_SLOPE_BOARD_CODE_SOURCE,
         )
         return 0, 0
+    if windows is not None:
+        win_list = [int(w) for w in windows if int(w) > 0]
+    else:
+        # 兼容旧调用：仅传 window 时只刷该窗；默认刷中线+短线
+        if window != DEFAULT_SECTOR_SLOPE_WINDOW:
+            win_list = [int(window)]
+        else:
+            win_list = list(DEFAULT_SLOPE_WINDOWS)
+    if not win_list:
+        win_list = [DEFAULT_SECTOR_SLOPE_WINDOW]
     try:
         ensure_board_daily_metrics_table(db, kind)
         if board_codes is None:
@@ -423,18 +483,19 @@ def refresh_board_sector_slopes(
         rows: List[Dict[str, Any]] = []
         for bc in codes:
             try:
-                detail = compute_board_sector_slope_detail(
+                details = compute_board_sector_slope_details_for_windows(
                     loader,
                     bc,
                     board_kind=kind,
                     end_date=end_date,
-                    window=window,
+                    windows=win_list,
                     lookback=lookback,
                     member_limit=member_limit,
                 )
-                if detail.get("sector_slope") is None or detail.get("slope_asof_date") is None:
-                    continue
-                rows.append(detail)
+                for detail in details:
+                    if detail.get("sector_slope") is None or detail.get("slope_asof_date") is None:
+                        continue
+                    rows.append(detail)
             except Exception as e:
                 logger.warning("refresh slope skip board %s: %s", bc, e)
 
@@ -507,9 +568,9 @@ def ensure_board_sector_slope(
     member_limit: Optional[int] = None,
     commit: bool = True,
 ) -> Optional[Dict[str, Any]]:
-    """单板：库中无有效斜率时现算全成分并 upsert，再读回。
+    """单板：库中无有效中线斜率时现算并 upsert（同时补短线），再读回中线。
 
-    非同花顺来源直接返回 None。已有斜率则只读库不重算。
+    非同花顺来源直接返回 None。已有中线斜率则只读库不重算。
     """
     bc = str(board_code or "").strip()
     if not bc:
@@ -518,8 +579,11 @@ def ensure_board_sector_slope(
     if src != ALLOWED_SLOPE_BOARD_CODE_SOURCE:
         return None
     kind = (board_kind or "industry").strip().lower()
+    mid_w = int(window) if window else DEFAULT_SECTOR_SLOPE_WINDOW
     try:
-        existing = load_board_sector_slopes(db, [bc], board_kind=kind) or {}
+        existing = load_board_sector_slopes(
+            db, [bc], board_kind=kind, window=mid_w
+        ) or {}
         row = existing.get(bc) or {}
         if row.get("sector_slope") is not None:
             return row
@@ -530,13 +594,14 @@ def ensure_board_sector_slope(
             pass
 
     try:
+        win_list = list({mid_w, DEFAULT_SECTOR_SLOPE_SHORT_WINDOW})
         written, _total = refresh_board_sector_slopes(
             db,
             board_kind=kind,
             board_codes=[bc],
             board_code_source=src,
             end_date=end_date,
-            window=window,
+            windows=win_list,
             lookback=lookback,
             member_limit=member_limit,
             commit=commit,
@@ -551,7 +616,9 @@ def ensure_board_sector_slope(
     if written <= 0:
         return None
     try:
-        loaded = load_board_sector_slopes(db, [bc], board_kind=kind) or {}
+        loaded = load_board_sector_slopes(
+            db, [bc], board_kind=kind, window=mid_w
+        ) or {}
         return loaded.get(bc)
     except Exception:
         try:

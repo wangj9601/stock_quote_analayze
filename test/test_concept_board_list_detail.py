@@ -25,7 +25,7 @@ def test_fetch_concept_board_list_merges_slope(monkeypatch):
     )
     monkeypatch.setattr(
         "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-        lambda db, codes, board_kind="concept": {
+        lambda db, codes, board_kind="concept", window=None, **kwargs: {
             "885311": {
                 "sector_slope": 0.0012,
                 "sector_slope_window": 60,

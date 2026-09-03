@@ -77,6 +77,55 @@ def resolve_board_for_roles(
     if row:
         return _row_to_meta(row)
 
+    # 先查持久化代码映射（东财码 → 同花顺码等）
+    try:
+        from backend_api.utils.industry_board_code_map import resolve_peer_board_code
+
+        peer = resolve_peer_board_code(db, code, board_kind=btype)
+        if peer:
+            peer_row = db.execute(
+                text(
+                    f"""
+                    SELECT board_code, board_name, board_code_source
+                    FROM {table}
+                    WHERE TRIM(board_code) = :code
+                      AND COALESCE(NULLIF(TRIM(board_code_source), ''), :legacy) = :source
+                    LIMIT 1
+                    """
+                ),
+                {
+                    "code": peer,
+                    "source": source,
+                    "legacy": LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+                },
+            ).fetchone()
+            if peer_row:
+                return _row_to_meta(peer_row)
+            # 目标为同花顺时，对端行本身可能就是同花顺码
+            if source == DEFAULT_BOARD_CODE_SOURCE:
+                peer_any = db.execute(
+                    text(
+                        f"""
+                        SELECT board_code, board_name, board_code_source
+                        FROM {table}
+                        WHERE TRIM(board_code) = :code
+                        LIMIT 1
+                        """
+                    ),
+                    {"code": peer},
+                ).fetchone()
+                if peer_any:
+                    peer_src = resolve_board_code_source(
+                        peer_any[2], fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
+                    )
+                    if peer_src == DEFAULT_BOARD_CODE_SOURCE:
+                        return _row_to_meta(peer_any)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
     # 默认同花顺：用名称（或东财同码行的名称）映射到同花顺板
     if source != DEFAULT_BOARD_CODE_SOURCE:
         return None
@@ -426,11 +475,40 @@ def _quote_fields_from_row(row: Any) -> Dict[str, Any]:
     return out
 
 
+def _parse_quote_update_ts(raw: Any) -> float:
+    """将 update_time 解析为可比较时间戳；无法解析则为 0。"""
+    if raw is None:
+        return 0.0
+    if isinstance(raw, datetime):
+        return raw.timestamp()
+    if isinstance(raw, date):
+        return datetime(raw.year, raw.month, raw.day).timestamp()
+    s = str(raw).strip()
+    if not s:
+        return 0.0
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S.%f",
+        "%Y-%m-%dT%H:%M:%S.%f",
+        "%Y-%m-%d",
+    ):
+        try:
+            return datetime.strptime(s[:26], fmt).timestamp()
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
 def _quote_index_score(fields: Optional[Dict[str, Any]]) -> Tuple[int, float, float]:
-    """行情行作为「板块指数点位」的优先分：越高越像东财指数行情。
+    """行情行优先分：(指数质量, 更新时间, 指数点位)。
 
     东财行业板「最新价」为指数点（常见数百~上万），且通常带涨跌额；
     同花顺一览误写入的「均价」多为个位数~百以内、涨跌额为空。
+    质量相同时优先更新时间更新的一条，避免旧同花顺行因 |涨跌幅| 更大而压过新东财行。
     """
     if not fields:
         return (0, 0.0, 0.0)
@@ -440,18 +518,15 @@ def _quote_index_score(fields: Optional[Dict[str, Any]]) -> Tuple[int, float, fl
     except (TypeError, ValueError):
         px = 0.0
     index_like = 1 if looks_like_board_index_price(fields.get("latest_price"), fields.get("change_amount")) else 0
-    try:
-        cp_abs = abs(float(fields.get("change_percent") or 0))
-    except (TypeError, ValueError):
-        cp_abs = 0.0
-    return (has_change_amt + index_like, px, cp_abs)
+    freshness = _parse_quote_update_ts(fields.get("update_time"))
+    return (has_change_amt + index_like, freshness, px)
 
 
 def _prefer_board_quote(
     primary: Optional[Dict[str, Any]],
     secondary: Optional[Dict[str, Any]],
 ) -> Dict[str, Any]:
-    """在按代码 / 按名称两路行情中，优先选用更像板块指数点位的一条。"""
+    """在多路行情候选中，优先选用更像板块指数、且更新更近的一条。"""
     a = primary or {}
     b = secondary or {}
     if not a:
@@ -461,6 +536,40 @@ def _prefer_board_quote(
     if _quote_index_score(b) > _quote_index_score(a):
         return dict(b)
     return dict(a)
+
+
+def _pick_best_board_quote(*candidates: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """从多个候选行情中折叠选出最优一条。"""
+    best: Dict[str, Any] = {}
+    for c in candidates:
+        if not c:
+            continue
+        best = _prefer_board_quote(best, c) if best else dict(c)
+    return best
+
+
+def _resolve_industry_board_quote(
+    by_code: Dict[str, Dict[str, Any]],
+    by_name: Dict[str, Dict[str, Any]],
+    *,
+    board_code: str,
+    board_name: str,
+    ths_to_em: Optional[Dict[str, str]] = None,
+    em_to_ths: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
+    """按 本码 / 映射对端码 / 同名 三路解析行业板实时行情。"""
+    code = str(board_code or "").strip()
+    name = str(board_name or "").strip()
+    peer = None
+    if code and ths_to_em and code in ths_to_em:
+        peer = ths_to_em.get(code)
+    elif code and em_to_ths and code in em_to_ths:
+        peer = em_to_ths.get(code)
+    return _pick_best_board_quote(
+        by_code.get(code) if code else None,
+        by_code.get(peer) if peer else None,
+        by_name.get(name) if name else None,
+    )
 
 
 def _load_industry_realtime_quote_indexes(
@@ -529,6 +638,59 @@ def _attach_slope_fields(item: Dict[str, Any], slope: Optional[Dict[str, Any]]) 
     item["member_count_used"] = slope.get("member_count_used")
 
 
+def _attach_short_slope_fields(
+    item: Dict[str, Any],
+    slope: Optional[Dict[str, Any]],
+    *,
+    change_percent: Any = None,
+) -> None:
+    """附加短线斜率与短线环境（默认近 10 日，不回退实时涨跌）。"""
+    from backend_core.board_metrics.sector_slope_store import (
+        DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+        DEFAULT_SLOPE_SHORT_STRONG_THRESHOLD,
+    )
+    from backend_core.strategies.gms.board_resonance import evaluate_board_environment
+
+    if not slope:
+        item["sector_slope_short"] = None
+        item["sector_slope_short_window"] = DEFAULT_SECTOR_SLOPE_SHORT_WINDOW
+        item["slope_short_asof_date"] = None
+        item["board_env_short"] = "unknown"
+        item["board_env_short_label"] = "--"
+        item["board_strong_short"] = False
+        item["board_weak_short"] = False
+        item["slope_short_strong_threshold"] = DEFAULT_SLOPE_SHORT_STRONG_THRESHOLD
+        return
+
+    item["sector_slope_short"] = slope.get("sector_slope")
+    item["sector_slope_short_window"] = (
+        slope.get("sector_slope_window") or DEFAULT_SECTOR_SLOPE_SHORT_WINDOW
+    )
+    asof = slope.get("slope_asof_date")
+    if hasattr(asof, "isoformat"):
+        item["slope_short_asof_date"] = asof.isoformat()
+    else:
+        item["slope_short_asof_date"] = str(asof)[:10] if asof else None
+
+    try:
+        slope_f = float(item["sector_slope_short"]) if item.get("sector_slope_short") is not None else None
+    except (TypeError, ValueError):
+        slope_f = None
+    env = evaluate_board_environment(
+        sector_slope_v=slope_f,
+        board_change_percent=None,
+        slope_strong_threshold=DEFAULT_SLOPE_SHORT_STRONG_THRESHOLD,
+        use_realtime_fallback=False,
+    )
+    item["board_weak_short"] = env["board_weak"]
+    item["board_strong_short"] = env["board_strong"]
+    item["board_env_short"] = env["board_env"]
+    item["board_env_short_label"] = env["board_env_label"]
+    item["slope_short_strong_threshold"] = env["slope_strong_threshold"]
+    # change_percent 预留；短线环境刻意不混当日涨跌
+    _ = change_percent
+
+
 def _attach_board_env_fields(item: Dict[str, Any], change_percent: Any = None) -> None:
     """列表/详情附加走弱/走强展示字段（ln 斜率口径）。"""
     from backend_core.strategies.gms.board_resonance import evaluate_board_environment
@@ -573,11 +735,42 @@ def fetch_industry_board_list_with_metrics(
         db, frontend_only=frontend_only, board_code_source=src
     )
     by_code, by_name = _load_industry_realtime_quote_indexes(db)
+    ths_to_em: Dict[str, str] = {}
+    em_to_ths: Dict[str, str] = {}
+    try:
+        from backend_api.utils.industry_board_code_map import load_active_code_maps
+
+        ths_to_em, em_to_ths = load_active_code_maps(db, board_kind="industry")
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
     codes = [str(x.get("board_code") or "").strip() for x in catalog if x.get("board_code")]
     slopes: Dict[str, Dict[str, Any]] = {}
+    slopes_short: Dict[str, Dict[str, Any]] = {}
     if codes:
         try:
-            slopes = load_board_sector_slopes(db, codes, board_kind="industry") or {}
+            from backend_core.board_metrics.sector_slope_store import (
+                DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+                DEFAULT_SECTOR_SLOPE_WINDOW,
+            )
+
+            slopes = (
+                load_board_sector_slopes(
+                    db, codes, board_kind="industry", window=DEFAULT_SECTOR_SLOPE_WINDOW
+                )
+                or {}
+            )
+            slopes_short = (
+                load_board_sector_slopes(
+                    db,
+                    codes,
+                    board_kind="industry",
+                    window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+                )
+                or {}
+            )
         except Exception:
             # 缺表/事务 abort/读失败：降级为无斜率，仍返回板列表
             try:
@@ -585,6 +778,7 @@ def fetch_industry_board_list_with_metrics(
             except Exception:
                 pass
             slopes = {}
+            slopes_short = {}
 
     out: List[Dict[str, Any]] = []
     for raw in catalog:
@@ -603,12 +797,23 @@ def fetch_industry_board_list_with_metrics(
             "stock_count": int(raw.get("stock_count") or 0),
             "member_count": int(raw.get("member_count") or raw.get("stock_count") or 0),
         }
-        quote = _prefer_board_quote(
-            by_code.get(code),
-            by_name.get(name) if name else None,
+        quote = _resolve_industry_board_quote(
+            by_code,
+            by_name,
+            board_code=code,
+            board_name=name,
+            ths_to_em=ths_to_em,
+            em_to_ths=em_to_ths,
         )
+        if code and ths_to_em.get(code):
+            item["mapped_em_board_code"] = ths_to_em[code]
+        elif code and em_to_ths.get(code):
+            item["mapped_ths_board_code"] = em_to_ths[code]
         item.update(quote)
         _attach_slope_fields(item, slopes.get(code))
+        _attach_short_slope_fields(
+            item, slopes_short.get(code), change_percent=item.get("change_percent")
+        )
         _attach_board_env_fields(item, item.get("change_percent"))
         out.append(item)
 
@@ -653,17 +858,49 @@ def fetch_concept_board_list_with_metrics(
     catalog = fetch_concept_board_catalog(
         db, frontend_only=frontend_only, board_code_source=src
     )
+    ths_to_em: Dict[str, str] = {}
+    em_to_ths: Dict[str, str] = {}
+    try:
+        from backend_api.utils.industry_board_code_map import load_active_code_maps
+
+        ths_to_em, em_to_ths = load_active_code_maps(db, board_kind="concept")
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
     codes = [str(x.get("board_code") or "").strip() for x in catalog if x.get("board_code")]
     slopes: Dict[str, Dict[str, Any]] = {}
+    slopes_short: Dict[str, Dict[str, Any]] = {}
     if codes:
         try:
-            slopes = load_board_sector_slopes(db, codes, board_kind="concept") or {}
+            from backend_core.board_metrics.sector_slope_store import (
+                DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+                DEFAULT_SECTOR_SLOPE_WINDOW,
+            )
+
+            slopes = (
+                load_board_sector_slopes(
+                    db, codes, board_kind="concept", window=DEFAULT_SECTOR_SLOPE_WINDOW
+                )
+                or {}
+            )
+            slopes_short = (
+                load_board_sector_slopes(
+                    db,
+                    codes,
+                    board_kind="concept",
+                    window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+                )
+                or {}
+            )
         except Exception:
             try:
                 db.rollback()
             except Exception:
                 pass
             slopes = {}
+            slopes_short = {}
 
     out: List[Dict[str, Any]] = []
     for raw in catalog:
@@ -682,7 +919,14 @@ def fetch_concept_board_list_with_metrics(
             "stock_count": int(raw.get("stock_count") or 0),
             "member_count": int(raw.get("member_count") or raw.get("stock_count") or 0),
         }
+        if code and ths_to_em.get(code):
+            item["mapped_em_board_code"] = ths_to_em[code]
+        elif code and em_to_ths.get(code):
+            item["mapped_ths_board_code"] = em_to_ths[code]
         _attach_slope_fields(item, slopes.get(code))
+        _attach_short_slope_fields(
+            item, slopes_short.get(code), change_percent=item.get("change_percent")
+        )
         _attach_board_env_fields(item, item.get("change_percent"))
         out.append(item)
 
@@ -804,22 +1048,59 @@ def fetch_board_detail(
         stock_count = 0
 
     quote: Dict[str, Any] = {}
+    mapped_em: Optional[str] = None
+    mapped_ths: Optional[str] = None
+    ths_to_em: Dict[str, str] = {}
+    em_to_ths: Dict[str, str] = {}
+    try:
+        from backend_api.utils.industry_board_code_map import load_active_code_maps
+
+        ths_to_em, em_to_ths = load_active_code_maps(db, board_kind=kind)
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    mapped_em = ths_to_em.get(code)
+    mapped_ths = em_to_ths.get(code)
     if kind == "industry":
         by_code, by_name = _load_industry_realtime_quote_indexes(db)
-        quote = _prefer_board_quote(
-            by_code.get(code),
-            by_name.get(name) if name else None,
+        quote = _resolve_industry_board_quote(
+            by_code,
+            by_name,
+            board_code=code,
+            board_name=name,
+            ths_to_em=ths_to_em,
+            em_to_ths=em_to_ths,
         )
 
     try:
-        slopes = load_board_sector_slopes(db, [code], board_kind=kind) or {}
+        from backend_core.board_metrics.sector_slope_store import (
+            DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+            DEFAULT_SECTOR_SLOPE_WINDOW,
+        )
+
+        slopes = (
+            load_board_sector_slopes(
+                db, [code], board_kind=kind, window=DEFAULT_SECTOR_SLOPE_WINDOW
+            )
+            or {}
+        )
+        slopes_short = (
+            load_board_sector_slopes(
+                db, [code], board_kind=kind, window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW
+            )
+            or {}
+        )
     except Exception:
         try:
             db.rollback()
         except Exception:
             pass
         slopes = {}
+        slopes_short = {}
     slope = slopes.get(code) or {}
+    slope_short = slopes_short.get(code) or {}
     slope_filled_on_demand = False
 
     change_percent = quote.get("change_percent")
@@ -855,6 +1136,22 @@ def fetch_board_detail(
                     sector_slope_f = float(filled["sector_slope"])
                 except (TypeError, ValueError):
                     sector_slope_f = None
+                try:
+                    slopes_short = (
+                        load_board_sector_slopes(
+                            db,
+                            [code],
+                            board_kind=kind,
+                            window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+                        )
+                        or {}
+                    )
+                    slope_short = slopes_short.get(code) or {}
+                except Exception:
+                    try:
+                        db.rollback()
+                    except Exception:
+                        pass
         except Exception:
             try:
                 db.rollback()
@@ -893,7 +1190,14 @@ def fetch_board_detail(
         "mid": None,
         "roles": None,
     }
+    if mapped_em:
+        detail["mapped_em_board_code"] = mapped_em
+    if mapped_ths:
+        detail["mapped_ths_board_code"] = mapped_ths
     _attach_slope_fields(detail, slope if slope else None)
+    _attach_short_slope_fields(
+        detail, slope_short if slope_short else None, change_percent=change_percent
+    )
 
     if include_roles:
         try:

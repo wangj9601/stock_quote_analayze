@@ -223,18 +223,27 @@ def test_refresh_skips_non_tonghuashun_boards():
             return_value=["881101"],
         ) as mock_filter:
             with patch(
-                "backend_core.board_metrics.sector_slope_store.compute_board_sector_slope_detail",
-                return_value={
-                    "board_code": "881101",
-                    "sector_slope": 0.01,
-                    "slope_asof_date": date(2024, 6, 1),
-                    "sector_slope_window": 60,
-                    "member_count_used": 10,
-                },
+                "backend_core.board_metrics.sector_slope_store.compute_board_sector_slope_details_for_windows",
+                return_value=[
+                    {
+                        "board_code": "881101",
+                        "sector_slope": 0.01,
+                        "slope_asof_date": date(2024, 6, 1),
+                        "sector_slope_window": 60,
+                        "member_count_used": 10,
+                    },
+                    {
+                        "board_code": "881101",
+                        "sector_slope": 0.02,
+                        "slope_asof_date": date(2024, 6, 1),
+                        "sector_slope_window": 10,
+                        "member_count_used": 10,
+                    },
+                ],
             ) as mock_detail:
                 with patch(
                     "backend_core.board_metrics.sector_slope_store.upsert_board_sector_slopes",
-                    return_value=1,
+                    return_value=2,
                 ) as mock_upsert:
                     with patch(
                         "backend_core.strategies.rpe.data_loader.RPEDataLoader"
@@ -249,7 +258,8 @@ def test_refresh_skips_non_tonghuashun_boards():
     assert mock_detail.call_count == 1
     assert mock_detail.call_args.args[1] == "881101"
     mock_upsert.assert_called_once()
-    assert n == 1
+    assert len(mock_upsert.call_args.args[1]) == 2
+    assert n == 2
     assert total == 1  # 过滤后仅同花顺板进入尝试
 
 
@@ -308,19 +318,29 @@ def test_refresh_concept_tonghuashun_writes_and_skips_others():
             return_value=["BK0428"],
         ) as mock_filter:
             with patch(
-                "backend_core.board_metrics.sector_slope_store.compute_board_sector_slope_detail",
-                return_value={
-                    "board_code": "BK0428",
-                    "board_kind": "concept",
-                    "sector_slope": 0.03,
-                    "slope_asof_date": date(2024, 6, 1),
-                    "sector_slope_window": 60,
-                    "member_count_used": 20,
-                },
+                "backend_core.board_metrics.sector_slope_store.compute_board_sector_slope_details_for_windows",
+                return_value=[
+                    {
+                        "board_code": "BK0428",
+                        "board_kind": "concept",
+                        "sector_slope": 0.03,
+                        "slope_asof_date": date(2024, 6, 1),
+                        "sector_slope_window": 60,
+                        "member_count_used": 20,
+                    },
+                    {
+                        "board_code": "BK0428",
+                        "board_kind": "concept",
+                        "sector_slope": 0.04,
+                        "slope_asof_date": date(2024, 6, 1),
+                        "sector_slope_window": 10,
+                        "member_count_used": 20,
+                    },
+                ],
             ) as mock_detail:
                 with patch(
                     "backend_core.board_metrics.sector_slope_store.upsert_board_sector_slopes",
-                    return_value=1,
+                    return_value=2,
                 ) as mock_upsert:
                     with patch(
                         "backend_core.strategies.rpe.data_loader.RPEDataLoader"
@@ -338,7 +358,8 @@ def test_refresh_concept_tonghuashun_writes_and_skips_others():
     assert mock_detail.call_args.kwargs.get("board_kind") == "concept"
     mock_upsert.assert_called_once()
     assert mock_upsert.call_args.kwargs.get("board_kind") == "concept"
-    assert n == 1
+    assert len(mock_upsert.call_args.args[1]) == 2
+    assert n == 2
     assert total == 1
 
     # 非同花顺来源：直接跳过

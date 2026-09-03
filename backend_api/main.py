@@ -920,6 +920,16 @@ if admin_board_constituents_router is not None:
     app.include_router(admin_board_constituents_router)
     print("admin board constituents路由注册成功")
 
+try:
+    from .admin.industry_board_code_map_admin import router as admin_industry_board_code_map_router
+except Exception as e:
+    print(f"admin_industry_board_code_map_router 导入失败: {e}")
+    admin_industry_board_code_map_router = None
+
+if admin_industry_board_code_map_router is not None:
+    app.include_router(admin_industry_board_code_map_router)
+    print("admin industry board code map路由注册成功")
+
 # 注册采集日历管理路由
 if trading_calendar_router is not None:
     app.include_router(trading_calendar_router)

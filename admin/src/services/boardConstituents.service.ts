@@ -333,6 +333,75 @@ class BoardConstituentsService {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   }
+
+  async listIndustryCodeMaps(params?: {
+    keyword?: string
+    activeOnly?: boolean
+    boardKind?: BoardType
+    limit?: number
+  }) {
+    const q = new URLSearchParams()
+    q.set('board_kind', params?.boardKind ?? 'industry')
+    if (params?.keyword) q.set('keyword', params.keyword)
+    if (params?.activeOnly) q.set('active_only', 'true')
+    q.set('limit', String(params?.limit ?? 500))
+    return apiService.get<{
+      success: boolean
+      data: IndustryBoardCodeMapRow[]
+      total: number
+      board_kind?: string
+    }>(`/industry-board-code-map?${q}`)
+  }
+
+  async rebuildIndustryCodeMaps(replaceAuto = true, boardKind: BoardType = 'industry') {
+    return apiService.post<{
+      success: boolean
+      data: {
+        pair_candidates: number
+        inserted: number
+        updated: number
+        deactivated_auto: number
+        skipped_manual: number
+      }
+      board_kind?: string
+    }>('/industry-board-code-map/rebuild', {
+      replace_auto: replaceAuto,
+      board_kind: boardKind,
+    })
+  }
+
+  async upsertIndustryCodeMap(body: {
+    ths_board_code: string
+    em_board_code: string
+    board_name?: string
+    board_kind?: BoardType
+    note?: string
+    confidence?: number
+    is_active?: boolean
+  }) {
+    return apiService.post<{ success: boolean; data: IndustryBoardCodeMapRow }>(
+      '/industry-board-code-map',
+      { board_kind: 'industry', ...body },
+    )
+  }
+
+  async deactivateIndustryCodeMap(mapId: number) {
+    return apiService.delete<{ success: boolean }>(`/industry-board-code-map/${mapId}`)
+  }
+}
+
+export interface IndustryBoardCodeMapRow {
+  id: number
+  board_kind: string
+  board_name: string | null
+  ths_board_code: string
+  em_board_code: string
+  match_method: string
+  confidence: number
+  is_active: boolean
+  note: string | null
+  created_at?: string
+  updated_at?: string
 }
 
 export const boardConstituentsService = new BoardConstituentsService()

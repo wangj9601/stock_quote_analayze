@@ -308,9 +308,75 @@ class RealtimeStockIndustryBoardCollector:
                 update_set = ','.join(update_parts)
                 sql = f'INSERT INTO {self.table_name} ({col_names}) VALUES ({placeholders}) ON CONFLICT (board_code, update_time) DO UPDATE SET {update_set}'
                 session.execute(text(sql), value_dict)
-            # 东财「最新价」= 板块指数点位。按名称镜像到同花顺板代码，供行情页默认同花顺列表按 code 命中。
+            # 东财「最新价」= 板块指数点位。优先按代码映射镜像到同花顺板，其次按同名镜像。
             # 仅当本批写入含有效 latest_price（指数）时镜像，避免同花顺均价兜底污染。
             try:
+                from backend_api.utils.industry_board_code_map import (
+                    ensure_industry_board_code_map_table,
+                    load_active_code_maps,
+                )
+
+                ensure_industry_board_code_map_table(session)
+                ths_to_em, em_to_ths = load_active_code_maps(session, board_kind="industry")
+                # 采集后轻量补映射：同名精确（不覆盖手工）
+                try:
+                    from backend_api.utils.industry_board_code_map import rebuild_name_exact_maps
+
+                    rebuild_name_exact_maps(session, board_kind="industry", replace_auto=False)
+                    ths_to_em, em_to_ths = load_active_code_maps(session, board_kind="industry")
+                except Exception as rebuild_err:
+                    print(f"[采集] 代码映射自动补全跳过: {rebuild_err}")
+
+                if em_to_ths:
+                    # 按映射表：东财码 → 同花顺码
+                    session.execute(
+                        text(
+                            f"""
+                            INSERT INTO {self.table_name} (
+                                board_code, board_name, latest_price, change_amount,
+                                change_percent, total_market_value, volume, amount,
+                                turnover_rate, up_count, down_count,
+                                leading_stock_name, leading_stock_code,
+                                leading_stock_change_percent, update_time
+                            )
+                            SELECT
+                                m.ths_board_code,
+                                COALESCE(t.board_name, q.board_name),
+                                q.latest_price, q.change_amount,
+                                q.change_percent, q.total_market_value, q.volume, q.amount,
+                                q.turnover_rate, q.up_count, q.down_count,
+                                q.leading_stock_name, q.leading_stock_code,
+                                q.leading_stock_change_percent, q.update_time
+                            FROM {self.table_name} q
+                            INNER JOIN industry_board_code_map m
+                              ON m.em_board_code = q.board_code
+                             AND m.board_kind = 'industry'
+                             AND m.is_active IS TRUE
+                            LEFT JOIN industry_board_basic_info t
+                              ON t.board_code = m.ths_board_code
+                            WHERE q.update_time = :now
+                              AND q.latest_price IS NOT NULL
+                              AND m.ths_board_code <> q.board_code
+                            ON CONFLICT (board_code, update_time) DO UPDATE SET
+                                board_name = EXCLUDED.board_name,
+                                latest_price = EXCLUDED.latest_price,
+                                change_amount = EXCLUDED.change_amount,
+                                change_percent = EXCLUDED.change_percent,
+                                total_market_value = EXCLUDED.total_market_value,
+                                volume = EXCLUDED.volume,
+                                amount = EXCLUDED.amount,
+                                turnover_rate = EXCLUDED.turnover_rate,
+                                up_count = EXCLUDED.up_count,
+                                down_count = EXCLUDED.down_count,
+                                leading_stock_name = EXCLUDED.leading_stock_name,
+                                leading_stock_code = EXCLUDED.leading_stock_code,
+                                leading_stock_change_percent = EXCLUDED.leading_stock_change_percent
+                            """
+                        ),
+                        {"now": now},
+                    )
+
+                # 名称兜底：未映射到的同花顺板仍按同名桥接
                 session.execute(
                     text(
                         f"""
@@ -335,6 +401,12 @@ class RealtimeStockIndustryBoardCollector:
                         WHERE COALESCE(NULLIF(TRIM(t.board_code_source), ''), 'eastmoney')
                               = 'tonghuashun'
                           AND q.board_code <> t.board_code
+                          AND NOT EXISTS (
+                              SELECT 1 FROM industry_board_code_map m
+                              WHERE m.board_kind = 'industry'
+                                AND m.is_active IS TRUE
+                                AND m.ths_board_code = t.board_code
+                          )
                         ON CONFLICT (board_code, update_time) DO UPDATE SET
                             board_name = EXCLUDED.board_name,
                             latest_price = EXCLUDED.latest_price,

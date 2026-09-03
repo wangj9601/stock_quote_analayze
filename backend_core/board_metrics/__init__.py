@@ -3,7 +3,10 @@
 
 from backend_core.board_metrics.sector_slope_store import (
     ALLOWED_SLOPE_BOARD_CODE_SOURCE,
+    DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+    DEFAULT_SECTOR_SLOPE_WINDOW,
     compute_board_sector_slope_detail,
+    compute_board_sector_slope_details_for_windows,
     ensure_board_daily_metrics_table,
     ensure_board_sector_slope,
     filter_board_codes_by_source,
@@ -18,7 +21,10 @@ from backend_core.board_metrics.sector_slope_store import (
 
 __all__ = [
     "ALLOWED_SLOPE_BOARD_CODE_SOURCE",
+    "DEFAULT_SECTOR_SLOPE_SHORT_WINDOW",
+    "DEFAULT_SECTOR_SLOPE_WINDOW",
     "compute_board_sector_slope_detail",
+    "compute_board_sector_slope_details_for_windows",
     "ensure_board_daily_metrics_table",
     "ensure_board_sector_slope",
     "filter_board_codes_by_source",
