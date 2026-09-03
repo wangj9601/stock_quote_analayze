@@ -38,7 +38,7 @@ def run() -> None:
                         sector_slope_window INTEGER NOT NULL DEFAULT 60,
                         member_count_used INTEGER,
                         updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-                        PRIMARY KEY (board_code, slope_asof_date)
+                        PRIMARY KEY (board_code, slope_asof_date, sector_slope_window)
                     )
                     """
                 )

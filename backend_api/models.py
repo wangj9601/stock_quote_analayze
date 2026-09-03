@@ -652,8 +652,8 @@ class IndustryBoardDailyMetrics(Base):
     __tablename__ = "industry_board_daily_metrics"
     board_code = Column(String(20), primary_key=True)
     slope_asof_date = Column(Date, primary_key=True)
+    sector_slope_window = Column(Integer, primary_key=True, default=60)
     sector_slope = Column(Float)
-    sector_slope_window = Column(Integer, default=60)
     member_count_used = Column(Integer)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -663,8 +663,8 @@ class ConceptBoardDailyMetrics(Base):
     __tablename__ = "concept_board_daily_metrics"
     board_code = Column(String(20), primary_key=True)
     slope_asof_date = Column(Date, primary_key=True)
+    sector_slope_window = Column(Integer, primary_key=True, default=60)
     sector_slope = Column(Float)
-    sector_slope_window = Column(Integer, default=60)
     member_count_used = Column(Integer)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 

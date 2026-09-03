@@ -77,7 +77,7 @@ def _table_for_kind(board_kind: str) -> str:
 
 
 def ensure_board_daily_metrics_table(db, board_kind: str = "industry") -> None:
-    """幂等建表（采集路径也可调用，避免未跑迁移时失败）。"""
+    """幂等建表，并确保主键含 sector_slope_window（兼容旧两列主键）。"""
     table = _table_for_kind(board_kind)
     db.execute(
         text(
@@ -97,8 +97,67 @@ def ensure_board_daily_metrics_table(db, board_kind: str = "industry") -> None:
     db.execute(
         text(
             f"""
+            ALTER TABLE {table}
+            ADD COLUMN IF NOT EXISTS sector_slope_window INTEGER NOT NULL DEFAULT 60
+            """
+        )
+    )
+    pk_rows = db.execute(
+        text(
+            """
+            SELECT a.attname
+            FROM pg_index i
+            JOIN pg_attribute a
+              ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+            WHERE i.indrelid = to_regclass(:tbl)
+              AND i.indisprimary
+            ORDER BY array_position(i.indkey, a.attnum)
+            """
+        ),
+        {"tbl": table},
+    ).fetchall()
+    pk = [str(r[0]) for r in pk_rows]
+    wanted = ["board_code", "slope_asof_date", "sector_slope_window"]
+    if pk and pk != wanted:
+        # 去重后重建主键，供 ON CONFLICT (board_code, slope_asof_date, sector_slope_window)
+        db.execute(
+            text(
+                f"""
+                DELETE FROM {table} a
+                USING {table} b
+                WHERE a.board_code = b.board_code
+                  AND a.slope_asof_date = b.slope_asof_date
+                  AND a.sector_slope_window = b.sector_slope_window
+                  AND a.ctid < b.ctid
+                """
+            )
+        )
+        db.execute(text(f"ALTER TABLE {table} DROP CONSTRAINT IF EXISTS {table}_pkey"))
+        db.execute(
+            text(
+                f"""
+                ALTER TABLE {table}
+                ADD PRIMARY KEY (board_code, slope_asof_date, sector_slope_window)
+                """
+            )
+        )
+        logger.info(
+            "%s 主键已升级为 (board_code, slope_asof_date, sector_slope_window)",
+            table,
+        )
+    db.execute(
+        text(
+            f"""
             CREATE INDEX IF NOT EXISTS ix_{table}_asof
             ON {table} (slope_asof_date DESC)
+            """
+        )
+    )
+    db.execute(
+        text(
+            f"""
+            CREATE INDEX IF NOT EXISTS ix_{table}_window_asof
+            ON {table} (sector_slope_window, slope_asof_date DESC)
             """
         )
     )
@@ -238,33 +297,35 @@ def upsert_board_sector_slopes(
         if asof is None:
             continue
         try:
-            db.execute(
-                text(
-                    f"""
-                    INSERT INTO {table} (
-                        board_code, slope_asof_date, sector_slope,
-                        sector_slope_window, member_count_used, updated_at
-                    ) VALUES (
-                        :board_code, :slope_asof_date, :sector_slope,
-                        :sector_slope_window, :member_count_used, :updated_at
-                    )
-                    ON CONFLICT (board_code, slope_asof_date, sector_slope_window) DO UPDATE SET
-                        sector_slope = EXCLUDED.sector_slope,
-                        member_count_used = EXCLUDED.member_count_used,
-                        updated_at = EXCLUDED.updated_at
-                    """
-                ),
-                {
-                    "board_code": bc,
-                    "slope_asof_date": asof,
-                    "sector_slope": r.get("sector_slope"),
-                    "sector_slope_window": int(
-                        r.get("sector_slope_window") or DEFAULT_SECTOR_SLOPE_WINDOW
+            # 行级 savepoint：单行失败不中止整批事务（避免 InFailedSqlTransaction 连锁）
+            with db.begin_nested():
+                db.execute(
+                    text(
+                        f"""
+                        INSERT INTO {table} (
+                            board_code, slope_asof_date, sector_slope,
+                            sector_slope_window, member_count_used, updated_at
+                        ) VALUES (
+                            :board_code, :slope_asof_date, :sector_slope,
+                            :sector_slope_window, :member_count_used, :updated_at
+                        )
+                        ON CONFLICT (board_code, slope_asof_date, sector_slope_window) DO UPDATE SET
+                            sector_slope = EXCLUDED.sector_slope,
+                            member_count_used = EXCLUDED.member_count_used,
+                            updated_at = EXCLUDED.updated_at
+                        """
                     ),
-                    "member_count_used": r.get("member_count_used"),
-                    "updated_at": now,
-                },
-            )
+                    {
+                        "board_code": bc,
+                        "slope_asof_date": asof,
+                        "sector_slope": r.get("sector_slope"),
+                        "sector_slope_window": int(
+                            r.get("sector_slope_window") or DEFAULT_SECTOR_SLOPE_WINDOW
+                        ),
+                        "member_count_used": r.get("member_count_used"),
+                        "updated_at": now,
+                    },
+                )
             n += 1
         except Exception as e:
             logger.warning("upsert board slope %s failed: %s", bc, e)
