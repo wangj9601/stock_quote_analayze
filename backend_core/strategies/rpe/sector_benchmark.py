@@ -53,19 +53,20 @@ def sector_slope(
     benchmark: List[Dict[str, float]],
     window: int,
     *,
-    transform: str = "none",
+    transform: str = "log",
 ) -> Optional[float]:
-    """近 window 日 I_t 回归斜率。
+    """近 window 日板块基准回归斜率。
 
     transform:
-      - ``none``：对原始 I_t 回归（绝对价位斜率，RPE 历史口径）
-      - ``log``：对 ln(I_t) 回归（近似日对数收益趋势，跨板更可比；GMS/板指标入库用）
+      - ``log`` / ``ln``：对 ln(I_t) 回归（近似日对数收益趋势，跨板可比；
+        行情板块详情、GMS 入库、RPE 默认口径）
+      - ``none``：对原始 I_t 回归（绝对价位斜率，历史兼容）
     """
     if not benchmark:
         return None
     w = max(5, int(window))
     vals = [float(b["i_t"]) for b in benchmark[-w:]]
-    mode = (transform or "none").strip().lower()
+    mode = (transform or "log").strip().lower()
     if mode in ("log", "ln", "log_it"):
         import math
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """板块量权基准斜率：计算、入库、读库。
 
-口径与 RPE/GMS 一致：I_t = Σ(close·volume)/Σ(volume)，近 N 日线性回归斜率。
+口径与 RPE/GMS 一致：I_t = Σ(close·volume)/Σ(volume)，近 N 日对 ln(I_t) 线性回归斜率。
 行业/概念板均无官方日线指数时，用成分股日线合成后写入对应日度指标表，供策略复用。
 
 业务范围：仅处理 board_code_source=tonghuashun（同花顺）的行业板与概念板；

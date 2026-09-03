@@ -123,7 +123,8 @@ flowchart TD
 | `z_window` | int | 40 | 滚动 Z 窗口（实现侧下限钳制为 ≥5） | Z-Score |
 | `z_lead` | float | 2.0 | \(Z \ge\) 此值 → 领涨 | 信号类型 |
 | `z_catch_up` | float | -1.5 | \(Z \le\) 此值 → 补涨 | 信号类型 |
-| `sector_slope_window` | int | 60 | 对 \(I_t\) 做线性回归的窗口 | 趋势否决 |
+| `sector_slope_window` | int | 60 | 对 \(\ln(I_t)\) 做线性回归的窗口 | 趋势否决 |
+| `sector_slope_transform` | str | `log` | `log`=对 \(\ln(I_t)\) 回归（与行情/GMS 一致）；`none`=原始 \(I_t\) | 趋势否决 |
 | `enable_trend_veto` | bool | true | 斜率 &lt; 0 时禁止补涨/领涨入场 | 入场门控 |
 | `enable_lead_trade` | bool | false | 是否允许领涨产生 `entry_signal` | 入场门控 |
 | `kde_base_factor` | float | 1.0 | KDE 带宽因子：raw = factor × (σ/μ) | 支撑阻力平滑度 |
@@ -198,7 +199,7 @@ I_t = \frac{\sum_i P_{i,t}\, V_{i,t}}{\sum_i V_{i,t}}
 
 ### 4.2 板块趋势斜率
 
-对最近 `sector_slope_window` 日的 \(I_t\) 做普通最小二乘：\(y \sim a + b x\)，\(x=0..n-1\)，取斜率 \(b\)。
+对最近 `sector_slope_window` 日的 \(\ln(I_t)\) 做普通最小二乘：\(y \sim a + b x\)，\(x=0..n-1\)，取斜率 \(b\)（默认 `sector_slope_transform=log`，与行情板块详情/GMS 入库一致；`none` 时对原始 \(I_t\) 回归）。
 
 - \(b < 0\) 且 `enable_trend_veto=true` → `trend_veto=true`，禁止入场（仍可标出 catch_up/lead 类型为观察）
 - 样本 &lt; 5 → 斜率 `None`，否决不触发

@@ -247,6 +247,7 @@ class RPEStrategyEngine:
                     "kde_lookback_step": int(cfg.get("kde_lookback_step", 250)),
                     "kde_lookback_max": kde_max,
                     "sector_slope_window": int(cfg.get("sector_slope_window", 60)),
+                    "sector_slope_transform": str(cfg.get("sector_slope_transform") or "log"),
                     "liquidity_board_segment": liq.get("board_segment"),
                     "liquidity_min_avg_amount": liq_amt_gate,
                     "liquidity_min_avg_turnover_rate": liq_tr_gate,
@@ -342,7 +343,11 @@ class RPEStrategyEngine:
         benchmark = compute_vwap_benchmark(date_members)
         if len(benchmark) < int(cfg.get("z_window", 40)) + 5:
             return []
-        slope = sector_slope(benchmark, int(cfg.get("sector_slope_window", 60)))
+        slope = sector_slope(
+            benchmark,
+            int(cfg.get("sector_slope_window", 60)),
+            transform=str(cfg.get("sector_slope_transform") or "log"),
+        )
         trade_date = date or (benchmark[-1]["date"] if benchmark else self.loader.resolve_trade_date())
 
         # 全成分建基准；仅对目标代码评估（单股/自选过滤时）

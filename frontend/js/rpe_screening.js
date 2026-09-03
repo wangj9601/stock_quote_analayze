@@ -52,6 +52,24 @@
     return String(r.name || r.stock_name || '').trim();
   }
 
+  function escAttr(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  /** 个股详情链接（新标签页，无下划线样式复用 gms-stock-code-link） */
+  function stockCodeLinkHtml(code, name) {
+    const c = String(code || '').trim();
+    if (!c) return '-';
+    const q = new URLSearchParams({ code: c });
+    const nm = String(name || '').trim();
+    if (nm) q.set('name', nm);
+    return `<a class="stock-code gms-stock-code-link" href="stock.html?${q.toString()}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${escAttr(c)}</a>`;
+  }
+
   function switchSub(name) {
     document.querySelectorAll('#rpe-content [data-rpe-sub]').forEach((b) => {
       b.classList.toggle('active', b.getAttribute('data-rpe-sub') === name);
@@ -308,9 +326,10 @@
         }
         const qfqTitle = r.price_adjust === 'qfq' ? '前复权' : '';
         const roleHtml = roleTagsHtml(r);
+        const nm = displayName(r);
         return `<tr data-rpe-row="${index}" data-code="${r.code || ''}">
-            <td>${r.code || ''}</td>
-            <td>${displayName(r)}${roleHtml ? ` ${roleHtml}` : ''}</td>
+            <td>${stockCodeLinkHtml(r.code, nm)}</td>
+            <td>${nm || '-'}${roleHtml ? ` ${roleHtml}` : ''}</td>
             <td>${r.sector_name || r.sector_id || '-'}</td>
             <td title="${qfqTitle}">${fmt(r.close)}</td>
             <td title="${qfqTitle}">${fmt(r.z_score, 2)}</td>
@@ -483,9 +502,10 @@
             detail: snap.detail || r.detail,
             signal_reason: snapField(snap, 'signal_reason', null),
           };
+          const nm = displayName(r) || displayName(snap) || '';
           return `<tr>
-          <td>${r.code || ''}</td>
-          <td>${displayName(r) || displayName(snap) || ''}</td>
+          <td>${stockCodeLinkHtml(r.code, nm)}</td>
+          <td>${nm || '-'}</td>
           <td>${r.signal_date || snap.date || '-'}</td>
           <td>${snapField(snap, 'sector_name', snap.sector_id) || '-'}</td>
           <td>${fmt(snapField(snap, 'z_score', null), 2)}</td>
@@ -523,8 +543,9 @@
           const live = r.live_eval || {};
           const breached = live.structure_break || live.breached ? '结构破位' : '';
           const evalTxt = breached || (live.note || r.last_eval && JSON.stringify(r.last_eval)) || '-';
+          const nm = displayName(r);
           return `<tr>
-            <td>${r.code}</td><td>${displayName(r)}</td><td>${r.status}</td>
+            <td>${stockCodeLinkHtml(r.code, nm)}</td><td>${nm || '-'}</td><td>${r.status}</td>
             <td>${fmt(r.entry_price)}</td>
             <td>${fmt(r.structure_support)}</td><td>${fmt(r.structure_resistance)}</td>
             <td>${r.exit_reason || '-'}</td><td>${evalTxt}</td>
@@ -688,6 +709,14 @@
         refreshFormal();
       }
     });
+  }
+
+  if (typeof window !== 'undefined') {
+    window.RpeScreening = {
+      syncScopeUI,
+      refreshSignals,
+      switchSub,
+    };
   }
 
   if (document.readyState === 'loading') {

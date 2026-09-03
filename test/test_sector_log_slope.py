@@ -22,11 +22,15 @@ def test_sector_slope_log_transform_positive_trend():
     assert env["board_strong"] is True
 
 
-def test_sector_slope_none_keeps_rpe_absolute_scale():
+def test_sector_slope_none_keeps_absolute_price_scale():
+    """transform=none 仍为绝对价位斜率；默认/log 为更小量级的对数斜率。"""
     it = [100.0 + i for i in range(30)]
     bench = [{"date": f"d{i}", "i_t": v, "volume_sum": 1.0} for i, v in enumerate(it)]
     abs_slope = sector_slope(bench, 30, transform="none")
     log_slope = sector_slope(bench, 30, transform="log")
+    default_slope = sector_slope(bench, 30)  # 默认 log，与行情/RPE 一致
     assert abs_slope is not None and abs(abs_slope - 1.0) < 1e-9
     assert log_slope is not None
     assert abs(log_slope) < 0.05  # 绝对斜率≈1，对数斜率远更小
+    assert default_slope is not None
+    assert abs(default_slope - log_slope) < 1e-12

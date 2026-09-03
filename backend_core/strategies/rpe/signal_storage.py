@@ -281,7 +281,11 @@ def recompute_trace_for_stock(
             benchmark = compute_vwap_benchmark(date_members)
             if len(benchmark) < min_need:
                 continue
-            slope = sector_slope(benchmark, slope_window)
+            slope = sector_slope(
+                benchmark,
+                slope_window,
+                transform=str(cfg.get("sector_slope_transform") or "log"),
+            )
             row = engine.evaluate_in_sector(
                 code_n,
                 sector_id=ctx["board_code"],

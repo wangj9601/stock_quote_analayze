@@ -18,6 +18,8 @@ def get_default_rpe_config() -> Dict[str, Any]:
         "z_lead": 2.0,
         "z_catch_up": -1.5,
         "sector_slope_window": 60,
+        # 与行情板块详情 / GMS 入库一致：对 ln(I_t) 回归（跨板可比）；none 为历史绝对价位斜率
+        "sector_slope_transform": "log",
         "enable_trend_veto": True,
         "enable_lead_trade": False,
         "kde_base_factor": 1.0,

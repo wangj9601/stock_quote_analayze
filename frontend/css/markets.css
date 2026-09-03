@@ -1187,6 +1187,7 @@
     color: #fff;
     background: #f78989;
     border-color: #f78989;
+    text-decoration: none;
 }
 
 .ba-role-pill--mid {
@@ -1199,6 +1200,7 @@
     color: #cf9236;
     background: #faecd8;
     border-color: #e6a23c;
+    text-decoration: none;
 }
 
 .sector-detail-meta {
@@ -1538,5 +1540,13 @@
     cursor: wait;
 }
 .sector-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
     margin: 0 0 10px;
+}
+
+.sector-detail-actions .sector-detail-rpe-btn {
+    border: none;
 }

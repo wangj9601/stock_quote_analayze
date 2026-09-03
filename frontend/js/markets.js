@@ -1349,7 +1349,16 @@ const MarketsPage = {
         return [];
     },
 
-    /** 对齐分析频道板块分析短线角色 pill（ba-role-pill），保留 goToStock */
+    /** 对齐分析频道板块分析短线角色 pill（ba-role-pill），新标签页打开个股详情 */
+    _stockDetailHref(code, name) {
+        const c = String(code || '').trim();
+        if (!c) return '';
+        const q = new URLSearchParams({ code: c });
+        const nm = String(name || '').trim();
+        if (nm) q.set('name', nm);
+        return `stock.html?${q.toString()}`;
+    },
+
     _formatSectorRolePct(v) {
         if (v == null || !Number.isFinite(Number(v))) return '';
         const n = Number(v);
@@ -1372,7 +1381,8 @@ const MarketsPage = {
         if (!code) {
             return `<span class="${cls}" title="${title}">${label} ${show}${pctHtml}</span>`;
         }
-        return `<a class="${cls}" href="javascript:void(0)" onclick="goToStock('${this.escapeHtml(code)}','${this.escapeHtml(name)}')" title="${title}">${label} ${show}${pctHtml}</a>`;
+        const href = this._stockDetailHref(code, name);
+        return `<a class="${cls}" href="${this.escapeHtml(href)}" target="_blank" rel="noopener noreferrer" title="${title}">${label} ${show}${pctHtml}</a>`;
     },
 
     /** 故意不 slice：分类结果有几只就展示几只；视觉对齐 BoardRolesPanel.renderShortlineRoles */
@@ -1470,6 +1480,7 @@ const MarketsPage = {
                 
                 <div class="sector-detail-actions">
                     <button type="button" class="btn btn-secondary sector-detail-slope-btn" title="仅重算当前板块斜率">重算斜率</button>
+                    <button type="button" class="btn btn-primary sector-detail-rpe-btn" title="进入比价效应策略选股（预选当前板块）">比价选股</button>
                 </div>
                 <div class="sector-detail-grid">
                     ${item('中线斜率(ln)', this.formatSlope(d.sector_slope), this.getChangeClass(d.sector_slope))}
@@ -1496,10 +1507,10 @@ const MarketsPage = {
             </div>
         `;
 
+        const kind = (d.board_kind === 'concept') ? 'concept' : 'industry';
+        const code = d.board_code || (this._sectorDetailCtx && this._sectorDetailCtx.boardCode) || '';
         const slopeBtn = body.querySelector('.sector-detail-slope-btn');
         if (slopeBtn) {
-            const kind = (d.board_kind === 'concept') ? 'concept' : 'industry';
-            const code = d.board_code || (this._sectorDetailCtx && this._sectorDetailCtx.boardCode) || '';
             slopeBtn.addEventListener('click', () => {
                 this.refreshSectorSlopes(kind, {
                     boardCode: code,
@@ -1507,7 +1518,46 @@ const MarketsPage = {
                 });
             });
         }
+        const rpeBtn = body.querySelector('.sector-detail-rpe-btn');
+        if (rpeBtn) {
+            rpeBtn.addEventListener('click', () => {
+                this.goToRpeScreeningFromSector(d);
+            });
+        }
 
+    },
+
+    /**
+     * 从板块详情进入比价效应选股页，并预选当前行业/概念板。
+     * 落地 URL：screening.html?board_kind=&board_code=&board_code_source=&board_name=#rpe
+     */
+    goToRpeScreeningFromSector(d) {
+        const ctx = this._sectorDetailCtx || {};
+        const kind = (d && d.board_kind === 'concept') || ctx.kind === 'concept'
+            ? 'concept'
+            : 'industry';
+        const code = String((d && d.board_code) || ctx.boardCode || '').trim();
+        if (!code) {
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+                CommonUtils.showToast('缺少板块代码，无法进入比价选股', 'warning');
+            }
+            return;
+        }
+        const name = String((d && d.board_name) || ctx.boardName || '').trim();
+        const params = new URLSearchParams({
+            board_kind: kind,
+            board_code: code,
+        });
+        const sourceKey = String((d && d.board_code_source) || ctx.boardSource || 'tonghuashun').trim();
+        if (sourceKey) params.set('board_code_source', sourceKey);
+        if (name) params.set('board_name', name);
+        const url = `screening.html?${params.toString()}#rpe`;
+        const win = window.open(url, '_blank');
+        if (win) {
+            try { win.opener = null; } catch (_) { /* ignore */ }
+        } else if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+            CommonUtils.showToast('无法打开新标签页，请检查浏览器弹窗拦截', 'warning');
+        }
     },
 
     // 加载热门数据

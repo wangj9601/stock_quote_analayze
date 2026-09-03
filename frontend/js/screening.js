@@ -92,6 +92,7 @@ const ScreeningPage = {
         }
         this.ensureActiveStrategyVisible();
         this.applyVsbHashOnLoad();
+        void this.applyRpeDeepLinkOnLoad();
         void this.initUrtStrategyConfig();
         void this.loadGmsUiConfig();
     },
@@ -245,6 +246,14 @@ const ScreeningPage = {
         if (strategy === 'urt') {
             void this.initUrtStrategyConfig();
             void this.loadUrtObservedCodeSets();
+        }
+        if (strategy === 'rpe') {
+            if (window.RpeScreening && typeof window.RpeScreening.syncScopeUI === 'function') {
+                window.RpeScreening.syncScopeUI();
+            }
+            if (window.RpeScreening && typeof window.RpeScreening.switchSub === 'function') {
+                window.RpeScreening.switchSub('signals');
+            }
         }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
             this.switchVsbSubPanel('pick');
@@ -2533,6 +2542,71 @@ const ScreeningPage = {
             this.switchStrategy('volume-shrink-breakout');
             this._vsbOpenFromHash = false;
             this.switchVsbSubPanel('pick');
+        }
+    },
+
+    /**
+     * 深链：screening.html?board_kind=industry|concept&board_code=...&board_code_source=...#rpe
+     * 从行情板块详情「比价选股」进入时预选范围与板块，并自动刷新筛选。
+     */
+    async applyRpeDeepLinkOnLoad() {
+        const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
+        if (h !== 'rpe') return;
+
+        this.switchStrategy('rpe');
+
+        let params;
+        try {
+            params = new URLSearchParams(window.location.search || '');
+        } catch (_) {
+            return;
+        }
+        const boardCode = String(params.get('board_code') || '').trim();
+        let boardKind = String(params.get('board_kind') || '').trim().toLowerCase();
+        if (boardKind === 'industry_board') boardKind = 'industry';
+        if (boardKind === 'concept_board') boardKind = 'concept';
+        if (!boardCode || (boardKind !== 'industry' && boardKind !== 'concept')) return;
+
+        const scope = boardKind === 'concept' ? 'concept_board' : 'industry_board';
+        const scopeEl = document.getElementById('rpeScope');
+        if (scopeEl) {
+            scopeEl.value = scope;
+        }
+
+        try {
+            if (boardKind === 'industry') {
+                await this.loadGmsIndustryBoardOptions();
+                this.rpeSelectedIndustryBoardCodes = [boardCode];
+                this.updateRpeIndustryBoardSummary();
+            } else {
+                await this.loadGmsConceptBoardOptions();
+                this.rpeSelectedConceptBoardCodes = [boardCode];
+                this.updateRpeConceptBoardSummary();
+            }
+        } catch (e) {
+            console.warn('applyRpeDeepLinkOnLoad board catalog:', e);
+            if (boardKind === 'industry') {
+                this.rpeSelectedIndustryBoardCodes = [boardCode];
+                this.updateRpeIndustryBoardSummary();
+            } else {
+                this.rpeSelectedConceptBoardCodes = [boardCode];
+                this.updateRpeConceptBoardSummary();
+            }
+        }
+
+        if (window.RpeScreening && typeof window.RpeScreening.syncScopeUI === 'function') {
+            window.RpeScreening.syncScopeUI();
+        } else if (scopeEl) {
+            scopeEl.dispatchEvent(new Event('change'));
+        }
+        this.refreshBoardRolesPanelForOwner('rpe');
+
+        // 自动跑一轮筛选，便于从板块详情直达结果
+        if (window.RpeScreening && typeof window.RpeScreening.refreshSignals === 'function') {
+            void window.RpeScreening.refreshSignals();
+        } else {
+            const btn = document.getElementById('rpeRefreshBtn');
+            if (btn) btn.click();
         }
     },
 
