@@ -35,6 +35,7 @@ const GannTrendTool = {
         params.set('lookback', String(o.lookback || 180));
         if (o.asof) params.set('asof', o.asof);
         if (o.scale != null && Number(o.scale) > 0) params.set('scale', String(o.scale));
+        if (o.use_realtime) params.set('use_realtime', 'true');
         const url = `${this.API_BASE_URL}/api/analysis/gann-trend/${encodeURIComponent(code)}?${params}`;
         const resp = await fetch(url, { credentials: 'include' });
         const data = await resp.json().catch(() => ({}));

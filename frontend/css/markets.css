@@ -514,6 +514,7 @@
     text-align: left;
     white-space: nowrap;
     font-size: 14px;
+    vertical-align: middle;
 }
 
 .sectors-table th {
@@ -1497,9 +1498,12 @@
     margin-bottom: 1rem;
   }
 
-/* 单板重算斜率 */
+/* 单板重算斜率：flex 放在内层，避免 td 失去 table-cell 导致与行内容垂直不对齐 */
 .sector-row-actions {
-    display: flex;
+    vertical-align: middle;
+}
+.sector-row-actions-inner {
+    display: inline-flex;
     flex-wrap: wrap;
     gap: 6px;
     align-items: center;

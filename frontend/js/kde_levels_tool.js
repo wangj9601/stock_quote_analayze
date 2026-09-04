@@ -174,6 +174,10 @@ const KdeLevelsTool = {
         } else if (options.kde_lookback != null) {
             qs.set('kde_lookback', String(options.kde_lookback));
         }
+        if (options.use_realtime) qs.set('use_realtime', 'true');
+        if (options.anchor_price != null && Number.isFinite(Number(options.anchor_price))) {
+            qs.set('anchor_price', String(options.anchor_price));
+        }
         const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
         const resp = await authFetch(url);
         const payload = await resp.json().catch(() => ({}));

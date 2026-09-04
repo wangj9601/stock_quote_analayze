@@ -223,6 +223,9 @@ async def patterns_for_stock(
         "auto",
         description="因子源：auto=归一化新浪优先BaoStock备用，sina=仅归一化新浪，baostock=仅BaoStock",
     ),
+    use_realtime: bool = Query(
+        False, description="叠加最新实时价为当日 K 线末根后再识别形态"
+    ),
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.analyze.tab.technical.btn.pattern")),
 ):
@@ -272,9 +275,25 @@ async def patterns_for_stock(
 
     market = infer_market_type(stock_code) or "CN"
 
-    asof_s = resolve_effective_trade_date(db, asof, market=market)
-    bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)
-    bars = bars_map.get(stock_code) or []
+    realtime_meta: Optional[Dict[str, Any]] = None
+    if use_realtime and not asof:
+        from backend_core.analysis.realtime_bars import load_bars_with_realtime
+
+        bars, realtime_meta, asof_s = load_bars_with_realtime(
+            db, stock_code, lookback=lookback, asof=None, prefer_live=True
+        )
+    else:
+        asof_s = resolve_effective_trade_date(db, asof, market=market)
+        bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)
+        bars = bars_map.get(stock_code) or []
+        if use_realtime:
+            from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
+
+            bars, realtime_meta = apply_realtime_to_code_bars(
+                db, stock_code, bars, prefer_live=True
+            )
+            if realtime_meta and realtime_meta.get("trade_date"):
+                asof_s = str(realtime_meta["trade_date"])[:10]
     bars_raw = list(bars)
     adj_meta: Optional[Dict[str, Any]] = None
     if adjust_n == "qfq":
@@ -360,9 +379,12 @@ async def patterns_for_stock(
         "invalidated_count": invalidated_count,
         "items": hits,
         "tactical": tactical,
+        "use_realtime": bool(use_realtime),
     }
     if adj_meta:
         payload["adj_meta"] = adj_meta
+    if realtime_meta:
+        payload["realtime"] = realtime_meta
     return payload
 
 

@@ -28,6 +28,9 @@
         <div class="ssa-action-btns">
           <button type="button" class="btn btn-primary" id="ssaAnalyzeBtn"
             data-perm="channel.analyze.tab.stock_ai.btn.analyze">刷新</button>
+          <button type="button" class="btn btn-secondary" id="ssaRealtimeAnalyzeBtn"
+            data-perm="channel.analyze.tab.stock_ai.btn.analyze"
+            title="拉取最新实时价后重算">实时分析</button>
           <button type="button" class="btn btn-secondary" id="ssaExportPdfBtn"
             data-perm="channel.analyze.tab.stock_ai.btn.analyze"
             title="导出 PDF" disabled>导出 PDF</button>

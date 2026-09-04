@@ -156,6 +156,8 @@ def _compute_levels_payload(
     vp_from_date: Optional[str] = None,
     kde_lookback: Optional[int] = None,
     kde_from_date: Optional[str] = None,
+    anchor_price: Optional[float] = None,
+    use_realtime: bool = False,
 ) -> Tuple[int, Dict[str, Any]]:
     """计算单股 KDE 关键价位，返回 (http_status, body)。"""
     try:
@@ -174,6 +176,35 @@ def _compute_levels_payload(
     adjust_n = str(adjust or "none").strip().lower() or "none"
     if adjust_n not in ("none", "qfq"):
         return 400, {"success": False, "message": "adjust 仅支持 none 或 qfq"}
+
+    resolved_anchor = None
+    realtime_meta = None
+    if use_realtime or (anchor_price is not None):
+        try:
+            from backend_core.analysis.realtime_bars import fetch_live_realtime_quote
+
+            quote = fetch_live_realtime_quote(db, code)
+            if quote and quote.get("current_price") is not None:
+                realtime_meta = {
+                    "trade_date": quote.get("trade_date"),
+                    "current_price": quote.get("current_price"),
+                    "change_percent": quote.get("change_percent"),
+                    "source": quote.get("source"),
+                    "update_time": quote.get("update_time"),
+                }
+                if anchor_price is None:
+                    resolved_anchor = float(quote["current_price"])
+        except Exception as e:
+            logger.debug("levels realtime quote skip: %s", e)
+        if anchor_price is not None:
+            try:
+                resolved_anchor = float(anchor_price)
+            except (TypeError, ValueError):
+                resolved_anchor = None
+
+    # 实时分析默认用不复权 + 实时锚定价，避免前复权末收盖住现价
+    if use_realtime and resolved_anchor is not None:
+        adjust_n = "none"
 
     # 复用请求 Session，避免 next(get_db) 泄漏
     with StockAnalysisService(db) as analysis_service:
@@ -222,21 +253,28 @@ def _compute_levels_payload(
             vp_from_date=vp_from_date,
             kde_lookback=kde_lookback,
             kde_from_date=kde_from_date,
+            anchor_price=resolved_anchor,
         )
 
         if not result.get("success"):
             if "data" in result:
-                return 200, {
+                body = {
                     "success": False,
                     "message": result.get("error") or "无法计算关键价位",
                     "data": result.get("data") or {},
                 }
+                if realtime_meta:
+                    body["realtime"] = realtime_meta
+                return 200, body
             return 500, {
                 "success": False,
                 "message": result.get("error") or "获取关键价位失败",
             }
 
-        return 200, {"success": True, "data": result["data"]}
+        body = {"success": True, "data": result["data"], "use_realtime": bool(use_realtime)}
+        if realtime_meta:
+            body["realtime"] = realtime_meta
+        return 200, body
 
 
 def _levels_response_for_code(
@@ -251,6 +289,8 @@ def _levels_response_for_code(
     vp_from_date: Optional[str] = None,
     kde_lookback: Optional[int] = None,
     kde_from_date: Optional[str] = None,
+    anchor_price: Optional[float] = None,
+    use_realtime: bool = False,
 ) -> JSONResponse:
     status, content = _compute_levels_payload(
         code,
@@ -263,6 +303,8 @@ def _levels_response_for_code(
         vp_from_date=vp_from_date,
         kde_lookback=kde_lookback,
         kde_from_date=kde_from_date,
+        anchor_price=anchor_price,
+        use_realtime=use_realtime,
     )
     return JSONResponse(status_code=status, content=content)
 
@@ -483,6 +525,12 @@ async def get_key_levels_by_query(
         None,
         description="强制日历窗：KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback）",
     ),
+    use_realtime: bool = Query(
+        False, description="实时分析：用不复权 + 最新现价作锚点重算支撑阻力"
+    ),
+    anchor_price: Optional[float] = Query(
+        None, description="可选显式锚定价；与 use_realtime 合用时覆盖现价"
+    ),
     db: Session = Depends(get_db),
 ):
     """按 query 参数 q（代码或名称）计算 KDE 支撑/压力位。"""
@@ -496,6 +544,8 @@ async def get_key_levels_by_query(
         vp_from_date=vp_from_date,
         kde_lookback=kde_lookback,
         kde_from_date=kde_from_date,
+        use_realtime=use_realtime,
+        anchor_price=anchor_price,
         db=db,
     )
 
@@ -620,6 +670,12 @@ async def get_key_levels(
         None,
         description="强制日历窗：KDE 回看起始日期 YYYY-MM-DD（优先于 kde_lookback）",
     ),
+    use_realtime: bool = Query(
+        False, description="实时分析：用不复权 + 最新现价作锚点重算支撑阻力"
+    ),
+    anchor_price: Optional[float] = Query(
+        None, description="可选显式锚定价；与 use_realtime 合用时覆盖现价"
+    ),
     db: Session = Depends(get_db)
 ):
     """
@@ -679,6 +735,8 @@ async def get_key_levels(
             vp_from_date=vp_from_date,
             kde_lookback=kde_lookback,
             kde_from_date=kde_from_date,
+            anchor_price=anchor_price,
+            use_realtime=use_realtime,
         )
 
     except Exception as e:

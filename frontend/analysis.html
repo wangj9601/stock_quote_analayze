@@ -120,6 +120,7 @@
                                 <strong>形态识别</strong>（与技术工具同口径）、
                                 <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
+                                点击「实时分析」将拉取最新现价，叠加当日未收盘 K 线后重算相关指标。
                                 自选股、<strong>行业龙头</strong>与<strong>概念龙头</strong>均支持多选或全选；默认勾选「一次分析全部勾选」时，选多少分析多少（数量较多会确认）。
                                 分析后每只股一个 Tab 页签切换查看。
                             </p>
@@ -172,6 +173,9 @@
                                     <div class="ssa-action-btns">
                                         <button type="button" class="btn btn-primary" id="ssaAnalyzeBtn"
                                             data-perm="channel.analyze.tab.stock_ai.btn.analyze">分析</button>
+                                        <button type="button" class="btn btn-secondary" id="ssaRealtimeAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.stock_ai.btn.analyze"
+                                            title="拉取最新实时价，叠加当日 K 线后重算策略与指标">实时分析</button>
                                         <button type="button" class="btn btn-secondary" id="ssaExportPdfBtn"
                                             data-perm="channel.analyze.tab.stock_ai.btn.analyze"
                                             title="将当前策略、阻力支撑、形态识别与波段趋势导出为 PDF"

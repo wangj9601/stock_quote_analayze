@@ -1203,8 +1203,10 @@ const MarketsPage = {
                     <td class="${this.getChangeClass(sector.sector_slope_short)}">${this.formatSlope(sector.sector_slope_short)}</td>
                     <td>${this.boardEnvChipHtml(sector, 'short')}</td>
                     <td class="sector-row-actions">
-                        <button type="button" class="btn btn-secondary sector-row-detail-btn">详情</button>
-                        <button type="button" class="btn btn-secondary sector-row-slope-btn" title="仅重算该板块斜率">重算斜率</button>
+                        <div class="sector-row-actions-inner">
+                            <button type="button" class="btn btn-secondary sector-row-detail-btn">详情</button>
+                            <button type="button" class="btn btn-secondary sector-row-slope-btn" title="仅重算该板块斜率">重算斜率</button>
+                        </div>
                     </td>
                 </tr>
             `;

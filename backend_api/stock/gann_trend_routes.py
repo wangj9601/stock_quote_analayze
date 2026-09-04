@@ -28,6 +28,9 @@ async def gann_trend_for_stock(
     scale: Optional[float] = Query(
         None, gt=0, description="可选覆盖 1×1 每交易日价格单位"
     ),
+    use_realtime: bool = Query(
+        False, description="叠加最新实时价为当日 K 线末根后再算江恩趋势"
+    ),
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
 ):
@@ -80,9 +83,25 @@ async def gann_trend_for_stock(
         raise HTTPException(status_code=400, detail="无效股票代码（A股6位，港股5位）")
 
     market = infer_market_type(stock_code) or "CN"
-    asof_s = resolve_effective_trade_date(db, asof, market=market)
-    bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=int(lookback), asof=asof_s)
-    bars = bars_map.get(stock_code) or []
+    realtime_meta: Optional[Dict[str, Any]] = None
+    if use_realtime and not asof:
+        from backend_core.analysis.realtime_bars import load_bars_with_realtime
+
+        bars, realtime_meta, asof_s = load_bars_with_realtime(
+            db, stock_code, lookback=int(lookback), asof=None, prefer_live=True
+        )
+    else:
+        asof_s = resolve_effective_trade_date(db, asof, market=market)
+        bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=int(lookback), asof=asof_s)
+        bars = bars_map.get(stock_code) or []
+        if use_realtime:
+            from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
+
+            bars, realtime_meta = apply_realtime_to_code_bars(
+                db, stock_code, bars, prefer_live=True
+            )
+            if realtime_meta and realtime_meta.get("trade_date"):
+                asof_s = str(realtime_meta["trade_date"])[:10]
     adj_meta: Optional[Dict[str, Any]] = None
     if adjust_n == "qfq":
         try:
@@ -117,11 +136,15 @@ async def gann_trend_for_stock(
     if isinstance(adj_meta, dict):
         price_adjust.update(adj_meta)
 
-    return {
+    out: Dict[str, Any] = {
         "success": True,
         "code": stock_code,
         "name": names.get(stock_code) or resolved.get("name") or "",
         "asof": gann.get("asof") or asof_s,
         "price_adjust": price_adjust,
         "gann_trend": gann,
+        "use_realtime": bool(use_realtime),
     }
+    if realtime_meta:
+        out["realtime"] = realtime_meta
+    return out

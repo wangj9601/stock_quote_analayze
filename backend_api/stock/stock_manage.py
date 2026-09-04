@@ -709,8 +709,333 @@ def _quote_from_akshare_em(code: str, *, name: Optional[str] = None) -> Optional
         return None
 
 
+def _quote_from_sina(code: str, *, name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """新浪财经单股实时快照（hq.sinajs.cn）；失败返回 None。
+
+    字段约定与东财回退一致。成交量为「股」。北交所用 bj 前缀。
+    """
+    import urllib.error
+    import urllib.request
+
+    def _num(v):
+        if v is None or v == "" or str(v).strip() in ("", "-", "None", "nan"):
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        from backend_api.utils.adj_quotes import (
+            AdjQuotesError,
+            normalize_a_share_code,
+            throttle_third_party_fetch,
+            to_sina_symbol,
+        )
+    except ImportError:
+        from utils.adj_quotes import (  # type: ignore
+            AdjQuotesError,
+            normalize_a_share_code,
+            throttle_third_party_fetch,
+            to_sina_symbol,
+        )
+
+    try:
+        code_n = normalize_a_share_code(code)
+        if not code_n:
+            return None
+        symbol = to_sina_symbol(code_n)
+    except AdjQuotesError as exc:
+        print(f"[realtime_quote_by_code] 新浪跳过 code={code}: {exc}")
+        return None
+    except Exception as exc:
+        print(f"[realtime_quote_by_code] 新浪代码转换失败 code={code}: {exc}")
+        return None
+
+    throttle_third_party_fetch(label=f"sina_quote:{code_n}")
+    url = f"https://hq.sinajs.cn/list={symbol}"
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Referer": "https://finance.sina.com.cn",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            ),
+        },
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            raw = resp.read()
+        # 新浪默认 gb18030 / gbk
+        text = None
+        for enc in ("gb18030", "gbk", "utf-8"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        if not text:
+            return None
+        # var hq_str_sh600519="name,open,...";
+        if '="' not in text:
+            return None
+        payload = text.split('="', 1)[1].rsplit('";', 1)[0].strip()
+        if not payload:
+            return None
+        parts = payload.split(",")
+        if len(parts) < 10:
+            return None
+        open_px = _num(parts[1])
+        pre_close = _num(parts[2])
+        current = _num(parts[3])
+        high_px = _num(parts[4])
+        low_px = _num(parts[5])
+        volume = _num(parts[8])  # 股
+        amount = _num(parts[9])
+        if current is None or current <= 0:
+            # 停牌等场景偶发现价为 0，回退昨收
+            current = pre_close
+        if current is None or current <= 0:
+            return None
+        trade_date = None
+        update_time = None
+        if len(parts) >= 32:
+            d = str(parts[30] or "").strip()
+            t = str(parts[31] or "").strip()
+            if len(d) >= 8:
+                trade_date = d[:10] if "-" in d else f"{d[0:4]}-{d[4:6]}-{d[6:8]}"
+            if trade_date and t:
+                update_time = f"{trade_date} {t}"
+        if not trade_date:
+            trade_date = datetime.datetime.now().strftime("%Y-%m-%d")
+        if not update_time:
+            update_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        change_amount = None
+        change_percent = None
+        if pre_close is not None and pre_close > 0:
+            change_amount = current - pre_close
+            change_percent = change_amount / pre_close * 100.0
+
+        average_price = None
+        try:
+            if amount is not None and volume is not None and float(volume) > 0:
+                average_price = float(amount) / float(volume)
+        except (TypeError, ValueError):
+            average_price = None
+
+        sina_name = str(parts[0] or "").strip() or name
+        return {
+            "code": code_n,
+            "name": sina_name or name,
+            "current_price": current,
+            "change_amount": change_amount,
+            "change_percent": change_percent,
+            "open": open_px,
+            "pre_close": pre_close,
+            "high": high_px,
+            "low": low_px,
+            "volume": volume,
+            "turnover": amount,
+            "turnover_rate": None,
+            "pe_dynamic": None,
+            "average_price": average_price,
+            "trade_date": trade_date,
+            "update_time": update_time,
+            "source": "sina",
+        }
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        print(f"[realtime_quote_by_code] 新浪财经回退失败: {exc}")
+        return None
+    except Exception as exc:
+        print(f"[realtime_quote_by_code] 新浪财经解析失败: {exc}")
+        return None
+
+
+def _quote_from_baostock(code: str, *, name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """BaoStock 最新日 K（必要时叠同日 5 分钟末根收盘）作为实时价回退。
+
+    当前 baostock 包无独立 tick 实时接口；用最近交易日不复权日 K，
+    若同日有 5 分钟线则用末根 close 作为现价。北交所/港股不支持，返回 None。
+    """
+    try:
+        import baostock as bs
+    except ImportError:
+        print("[realtime_quote_by_code] 未安装 baostock，跳过")
+        return None
+
+    try:
+        from backend_api.utils.adj_quotes import (
+            AdjQuotesError,
+            is_bse_a_share_code,
+            normalize_a_share_code,
+            throttle_third_party_fetch,
+            to_baostock_symbol,
+        )
+    except ImportError:
+        from utils.adj_quotes import (  # type: ignore
+            AdjQuotesError,
+            is_bse_a_share_code,
+            normalize_a_share_code,
+            throttle_third_party_fetch,
+            to_baostock_symbol,
+        )
+
+    def _num(v):
+        if v is None or v == "" or str(v).strip() in ("", "None", "nan"):
+            return None
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        code_n = normalize_a_share_code(code)
+        if not code_n or is_bse_a_share_code(code_n):
+            return None
+        symbol = to_baostock_symbol(code_n)
+    except AdjQuotesError as exc:
+        print(f"[realtime_quote_by_code] BaoStock 跳过 code={code}: {exc}")
+        return None
+    except Exception as exc:
+        print(f"[realtime_quote_by_code] BaoStock 代码转换失败 code={code}: {exc}")
+        return None
+
+    throttle_third_party_fetch(label=f"baostock_quote:{code_n}")
+    now = datetime.datetime.now()
+    end = now.strftime("%Y-%m-%d")
+    start = (now - datetime.timedelta(days=20)).strftime("%Y-%m-%d")
+    lg = None
+    try:
+        lg = bs.login()
+        if getattr(lg, "error_code", "0") not in ("0", 0, None, ""):
+            print(
+                f"[realtime_quote_by_code] BaoStock 登录失败: "
+                f"{getattr(lg, 'error_msg', lg)}"
+            )
+            return None
+
+        fields = (
+            "date,code,open,high,low,close,preclose,volume,amount,pctChg,turn"
+        )
+        rs = bs.query_history_k_data_plus(
+            symbol,
+            fields,
+            start_date=start,
+            end_date=end,
+            frequency="d",
+            adjustflag="3",  # 不复权
+        )
+        if getattr(rs, "error_code", "0") not in ("0", 0, None, ""):
+            print(
+                f"[realtime_quote_by_code] BaoStock 日K失败 {symbol}: "
+                f"{getattr(rs, 'error_msg', rs)}"
+            )
+            return None
+        daily_rows = []
+        while getattr(rs, "error_code", "1") == "0" and rs.next():
+            daily_rows.append(dict(zip(rs.fields, rs.get_row_data())))
+        if not daily_rows:
+            return None
+        last = daily_rows[-1]
+        trade_date = str(last.get("date") or "")[:10]
+        open_px = _num(last.get("open"))
+        high_px = _num(last.get("high"))
+        low_px = _num(last.get("low"))
+        close_px = _num(last.get("close"))
+        pre_close = _num(last.get("preclose"))
+        volume = _num(last.get("volume"))
+        amount = _num(last.get("amount"))
+        pct_chg = _num(last.get("pctChg"))
+        turn = _num(last.get("turn"))
+        if close_px is None or close_px <= 0:
+            return None
+
+        current = close_px
+        update_time = None
+        # 同日 5 分钟末根：盘中更接近「现价」
+        if trade_date:
+            try:
+                rs5 = bs.query_history_k_data_plus(
+                    symbol,
+                    "date,time,code,open,high,low,close,volume,amount",
+                    start_date=trade_date,
+                    end_date=trade_date,
+                    frequency="5",
+                    adjustflag="3",
+                )
+                m5 = []
+                while getattr(rs5, "error_code", "1") == "0" and rs5.next():
+                    m5.append(dict(zip(rs5.fields, rs5.get_row_data())))
+                if m5:
+                    last5 = m5[-1]
+                    c5 = _num(last5.get("close"))
+                    if c5 is not None and c5 > 0:
+                        current = c5
+                    t_raw = str(last5.get("time") or "").strip()
+                    # BaoStock time: YYYYMMDDHHMMSSmmm
+                    if len(t_raw) >= 14 and t_raw[:8].isdigit():
+                        update_time = (
+                            f"{t_raw[0:4]}-{t_raw[4:6]}-{t_raw[6:8]} "
+                            f"{t_raw[8:10]}:{t_raw[10:12]}:{t_raw[12:14]}"
+                        )
+                    h5 = _num(last5.get("high"))
+                    l5 = _num(last5.get("low"))
+                    if high_px is not None and h5 is not None:
+                        high_px = max(high_px, h5, current)
+                    if low_px is not None and l5 is not None:
+                        low_px = min(low_px, l5, current)
+            except Exception as exc:
+                print(f"[realtime_quote_by_code] BaoStock 5分钟增强跳过: {exc}")
+
+        change_amount = None
+        if pre_close is not None and current is not None:
+            change_amount = current - pre_close
+        if pct_chg is None and pre_close and pre_close > 0 and current is not None:
+            pct_chg = (current - pre_close) / pre_close * 100.0
+
+        average_price = None
+        try:
+            if amount is not None and volume is not None and float(volume) > 0:
+                average_price = float(amount) / float(volume)
+        except (TypeError, ValueError):
+            average_price = None
+
+        return {
+            "code": code_n,
+            "name": name,
+            "current_price": current,
+            "change_amount": change_amount,
+            "change_percent": pct_chg,
+            "open": open_px,
+            "pre_close": pre_close,
+            "high": high_px,
+            "low": low_px,
+            "volume": volume,
+            "turnover": amount,
+            "turnover_rate": turn,
+            "pe_dynamic": None,
+            "average_price": average_price,
+            "trade_date": trade_date,
+            "update_time": update_time or now.strftime("%Y-%m-%d %H:%M:%S"),
+            "source": "baostock",
+        }
+    except Exception as exc:
+        print(f"[realtime_quote_by_code] BaoStock 回退失败: {exc}")
+        return None
+    finally:
+        try:
+            if lg is not None:
+                bs.logout()
+        except Exception:
+            pass
+
+
 def _format_realtime_quote_result(raw: Dict[str, Any]) -> Dict[str, Any]:
-    return {
+    out = {
         "code": raw.get("code"),
         "name": raw.get("name"),
         "current_price": _fmt_quote_num(raw.get("current_price")),
@@ -727,6 +1052,11 @@ def _format_realtime_quote_result(raw: Dict[str, Any]) -> Dict[str, Any]:
         "average_price": _fmt_quote_num(raw.get("average_price")),
         "source": raw.get("source"),
     }
+    if raw.get("trade_date"):
+        out["trade_date"] = str(raw.get("trade_date"))[:10]
+    if raw.get("update_time"):
+        out["update_time"] = raw.get("update_time")
+    return out
 
 
 # 根据股票代码获取实时行情
@@ -734,7 +1064,7 @@ def _format_realtime_quote_result(raw: Dict[str, Any]) -> Dict[str, Any]:
 async def get_realtime_quote_by_code(code: str = Query(None, description="股票代码"), db: Session = Depends(get_db)):
     """
     个股详情页实时行情。
-    A 股优先级：同花顺 Fuyao REST snapshot → AkShare 东方财富 → 本地实时/历史表。
+    A 股优先级：同花顺 Fuyao → 东财 → 新浪财经 → BaoStock → 本地实时/历史表。
     """
     print(f"[realtime_quote_by_code] 输入参数: code={code}")
     if not code:
@@ -769,13 +1099,40 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
             print(f"[realtime_quote_by_code] Fuyao 访问异常，回退东财: {exc}")
 
         # 2. AkShare 东方财富
-        em_quote = _quote_from_akshare_em(code, name=stock_name)
-        if em_quote and em_quote.get("current_price") is not None:
-            result = _format_realtime_quote_result(em_quote)
-            print(f"[realtime_quote_by_code] 从akshare_em输出数据: {result}")
-            return JSONResponse({"success": True, "data": result})
+        try:
+            em_quote = _quote_from_akshare_em(code, name=stock_name)
+            if em_quote and em_quote.get("current_price") is not None:
+                result = _format_realtime_quote_result(em_quote)
+                print(f"[realtime_quote_by_code] 从akshare_em输出数据: {result}")
+                return JSONResponse({"success": True, "data": result})
+        except Exception as exc:
+            print(f"[realtime_quote_by_code] 东财访问异常，回退新浪: {exc}")
 
-        # 3. 本地库兜底：实时表 → 历史表
+        # 3. 新浪财经单股快照
+        try:
+            sina_quote = _quote_from_sina(code, name=stock_name)
+            if sina_quote and sina_quote.get("current_price") is not None:
+                if not sina_quote.get("name"):
+                    sina_quote["name"] = stock_name
+                result = _format_realtime_quote_result(sina_quote)
+                print(f"[realtime_quote_by_code] 从sina输出数据: {result}")
+                return JSONResponse({"success": True, "data": result})
+        except Exception as exc:
+            print(f"[realtime_quote_by_code] 新浪访问异常，回退 BaoStock: {exc}")
+
+        # 4. BaoStock 最新日K（可叠同日 5 分钟末根）
+        try:
+            bs_quote = _quote_from_baostock(code, name=stock_name)
+            if bs_quote and bs_quote.get("current_price") is not None:
+                if not bs_quote.get("name"):
+                    bs_quote["name"] = stock_name
+                result = _format_realtime_quote_result(bs_quote)
+                print(f"[realtime_quote_by_code] 从baostock输出数据: {result}")
+                return JSONResponse({"success": True, "data": result})
+        except Exception as exc:
+            print(f"[realtime_quote_by_code] BaoStock 访问异常，回退本地表: {exc}")
+
+        # 5. 本地库兜底：实时表 → 历史表
         db_stock_data = db.query(StockRealtimeQuote).filter(
             StockRealtimeQuote.code == code
         ).order_by(desc(StockRealtimeQuote.trade_date)).first()

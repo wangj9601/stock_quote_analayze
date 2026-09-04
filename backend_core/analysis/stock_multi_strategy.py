@@ -519,6 +519,7 @@ def collect_stock_multi_strategy_check(
     name: Optional[str] = None,
     date: Optional[str] = None,
     strategies: Optional[Sequence[str]] = None,
+    use_realtime: bool = False,
 ) -> Dict[str, Any]:
     """并行语义：顺序评估四策略（单股，耗时短），返回统一卡片列表。"""
     code_n = _norm_code(code)
@@ -536,7 +537,31 @@ def collect_stock_multi_strategy_check(
     if not wanted:
         wanted = list(STRATEGY_KEYS)
 
-    trade_date = _resolve_trade_date(db, date)
+    realtime_meta: Optional[Dict[str, Any]] = None
+    date_for_strategy = date
+    if use_realtime:
+        try:
+            from backend_core.analysis.realtime_bars import fetch_live_realtime_quote
+
+            quote = fetch_live_realtime_quote(db, code_n)
+            if quote:
+                realtime_meta = {
+                    "trade_date": quote.get("trade_date"),
+                    "current_price": quote.get("current_price"),
+                    "change_percent": quote.get("change_percent"),
+                    "source": quote.get("source"),
+                    "update_time": quote.get("update_time"),
+                    "open": quote.get("open"),
+                    "high": quote.get("high"),
+                    "low": quote.get("low"),
+                }
+                # 未指定基准日时，策略尽量按实时交易日评估（无当日 K 则各引擎自行回退）
+                if not date_for_strategy and quote.get("trade_date"):
+                    date_for_strategy = str(quote["trade_date"])[:10]
+        except Exception as e:
+            logger.warning("multi-strategy realtime quote skip: %s", e)
+
+    trade_date = _resolve_trade_date(db, date_for_strategy)
     stock_name = (name or "").strip() or _lookup_stock_name(db, code_n)
 
     evaluators = {
@@ -564,7 +589,7 @@ def collect_stock_multi_strategy_check(
             )
 
     hit_count = sum(1 for r in results if r.get("hit"))
-    return {
+    out: Dict[str, Any] = {
         "stock": {"code": code_n, "name": stock_name},
         "trade_date": trade_date,
         "requested_date": (str(date).strip()[:10] if date else None),
@@ -574,4 +599,11 @@ def collect_stock_multi_strategy_check(
         "any_hit": hit_count > 0,
         "errors": errors,
         "asof": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "use_realtime": bool(use_realtime),
     }
+    if realtime_meta:
+        out["realtime"] = realtime_meta
+        # 展示用：实时分析时基准日优先显示实时交易日
+        if realtime_meta.get("trade_date"):
+            out["realtime_trade_date"] = str(realtime_meta["trade_date"])[:10]
+    return out

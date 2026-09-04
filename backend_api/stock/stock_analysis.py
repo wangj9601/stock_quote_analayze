@@ -818,6 +818,7 @@ class StockAnalysisService:
         vp_from_date: Optional[str] = None,
         kde_lookback: Optional[int] = None,
         kde_from_date: Optional[str] = None,
+        anchor_price: Optional[float] = None,
     ) -> Dict:
         """计算 KDE 支撑/压力，并附带黄金分割与经典 Pivot 参考位（分析-个股分析）。
 
@@ -887,10 +888,15 @@ class StockAnalysisService:
                 }
 
             # 不复权：现价优先实时；前复权：KDE/Fib/Pivot 一律用复权 OHLC + 复权序列末收作锚点
+            # anchor_price：实时分析可显式覆盖锚定价（如 Fuyao 最新价）
+            override_px = self._valid_price(anchor_price)
             realtime_price, realtime_source = self._resolve_anchor_price(
                 code, historical_data
             )
-            if adjust == "qfq":
+            if override_px is not None:
+                current_price = float(override_px)
+                price_source = "realtime_override"
+            elif adjust == "qfq":
                 qfq_close = None
                 try:
                     qfq_close = self._valid_price(historical_data[-1].get("close"))

@@ -1773,6 +1773,18 @@ body.ssa-png-capturing .ms-zigzag-svg,
     font-size: 1.05rem;
     color: #0f172a;
 }
+.ssa-meta-tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+}
+.ssa-meta-tag--live {
+    color: #b45309;
+    background: #fff7ed;
+    border: 1px solid #fdba74;
+}
 .ssa-muted { color: #94a3b8; }
 .ssa-empty {
     margin-top: 1.25rem;

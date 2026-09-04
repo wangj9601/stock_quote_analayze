@@ -37,6 +37,7 @@ const MarketStructureTool = {
         params.set('max_points', String(o.max_points || 12));
         if (o.asof) params.set('asof', o.asof);
         if (o.pattern_short_bias) params.set('pattern_short_bias', o.pattern_short_bias);
+        if (o.use_realtime) params.set('use_realtime', 'true');
         const url = `${this.API_BASE_URL}/api/analysis/market-structure/${encodeURIComponent(code)}?${params}`;
         const resp = await fetch(url, { credentials: 'include' });
         const data = await resp.json().catch(() => ({}));

@@ -30,6 +30,9 @@ async def market_structure_for_stock(
         None,
         description="可选：形态 tactical.short_bias，用于生成对照句（不改写趋势）",
     ),
+    use_realtime: bool = Query(
+        False, description="叠加最新实时价为当日 K 线末根后再算波段结构"
+    ),
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.analyze.tab.technical")),
 ):
@@ -87,11 +90,27 @@ async def market_structure_for_stock(
         raise HTTPException(status_code=400, detail="无效股票代码（A股6位，港股5位）")
 
     market = infer_market_type(stock_code) or "CN"
-    asof_s = resolve_effective_trade_date(db, asof, market=market)
+    realtime_meta: Optional[Dict[str, Any]] = None
     # 日线 lookback；周线需更多日线再聚合（约 5×）
     daily_fetch = max(int(lookback), min(400, int(lookback) * 5))
-    bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=daily_fetch, asof=asof_s)
-    bars = bars_map.get(stock_code) or []
+    if use_realtime and not asof:
+        from backend_core.analysis.realtime_bars import load_bars_with_realtime
+
+        bars, realtime_meta, asof_s = load_bars_with_realtime(
+            db, stock_code, lookback=daily_fetch, asof=None, prefer_live=True
+        )
+    else:
+        asof_s = resolve_effective_trade_date(db, asof, market=market)
+        bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=daily_fetch, asof=asof_s)
+        bars = bars_map.get(stock_code) or []
+        if use_realtime:
+            from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
+
+            bars, realtime_meta = apply_realtime_to_code_bars(
+                db, stock_code, bars, prefer_live=True
+            )
+            if realtime_meta and realtime_meta.get("trade_date"):
+                asof_s = str(realtime_meta["trade_date"])[:10]
     adj_meta: Optional[Dict[str, Any]] = None
     if adjust_n == "qfq":
         try:
@@ -166,7 +185,7 @@ async def market_structure_for_stock(
     if isinstance(adj_meta, dict):
         price_adjust.update(adj_meta)
 
-    return {
+    out: Dict[str, Any] = {
         "success": True,
         "code": stock_code,
         "name": names.get(stock_code) or resolved.get("name") or "",
@@ -176,4 +195,8 @@ async def market_structure_for_stock(
         "weekly": weekly_ms,
         "counter_trend_caution": bool(caution),
         "counter_trend_note": (caution or {}).get("text") if caution else None,
+        "use_realtime": bool(use_realtime),
     }
+    if realtime_meta:
+        out["realtime"] = realtime_meta
+    return out

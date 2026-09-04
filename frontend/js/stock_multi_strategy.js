@@ -17,6 +17,8 @@ const StockMultiStrategy = {
     lastSwing: null,
     lastGann: null,
     lastTradePlan: null,
+    lastUseRealtime: false,
+    lastRealtime: null,
     embeddedMode: false,
     MAX_WATCHLIST_BATCH: 0,
     /** 未勾选「一次分析全部」时的建议上限；0 表示不限制 */
@@ -36,6 +38,10 @@ const StockMultiStrategy = {
         const btn = document.getElementById('ssaAnalyzeBtn');
         if (btn) {
             btn.addEventListener('click', () => this.analyze());
+        }
+        const rtBtn = document.getElementById('ssaRealtimeAnalyzeBtn');
+        if (rtBtn) {
+            rtBtn.addEventListener('click', () => this.analyze({ useRealtime: true }));
         }
         const exportBtn = document.getElementById('ssaExportPdfBtn');
         if (exportBtn) {
@@ -86,6 +92,10 @@ const StockMultiStrategy = {
         if (btn) {
             btn.textContent = '刷新';
             btn.addEventListener('click', () => this.analyze());
+        }
+        const rtBtn = document.getElementById('ssaRealtimeAnalyzeBtn');
+        if (rtBtn) {
+            rtBtn.addEventListener('click', () => this.analyze({ useRealtime: true }));
         }
         const exportBtn = document.getElementById('ssaExportPdfBtn');
         if (exportBtn) {
@@ -1935,10 +1945,13 @@ const StockMultiStrategy = {
         await Promise.all(runners);
     },
 
-    async _fetchAnalysisBundle(code, name, asof) {
+    async _fetchAnalysisBundle(code, name, asof, opts) {
+        const options = opts || {};
+        const useRealtime = !!options.useRealtime;
         const query = name ? `${code} ${name}` : code;
         const q = new URLSearchParams({ code: query });
-        if (asof) q.set('date', asof);
+        if (asof && !useRealtime) q.set('date', asof);
+        if (useRealtime) q.set('use_realtime', 'true');
         const resp = await authFetch(
             `${this.API_BASE_URL}/api/analysis/multi-strategy-check?${q}`
         );
@@ -1953,7 +1966,11 @@ const StockMultiStrategy = {
         const strategyData = payload.data || {};
         const stock = strategyData.stock || { code, name };
         const resolvedCode = stock.code || code;
-        const tradeDate = strategyData.trade_date || asof || '';
+        const tradeDate = useRealtime
+            ? (strategyData.realtime_trade_date || (strategyData.realtime && strategyData.realtime.trade_date) || strategyData.trade_date || asof || '')
+            : (strategyData.trade_date || asof || '');
+        const rtOpts = useRealtime ? { use_realtime: true } : {};
+        const levelsAdjust = useRealtime ? 'none' : 'qfq';
 
         const [rsFetched, levelsFetched, patternFetched, swingFetched, gannFetched] = await Promise.all([
             authFetch(
@@ -1972,27 +1989,31 @@ const StockMultiStrategy = {
                 .catch((e) => ({ __error: e.message || '相对强度加载失败' })),
             (typeof KdeLevelsTool !== 'undefined' && KdeLevelsTool.fetchLevels)
                 ? KdeLevelsTool.fetchLevels(resolvedCode, {
-                    adjust: 'qfq',
+                    adjust: levelsAdjust,
                     factor_source: 'auto',
                     max_levels: 8,
+                    ...rtOpts,
                 }).catch((e) => ({ __error: e.message || '阻力支撑计算失败' }))
                 : Promise.resolve({ __error: '阻力支撑模块未加载' }),
             (typeof PatternTool !== 'undefined' && PatternTool.fetchSingle)
                 ? PatternTool.fetchSingle(resolvedCode, {
-                    adjust: 'qfq',
-                    asof: tradeDate || undefined,
+                    adjust: useRealtime ? 'none' : 'qfq',
+                    asof: useRealtime ? undefined : (tradeDate || undefined),
+                    ...rtOpts,
                 }).catch((e) => ({ __error: e.message || '形态识别失败' }))
                 : Promise.resolve({ __error: '形态识别模块未加载' }),
             (typeof MarketStructureTool !== 'undefined' && MarketStructureTool.fetchStructure)
                 ? MarketStructureTool.fetchStructure(resolvedCode, {
-                    adjust: 'qfq',
-                    asof: tradeDate || undefined,
+                    adjust: useRealtime ? 'none' : 'qfq',
+                    asof: useRealtime ? undefined : (tradeDate || undefined),
+                    ...rtOpts,
                 }).catch((e) => ({ __error: e.message || '波段趋势分析失败' }))
                 : Promise.resolve({ __error: '波段趋势模块未加载' }),
             (typeof GannTrendTool !== 'undefined' && GannTrendTool.fetchGann)
                 ? GannTrendTool.fetchGann(resolvedCode, {
-                    adjust: 'qfq',
-                    asof: tradeDate || undefined,
+                    adjust: useRealtime ? 'none' : 'qfq',
+                    asof: useRealtime ? undefined : (tradeDate || undefined),
+                    ...rtOpts,
                 }).catch((e) => ({ __error: e.message || '江恩趋势分析失败' }))
                 : Promise.resolve({ __error: '江恩趋势模块未加载' }),
         ]);
@@ -2162,6 +2183,8 @@ const StockMultiStrategy = {
             swing,
             gann,
             tradePlan,
+            useRealtime,
+            realtime: strategyData.realtime || null,
         };
     },
 
@@ -2171,6 +2194,8 @@ const StockMultiStrategy = {
         this.lastStrategyError = bundle.strategyError || null;
         this.lastStock = bundle.stock || null;
         this.lastTradeDate = bundle.tradeDate || null;
+        this.lastUseRealtime = !!bundle.useRealtime;
+        this.lastRealtime = bundle.realtime || (bundle.strategyData && bundle.strategyData.realtime) || null;
         this.lastRs = bundle.rs
             ? {
                 ok: bundle.rs.ok,
@@ -2411,10 +2436,16 @@ const StockMultiStrategy = {
         this._batchAnalyzing = true;
         this.hideCandidates();
         const btn = document.getElementById('ssaAnalyzeBtn');
+        const rtBtn = document.getElementById('ssaRealtimeAnalyzeBtn');
         const empty = document.getElementById('ssaEmpty');
+        const useRealtime = !!(options && options.useRealtime);
         if (btn) {
             btn.disabled = true;
             btn.textContent = '分析中…';
+        }
+        if (rtBtn) {
+            rtBtn.disabled = true;
+            rtBtn.textContent = '实时分析中…';
         }
 
         // 仅保留本次勾选的会话，避免旧 Tab 干扰
@@ -2438,11 +2469,13 @@ const StockMultiStrategy = {
         this.hideResultBlocks();
         if (empty) {
             empty.hidden = false;
-            empty.textContent = `正在并行分析 0/${list.length}…`;
+            empty.textContent = useRealtime
+                ? `正在并行实时分析 0/${list.length}…`
+                : `正在并行分析 0/${list.length}…`;
         }
 
         const dateEl = document.getElementById('ssaTradeDate');
-        const asof = dateEl && dateEl.value ? dateEl.value : '';
+        const asof = (!useRealtime && dateEl && dateEl.value) ? dateEl.value : '';
         let doneCount = 0;
         let okCount = 0;
         const concurrency = Math.min(3, list.length);
@@ -2451,7 +2484,9 @@ const StockMultiStrategy = {
             const key = this._sessionKey(code);
             const session = this.stockSessions[key];
             try {
-                const bundle = await this._fetchAnalysisBundle(code, name, asof);
+                const bundle = await this._fetchAnalysisBundle(code, name, asof, {
+                    useRealtime,
+                });
                 if (session) {
                     session.bundle = bundle;
                     session.status = 'fetched';
@@ -2498,6 +2533,10 @@ const StockMultiStrategy = {
             btn.disabled = false;
             btn.textContent = '分析';
         }
+        if (rtBtn) {
+            rtBtn.disabled = false;
+            rtBtn.textContent = '实时分析';
+        }
 
         const firstReady = keys.find((k) => this.stockSessions[k] && this.stockSessions[k].status === 'ready');
         if (firstReady) {
@@ -2509,7 +2548,9 @@ const StockMultiStrategy = {
         }
 
         CommonUtils.showToast(
-            `批量分析完成：${okCount}/${list.length}`,
+            useRealtime
+                ? `批量实时分析完成：${okCount}/${list.length}`
+                : `批量分析完成：${okCount}/${list.length}`,
             okCount === list.length ? 'success' : 'warning'
         );
         this.updateExportBtn();
@@ -2517,6 +2558,7 @@ const StockMultiStrategy = {
 
     async _runAnalyzeCore(resolved, opts) {
         const options = opts || {};
+        const useRealtime = !!options.useRealtime;
         let { query, firstToken } = resolved;
         const codeInput = document.getElementById('ssaStockCode');
         const empty = document.getElementById('ssaEmpty');
@@ -2525,8 +2567,9 @@ const StockMultiStrategy = {
         try {
             const q = new URLSearchParams({ code: query });
             const dateEl = document.getElementById('ssaTradeDate');
-            const asof = dateEl && dateEl.value ? dateEl.value : '';
+            const asof = (!useRealtime && dateEl && dateEl.value) ? dateEl.value : '';
             if (asof) q.set('date', asof);
+            if (useRealtime) q.set('use_realtime', 'true');
             const resp = await authFetch(
                 `${this.API_BASE_URL}/api/analysis/multi-strategy-check?${q}`
             );
@@ -2545,27 +2588,42 @@ const StockMultiStrategy = {
             if (stock.code && codeInput) {
                 codeInput.value = stock.name ? `${stock.code} ${stock.name}` : stock.code;
             }
-            this.lastTradeDate = data.trade_date || asof || null;
+            this.lastUseRealtime = useRealtime;
+            this.lastRealtime = data.realtime || null;
+            this.lastTradeDate = useRealtime
+                ? (data.realtime_trade_date || (data.realtime && data.realtime.trade_date) || data.trade_date || asof || null)
+                : (data.trade_date || asof || null);
             this.renderStrategyResult(data);
             if (empty) empty.hidden = true;
 
             const resolvedCode = stock.code || query;
-            const tradeDate = data.trade_date || asof || '';
+            const tradeDate = this.lastTradeDate || '';
             await Promise.all([
                 this.loadRsRatingSection(resolvedCode, tradeDate),
-                this.loadLevelsSection(resolvedCode),
-                this.loadPatternSection(resolvedCode, tradeDate),
-                this.loadSwingSection(resolvedCode, tradeDate),
-                this.loadGannSection(resolvedCode, tradeDate),
+                this.loadLevelsSection(resolvedCode, { useRealtime }),
+                this.loadPatternSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
+                this.loadSwingSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
+                this.loadGannSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
             ]);
             await this.loadTradePlanSection(resolvedCode, tradeDate);
             this.updateExportBtn();
 
             if (!options.quietToast) {
-                CommonUtils.showToast(
-                    data.any_hit ? `命中 ${data.hit_count || 0} 个策略` : '四策略均未命中',
-                    data.any_hit ? 'success' : 'info'
-                );
+                const rt = data.realtime;
+                const px = rt && rt.current_price != null ? Number(rt.current_price).toFixed(2) : '';
+                if (useRealtime && px) {
+                    CommonUtils.showToast(
+                        data.any_hit
+                            ? `实时分析完成 · 现价 ${px} · 命中 ${data.hit_count || 0} 个策略`
+                            : `实时分析完成 · 现价 ${px} · 四策略均未命中`,
+                        data.any_hit ? 'success' : 'info'
+                    );
+                } else {
+                    CommonUtils.showToast(
+                        data.any_hit ? `命中 ${data.hit_count || 0} 个策略` : '四策略均未命中',
+                        data.any_hit ? 'success' : 'info'
+                    );
+                }
             }
         } catch (e) {
             console.error(e);
@@ -2620,14 +2678,16 @@ const StockMultiStrategy = {
         }
     },
 
-    async analyze() {
+    async analyze(opts) {
+        const options = opts || {};
+        const useRealtime = !!options.useRealtime;
         if (this.running) return;
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
 
         if (!this.embeddedMode) {
             const selected = this.getSelectedBatchStocks();
             if (selected.length > 0) {
-                return this.analyzeWatchlistBatch(selected);
+                return this.analyzeWatchlistBatch(selected, { useRealtime });
             }
         }
 
@@ -2642,6 +2702,7 @@ const StockMultiStrategy = {
         let { query, firstToken } = resolved;
         const codeInput = document.getElementById('ssaStockCode');
         const btn = document.getElementById('ssaAnalyzeBtn');
+        const rtBtn = document.getElementById('ssaRealtimeAnalyzeBtn');
         const empty = document.getElementById('ssaEmpty');
 
         if (!this.embeddedMode) {
@@ -2660,15 +2721,21 @@ const StockMultiStrategy = {
             btn.disabled = true;
             btn.textContent = this.embeddedMode ? '刷新中…' : '分析中…';
         }
+        if (rtBtn) {
+            rtBtn.disabled = true;
+            rtBtn.textContent = '实时分析中…';
+        }
         if (empty) {
             empty.hidden = false;
-            empty.textContent = '正在评估策略、阻力支撑与形态，请稍候…';
+            empty.textContent = useRealtime
+                ? '正在拉取实时价并评估策略、阻力支撑与形态，请稍候…'
+                : '正在评估策略、阻力支撑与形态，请稍候…';
         }
         const meta = document.getElementById('ssaMeta');
         if (meta) meta.hidden = true;
 
         try {
-            await this._runAnalyzeCore(resolved);
+            await this._runAnalyzeCore(resolved, { useRealtime });
             if (!this.embeddedMode && this.activeSessionKey) {
                 this._persistActiveSession();
                 const session = this.stockSessions[this.activeSessionKey];
@@ -2693,6 +2760,10 @@ const StockMultiStrategy = {
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = this.embeddedMode ? '刷新' : '分析';
+            }
+            if (rtBtn) {
+                rtBtn.disabled = false;
+                rtBtn.textContent = '实时分析';
             }
             this.updateExportBtn();
         }
@@ -2867,19 +2938,23 @@ const StockMultiStrategy = {
         }
     },
 
-    async loadLevelsSection(code) {
+    async loadLevelsSection(code, opts) {
+        const options = opts || {};
+        const useRealtime = !!options.useRealtime;
         const block = document.getElementById('ssaLevelsBlock');
         const host = document.getElementById('ssaLevelsHost');
         if (!block || !host) return;
-        this.setBlockLoading('ssaLevelsBlock', 'ssaLevelsStatus', '正在计算阻力支撑位…');
+        this.setBlockLoading('ssaLevelsBlock', 'ssaLevelsStatus', useRealtime ? '正在按实时价计算阻力支撑位…' : '正在计算阻力支撑位…');
         try {
             if (typeof KdeLevelsTool === 'undefined' || typeof KdeLevelsTool.fetchLevels !== 'function') {
                 throw new Error('阻力支撑模块未加载');
             }
+            const adjust = useRealtime ? 'none' : 'qfq';
             const fetched = await KdeLevelsTool.fetchLevels(code, {
-                adjust: 'qfq',
+                adjust,
                 factor_source: 'auto',
                 max_levels: 8,
+                use_realtime: useRealtime,
             });
             if (fetched.candidates && fetched.candidates.length > 1 && !fetched.data) {
                 throw new Error(fetched.message || '股票代码不唯一，请使用精确代码');
@@ -2892,7 +2967,7 @@ const StockMultiStrategy = {
                     || this._levelsStockCode()
                     || (fetched.data && (fetched.data.stock_code || fetched.data.code))
                     || '',
-                adjust: 'qfq',
+                adjust,
                 factor_source: 'auto',
                 max_levels: 8,
                 onUpdated: (result) => {
@@ -2922,21 +2997,25 @@ const StockMultiStrategy = {
         this.updateExportBtn();
     },
 
-    async loadPatternSection(code, asof) {
+    async loadPatternSection(code, asof, opts) {
+        const options = opts || {};
+        const useRealtime = !!options.useRealtime;
         const block = document.getElementById('ssaPatternBlock');
         const host = document.getElementById('ssaPatternHost');
         if (!block || !host) return;
-        this.setBlockLoading('ssaPatternBlock', 'ssaPatternStatus', '正在识别形态…');
+        this.setBlockLoading('ssaPatternBlock', 'ssaPatternStatus', useRealtime ? '正在按实时价识别形态…' : '正在识别形态…');
         try {
             if (typeof PatternTool === 'undefined' || typeof PatternTool.fetchSingle !== 'function') {
                 throw new Error('形态识别模块未加载');
             }
             const fetched = await PatternTool.fetchSingle(code, {
-                adjust: 'qfq',
-                asof: asof || undefined,
+                adjust: useRealtime ? 'none' : 'qfq',
+                asof: useRealtime ? undefined : (asof || undefined),
+                use_realtime: useRealtime,
             });
             const invN = fetched.invalidated_count || 0;
-            const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PatternTool.adjustLabel(fetched.price_adjust))} · ${this.esc(PatternTool.formatHitMeta(fetched.items.length, invN))}`;
+            const rtTag = useRealtime ? ' · 实时' : '';
+            const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PatternTool.adjustLabel(fetched.price_adjust))} · ${this.esc(PatternTool.formatHitMeta(fetched.items.length, invN))}${rtTag}`;
             const levelsData = (this.lastLevels && this.lastLevels.data) || {};
             const classic = levelsData.classic_levels || levelsData.classic || {};
             const confluence =
@@ -3025,11 +3104,13 @@ const StockMultiStrategy = {
         }
     },
 
-    async loadSwingSection(code, asof) {
+    async loadSwingSection(code, asof, opts) {
+        const options = opts || {};
+        const useRealtime = !!options.useRealtime;
         const block = document.getElementById('ssaSwingBlock');
         const host = document.getElementById('ssaSwingHost');
         if (!block || !host) return;
-        this.setBlockLoading('ssaSwingBlock', 'ssaSwingStatus', '正在分析波段与趋势…');
+        this.setBlockLoading('ssaSwingBlock', 'ssaSwingStatus', useRealtime ? '正在按实时价分析波段与趋势…' : '正在分析波段与趋势…');
         try {
             if (typeof MarketStructureTool === 'undefined' || typeof MarketStructureTool.fetchStructure !== 'function') {
                 throw new Error('波段趋势模块未加载');
@@ -3037,9 +3118,10 @@ const StockMultiStrategy = {
             // 稍候形态可能未完成；先拉结构，有 bias 再带上
             const bias = this._patternShortBias();
             const fetched = await MarketStructureTool.fetchStructure(code, {
-                adjust: 'qfq',
-                asof: asof || undefined,
+                adjust: useRealtime ? 'none' : 'qfq',
+                asof: useRealtime ? undefined : (asof || undefined),
                 pattern_short_bias: bias || undefined,
+                use_realtime: useRealtime,
             });
             MarketStructureTool.renderEmbedded(host, fetched);
             this.lastSwing = {
@@ -3070,18 +3152,21 @@ const StockMultiStrategy = {
         this.updateExportBtn();
     },
 
-    async loadGannSection(code, asof) {
+    async loadGannSection(code, asof, opts) {
+        const options = opts || {};
+        const useRealtime = !!options.useRealtime;
         const block = document.getElementById('ssaGannBlock');
         const host = document.getElementById('ssaGannHost');
         if (!block || !host) return;
-        this.setBlockLoading('ssaGannBlock', 'ssaGannStatus', '正在计算江恩趋势…');
+        this.setBlockLoading('ssaGannBlock', 'ssaGannStatus', useRealtime ? '正在按实时价计算江恩趋势…' : '正在计算江恩趋势…');
         try {
             if (typeof GannTrendTool === 'undefined' || typeof GannTrendTool.fetchGann !== 'function') {
                 throw new Error('江恩趋势模块未加载');
             }
             const fetched = await GannTrendTool.fetchGann(code, {
-                adjust: 'qfq',
-                asof: asof || undefined,
+                adjust: useRealtime ? 'none' : 'qfq',
+                asof: useRealtime ? undefined : (asof || undefined),
+                use_realtime: useRealtime,
             });
             GannTrendTool.renderEmbedded(host, fetched);
             const g = fetched.gann_trend || {};
@@ -3203,13 +3288,33 @@ const StockMultiStrategy = {
         this.resetGannTradeObserveBtn();
         if (meta) {
             meta.hidden = false;
+            const rt = data.realtime || this.lastRealtime;
+            const useRt = !!(data.use_realtime || this.lastUseRealtime);
+            const px = rt && rt.current_price != null ? Number(rt.current_price) : null;
+            const chg = rt && rt.change_percent != null ? Number(rt.change_percent) : null;
+            const pxTxt = px != null && Number.isFinite(px) ? px.toFixed(2) : '';
+            const chgTxt = chg != null && Number.isFinite(chg)
+                ? `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}%`
+                : '';
+            const modeTag = useRt
+                ? `<span class="ssa-meta-tag ssa-meta-tag--live">实时分析</span>`
+                : '';
+            const priceTag = pxTxt
+                ? `<span>现价 ${this.esc(pxTxt)}${chgTxt ? `（${this.esc(chgTxt)}）` : ''}</span>`
+                : '';
+            const dateLabel = useRt ? '实时日' : '基准日';
+            const dateVal = useRt
+                ? (data.realtime_trade_date || (rt && rt.trade_date) || data.trade_date || '--')
+                : (data.trade_date || '--');
             meta.innerHTML = `
                 <div class="ssa-meta-card">
                     <strong>${this.esc(stock.code || '')}</strong>
                     <span>${this.esc(stock.name || '')}</span>
-                    <span>基准日 ${this.esc(data.trade_date || '--')}</span>
+                    ${modeTag}
+                    ${priceTag}
+                    <span>${dateLabel} ${this.esc(dateVal)}</span>
                     <span>命中 ${data.hit_count != null ? data.hit_count : 0}/4</span>
-                    <span class="ssa-muted">${this.esc(data.asof || '')}</span>
+                    <span class="ssa-muted">${this.esc((rt && rt.update_time) || data.asof || '')}</span>
                 </div>`;
         }
         if (!host) return;

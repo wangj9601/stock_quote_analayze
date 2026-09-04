@@ -398,6 +398,10 @@ def get_multi_strategy_check(
     strategies: Optional[str] = Query(
         None, description="逗号分隔：gms,urt,sbbr,rpe；默认全部"
     ),
+    use_realtime: bool = Query(
+        False,
+        description="实时分析：拉取最新现价元数据；策略按实时交易日尽量现算",
+    ),
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
 ):
@@ -440,6 +444,7 @@ def get_multi_strategy_check(
             name=resolved.get("name") or "",
             date=date,
             strategies=_parse_strategies(strategies),
+            use_realtime=bool(use_realtime),
         )
         return {"success": True, "data": data}
     except Exception as e:
