@@ -2,7 +2,7 @@
   <div class="sbbr-management">
     <div class="page-header">
       <h1 class="page-title">做小做底（SBBR）管理</h1>
-      <p class="page-subtitle">参数版本 · 回测任务 · 手动预计算</p>
+      <p class="page-subtitle">参数版本 · 历史回测 · 手动预计算</p>
     </div>
 
     <el-tabs v-model="activeTab">
@@ -36,23 +36,62 @@
       </el-tab-pane>
 
       <el-tab-pane label="回测任务" name="backtest">
-        <div class="toolbar">
-          <el-button type="primary" @click="loadBacktests">刷新</el-button>
-          <el-button type="success" @click="showBt = true">创建回测</el-button>
-        </div>
-        <el-table :data="backtests" stripe v-loading="loadingBt">
-          <el-table-column prop="task_id" label="任务ID" min-width="220" />
-          <el-table-column prop="name" label="名称" width="160" />
-          <el-table-column prop="backtest_type" label="类型" width="140" />
-          <el-table-column prop="status" label="状态" width="100" />
-          <el-table-column prop="progress" label="进度" width="80" />
-          <el-table-column prop="created_at" label="创建时间" width="180" />
-          <el-table-column label="操作" width="100">
-            <template #default="{ row }">
-              <el-button link type="primary" @click="viewBt(row.task_id)">详情</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+        <el-card shadow="never" class="history-card">
+          <template #header>
+            <div class="card-header">
+              <span>历史回测</span>
+              <div class="toolbar inline">
+                <el-button type="primary" @click="loadBacktests">刷新</el-button>
+                <el-button type="success" @click="openBtDialog">创建历史回测</el-button>
+              </div>
+            </div>
+          </template>
+          <el-table :data="backtests" stripe v-loading="loadingBt">
+            <el-table-column prop="task_id" label="任务ID" min-width="200" show-overflow-tooltip />
+            <el-table-column prop="name" label="名称" width="140" show-overflow-tooltip />
+            <el-table-column label="数据范围" min-width="140">
+              <template #default="{ row }">
+                {{ formatScope(row) }}
+              </template>
+            </el-table-column>
+            <el-table-column prop="backtest_type" label="类型" width="130" />
+            <el-table-column label="入场次数" width="90" align="right">
+              <template #default="{ row }">
+                {{ formatNum(row.summary?.entry_count) }}
+              </template>
+            </el-table-column>
+            <el-table-column label="命中次数" width="90" align="right">
+              <template #default="{ row }">
+                <template v-if="row.backtest_type === 'trade_simulation'">
+                  {{ formatNum(row.summary?.total_trades) }}
+                  <span class="sub-hint">交易</span>
+                </template>
+                <template v-else>
+                  {{ formatNum(row.summary?.hit_count) }}
+                </template>
+              </template>
+            </el-table-column>
+            <el-table-column label="命中率" width="90" align="right">
+              <template #default="{ row }">
+                <template v-if="row.backtest_type === 'trade_simulation'">
+                  {{ formatPct(row.summary?.win_rate) }}
+                  <span class="sub-hint">胜率</span>
+                </template>
+                <template v-else>
+                  {{ formatPct(row.summary?.hit_rate) }}
+                </template>
+              </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" width="90" />
+            <el-table-column prop="progress" label="进度" width="70" />
+            <el-table-column prop="created_at" label="创建时间" width="170" />
+            <el-table-column label="操作" width="90" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="viewBt(row.task_id)">详情</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
       </el-tab-pane>
     </el-tabs>
 
@@ -76,20 +115,46 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="showBt" title="创建回测" width="560px">
+    <el-dialog v-model="showBt" title="创建历史回测" width="640px">
       <el-form label-width="120px">
         <el-form-item label="任务名"><el-input v-model="btForm.task_name" /></el-form-item>
         <el-form-item label="开始日"><el-input v-model="btForm.start_date" placeholder="YYYY-MM-DD" /></el-form-item>
         <el-form-item label="结束日"><el-input v-model="btForm.end_date" placeholder="YYYY-MM-DD" /></el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="btForm.backtest_type">
+          <el-select v-model="btForm.backtest_type" style="width: 100%">
             <el-option label="命中率 signal_hit_rate" value="signal_hit_rate" />
             <el-option label="交易模拟 trade_simulation" value="trade_simulation" />
           </el-select>
         </el-form-item>
+        <el-form-item label="数据范围" required>
+          <el-select v-model="btForm.stock_pool_mode" style="width: 100%" @change="onPoolModeChange">
+            <el-option label="全市场（做小宇宙）" value="market" />
+            <el-option label="行业板块" value="industry_board" />
+            <el-option label="概念板块" value="concept_board" />
+            <el-option label="个股" value="stocks" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="btForm.stock_pool_mode === 'industry_board'" label="行业板块" required>
+          <BoardPickerDialog v-model="selectedIndustryBoardCodes" board-type="industry" />
+        </el-form-item>
+        <el-form-item v-if="btForm.stock_pool_mode === 'concept_board'" label="概念板块" required>
+          <BoardPickerDialog v-model="selectedConceptBoardCodes" board-type="concept" />
+        </el-form-item>
+        <el-form-item v-if="btForm.stock_pool_mode === 'stocks'" label="个股代码" required>
+          <el-input
+            v-model="stockCodesText"
+            type="textarea"
+            :rows="3"
+            placeholder="多个代码用逗号、空格或换行分隔，如 600519,000001"
+          />
+        </el-form-item>
+        <el-form-item v-if="btForm.stock_pool_mode === 'market'" label="宇宙上限">
+          <el-input-number v-model="btForm.universe_limit" :min="10" :max="500" />
+          <span class="form-hint">按做小宇宙筛选后取前 N 只</span>
+        </el-form-item>
         <el-form-item label="目标涨幅"><el-input-number v-model="btForm.target_pct" :min="0.1" :max="2" :step="0.1" /></el-form-item>
         <el-form-item label="持有天数"><el-input-number v-model="btForm.horizon_days" :min="5" :max="120" /></el-form-item>
-        <el-form-item label="宇宙上限"><el-input-number v-model="btForm.universe_limit" :min="10" :max="500" /></el-form-item>
+        <el-form-item label="采样步长"><el-input-number v-model="btForm.date_step" :min="1" :max="20" /></el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showBt = false">取消</el-button>
@@ -131,7 +196,15 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import sbbrApi from '@/services/sbbrApi'
+import BoardPickerDialog from '@/components/common/BoardPickerDialog.vue'
+import sbbrApi, { type SbbrBacktestCreateBody, type SbbrStockPoolMode } from '@/services/sbbrApi'
+
+const MODE_LABELS: Record<string, string> = {
+  market: '全市场',
+  industry_board: '行业',
+  concept_board: '概念',
+  stocks: '个股',
+}
 
 const activeTab = ref('config')
 const configs = ref<any[]>([])
@@ -147,6 +220,9 @@ const showPrecompute = ref(false)
 const editId = ref<number | null>(null)
 const editJson = ref('')
 const detailText = ref('')
+const selectedIndustryBoardCodes = ref<string[]>([])
+const selectedConceptBoardCodes = ref<string[]>([])
+const stockCodesText = ref('')
 
 const createForm = reactive({ name: '', description: '', set_default: false })
 const precomputeForm = reactive<{ trade_date: string; config_id: number | undefined }>({
@@ -162,7 +238,60 @@ const btForm = reactive({
   horizon_days: 60,
   universe_limit: 50,
   date_step: 5,
+  stock_pool_mode: 'market' as SbbrStockPoolMode,
 })
+
+function parseStockCodes(text: string): string[] {
+  return text
+    .split(/[\s,;，；\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function formatNum(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '-'
+  const n = Number(v)
+  return Number.isFinite(n) ? String(n) : '-'
+}
+
+function formatPct(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '-'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '-'
+  return `${(n * 100).toFixed(1)}%`
+}
+
+function formatScope(row: any): string {
+  const mode = row.stock_pool_mode || row.scope_meta?.stock_pool_mode || '-'
+  const label = MODE_LABELS[mode] || mode
+  const meta = row.scope_meta || {}
+  const count = meta.stock_count
+  if (mode === 'market') {
+    const lim = meta.universe_limit
+    return lim != null ? `${label}(上限${lim})` : label
+  }
+  if (count != null) return `${label}(${count}只)`
+  const boards = meta.board_codes
+  if (Array.isArray(boards) && boards.length) return `${label}(${boards.length}板)`
+  return label
+}
+
+function onPoolModeChange() {
+  selectedIndustryBoardCodes.value = []
+  selectedConceptBoardCodes.value = []
+  stockCodesText.value = ''
+}
+
+function openBtDialog() {
+  if (!btForm.start_date || !btForm.end_date) {
+    const end = new Date()
+    const start = new Date()
+    start.setMonth(start.getMonth() - 6)
+    btForm.end_date = end.toISOString().slice(0, 10)
+    btForm.start_date = start.toISOString().slice(0, 10)
+  }
+  showBt.value = true
+}
 
 async function loadConfigs() {
   loadingConfigs.value = true
@@ -253,8 +382,45 @@ async function onPrecompute() {
 }
 
 async function onCreateBt() {
+  if (!btForm.start_date || !btForm.end_date) {
+    ElMessage.warning('请填写开始日与结束日')
+    return
+  }
+  const mode = btForm.stock_pool_mode
+  const body: SbbrBacktestCreateBody = {
+    task_name: btForm.task_name,
+    start_date: btForm.start_date,
+    end_date: btForm.end_date,
+    backtest_type: btForm.backtest_type,
+    target_pct: btForm.target_pct,
+    horizon_days: btForm.horizon_days,
+    universe_limit: btForm.universe_limit,
+    date_step: btForm.date_step,
+    stock_pool_mode: mode,
+  }
+  if (mode === 'industry_board') {
+    if (!selectedIndustryBoardCodes.value.length) {
+      ElMessage.warning('请选择行业板块')
+      return
+    }
+    body.industry_board_codes = [...selectedIndustryBoardCodes.value]
+  } else if (mode === 'concept_board') {
+    if (!selectedConceptBoardCodes.value.length) {
+      ElMessage.warning('请选择概念板块')
+      return
+    }
+    body.concept_board_codes = [...selectedConceptBoardCodes.value]
+  } else if (mode === 'stocks') {
+    const codes = parseStockCodes(stockCodesText.value)
+    if (!codes.length) {
+      ElMessage.warning('请输入个股代码')
+      return
+    }
+    body.stock_codes = codes
+  }
+
   try {
-    const data = await sbbrApi.createBacktest({ ...btForm })
+    const data = await sbbrApi.createBacktest(body)
     showBt.value = false
     ElMessage.success(`已创建任务 ${data.task_id}`)
     activeTab.value = 'backtest'
@@ -282,6 +448,11 @@ onMounted(() => {
 .page-title { margin: 0; font-size: 22px; }
 .page-subtitle { margin: 4px 0 0; color: #666; }
 .toolbar { margin-bottom: 12px; display: flex; gap: 8px; }
+.toolbar.inline { margin-bottom: 0; }
+.card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.history-card { border: 1px solid #e5e7eb; }
+.form-hint { margin-left: 8px; color: #64748b; font-size: 12px; }
+.sub-hint { display: block; font-size: 11px; color: #94a3b8; line-height: 1.2; }
 .precompute-hint { margin: 4px 0 0; color: #64748b; font-size: 12px; }
 .json-pre {
   max-height: 480px;

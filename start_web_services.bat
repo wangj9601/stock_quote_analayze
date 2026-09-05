@@ -145,7 +145,9 @@ echo.
 echo URLs:
 echo   API      http://localhost:5000
 echo   Frontend http://localhost:8000/login.html
-echo   Admin    http://localhost:8001
+echo   Admin    http://localhost:8001/login
+echo.
+echo Browsers open automatically: Frontend login + Admin login
 echo.
 echo NOT started: backend_core / collectors (use start_news_scheduler.bat)
 echo ----------------------------------------

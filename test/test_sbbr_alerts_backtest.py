@@ -60,6 +60,7 @@ def test_hit_rate_helper():
     ]
     summary = _hit_rate(_FakeLoader(), samples, horizon=30, target_pct=0.2, cfg=get_default_sbbr_config())
     assert summary["total_samples"] >= 0
+    assert summary["entry_count"] == 1
     assert "hit_rate" in summary
 
 

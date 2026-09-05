@@ -77,6 +77,25 @@ class SBBRBacktestStorage:
         finally:
             db.close()
 
+    @staticmethod
+    def _summary_list_fields(summary: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """列表用精简 summary；兼容旧任务仅有 total_samples。"""
+        s = summary or {}
+        entry_count = s.get("entry_count")
+        if entry_count is None:
+            entry_count = s.get("total_samples")
+        out: Dict[str, Any] = {
+            "entry_count": entry_count,
+            "hit_count": s.get("hit_count"),
+            "hit_rate": s.get("hit_rate"),
+            "total_samples": s.get("total_samples"),
+            "total_trades": s.get("total_trades"),
+            "win_rate": s.get("win_rate"),
+            "total_return": s.get("total_return"),
+            "max_drawdown": s.get("max_drawdown"),
+        }
+        return out
+
     def list_tasks(self, limit: int = 50) -> List[Dict[str, Any]]:
         from backend_api.models import SBBRBacktestTask
 
@@ -88,18 +107,32 @@ class SBBRBacktestStorage:
                 .limit(limit)
                 .all()
             )
-            return [
-                {
-                    "task_id": r.task_id,
-                    "name": r.name,
-                    "status": r.status,
-                    "progress": r.progress,
-                    "message": r.message,
-                    "created_at": r.created_at.isoformat() if r.created_at else None,
-                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-                    "backtest_type": (r.config or {}).get("backtest_type"),
-                }
-                for r in rows
-            ]
+            items = []
+            for r in rows:
+                cfg = r.config or {}
+                scope_meta = cfg.get("scope_meta") or {}
+                if not scope_meta and (r.summary or {}).get("scope_meta"):
+                    scope_meta = (r.summary or {}).get("scope_meta") or {}
+                mode = (
+                    scope_meta.get("stock_pool_mode")
+                    or cfg.get("stock_pool_mode")
+                    or ((r.summary or {}).get("stock_pool_mode") if r.summary else None)
+                )
+                items.append(
+                    {
+                        "task_id": r.task_id,
+                        "name": r.name,
+                        "status": r.status,
+                        "progress": r.progress,
+                        "message": r.message,
+                        "created_at": r.created_at.isoformat() if r.created_at else None,
+                        "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                        "backtest_type": cfg.get("backtest_type"),
+                        "stock_pool_mode": mode,
+                        "scope_meta": scope_meta or None,
+                        "summary": self._summary_list_fields(r.summary),
+                    }
+                )
+            return items
         finally:
             db.close()

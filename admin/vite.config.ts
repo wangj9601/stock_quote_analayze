@@ -97,6 +97,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 8001,
       host: true,
+      open: '/login',
       proxy: apiDevProxy,
     },
     // 新增：生产预览端口配置

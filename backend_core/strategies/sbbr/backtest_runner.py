@@ -71,18 +71,34 @@ def run_sbbr_backtest(task_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
                 samples.append(row)
             if di % 5 == 0:
                 pct = 10 + int(50 * di / max(1, len(sample_dates[::step])))
-                storage.update_task(task_id, progress=min(pct, 60), message=f"signals={len(samples)}")
+                storage.update_task(
+                    task_id,
+                    progress=min(pct, 60),
+                    message=f"entry_count={len(samples)}",
+                )
+
+        entry_count = len(samples)
+        scope_meta = config.get("scope_meta") or {
+            "stock_pool_mode": config.get("stock_pool_mode") or ("stocks" if pool else "market"),
+            "stock_count": len(codes),
+            "universe_limit": config.get("universe_limit"),
+        }
 
         if bt_type == "trade_simulation":
             summary = _simulate_trades(loader, samples, horizon, target_pct, strategy_cfg)
         else:
             summary = _hit_rate(loader, samples, horizon, target_pct, strategy_cfg)
 
+        summary["entry_count"] = entry_count
+        summary["scope_meta"] = scope_meta
+        summary["stock_pool_mode"] = scope_meta.get("stock_pool_mode")
+        summary["universe_size"] = len(codes)
+
         storage.update_task(
             task_id,
             status="completed",
             progress=100,
-            message="done",
+            message=f"done entry={entry_count}",
             summary=summary,
             completed_at=datetime.now(),
         )
@@ -130,9 +146,11 @@ def _hit_rate(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any]:
             }
         )
     total = len(details)
+    entry_count = len(samples)
     return {
         "summary_schema_version": 1,
         "backtest_type": "signal_hit_rate",
+        "entry_count": entry_count,
         "total_samples": total,
         "hit_count": hit,
         "hit_rate": (hit / total) if total else 0.0,
@@ -204,9 +222,11 @@ def _simulate_trades(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any
             max_dd = max(max_dd, (peak - v) / peak)
 
     n = len(trades)
+    entry_count = len(samples)
     return {
         "summary_schema_version": 1,
         "backtest_type": "trade_simulation",
+        "entry_count": entry_count,
         "total_trades": n,
         "win_rate": (wins / n) if n else 0.0,
         "total_return": equity[-1] - 1.0 if equity else 0.0,
