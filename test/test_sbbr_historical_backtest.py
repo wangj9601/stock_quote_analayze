@@ -129,18 +129,21 @@ def test_build_stocks_config_resolves_pool(monkeypatch):
 
 def test_hit_rate_summary_has_entry_count():
     samples = [
-        {"code": "000001", "date": "2024-06-15", "close": 10.0, "defense_low": 9.0},
-        {"code": "000002", "date": "2024-06-15", "close": 10.0, "defense_low": 9.0},
+        {"code": "000001", "name": "平安银行", "date": "2024-06-15", "close": 10.0, "defense_low": 9.0},
+        {"code": "000002", "name": "万科A", "date": "2024-06-15", "close": 10.0, "defense_low": 9.0},
     ]
     summary = _hit_rate(_FakeLoader(), samples, horizon=30, target_pct=0.2, cfg=get_default_sbbr_config())
     assert summary["entry_count"] == 2
     assert "hit_count" in summary
     assert "hit_rate" in summary
+    assert len(summary["entry_stocks"]) == 2
+    assert summary["entry_stocks"][0]["code"] == "000001"
+    assert isinstance(summary["hit_stocks"], list)
 
 
 def test_simulate_trades_summary_has_entry_count():
     samples = [
-        {"code": "000001", "date": "2024-06-15", "close": 10.0, "defense_low": 9.0},
+        {"code": "000001", "name": "平安银行", "date": "2024-06-15", "close": 10.0, "defense_low": 9.0},
     ]
     summary = _simulate_trades(
         _FakeLoader(), samples, horizon=30, target_pct=0.2, cfg=get_default_sbbr_config()
@@ -148,6 +151,7 @@ def test_simulate_trades_summary_has_entry_count():
     assert summary["entry_count"] == 1
     assert "total_trades" in summary
     assert "win_rate" in summary
+    assert len(summary["entry_stocks"]) == 1
 
 
 def test_summary_list_fields_compat_old_total_samples():
@@ -165,3 +169,21 @@ def test_summary_list_fields_prefers_entry_count():
     )
     assert fields["entry_count"] == 20
     assert fields["total_samples"] == 18
+
+
+def test_summary_list_fields_derives_stocks_from_details_preview():
+    fields = SBBRBacktestStorage._summary_list_fields(
+        {
+            "entry_count": 2,
+            "hit_count": 1,
+            "hit_rate": 0.5,
+            "details_preview": [
+                {"code": "002349", "date": "2026-07-02", "ok": False, "hit_target": False},
+                {"code": "300534", "name": "陇神戎发", "date": "2026-07-02", "ok": True, "hit_target": True},
+            ],
+        }
+    )
+    assert [x["code"] for x in fields["entry_stocks"]] == ["002349", "300534"]
+    assert [x["code"] for x in fields["hit_stocks"]] == ["300534"]
+    assert "300534" in fields["hit_stock_labels"]
+    assert "002349" in fields["entry_stock_labels"]

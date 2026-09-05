@@ -638,57 +638,155 @@ def _attach_slope_fields(item: Dict[str, Any], slope: Optional[Dict[str, Any]]) 
     item["member_count_used"] = slope.get("member_count_used")
 
 
+def _attach_window_slope_fields(
+    item: Dict[str, Any],
+    slope: Optional[Dict[str, Any]],
+    *,
+    window: int,
+    field_suffix: str,
+    use_realtime_fallback: bool = False,
+    change_percent: Any = None,
+) -> None:
+    """附加指定窗口斜率与环境字段（suffix 如 '120'/'20'/'5'/'short'）。"""
+    from backend_core.board_metrics.sector_slope_store import (
+        slope_strong_threshold_for_window,
+    )
+    from backend_core.strategies.gms.board_resonance import evaluate_board_environment
+
+    slope_key = f"sector_slope_{field_suffix}"
+    window_key = f"sector_slope_{field_suffix}_window"
+    asof_key = f"slope_{field_suffix}_asof_date"
+    env_key = f"board_env_{field_suffix}"
+    env_label_key = f"board_env_{field_suffix}_label"
+    strong_key = f"board_strong_{field_suffix}"
+    weak_key = f"board_weak_{field_suffix}"
+    th_key = f"slope_{field_suffix}_strong_threshold"
+    strong_th = slope_strong_threshold_for_window(window)
+
+    if not slope:
+        item[slope_key] = None
+        item[window_key] = int(window)
+        item[asof_key] = None
+        item[env_key] = "unknown"
+        item[env_label_key] = "--"
+        item[strong_key] = False
+        item[weak_key] = False
+        item[th_key] = strong_th
+        return
+
+    item[slope_key] = slope.get("sector_slope")
+    item[window_key] = slope.get("sector_slope_window") or int(window)
+    asof = slope.get("slope_asof_date")
+    if hasattr(asof, "isoformat"):
+        item[asof_key] = asof.isoformat()
+    else:
+        item[asof_key] = str(asof)[:10] if asof else None
+
+    try:
+        slope_f = float(item[slope_key]) if item.get(slope_key) is not None else None
+    except (TypeError, ValueError):
+        slope_f = None
+    cp = None
+    if use_realtime_fallback:
+        cp = change_percent if change_percent is not None else item.get("change_percent")
+        try:
+            cp = float(cp) if cp is not None else None
+        except (TypeError, ValueError):
+            cp = None
+    env = evaluate_board_environment(
+        sector_slope_v=slope_f,
+        board_change_percent=cp,
+        slope_strong_threshold=strong_th,
+        use_realtime_fallback=bool(use_realtime_fallback),
+    )
+    item[weak_key] = env["board_weak"]
+    item[strong_key] = env["board_strong"]
+    item[env_key] = env["board_env"]
+    item[env_label_key] = env["board_env_label"]
+    item[th_key] = env["slope_strong_threshold"]
+
+
 def _attach_short_slope_fields(
     item: Dict[str, Any],
     slope: Optional[Dict[str, Any]],
     *,
     change_percent: Any = None,
 ) -> None:
-    """附加短线斜率与短线环境（默认近 10 日，不回退实时涨跌）。"""
+    """附加短线斜率与短线环境（默认近 10 日，不回退实时涨跌）。
+
+    兼容旧字段名 sector_slope_short / board_env_short。
+    """
     from backend_core.board_metrics.sector_slope_store import (
         DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
-        DEFAULT_SLOPE_SHORT_STRONG_THRESHOLD,
     )
-    from backend_core.strategies.gms.board_resonance import evaluate_board_environment
 
-    if not slope:
-        item["sector_slope_short"] = None
-        item["sector_slope_short_window"] = DEFAULT_SECTOR_SLOPE_SHORT_WINDOW
-        item["slope_short_asof_date"] = None
-        item["board_env_short"] = "unknown"
-        item["board_env_short_label"] = "--"
-        item["board_strong_short"] = False
-        item["board_weak_short"] = False
-        item["slope_short_strong_threshold"] = DEFAULT_SLOPE_SHORT_STRONG_THRESHOLD
-        return
-
-    item["sector_slope_short"] = slope.get("sector_slope")
-    item["sector_slope_short_window"] = (
-        slope.get("sector_slope_window") or DEFAULT_SECTOR_SLOPE_SHORT_WINDOW
-    )
-    asof = slope.get("slope_asof_date")
-    if hasattr(asof, "isoformat"):
-        item["slope_short_asof_date"] = asof.isoformat()
-    else:
-        item["slope_short_asof_date"] = str(asof)[:10] if asof else None
-
-    try:
-        slope_f = float(item["sector_slope_short"]) if item.get("sector_slope_short") is not None else None
-    except (TypeError, ValueError):
-        slope_f = None
-    env = evaluate_board_environment(
-        sector_slope_v=slope_f,
-        board_change_percent=None,
-        slope_strong_threshold=DEFAULT_SLOPE_SHORT_STRONG_THRESHOLD,
+    _attach_window_slope_fields(
+        item,
+        slope,
+        window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+        field_suffix="short",
         use_realtime_fallback=False,
+        change_percent=change_percent,
     )
-    item["board_weak_short"] = env["board_weak"]
-    item["board_strong_short"] = env["board_strong"]
-    item["board_env_short"] = env["board_env"]
-    item["board_env_short_label"] = env["board_env_label"]
-    item["slope_short_strong_threshold"] = env["slope_strong_threshold"]
-    # change_percent 预留；短线环境刻意不混当日涨跌
-    _ = change_percent
+
+
+def _attach_extra_window_slope_fields(
+    item: Dict[str, Any],
+    slopes_by_window: Dict[int, Dict[str, Any]],
+    *,
+    board_code: str,
+    change_percent: Any = None,
+) -> None:
+    """附加 120/20/5 日斜率字段（列表/详情共用）。"""
+    from backend_core.board_metrics.sector_slope_store import (
+        DEFAULT_SECTOR_SLOPE_LONG_WINDOW,
+        DEFAULT_SECTOR_SLOPE_MID_SHORT_WINDOW,
+        DEFAULT_SECTOR_SLOPE_ULTRA_SHORT_WINDOW,
+    )
+
+    for win, suffix in (
+        (DEFAULT_SECTOR_SLOPE_LONG_WINDOW, "120"),
+        (DEFAULT_SECTOR_SLOPE_MID_SHORT_WINDOW, "20"),
+        (DEFAULT_SECTOR_SLOPE_ULTRA_SHORT_WINDOW, "5"),
+    ):
+        bucket = slopes_by_window.get(win) or {}
+        _attach_window_slope_fields(
+            item,
+            bucket.get(board_code),
+            window=win,
+            field_suffix=suffix,
+            use_realtime_fallback=False,
+            change_percent=change_percent,
+        )
+
+
+def _load_slopes_by_windows(
+    db: Session,
+    codes: List[str],
+    *,
+    board_kind: str,
+) -> Dict[int, Dict[str, Dict[str, Any]]]:
+    """批量读取默认多窗口斜率；失败返回空桶。"""
+    from backend_core.board_metrics.sector_slope_store import (
+        DEFAULT_SLOPE_WINDOWS,
+        load_board_sector_slopes_multi,
+    )
+
+    if not codes:
+        return {int(w): {} for w in DEFAULT_SLOPE_WINDOWS}
+    try:
+        return (
+            load_board_sector_slopes_multi(
+                db, codes, board_kind=board_kind, windows=DEFAULT_SLOPE_WINDOWS
+            )
+            or {int(w): {} for w in DEFAULT_SLOPE_WINDOWS}
+        )
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {int(w): {} for w in DEFAULT_SLOPE_WINDOWS}
 
 
 def _attach_board_env_fields(item: Dict[str, Any], change_percent: Any = None) -> None:
@@ -726,8 +824,6 @@ def fetch_industry_board_list_with_metrics(
     frontend_only: bool = True,
 ) -> List[Dict[str, Any]]:
     """行情页行业板列表：默认同花顺全量 + 实时行情 + 成分数 + 批量斜率。"""
-    from backend_core.board_metrics.sector_slope_store import load_board_sector_slopes
-
     src = resolve_board_code_source(
         board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
     )
@@ -747,38 +843,14 @@ def fetch_industry_board_list_with_metrics(
         except Exception:
             pass
     codes = [str(x.get("board_code") or "").strip() for x in catalog if x.get("board_code")]
-    slopes: Dict[str, Dict[str, Any]] = {}
-    slopes_short: Dict[str, Dict[str, Any]] = {}
-    if codes:
-        try:
-            from backend_core.board_metrics.sector_slope_store import (
-                DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
-                DEFAULT_SECTOR_SLOPE_WINDOW,
-            )
+    from backend_core.board_metrics.sector_slope_store import (
+        DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+        DEFAULT_SECTOR_SLOPE_WINDOW,
+    )
 
-            slopes = (
-                load_board_sector_slopes(
-                    db, codes, board_kind="industry", window=DEFAULT_SECTOR_SLOPE_WINDOW
-                )
-                or {}
-            )
-            slopes_short = (
-                load_board_sector_slopes(
-                    db,
-                    codes,
-                    board_kind="industry",
-                    window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
-                )
-                or {}
-            )
-        except Exception:
-            # 缺表/事务 abort/读失败：降级为无斜率，仍返回板列表
-            try:
-                db.rollback()
-            except Exception:
-                pass
-            slopes = {}
-            slopes_short = {}
+    slopes_by_win = _load_slopes_by_windows(db, codes, board_kind="industry")
+    slopes = slopes_by_win.get(DEFAULT_SECTOR_SLOPE_WINDOW) or {}
+    slopes_short = slopes_by_win.get(DEFAULT_SECTOR_SLOPE_SHORT_WINDOW) or {}
 
     out: List[Dict[str, Any]] = []
     for raw in catalog:
@@ -813,6 +885,12 @@ def fetch_industry_board_list_with_metrics(
         _attach_slope_fields(item, slopes.get(code))
         _attach_short_slope_fields(
             item, slopes_short.get(code), change_percent=item.get("change_percent")
+        )
+        _attach_extra_window_slope_fields(
+            item,
+            slopes_by_win,
+            board_code=code,
+            change_percent=item.get("change_percent"),
         )
         _attach_board_env_fields(item, item.get("change_percent"))
         out.append(item)
@@ -850,8 +928,6 @@ def fetch_concept_board_list_with_metrics(
 
     概念板暂无独立实时行情表，指数/涨跌/成交等字段为空（详情可走角色估算涨跌）。
     """
-    from backend_core.board_metrics.sector_slope_store import load_board_sector_slopes
-
     src = resolve_board_code_source(
         board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
     )
@@ -870,37 +946,14 @@ def fetch_concept_board_list_with_metrics(
         except Exception:
             pass
     codes = [str(x.get("board_code") or "").strip() for x in catalog if x.get("board_code")]
-    slopes: Dict[str, Dict[str, Any]] = {}
-    slopes_short: Dict[str, Dict[str, Any]] = {}
-    if codes:
-        try:
-            from backend_core.board_metrics.sector_slope_store import (
-                DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
-                DEFAULT_SECTOR_SLOPE_WINDOW,
-            )
+    from backend_core.board_metrics.sector_slope_store import (
+        DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+        DEFAULT_SECTOR_SLOPE_WINDOW,
+    )
 
-            slopes = (
-                load_board_sector_slopes(
-                    db, codes, board_kind="concept", window=DEFAULT_SECTOR_SLOPE_WINDOW
-                )
-                or {}
-            )
-            slopes_short = (
-                load_board_sector_slopes(
-                    db,
-                    codes,
-                    board_kind="concept",
-                    window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
-                )
-                or {}
-            )
-        except Exception:
-            try:
-                db.rollback()
-            except Exception:
-                pass
-            slopes = {}
-            slopes_short = {}
+    slopes_by_win = _load_slopes_by_windows(db, codes, board_kind="concept")
+    slopes = slopes_by_win.get(DEFAULT_SECTOR_SLOPE_WINDOW) or {}
+    slopes_short = slopes_by_win.get(DEFAULT_SECTOR_SLOPE_SHORT_WINDOW) or {}
 
     out: List[Dict[str, Any]] = []
     for raw in catalog:
@@ -926,6 +979,12 @@ def fetch_concept_board_list_with_metrics(
         _attach_slope_fields(item, slopes.get(code))
         _attach_short_slope_fields(
             item, slopes_short.get(code), change_percent=item.get("change_percent")
+        )
+        _attach_extra_window_slope_fields(
+            item,
+            slopes_by_win,
+            board_code=code,
+            change_percent=item.get("change_percent"),
         )
         _attach_board_env_fields(item, item.get("change_percent"))
         out.append(item)
@@ -1006,9 +1065,10 @@ def fetch_board_detail(
 ) -> Optional[Dict[str, Any]]:
     """行业/概念板详情：基本信息、可选行情、斜率、走弱/走强、龙头/中军。"""
     from backend_core.board_metrics.sector_slope_store import (
+        DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
+        DEFAULT_SECTOR_SLOPE_WINDOW,
         ensure_board_sector_slope,
         is_allowed_slope_board_source,
-        load_board_sector_slopes,
     )
     from backend_core.board_roles.service import (
         extract_leader_mid_from_payload,
@@ -1074,31 +1134,9 @@ def fetch_board_detail(
             em_to_ths=em_to_ths,
         )
 
-    try:
-        from backend_core.board_metrics.sector_slope_store import (
-            DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
-            DEFAULT_SECTOR_SLOPE_WINDOW,
-        )
-
-        slopes = (
-            load_board_sector_slopes(
-                db, [code], board_kind=kind, window=DEFAULT_SECTOR_SLOPE_WINDOW
-            )
-            or {}
-        )
-        slopes_short = (
-            load_board_sector_slopes(
-                db, [code], board_kind=kind, window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW
-            )
-            or {}
-        )
-    except Exception:
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        slopes = {}
-        slopes_short = {}
+    slopes_by_win = _load_slopes_by_windows(db, [code], board_kind=kind)
+    slopes = slopes_by_win.get(DEFAULT_SECTOR_SLOPE_WINDOW) or {}
+    slopes_short = slopes_by_win.get(DEFAULT_SECTOR_SLOPE_SHORT_WINDOW) or {}
     slope = slopes.get(code) or {}
     slope_short = slopes_short.get(code) or {}
     slope_filled_on_demand = False
@@ -1136,22 +1174,9 @@ def fetch_board_detail(
                     sector_slope_f = float(filled["sector_slope"])
                 except (TypeError, ValueError):
                     sector_slope_f = None
-                try:
-                    slopes_short = (
-                        load_board_sector_slopes(
-                            db,
-                            [code],
-                            board_kind=kind,
-                            window=DEFAULT_SECTOR_SLOPE_SHORT_WINDOW,
-                        )
-                        or {}
-                    )
-                    slope_short = slopes_short.get(code) or {}
-                except Exception:
-                    try:
-                        db.rollback()
-                    except Exception:
-                        pass
+                slopes_by_win = _load_slopes_by_windows(db, [code], board_kind=kind)
+                slopes_short = slopes_by_win.get(DEFAULT_SECTOR_SLOPE_SHORT_WINDOW) or {}
+                slope_short = slopes_short.get(code) or {}
         except Exception:
             try:
                 db.rollback()
@@ -1197,6 +1222,12 @@ def fetch_board_detail(
     _attach_slope_fields(detail, slope if slope else None)
     _attach_short_slope_fields(
         detail, slope_short if slope_short else None, change_percent=change_percent
+    )
+    _attach_extra_window_slope_fields(
+        detail,
+        slopes_by_win,
+        board_code=code,
+        change_percent=change_percent,
     )
 
     if include_roles:

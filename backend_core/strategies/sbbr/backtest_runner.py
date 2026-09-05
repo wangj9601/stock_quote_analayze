@@ -139,7 +139,9 @@ def _hit_rate(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any]:
         details.append(
             {
                 "code": s["code"],
+                "name": s.get("name"),
                 "date": s["date"],
+                "close": s.get("close"),
                 "hit_target": hit_target,
                 "defense_breached": breached,
                 "ok": ok,
@@ -147,6 +149,11 @@ def _hit_rate(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any]:
         )
     total = len(details)
     entry_count = len(samples)
+    entry_stocks = [
+        {"code": d["code"], "name": d.get("name"), "date": d["date"], "ok": d["ok"]}
+        for d in details
+    ]
+    hit_stocks = [e for e in entry_stocks if e.get("ok")]
     return {
         "summary_schema_version": 1,
         "backtest_type": "signal_hit_rate",
@@ -156,6 +163,8 @@ def _hit_rate(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any]:
         "hit_rate": (hit / total) if total else 0.0,
         "target_pct": target_pct,
         "horizon_days": horizon,
+        "entry_stocks": entry_stocks[:100],
+        "hit_stocks": hit_stocks[:100],
         "details_preview": details[:50],
     }
 
@@ -206,11 +215,14 @@ def _simulate_trades(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any
         trades.append(
             {
                 "code": s["code"],
+                "name": s.get("name"),
                 "signal_date": s["date"],
+                "date": s["date"],
                 "entry": entry,
                 "exit": exit_price,
                 "return": ret,
                 "exit_reason": exit_reason,
+                "ok": ret > 0,
             }
         )
 
@@ -223,6 +235,16 @@ def _simulate_trades(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any
 
     n = len(trades)
     entry_count = len(samples)
+    entry_stocks = [
+        {
+            "code": t["code"],
+            "name": t.get("name"),
+            "date": t.get("signal_date") or t.get("date"),
+            "ok": bool(t.get("ok")),
+        }
+        for t in trades
+    ]
+    hit_stocks = [e for e in entry_stocks if e.get("ok")]
     return {
         "summary_schema_version": 1,
         "backtest_type": "trade_simulation",
@@ -233,6 +255,8 @@ def _simulate_trades(loader, samples, horizon, target_pct, cfg) -> Dict[str, Any
         "max_drawdown": max_dd,
         "equity_curve": equity[:200],
         "by_exit_reason": _count_by(trades, "exit_reason"),
+        "entry_stocks": entry_stocks[:100],
+        "hit_stocks": hit_stocks[:100],
         "details_preview": trades[:50],
     }
 

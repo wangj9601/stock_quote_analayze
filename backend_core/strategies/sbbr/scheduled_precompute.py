@@ -111,16 +111,50 @@ def run_sbbr_precompute(
             config=cfg,
         )
 
+        def _stock_brief(r: Dict[str, Any]) -> Dict[str, Any]:
+            return {
+                "code": r.get("code"),
+                "name": r.get("name"),
+                "close": r.get("close"),
+                "bottom_mode": r.get("bottom_mode"),
+                "bottom_matched": bool(r.get("bottom_matched")),
+                "entry_signal": bool(r.get("entry_signal")),
+                "size_ok": r.get("size_ok"),
+                "ma20": r.get("ma20"),
+                "volume_ratio": r.get("volume_ratio"),
+            }
+
+        bottom_stocks = [_stock_brief(r) for r in rows[:100]]
+        entry_stocks = [_stock_brief(r) for r in entry_rows[:100]]
+        cfg_name = None
+        try:
+            for c in cm.list_configs(active_only=False):
+                if int(c.get("id") or 0) == int(cid):
+                    cfg_name = c.get("name")
+                    break
+        except Exception:
+            cfg_name = None
+
         summary = {
             "ok": True,
             "config_id": cid,
+            "config_name": cfg_name,
             "trade_date": date_s,
             "screened": len(rows),
             "saved": saved,
+            "bottom_count": len(rows),
             "entry_count": len(entry_rows),
             "position_events": len(position_events),
+            "bottom_stocks": bottom_stocks,
+            "entry_stocks": entry_stocks,
         }
-        logger.info("SBBR precompute done: %s", summary)
+        logger.info(
+            "SBBR precompute done: config_id=%s date=%s screened=%s entry=%s",
+            cid,
+            date_s,
+            len(rows),
+            len(entry_rows),
+        )
         return summary
     except Exception as e:
         db.rollback()

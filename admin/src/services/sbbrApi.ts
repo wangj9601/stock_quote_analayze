@@ -51,7 +51,10 @@ export const sbbrApi = {
     )
   },
   triggerPrecompute(params?: { config_id?: number; trade_date?: string }) {
-    return apiService.post(`${PREFIX}/precompute/trigger`, null, { params })
+    return apiService.post(`${PREFIX}/precompute/trigger`, null, {
+      params,
+      timeout: 300000,
+    })
   },
 }
 

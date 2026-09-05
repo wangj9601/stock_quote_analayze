@@ -82,11 +82,19 @@
                 </template>
               </template>
             </el-table-column>
-            <el-table-column prop="status" label="状态" width="90" />
+            <el-table-column prop="status" label="状态" width="100" />
             <el-table-column prop="progress" label="进度" width="70" />
             <el-table-column prop="created_at" label="创建时间" width="170" />
-            <el-table-column label="操作" width="90" fixed="right">
+            <el-table-column label="操作" width="140" fixed="right">
               <template #default="{ row }">
+                <el-button
+                  link
+                  type="primary"
+                  :disabled="row.status !== 'completed'"
+                  @click="viewStocks(row.task_id)"
+                >
+                  股票
+                </el-button>
                 <el-button link type="primary" @click="viewBt(row.task_id)">详情</el-button>
               </template>
             </el-table-column>
@@ -166,6 +174,50 @@
       <pre class="json-pre">{{ detailText }}</pre>
     </el-dialog>
 
+    <el-dialog
+      v-model="showStocks"
+      :title="stocksDialogTitle"
+      width="820px"
+      destroy-on-close
+    >
+      <div class="detail-panels">
+        <div class="detail-meta">
+          <span>入场 {{ stockEntryRows.length }} 只</span>
+          <span>命中 {{ stockHitRows.length }} 只</span>
+        </div>
+        <h4 class="detail-title">入场股票</h4>
+        <el-table :data="stockEntryRows" size="small" stripe max-height="320" empty-text="无入场记录">
+          <el-table-column prop="code" label="代码" width="100" />
+          <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="date" label="信号日" width="120" />
+          <el-table-column label="结果" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.ok ? 'success' : 'info'" size="small">{{ row.ok ? '命中' : '未命中' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="备注" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              <span v-if="row.hit_target != null">
+                目标{{ row.hit_target ? '触达' : '未触达' }}
+                <template v-if="row.defense_breached"> / 防守破位</template>
+              </span>
+              <span v-else-if="row.exit_reason">离场：{{ row.exit_reason }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+        </el-table>
+        <h4 class="detail-title">命中股票</h4>
+        <el-table :data="stockHitRows" size="small" stripe max-height="240" empty-text="无命中记录">
+          <el-table-column prop="code" label="代码" width="100" />
+          <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="date" label="信号日" width="120" />
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="showStocks = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="showPrecompute" title="SBBR 信号预计算" width="440px">
       <el-form label-width="100px">
         <el-form-item label="基准日">
@@ -190,11 +242,74 @@
         <el-button type="primary" :loading="precomputing" @click="onPrecompute">开始预计算</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="showPrecomputeResult"
+      title="预计算结果"
+      width="860px"
+      destroy-on-close
+    >
+      <div v-if="precomputeResult" class="detail-panels">
+        <div class="detail-meta">
+          <span>基准日：{{ precomputeResult.trade_date || '-' }}</span>
+          <span>配置：{{ precomputeResult.config_name || precomputeResult.config_id || '-' }}</span>
+          <span>筑底 {{ precomputeResult.bottom_count ?? precomputeResult.screened ?? 0 }}</span>
+          <span>入场 {{ precomputeResult.entry_count ?? 0 }}</span>
+          <span>入库 {{ precomputeResult.saved ?? '-' }}</span>
+        </div>
+        <el-alert
+          v-if="precomputeResult.ok === false"
+          type="error"
+          :title="precomputeResult.error || '预计算失败'"
+          show-icon
+          :closable="false"
+        />
+        <template v-else>
+          <h4 class="detail-title">入场信号（{{ (precomputeResult.entry_stocks || []).length }}）</h4>
+          <el-table
+            :data="precomputeResult.entry_stocks || []"
+            size="small"
+            stripe
+            max-height="240"
+            empty-text="当日无入场信号"
+          >
+            <el-table-column prop="code" label="代码" width="100" />
+            <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="close" label="收盘" width="90" align="right" />
+            <el-table-column prop="bottom_mode" label="筑底模式" width="140" show-overflow-tooltip />
+            <el-table-column prop="volume_ratio" label="量比" width="90" align="right" />
+          </el-table>
+          <h4 class="detail-title">筑底池（{{ (precomputeResult.bottom_stocks || []).length }}，最多 100）</h4>
+          <el-table
+            :data="precomputeResult.bottom_stocks || []"
+            size="small"
+            stripe
+            max-height="320"
+            empty-text="无筑底结果"
+          >
+            <el-table-column prop="code" label="代码" width="100" />
+            <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
+            <el-table-column prop="close" label="收盘" width="90" align="right" />
+            <el-table-column prop="bottom_mode" label="筑底模式" width="140" show-overflow-tooltip />
+            <el-table-column label="入场" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.entry_signal ? 'success' : 'info'" size="small">
+                  {{ row.entry_signal ? '是' : '否' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
+      </div>
+      <template #footer>
+        <el-button type="primary" @click="showPrecomputeResult = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import BoardPickerDialog from '@/components/common/BoardPickerDialog.vue'
 import sbbrApi, { type SbbrBacktestCreateBody, type SbbrStockPoolMode } from '@/services/sbbrApi'
@@ -216,10 +331,16 @@ const showCreate = ref(false)
 const showEdit = ref(false)
 const showBt = ref(false)
 const showDetail = ref(false)
+const showStocks = ref(false)
 const showPrecompute = ref(false)
+const showPrecomputeResult = ref(false)
+const precomputeResult = ref<any | null>(null)
 const editId = ref<number | null>(null)
 const editJson = ref('')
 const detailText = ref('')
+const stocksDialogTitle = ref('入场/命中股票')
+const stockEntryRows = ref<any[]>([])
+const stockHitRows = ref<any[]>([])
 const selectedIndustryBoardCodes = ref<string[]>([])
 const selectedConceptBoardCodes = ref<string[]>([])
 const stockCodesText = ref('')
@@ -305,15 +426,44 @@ async function loadConfigs() {
   }
 }
 
-async function loadBacktests() {
-  loadingBt.value = true
+let btPollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopBtPoll() {
+  if (btPollTimer != null) {
+    clearInterval(btPollTimer)
+    btPollTimer = null
+  }
+}
+
+function hasInFlightBacktests(rows: any[]): boolean {
+  return rows.some((r) => r?.status === 'pending' || r?.status === 'running')
+}
+
+function syncBtPoll(rows: any[]) {
+  if (hasInFlightBacktests(rows)) {
+    if (btPollTimer == null) {
+      btPollTimer = setInterval(() => {
+        void loadBacktests({ silent: true })
+      }, 3000)
+    }
+  } else {
+    stopBtPoll()
+  }
+}
+
+async function loadBacktests(opts?: { silent?: boolean }) {
+  const silent = !!opts?.silent
+  if (!silent) loadingBt.value = true
   try {
     const data = await sbbrApi.listBacktests()
     backtests.value = data.items || []
+    syncBtPoll(backtests.value)
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || e.message || '加载回测失败')
+    if (!silent) {
+      ElMessage.error(e?.response?.data?.detail || e.message || '加载回测失败')
+    }
   } finally {
-    loadingBt.value = false
+    if (!silent) loadingBt.value = false
   }
 }
 
@@ -370,10 +520,19 @@ async function onPrecompute() {
     if (precomputeForm.config_id) params.config_id = precomputeForm.config_id
     if (precomputeForm.trade_date) params.trade_date = precomputeForm.trade_date
     const data: any = await sbbrApi.triggerPrecompute(params)
-    ElMessage.success(
-      `预计算完成 date=${data.trade_date ?? precomputeForm.trade_date ?? '-'} screened=${data.screened ?? '-'} entry=${data.entry_count ?? '-'}`
-    )
+    if (data?.ok === false) {
+      ElMessage.error(data?.error || '预计算失败')
+      precomputeResult.value = data
+      showPrecompute.value = false
+      showPrecomputeResult.value = true
+      return
+    }
+    precomputeResult.value = data
     showPrecompute.value = false
+    showPrecomputeResult.value = true
+    ElMessage.success(
+      `预计算完成：筑底 ${data.bottom_count ?? data.screened ?? 0} / 入场 ${data.entry_count ?? 0}`
+    )
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message)
   } finally {
@@ -430,6 +589,59 @@ async function onCreateBt() {
   }
 }
 
+function deriveDetailRows(summary: any): { entry: any[]; hit: any[] } {
+  const s = summary || {}
+  let entry = Array.isArray(s.entry_stocks) ? [...s.entry_stocks] : []
+  let hit = Array.isArray(s.hit_stocks) ? [...s.hit_stocks] : []
+  const preview = Array.isArray(s.details_preview) ? s.details_preview : []
+
+  if (!entry.length && preview.length) {
+    entry = preview.map((d: any) => {
+      let ok = d.ok
+      if (ok == null) {
+        if (d.return != null) ok = Number(d.return) > 0
+        else ok = !!d.hit_target && !d.defense_breached
+      }
+      return {
+        code: d.code,
+        name: d.name,
+        date: d.date || d.signal_date,
+        ok: !!ok,
+        hit_target: d.hit_target,
+        defense_breached: d.defense_breached,
+        exit_reason: d.exit_reason,
+      }
+    })
+  } else if (entry.length && preview.length) {
+    const byKey = new Map(
+      preview.map((d: any) => [`${d.code}|${d.date || d.signal_date}`, d])
+    )
+    entry = entry.map((e: any) => {
+      const extra = byKey.get(`${e.code}|${e.date}`) || {}
+      return { ...extra, ...e, date: e.date || extra.date || extra.signal_date }
+    })
+  }
+
+  if (!hit.length) {
+    hit = entry.filter((e: any) => e.ok)
+  }
+  return { entry, hit }
+}
+
+async function viewStocks(taskId: string) {
+  try {
+    const data = await sbbrApi.getBacktest(taskId)
+    const rows = deriveDetailRows(data?.summary)
+    stockEntryRows.value = rows.entry
+    stockHitRows.value = rows.hit
+    const name = data?.name || taskId
+    stocksDialogTitle.value = `入场/命中股票 · ${name}`
+    showStocks.value = true
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载股票明细失败')
+  }
+}
+
 async function viewBt(taskId: string) {
   const data = await sbbrApi.getBacktest(taskId)
   detailText.value = JSON.stringify(data, null, 2)
@@ -439,6 +651,10 @@ async function viewBt(taskId: string) {
 onMounted(() => {
   loadConfigs()
   loadBacktests()
+})
+
+onUnmounted(() => {
+  stopBtPoll()
 })
 </script>
 
@@ -454,6 +670,21 @@ onMounted(() => {
 .form-hint { margin-left: 8px; color: #64748b; font-size: 12px; }
 .sub-hint { display: block; font-size: 11px; color: #94a3b8; line-height: 1.2; }
 .precompute-hint { margin: 4px 0 0; color: #64748b; font-size: 12px; }
+.detail-panels { display: flex; flex-direction: column; gap: 8px; }
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  color: #475569;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.detail-title {
+  margin: 8px 0 4px;
+  font-size: 14px;
+  color: #0f172a;
+}
+.detail-raw { margin-top: 8px; }
 .json-pre {
   max-height: 480px;
   overflow: auto;

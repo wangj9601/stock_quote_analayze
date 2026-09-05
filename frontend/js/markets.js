@@ -820,7 +820,7 @@ const MarketsPage = {
             console.error(`${ui.label}数据加载失败:`, error);
             this[ui.dataKey] = [];
             if (tbody) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#c00;">${ui.label}加载失败</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#c00;">${ui.label}加载失败</td></tr>`;
             }
             const grid = document.getElementById(ui.gridId);
             if (grid) {
@@ -835,18 +835,41 @@ const MarketsPage = {
         return rows.filter((x) => x && x.sector_slope != null && !isNaN(Number(x.sector_slope))).length;
     },
 
+    /** 是否已具备完整多窗口斜率（120/60/20/10/5）中的任一板。 */
+    _hasFullWindowSlopes(rows) {
+        if (!Array.isArray(rows) || !rows.length) return false;
+        const keys = [
+            'sector_slope_120',
+            'sector_slope',
+            'sector_slope_20',
+            'sector_slope_short',
+            'sector_slope_5',
+        ];
+        return rows.some((x) => {
+            if (!x) return false;
+            return keys.every((k) => x[k] != null && !isNaN(Number(x[k])));
+        });
+    },
+
     /**
-     * 列表无任何斜率且有板数据时，自动触发一次后台刷新（每 kind 每会话最多一次）。
+     * 列表无完整多窗口斜率且有板数据时，自动触发一次后台刷新（每 kind 每会话最多一次）。
      */
     _maybeAutoRefreshSectorSlopes(kind = 'industry') {
         const ui = this._boardKindUi(kind);
         const rows = this[ui.dataKey] || [];
         if (!rows.length) return;
-        if (this._countSectorSlopes(rows) > 0) return;
+        // 已有任一板具备全窗口则不自动刷；仅中线有值但缺 120/20/5 时仍会刷一次
+        if (this._hasFullWindowSlopes(rows)) return;
         const flagKey = `_autoSlopeRefreshTried_${ui.kind}`;
         if (this[flagKey]) return;
         this[flagKey] = true;
-        CommonUtils.showToast(`${ui.label}斜率尚未入库，正在后台计算…`, 'info');
+        const hasMid = this._countSectorSlopes(rows) > 0;
+        CommonUtils.showToast(
+            hasMid
+                ? `${ui.label}正在补算 120/20/5 日斜率…`
+                : `${ui.label}斜率尚未入库，正在后台计算…`,
+            'info'
+        );
         this.refreshSectorSlopes(ui.kind);
     },
 
@@ -1011,23 +1034,52 @@ const MarketsPage = {
     },
 
     _boardEnvSortRank(d, mode = 'mid') {
-        const isShort = mode === 'short';
-        const env = isShort
-            ? ((d && d.board_env_short)
-                || (d && d.board_strong_short ? 'strong' : (d && d.board_weak_short ? 'weak' : '')))
-            : ((d && d.board_env)
-                || (d && d.board_strong ? 'strong' : (d && d.board_weak ? 'weak' : '')));
+        const envMap = {
+            short: {
+                env: (d && d.board_env_short)
+                    || (d && d.board_strong_short ? 'strong' : (d && d.board_weak_short ? 'weak' : '')),
+            },
+            '120': {
+                env: (d && d.board_env_120)
+                    || (d && d.board_strong_120 ? 'strong' : (d && d.board_weak_120 ? 'weak' : '')),
+            },
+            '20': {
+                env: (d && d.board_env_20)
+                    || (d && d.board_strong_20 ? 'strong' : (d && d.board_weak_20 ? 'weak' : '')),
+            },
+            '5': {
+                env: (d && d.board_env_5)
+                    || (d && d.board_strong_5 ? 'strong' : (d && d.board_weak_5 ? 'weak' : '')),
+            },
+            mid: {
+                env: (d && d.board_env)
+                    || (d && d.board_strong ? 'strong' : (d && d.board_weak ? 'weak' : '')),
+            },
+        };
+        const env = (envMap[mode] || envMap.mid).env;
         if (env === 'strong') return 0;
         if (env === 'neutral') return 1;
         if (env === 'weak') return 2;
         return 3; // unknown / 无斜率
     },
 
+    _slopeSortMeta(sortKey) {
+        const key = String(sortKey || 'sector_slope');
+        const meta = {
+            sector_slope: { key: 'sector_slope', mode: 'mid' },
+            sector_slope_short: { key: 'sector_slope_short', mode: 'short' },
+            sector_slope_120: { key: 'sector_slope_120', mode: '120' },
+            sector_slope_20: { key: 'sector_slope_20', mode: '20' },
+            sector_slope_5: { key: 'sector_slope_5', mode: '5' },
+        };
+        return meta[key] || meta.sector_slope;
+    },
+
     setSectorSort(kind, sortKey) {
         const isConcept = kind === 'concept';
         const keyProp = isConcept ? 'conceptSortKey' : 'sectorSortKey';
         const ascProp = isConcept ? 'conceptSortAsc' : 'sectorSortAsc';
-        const key = (sortKey === 'sector_slope_short') ? 'sector_slope_short' : 'sector_slope';
+        const key = this._slopeSortMeta(sortKey).key;
         if (this[keyProp] === key) {
             this[ascProp] = !this[ascProp];
         } else {
@@ -1061,11 +1113,17 @@ const MarketsPage = {
             ? (this.conceptSortKey || 'sector_slope')
             : (this.sectorSortKey || 'sector_slope');
         const asc = kind === 'concept' ? !!this.conceptSortAsc : !!this.sectorSortAsc;
-        const slopeKeys = new Set(['sector_slope', 'sector_slope_short']);
+        const slopeKeys = new Set([
+            'sector_slope',
+            'sector_slope_short',
+            'sector_slope_120',
+            'sector_slope_20',
+            'sector_slope_5',
+        ]);
         list.sort((a, b) => {
-            // 中线/短线斜率：先按对应环境档，再按斜率数值
+            // 各窗口斜率：先按对应环境档，再按斜率数值
             if (slopeKeys.has(key)) {
-                const mode = key === 'sector_slope_short' ? 'short' : 'mid';
+                const mode = this._slopeSortMeta(key).mode;
                 const ra = this._boardEnvSortRank(a, mode);
                 const rb = this._boardEnvSortRank(b, mode);
                 if (ra !== rb) return ra - rb;
@@ -1141,20 +1199,27 @@ const MarketsPage = {
     },
 
     boardEnvChipHtml(d, mode = 'mid') {
-        const isShort = mode === 'short';
-        const env = isShort
-            ? ((d && d.board_env_short) || (d && d.board_strong_short ? 'strong' : (d && d.board_weak_short ? 'weak' : '')))
-            : ((d && d.board_env) || (d && d.board_strong ? 'strong' : (d && d.board_weak ? 'weak' : '')));
-        const label = isShort
-            ? ((d && d.board_env_short_label)
-                || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : env === 'neutral' ? '正常' : '--'))
-            : ((d && d.board_env_label)
-                || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : env === 'neutral' ? '正常' : '--'));
-        const tip = this.escapeHtml(
-            isShort
-                ? ((d && (d.board_weak_short_summary || d.board_env_short_label)) || '短线环境')
-                : ((d && (d.board_weak_summary || d.board_weak_reason)) || '')
-        );
+        let env = '';
+        let label = '';
+        let tipRaw = '';
+        if (mode === 'short') {
+            env = (d && d.board_env_short) || (d && d.board_strong_short ? 'strong' : (d && d.board_weak_short ? 'weak' : ''));
+            label = (d && d.board_env_short_label)
+                || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : env === 'neutral' ? '正常' : '--');
+            tipRaw = (d && (d.board_weak_short_summary || d.board_env_short_label)) || '短线环境';
+        } else if (mode === '120' || mode === '20' || mode === '5') {
+            env = (d && d[`board_env_${mode}`])
+                || (d && d[`board_strong_${mode}`] ? 'strong' : (d && d[`board_weak_${mode}`] ? 'weak' : ''));
+            label = (d && d[`board_env_${mode}_label`])
+                || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : env === 'neutral' ? '正常' : '--');
+            tipRaw = (d && d[`board_env_${mode}_label`]) || `${mode}日环境`;
+        } else {
+            env = (d && d.board_env) || (d && d.board_strong ? 'strong' : (d && d.board_weak ? 'weak' : ''));
+            label = (d && d.board_env_label)
+                || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : env === 'neutral' ? '正常' : '--');
+            tipRaw = (d && (d.board_weak_summary || d.board_weak_reason)) || '';
+        }
+        const tip = this.escapeHtml(tipRaw);
         let cls = 'sector-weak-chip unknown';
         if (env === 'strong') cls = 'sector-weak-chip strong';
         else if (env === 'weak') cls = 'sector-weak-chip weak';
@@ -1177,7 +1242,7 @@ const MarketsPage = {
         if (!tbody) return;
         const rows = this._sortedSectors(sectors, ui.kind);
         if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#888;">暂无同花顺${ui.label}数据</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#888;">暂无同花顺${ui.label}数据</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(sector => {
@@ -1198,10 +1263,13 @@ const MarketsPage = {
                     <td class="${this.getChangeClass(cp)}">${cp == null ? '--' : this.formatPercent(cp)}</td>
                     <td>${this.formatBoardAmountYi(sector.amount)}</td>
                     <td>${memberCount}</td>
+                    <td class="${this.getChangeClass(sector.sector_slope_120)}">${this.formatSlope(sector.sector_slope_120)}</td>
                     <td class="${this.getChangeClass(sector.sector_slope)}">${this.formatSlope(sector.sector_slope)}</td>
                     <td>${this.boardEnvChipHtml(sector)}</td>
+                    <td class="${this.getChangeClass(sector.sector_slope_20)}">${this.formatSlope(sector.sector_slope_20)}</td>
                     <td class="${this.getChangeClass(sector.sector_slope_short)}">${this.formatSlope(sector.sector_slope_short)}</td>
                     <td>${this.boardEnvChipHtml(sector, 'short')}</td>
+                    <td class="${this.getChangeClass(sector.sector_slope_5)}">${this.formatSlope(sector.sector_slope_5)}</td>
                     <td class="sector-row-actions">
                         <div class="sector-row-actions-inner">
                             <button type="button" class="btn btn-secondary sector-row-detail-btn">详情</button>
@@ -1283,7 +1351,11 @@ const MarketsPage = {
                             <span class="stock-change ${this.getChangeClass(leadingCp)}">${leadingCp == null ? '--' : this.formatPercent(leadingCp)}</span>
                         </div>
                         <div class="leader-stock">
-                            <span class="stock-name">中线斜率</span>
+                            <span class="stock-name">120日斜率</span>
+                            <span class="stock-change ${this.getChangeClass(sector.sector_slope_120)}">${this.formatSlope(sector.sector_slope_120)}</span>
+                        </div>
+                        <div class="leader-stock">
+                            <span class="stock-name">60日斜率</span>
                             <span class="stock-change ${this.getChangeClass(sector.sector_slope)}">${this.formatSlope(sector.sector_slope)}</span>
                         </div>
                         <div class="leader-stock">
@@ -1291,12 +1363,20 @@ const MarketsPage = {
                             <span class="stock-change">${this.boardEnvChipHtml(sector)}</span>
                         </div>
                         <div class="leader-stock">
-                            <span class="stock-name">短线斜率</span>
+                            <span class="stock-name">20日斜率</span>
+                            <span class="stock-change ${this.getChangeClass(sector.sector_slope_20)}">${this.formatSlope(sector.sector_slope_20)}</span>
+                        </div>
+                        <div class="leader-stock">
+                            <span class="stock-name">10日斜率</span>
                             <span class="stock-change ${this.getChangeClass(sector.sector_slope_short)}">${this.formatSlope(sector.sector_slope_short)}</span>
                         </div>
                         <div class="leader-stock">
                             <span class="stock-name">短线环境</span>
                             <span class="stock-change">${this.boardEnvChipHtml(sector, 'short')}</span>
+                        </div>
+                        <div class="leader-stock">
+                            <span class="stock-name">5日斜率</span>
+                            <span class="stock-change ${this.getChangeClass(sector.sector_slope_5)}">${this.formatSlope(sector.sector_slope_5)}</span>
                         </div>
                     </div>
                     <div class="sector-card-actions">
@@ -1485,19 +1565,21 @@ const MarketsPage = {
                     <button type="button" class="btn btn-primary sector-detail-rpe-btn" title="进入比价效应策略选股（预选当前板块）">比价选股</button>
                 </div>
                 <div class="sector-detail-grid">
-                    ${item('中线斜率(ln)', this.formatSlope(d.sector_slope), this.getChangeClass(d.sector_slope))}
+                    ${item('120日斜率(ln)', this.formatSlope(d.sector_slope_120), this.getChangeClass(d.sector_slope_120))}
+                    ${item('120日环境', this.boardEnvChipHtml(d, '120'))}
+                    ${item('60日斜率(ln)', this.formatSlope(d.sector_slope), this.getChangeClass(d.sector_slope))}
                     ${item('中线环境', this.boardEnvChipHtml(d))}
-                    ${item('中线window', d.sector_slope_window != null ? d.sector_slope_window : 60)}
-                    ${item('中线asof', d.slope_asof_date || '--')}
-                    ${item('短线斜率(ln)', this.formatSlope(d.sector_slope_short), this.getChangeClass(d.sector_slope_short))}
+                    ${item('20日斜率(ln)', this.formatSlope(d.sector_slope_20), this.getChangeClass(d.sector_slope_20))}
+                    ${item('20日环境', this.boardEnvChipHtml(d, '20'))}
+                    ${item('10日斜率(ln)', this.formatSlope(d.sector_slope_short), this.getChangeClass(d.sector_slope_short))}
                     ${item('短线环境', this.boardEnvChipHtml(d, 'short'))}
-                    ${item('短线window', d.sector_slope_short_window != null ? d.sector_slope_short_window : 10)}
-                    ${item('短线asof', d.slope_short_asof_date || '--')}
-                    ${item('走强阈值(中)', d.slope_strong_threshold != null ? Number(d.slope_strong_threshold).toFixed(4) : '0.0010')}
-                    ${item('走强阈值(短)', d.slope_short_strong_threshold != null ? Number(d.slope_short_strong_threshold).toFixed(4) : '0.0015')}
+                    ${item('5日斜率(ln)', this.formatSlope(d.sector_slope_5), this.getChangeClass(d.sector_slope_5))}
+                    ${item('5日环境', this.boardEnvChipHtml(d, '5'))}
+                    ${item('60日asof', d.slope_asof_date || '--')}
+                    ${item('10日asof', d.slope_short_asof_date || '--')}
                     ${item('member_count_used', d.member_count_used != null ? d.member_count_used : '--')}
                 </div>
-                <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（中线≈60日，短线≈10日；均为 ln 量权基准回归）</div>
+                <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（窗口：120/60/20/10/5 日；均为 ln 量权基准回归）</div>
             </div>
             <div class="sector-detail-section">
                 <h3>龙头 / 中军</h3>

@@ -61,6 +61,10 @@ class SBBRBacktestStorage:
             row = db.query(SBBRBacktestTask).filter(SBBRBacktestTask.task_id == task_id).first()
             if not row:
                 return None
+            summary = dict(row.summary or {})
+            stock_lists = self._derive_stock_lists(summary)
+            summary.setdefault("entry_stocks", stock_lists["entry_stocks"])
+            summary.setdefault("hit_stocks", stock_lists["hit_stocks"])
             return {
                 "task_id": row.task_id,
                 "name": row.name,
@@ -68,7 +72,7 @@ class SBBRBacktestStorage:
                 "status": row.status,
                 "progress": row.progress,
                 "message": row.message,
-                "summary": row.summary,
+                "summary": summary,
                 "error": row.error,
                 "created_at": row.created_at.isoformat() if row.created_at else None,
                 "started_at": row.started_at.isoformat() if row.started_at else None,
@@ -78,12 +82,71 @@ class SBBRBacktestStorage:
             db.close()
 
     @staticmethod
+    def _derive_stock_lists(summary: Optional[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """从 summary / details_preview 推导入场与命中列表（兼容旧任务）。"""
+        s = summary or {}
+        if s.get("entry_stocks") is not None:
+            entry_stocks = list(s.get("entry_stocks") or [])
+            if s.get("hit_stocks") is not None:
+                hit_stocks = list(s.get("hit_stocks") or [])
+            else:
+                hit_stocks = [e for e in entry_stocks if e.get("ok")]
+            return {
+                "entry_stocks": entry_stocks[:100],
+                "hit_stocks": hit_stocks[:100],
+            }
+
+        entry_stocks: List[Dict[str, Any]] = []
+        for d in list(s.get("details_preview") or []):
+            code = d.get("code")
+            if not code:
+                continue
+            date = d.get("date") or d.get("signal_date")
+            ok = d.get("ok")
+            if ok is None:
+                if "return" in d:
+                    ok = float(d.get("return") or 0) > 0
+                else:
+                    ok = bool(d.get("hit_target")) and not bool(d.get("defense_breached"))
+            entry_stocks.append(
+                {
+                    "code": code,
+                    "name": d.get("name"),
+                    "date": date,
+                    "ok": bool(ok),
+                }
+            )
+        hit_stocks = [e for e in entry_stocks if e.get("ok")]
+        return {
+            "entry_stocks": entry_stocks[:100],
+            "hit_stocks": hit_stocks[:100],
+        }
+
+    @staticmethod
+    def _format_stock_labels(rows: List[Dict[str, Any]], limit: int = 8) -> str:
+        labels: List[str] = []
+        for r in rows[:limit]:
+            code = str(r.get("code") or "")
+            name = str(r.get("name") or "").strip()
+            date = str(r.get("date") or "")[:10]
+            base = f"{code}{(' ' + name) if name else ''}".strip()
+            labels.append(f"{base}@{date}" if date else base)
+        extra = len(rows) - limit
+        text = "、".join(labels)
+        if extra > 0:
+            text = f"{text} 等{len(rows)}只" if text else f"{len(rows)}只"
+        return text
+
+    @staticmethod
     def _summary_list_fields(summary: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         """列表用精简 summary；兼容旧任务仅有 total_samples。"""
         s = summary or {}
         entry_count = s.get("entry_count")
         if entry_count is None:
             entry_count = s.get("total_samples")
+        stock_lists = SBBRBacktestStorage._derive_stock_lists(s)
+        entry_stocks = stock_lists["entry_stocks"]
+        hit_stocks = stock_lists["hit_stocks"]
         out: Dict[str, Any] = {
             "entry_count": entry_count,
             "hit_count": s.get("hit_count"),
@@ -93,6 +156,10 @@ class SBBRBacktestStorage:
             "win_rate": s.get("win_rate"),
             "total_return": s.get("total_return"),
             "max_drawdown": s.get("max_drawdown"),
+            "entry_stocks": entry_stocks,
+            "hit_stocks": hit_stocks,
+            "entry_stock_labels": SBBRBacktestStorage._format_stock_labels(entry_stocks),
+            "hit_stock_labels": SBBRBacktestStorage._format_stock_labels(hit_stocks),
         }
         return out
 

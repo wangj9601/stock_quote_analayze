@@ -498,7 +498,7 @@ class RealtimeStockIndustryBoardCollector:
         # 先落 start，避免长耗时中途被杀时完全无痕迹
         self.write_log(
             operation_type="industry_board_sector_slope",
-            operation_desc="开始：同花顺行业/概念板斜率入库（行情采集挂载）",
+            operation_desc="开始：同花顺行业/概念板斜率入库（行情采集挂载，窗口120/60/20/10/5）",
             affected_rows=0,
             status="start",
             error_message=None,
