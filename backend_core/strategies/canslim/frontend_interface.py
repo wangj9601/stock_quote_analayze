@@ -38,6 +38,7 @@ class CanSlimFrontendInterface:
         roe_min: Optional[float] = None,
         near_high_min_pct: Optional[float] = None,
         circ_shares_max_yi: Optional[float] = None,
+        a_require_growth: Optional[bool] = None,
         overrides: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         cfg = merge_canslim_config(overrides) if overrides else copy.deepcopy(self.config)
@@ -62,6 +63,9 @@ class CanSlimFrontendInterface:
         if roe_min is not None:
             cfg.setdefault("A", {})
             cfg["A"]["roe_min"] = float(roe_min)
+        if a_require_growth is not None:
+            cfg.setdefault("A", {})
+            cfg["A"]["require_annual_growth"] = bool(a_require_growth)
         if near_high_min_pct is not None:
             cfg.setdefault("N", {})
             # 前端传百分比 85 → 内部 ratio 0.85

@@ -20,6 +20,10 @@ def get_default_canslim_config() -> Dict[str, Any]:
             "annual_eps_yoy_min": 25.0,  # 近 3 年每年同比 %
             "annual_years": 3,
             "roe_min": 17.0,
+            # True=年增速+ROE；False=仅 ROE（页面勾选「仅 ROE」时）
+            "require_annual_growth": True,
+            # annual=仅最新年报 ROE；freshest_annualized=优先更新报告期并把中报/季报 ROE 年化
+            "roe_source": "freshest_annualized",
             "use_cagr_fallback": True,
             "cagr_min": 25.0,
         },

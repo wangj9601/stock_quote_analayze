@@ -67,6 +67,18 @@ def test_eval_A_requires_roe_and_years():
     assert eng.eval_A(low_roe)["ok"] is False
 
 
+def test_eval_A_roe_only_skips_growth():
+    eng = CanSlimEngine.__new__(CanSlimEngine)
+    eng.cfg = merge_canslim_config({"A": {"require_annual_growth": False, "roe_min": 17.0}})
+    # 无年报增速、甚至年报不足，只要 ROE 达标即可
+    rows = [{"end_date": "20250630", "roe_waa": 9.0}]  # 中报 9 → 年化 18
+    out = eng.eval_A(rows)
+    assert out["ok"] is True
+    assert out.get("require_annual_growth") is False
+    bad = eng.eval_A([{"end_date": "20250630", "roe_waa": 5.0}])
+    assert bad["ok"] is False
+
+
 def test_eval_L_and_N_and_S():
     eng = CanSlimEngine.__new__(CanSlimEngine)
     eng.cfg = get_default_canslim_config()
@@ -100,14 +112,43 @@ def test_eval_L_and_N_and_S():
 def test_peek_roe_and_q_yoy_for_display():
     """字母关闭时仍可从财务行窥探 ROE / 季增% 供表格展示。"""
     rows = [
-        {"end_date": "20250331", "q_eps_yoy": 40.0, "roe": 5.0},
+        {"end_date": "20250331", "q_eps_yoy": 40.0, "roe": 5.0},  # 年化 20
         {"end_date": "20241231", "basic_eps_yoy": 30.0, "roe_waa": 22.5},
         {"end_date": "20231231", "basic_eps_yoy": 28.0, "roe_waa": 18.0},
     ]
-    assert CanSlimEngine._peek_latest_roe(rows) == 22.5
+    assert CanSlimEngine._peek_latest_roe(rows) == 20.0
     assert CanSlimEngine._peek_q_eps_yoy(rows) == 40.0
     assert CanSlimEngine._peek_latest_roe([]) is None
     assert CanSlimEngine._peek_q_eps_yoy([]) is None
+
+
+def test_eval_A_freshest_roe_annualizes_interim():
+    from backend_core.strategies.canslim.engine import _annualize_roe, _pick_roe_for_a
+
+    assert abs(_annualize_roe(5.22, "20260630") - 10.44) < 1e-9
+    rows = [
+        {"end_date": "20260630", "roe": 5.22},
+        {"end_date": "20251231", "basic_eps_yoy": 30.0, "eps": 1.5, "roe_waa": 9.0},
+        {"end_date": "20241231", "basic_eps_yoy": 28.0, "eps": 1.2, "roe_waa": 18.0},
+        {"end_date": "20231231", "basic_eps_yoy": 26.0, "eps": 0.9, "roe_waa": 17.0},
+    ]
+    roe, end, raw = _pick_roe_for_a(rows, source="freshest_annualized")
+    assert end == "20260630" and abs(roe - 10.44) < 1e-9 and abs(raw - 5.22) < 1e-9
+    roe_a, end_a, _ = _pick_roe_for_a(rows, source="annual")
+    assert end_a == "20251231" and roe_a == 9.0
+
+    eng = CanSlimEngine.__new__(CanSlimEngine)
+    eng.cfg = get_default_canslim_config()
+    eng.cfg["A"]["roe_min"] = 10.0
+    out = eng.eval_A(rows)
+    assert out["ok"] is True
+    assert out["roe_end_date"] == "20260630"
+    assert abs(out["roe"] - 10.44) < 1e-9
+
+    eng.cfg["A"]["roe_source"] = "annual"
+    out2 = eng.eval_A(rows)
+    assert out2["ok"] is False  # 年报 ROE 9 < 10
+    assert out2["roe_end_date"] == "20251231"
 
 
 def test_letter_result_keeps_metrics_when_disabled():

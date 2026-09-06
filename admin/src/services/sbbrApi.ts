@@ -42,7 +42,9 @@ export const sbbrApi = {
     return apiService.get<{ items: any[] }>(`${PREFIX}/backtests`, { params: { limit } })
   },
   getBacktest(taskId: string) {
-    return apiService.get(`${PREFIX}/backtests/${taskId}`)
+    return apiService.get<{ name?: string; summary?: any; [key: string]: any }>(
+      `${PREFIX}/backtests/${taskId}`
+    )
   },
   createBacktest(body: SbbrBacktestCreateBody) {
     return apiService.post<{ task_id: string; status: string; scope_meta?: Record<string, unknown> }>(

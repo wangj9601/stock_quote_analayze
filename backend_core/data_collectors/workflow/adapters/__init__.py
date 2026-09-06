@@ -167,9 +167,19 @@ def _cn_turnover() -> Any:
 
 
 def _stock_shares() -> Any:
-    from backend_core.data_collectors.akshare.stock_shares_collector import StockSharesCollector
+    from backend_core.data_collectors.akshare.stock_shares_collector import (
+        StockSharesCollector,
+        resolve_shares_source,
+    )
+    import os
 
-    return StockSharesCollector(DATA_COLLECTORS.get("akshare", {})).run(mode="incremental")
+    mode = (os.getenv("STOCK_SHARES_MODE") or "incremental").strip().lower()
+    if mode not in ("incremental", "full"):
+        mode = "incremental"
+    source = resolve_shares_source()
+    return StockSharesCollector(DATA_COLLECTORS.get("akshare", {})).run(
+        mode=mode, source=source
+    )
 
 
 def _hk_realtime() -> Any:

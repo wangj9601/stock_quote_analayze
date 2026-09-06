@@ -113,8 +113,17 @@
           </div>
 
           <el-alert class="mb-4" type="info" :closable="false" show-icon
-            :title="`当前为【${mainTab === 'CN' ? 'A股' : '港股'}】导入：仅处理文件中市场为 ${mainTab} 的行；策略为仅补空值。支持 CSV/XLS/XLSX（含东财 Table.xls 文本格式）。`"
+            :title="`当前为【${mainTab === 'CN' ? 'A股' : '港股'}】导入。支持 CSV/XLS/XLSX，以及华泰/东财 Table.xls（制表符文本）。若文件含「流通值+现价」会自动反算流通股；「总市值+现价」反算总股本。`"
           />
+
+          <el-form inline class="mb-4">
+            <el-form-item label="写入策略">
+              <el-select v-model="importMode" style="width: 280px">
+                <el-option label="覆盖已有股本（推荐，刷新旧数据）" value="overwrite_shares" />
+                <el-option label="仅补空（已有股本不改）" value="only_fill_empty" />
+              </el-select>
+            </el-form-item>
+          </el-form>
 
           <el-upload
             :auto-upload="false"
@@ -138,6 +147,10 @@
             <template #header>预校验结果</template>
             <div>有效行：{{ currentValidateResult.valid_rows }}，无效行：{{ currentValidateResult.invalid_rows }}</div>
             <div>市场分布：A股 {{ currentValidateResult.market_count?.CN || 0 }}，港股 {{ currentValidateResult.market_count?.HK || 0 }}</div>
+            <div>
+              含股本数据行：{{ currentValidateResult.rows_with_shares ?? '--' }}
+              （其中市值反算：{{ currentValidateResult.derived_from_mv ?? 0 }}）
+            </div>
             <div class="table-scroll">
               <el-table :data="currentValidateResult.issues || []" size="small" class="mt-3">
                 <el-table-column prop="row_no" label="行号" width="80" />
@@ -150,8 +163,15 @@
           <el-card v-if="currentExecuteResult" class="mt-4">
             <template #header>导入结果</template>
             <div>
-              总行数 {{ currentExecuteResult.total_rows }}，成功 {{ currentExecuteResult.success }}，
-              跳过 {{ currentExecuteResult.skipped }}，失败 {{ currentExecuteResult.failed }}
+              模式 {{ currentExecuteResult.mode }}，总行数 {{ currentExecuteResult.total_rows }}，
+              成功 {{ currentExecuteResult.success }}，跳过 {{ currentExecuteResult.skipped }}，
+              失败 {{ currentExecuteResult.failed }}
+              <span v-if="currentExecuteResult.derived_from_mv">
+                ，市值反算 {{ currentExecuteResult.derived_from_mv }}
+              </span>
+              <span v-if="currentExecuteResult.no_shares_in_row">
+                ，无股本字段跳过 {{ currentExecuteResult.no_shares_in_row }}
+              </span>
             </div>
             <div class="table-scroll">
               <el-table :data="currentExecuteResult.failed_sample || []" size="small" class="mt-3">
@@ -416,6 +436,7 @@ const subTab = ref('query')
 const loading = ref(false)
 const syncingIndustry = ref(false)
 const validating = ref(false)
+const importMode = ref<'only_fill_empty' | 'overwrite_shares'>('overwrite_shares')
 const executing = ref(false)
 const exporting = ref(false)
 const rows = ref<any[]>([])
@@ -627,7 +648,13 @@ const executeImport = async (dryRun: boolean) => {
   if (!f) return
   executing.value = true
   try {
-    const res = await stockBasicService.executeImport(f, dryRun, 100, mainTab.value)
+    const res = await stockBasicService.executeImport(
+      f,
+      dryRun,
+      100,
+      mainTab.value,
+      importMode.value
+    )
     if (mainTab.value === 'CN') executeCN.value = res.data
     else executeHK.value = res.data
     if (res.success) {

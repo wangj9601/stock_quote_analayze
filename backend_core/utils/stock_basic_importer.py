@@ -25,6 +25,10 @@ _COLUMN_ALIASES = {
         "流通股数",
         "流通股数(股)",
     ],
+    # 华泰/行情导出：市值(元) ÷ 现价 → 股本(股)
+    "price": ["price", "现价", "最新价", "收盘价", "股价"],
+    "circ_mv": ["流通值", "流通市值", "流通市值(元)", "circ_mv", "float_mv"],
+    "total_mv": ["总市值", "总市值(元)", "total_mv", "market_cap"],
     "listing_date": ["listing_date", "上市日期", "上市时间"],
     "industry": ["industry", "行业", "所属行业"],
     "asof_date": ["asof_date", "数据日期", "基准日期", "生效日期"],
@@ -171,6 +175,15 @@ def _read_df_from_bytes(filename: str, content: bytes) -> pd.DataFrame:
     raise ValueError("仅支持 CSV/XLS/XLSX（含东财 Table.xls 文本格式）")
 
 
+def _shares_from_mv_price(mv: Optional[float], price: Optional[float]) -> Optional[float]:
+    """市值(元) / 现价(元) → 股本(股)。"""
+    if mv is None or price is None:
+        return None
+    if price <= 0 or mv <= 0:
+        return None
+    return float(mv) / float(price)
+
+
 def parse_import_file(filename: str, content: bytes) -> Tuple[List[Dict[str, Any]], List[ImportIssue]]:
     df = _read_df_from_bytes(filename, content)
     if df is None or df.empty:
@@ -195,6 +208,23 @@ def parse_import_file(filename: str, content: bytes) -> Tuple[List[Dict[str, Any
         market = detect_market(code, row.get(picked["market"]) if picked["market"] else None)
         total_shares = _to_float(row.get(picked["total_shares"])) if picked["total_shares"] else None
         free_float_shares = _to_float(row.get(picked["free_float_shares"])) if picked["free_float_shares"] else None
+
+        # 华泰 Table.xls 等：无流通股列时，用 流通值/现价、总市值/现价 反算
+        price = _to_float(row.get(picked["price"])) if picked["price"] else None
+        circ_mv = _to_float(row.get(picked["circ_mv"])) if picked["circ_mv"] else None
+        total_mv = _to_float(row.get(picked["total_mv"])) if picked["total_mv"] else None
+        derived = False
+        if free_float_shares is None:
+            got = _shares_from_mv_price(circ_mv, price)
+            if got is not None:
+                free_float_shares = got
+                derived = True
+        if total_shares is None:
+            got = _shares_from_mv_price(total_mv, price)
+            if got is not None:
+                total_shares = got
+                derived = True
+
         listing_date = _to_optional_text(row.get(picked["listing_date"])) if picked["listing_date"] else None
         industry = _to_optional_text(row.get(picked["industry"])) if picked["industry"] else None
         asof_date = _to_optional_text(row.get(picked["asof_date"])) if picked["asof_date"] else None
@@ -209,10 +239,16 @@ def parse_import_file(filename: str, content: bytes) -> Tuple[List[Dict[str, Any
         if (
             total_shares is not None
             and free_float_shares is not None
-            and free_float_shares > total_shares
+            and free_float_shares > total_shares * 1.001  # 浮点/反算允许极小误差
         ):
-            issues.append(ImportIssue(row_no=row_no, code=code, message="free_float_shares 不能大于 total_shares"))
-            continue
+            # 反算偶发流通>总股本（价差/四舍五入）：以总股本为上限截断
+            if derived and total_shares > 0:
+                free_float_shares = total_shares
+            else:
+                issues.append(
+                    ImportIssue(row_no=row_no, code=code, message="free_float_shares 不能大于 total_shares")
+                )
+                continue
 
         records.append(
             {
@@ -226,6 +262,7 @@ def parse_import_file(filename: str, content: bytes) -> Tuple[List[Dict[str, Any
                 "industry": industry,
                 "asof_date": asof_date,
                 "collect_enabled": collect_enabled,
+                "shares_derived_from_mv": derived,
             }
         )
 
@@ -321,8 +358,15 @@ def _update_cn_only_fill_empty(session, row: Dict[str, Any]) -> int:
                 END,
                 collect_enabled = CASE WHEN :collect_enabled IS NOT NULL THEN :collect_enabled ELSE collect_enabled END,
                 shares_updated_at = CASE
-                    WHEN shares_updated_at IS NULL AND
-                         (:total_shares IS NOT NULL OR :free_float_shares IS NOT NULL OR :industry IS NOT NULL OR :listing_date IS NOT NULL)
+                    WHEN (
+                        (total_shares IS NULL AND :total_shares IS NOT NULL)
+                        OR (free_float_shares IS NULL AND :free_float_shares IS NOT NULL)
+                        OR ((industry IS NULL OR industry = '') AND :industry IS NOT NULL)
+                        OR (
+                            (listing_date IS NULL OR NULLIF(TRIM(CAST(listing_date AS TEXT)), '') IS NULL)
+                            AND :listing_date IS NOT NULL
+                        )
+                    )
                     THEN :updated_at
                     ELSE shares_updated_at
                 END
@@ -330,7 +374,7 @@ def _update_cn_only_fill_empty(session, row: Dict[str, Any]) -> int:
             """
         ),
         {
-            "code": row["code"].zfill(6),
+            "code": row["code"].zfill(6) if str(row["code"]).isdigit() else row["code"],
             "name": row.get("name"),
             "total_shares": row.get("total_shares"),
             "free_float_shares": row.get("free_float_shares"),
@@ -360,8 +404,15 @@ def _update_hk_only_fill_empty(session, row: Dict[str, Any]) -> int:
                 END,
                 collect_enabled = CASE WHEN :collect_enabled IS NOT NULL THEN :collect_enabled ELSE collect_enabled END,
                 shares_updated_at = CASE
-                    WHEN shares_updated_at IS NULL AND
-                         (:total_shares IS NOT NULL OR :free_float_shares IS NOT NULL OR :industry IS NOT NULL OR :listing_date IS NOT NULL)
+                    WHEN (
+                        (total_shares IS NULL AND :total_shares IS NOT NULL)
+                        OR (free_float_shares IS NULL AND :free_float_shares IS NOT NULL)
+                        OR ((industry IS NULL OR industry = '') AND :industry IS NOT NULL)
+                        OR (
+                            (listing_date IS NULL OR NULLIF(TRIM(CAST(listing_date AS TEXT)), '') IS NULL)
+                            AND :listing_date IS NOT NULL
+                        )
+                    )
                     THEN :updated_at
                     ELSE shares_updated_at
                 END
@@ -382,6 +433,65 @@ def _update_hk_only_fill_empty(session, row: Dict[str, Any]) -> int:
     return ret.rowcount or 0
 
 
+def _update_cn_overwrite_shares(session, row: Dict[str, Any]) -> int:
+    """覆盖写入股本（有值才覆盖对应列），并刷新 shares_updated_at。"""
+    if row.get("total_shares") is None and row.get("free_float_shares") is None:
+        return 0
+    ret = session.execute(
+        text(
+            """
+            UPDATE stock_basic_info
+            SET
+                total_shares = CASE WHEN :total_shares IS NOT NULL THEN :total_shares ELSE total_shares END,
+                free_float_shares = CASE WHEN :free_float_shares IS NOT NULL THEN :free_float_shares ELSE free_float_shares END,
+                industry = CASE
+                    WHEN :industry IS NOT NULL AND (industry IS NULL OR industry = '') THEN :industry
+                    ELSE industry
+                END,
+                shares_updated_at = :updated_at
+            WHERE CAST(code AS TEXT) = :code
+            """
+        ),
+        {
+            "code": row["code"].zfill(6) if str(row["code"]).isdigit() else row["code"],
+            "total_shares": row.get("total_shares"),
+            "free_float_shares": row.get("free_float_shares"),
+            "industry": row.get("industry"),
+            "updated_at": datetime.now(),
+        },
+    )
+    return ret.rowcount or 0
+
+
+def _update_hk_overwrite_shares(session, row: Dict[str, Any]) -> int:
+    if row.get("total_shares") is None and row.get("free_float_shares") is None:
+        return 0
+    ret = session.execute(
+        text(
+            """
+            UPDATE stock_basic_info_hk
+            SET
+                total_shares = CASE WHEN :total_shares IS NOT NULL THEN :total_shares ELSE total_shares END,
+                free_float_shares = CASE WHEN :free_float_shares IS NOT NULL THEN :free_float_shares ELSE free_float_shares END,
+                industry = CASE
+                    WHEN :industry IS NOT NULL AND (industry IS NULL OR industry = '') THEN :industry
+                    ELSE industry
+                END,
+                shares_updated_at = :updated_at
+            WHERE code = :code
+            """
+        ),
+        {
+            "code": row["code"],
+            "total_shares": row.get("total_shares"),
+            "free_float_shares": row.get("free_float_shares"),
+            "industry": row.get("industry"),
+            "updated_at": datetime.now(),
+        },
+    )
+    return ret.rowcount or 0
+
+
 def execute_import_rows(
     session,
     rows: List[Dict[str, Any]],
@@ -389,13 +499,15 @@ def execute_import_rows(
     dry_run: bool = False,
     max_errors: int = 100,
 ) -> Dict[str, Any]:
-    if mode not in ("only_fill_empty",):
-        raise ValueError("仅支持 only_fill_empty 模式")
+    if mode not in ("only_fill_empty", "overwrite_shares"):
+        raise ValueError("仅支持 only_fill_empty / overwrite_shares 模式")
 
     ensure_share_columns(session)
     success = 0
     skipped = 0
     failed = 0
+    no_shares_in_row = 0
+    derived_from_mv = 0
     failures: List[Dict[str, Any]] = []
     market_count = {"CN": 0, "HK": 0}
 
@@ -403,13 +515,30 @@ def execute_import_rows(
         market = row.get("market", "CN")
         code = row.get("code", "")
         market_count[market] = market_count.get(market, 0) + 1
+        if row.get("shares_derived_from_mv"):
+            derived_from_mv += 1
+        if row.get("total_shares") is None and row.get("free_float_shares") is None:
+            no_shares_in_row += 1
+            skipped += 1
+            continue
 
         try:
             if dry_run:
                 success += 1
                 continue
 
-            affected = _update_cn_only_fill_empty(session, row) if market == "CN" else _update_hk_only_fill_empty(session, row)
+            if mode == "overwrite_shares":
+                affected = (
+                    _update_cn_overwrite_shares(session, row)
+                    if market == "CN"
+                    else _update_hk_overwrite_shares(session, row)
+                )
+            else:
+                affected = (
+                    _update_cn_only_fill_empty(session, row)
+                    if market == "CN"
+                    else _update_hk_only_fill_empty(session, row)
+                )
             if affected > 0:
                 success += 1
             else:
@@ -432,6 +561,8 @@ def execute_import_rows(
         "success": success,
         "skipped": skipped,
         "failed": failed,
+        "no_shares_in_row": no_shares_in_row,
+        "derived_from_mv": derived_from_mv,
         "market_count": market_count,
         "failures": failures,
         "failed_sample": failures[:20],

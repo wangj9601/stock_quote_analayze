@@ -94,12 +94,13 @@ class StockBasicService {
     file: File,
     dryRun = false,
     maxErrors = 100,
-    scopeMarket?: StockBasicMarket
+    scopeMarket?: StockBasicMarket,
+    mode: 'only_fill_empty' | 'overwrite_shares' = 'overwrite_shares'
   ): Promise<any> {
     const fd = new FormData()
     fd.append('file', file)
     const q = new URLSearchParams()
-    q.set('mode', 'only_fill_empty')
+    q.set('mode', mode)
     q.set('dry_run', String(dryRun))
     q.set('max_errors', String(maxErrors))
     if (scopeMarket) q.set('scope_market', scopeMarket)

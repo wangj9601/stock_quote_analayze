@@ -241,6 +241,52 @@ class CanSlimDataLoader:
         bars_out.reverse()  # 升序
         return bars_out
 
+    def load_quote_windows_batch(
+        self, codes: Sequence[str], asof: str, bars: int
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """批量取每只股票 asof 前最近 bars 根日 K（升序）。"""
+        if not codes:
+            return {}
+        lim = int(bars) + 5
+        out: Dict[str, List[Dict[str, Any]]] = {c: [] for c in codes}
+        chunk = 200
+        for i in range(0, len(codes), chunk):
+            part = list(codes[i : i + chunk])
+            placeholders = ",".join([f":c{j}" for j in range(len(part))])
+            params = {f"c{j}": part[j] for j in range(len(part))}
+            params["asof"] = asof
+            params["lim"] = lim
+            rows = self.db.execute(
+                text(
+                    f"""
+                    SELECT code, date::text, open, high, low, close, volume
+                    FROM (
+                        SELECT code, date, open, high, low, close, volume,
+                               ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) AS rn
+                        FROM historical_quotes
+                        WHERE code IN ({placeholders})
+                          AND date::text <= :asof
+                    ) t
+                    WHERE rn <= :lim
+                    ORDER BY code, date ASC
+                    """
+                ),
+                params,
+            ).fetchall()
+            for r in rows:
+                code = _norm_code(r[0])
+                out.setdefault(code, []).append(
+                    {
+                        "date": _to_date_str(r[1]),
+                        "open": float(r[2]) if r[2] is not None else None,
+                        "high": float(r[3]) if r[3] is not None else None,
+                        "low": float(r[4]) if r[4] is not None else None,
+                        "close": float(r[5]) if r[5] is not None else None,
+                        "volume": float(r[6]) if r[6] is not None else None,
+                    }
+                )
+        return out
+
     def load_adj_factors(self, code: str) -> List[Tuple[str, float]]:
         """优先 sina qfq 因子。"""
         rows = self.db.execute(
@@ -262,6 +308,45 @@ class CanSlimDataLoader:
         if sina:
             return sina
         return [(str(r[0])[:10], float(r[1])) for r in rows if r[2] == "baostock_qfq" and r[1] is not None]
+
+    def load_adj_factors_batch(
+        self, codes: Sequence[str]
+    ) -> Dict[str, List[Tuple[str, float]]]:
+        if not codes:
+            return {}
+        out: Dict[str, List[Tuple[str, float]]] = {c: [] for c in codes}
+        chunk = 200
+        for i in range(0, len(codes), chunk):
+            part = list(codes[i : i + chunk])
+            placeholders = ",".join([f":c{j}" for j in range(len(part))])
+            params = {f"c{j}": part[j] for j in range(len(part))}
+            rows = self.db.execute(
+                text(
+                    f"""
+                    SELECT code, trade_date::text, adj_factor, source
+                    FROM stock_adj_factor
+                    WHERE code IN ({placeholders})
+                      AND source IN ('akshare_sina_qfq', 'baostock_qfq')
+                    ORDER BY code, trade_date
+                    """
+                ),
+                params,
+            ).fetchall()
+            sina_map: Dict[str, List[Tuple[str, float]]] = {}
+            bao_map: Dict[str, List[Tuple[str, float]]] = {}
+            for r in rows:
+                code = _norm_code(r[0])
+                if r[2] is None:
+                    continue
+                item = (str(r[1])[:10], float(r[2]))
+                if r[3] == "akshare_sina_qfq":
+                    sina_map.setdefault(code, []).append(item)
+                elif r[3] == "baostock_qfq":
+                    bao_map.setdefault(code, []).append(item)
+            for code in part:
+                nc = _norm_code(code)
+                out[nc] = sina_map.get(nc) or bao_map.get(nc) or []
+        return out
 
     def load_index_closes(self, ts_code: str, asof: str, limit: int = 80) -> List[Dict[str, Any]]:
         rows = self.db.execute(

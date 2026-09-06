@@ -53,7 +53,7 @@ AkShare 指数路径：`stock_zh_index_daily`（如 `sh000300`）。
 - 筛 `end_date` 以 `1231` 结尾的年报，取最近 `A.annual_years`（默认 3）期。
 - 优先各期 `basic_eps_yoy`（或 `dt_eps_yoy`）均 ≥ `A.annual_eps_yoy_min`。
 - 若不满足且 `use_cagr_fallback`：用年报 `eps` 算 CAGR ≥ `cagr_min`。
-- ROE：最新年报 `roe_waa` 或 `roe` ≥ `A.roe_min`（默认 17）。
+- ROE：默认 `roe_source=freshest_annualized`——取最新有 ROE 的报告期；若为中报/季报则按 4/2/4÷3 年化后再与 `A.roe_min` 比较。设为 `annual` 则仍只用最新年报 ROE。
 - 年报期数不足 → 失败。
 
 ### N

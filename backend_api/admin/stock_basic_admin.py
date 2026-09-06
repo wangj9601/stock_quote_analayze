@@ -561,8 +561,14 @@ async def validate_import_file(
     if scope_market:
         rows = _filter_rows_by_scope(rows, scope_market)
     market_count = {"CN": 0, "HK": 0}
+    with_shares = 0
+    derived_from_mv = 0
     for x in rows:
         market_count[x["market"]] = market_count.get(x["market"], 0) + 1
+        if x.get("total_shares") is not None or x.get("free_float_shares") is not None:
+            with_shares += 1
+        if x.get("shares_derived_from_mv"):
+            derived_from_mv += 1
     ensure_share_columns(db)
     return {
         "success": True,
@@ -571,6 +577,8 @@ async def validate_import_file(
             "valid_rows": len(rows),
             "invalid_rows": len(issues),
             "market_count": market_count,
+            "rows_with_shares": with_shares,
+            "derived_from_mv": derived_from_mv,
             "issues": issues_to_dict(issues)[:200],
             "preview": rows[:20],
         },
@@ -580,7 +588,11 @@ async def validate_import_file(
 @router.post("/import/execute")
 async def execute_import_file(
     file: UploadFile = File(...),
-    mode: str = Query("only_fill_empty", pattern="^only_fill_empty$"),
+    mode: str = Query(
+        "overwrite_shares",
+        pattern="^(only_fill_empty|overwrite_shares)$",
+        description="only_fill_empty=仅补空；overwrite_shares=覆盖已有股本（华泰行情表推荐）",
+    ),
     dry_run: bool = Query(False),
     max_errors: int = Query(100, ge=1, le=1000),
     scope_market: Optional[str] = Query(None, description="仅导入该市场行：CN 或 HK"),
@@ -589,16 +601,22 @@ async def execute_import_file(
 ):
     content = await file.read()
     rows, issues = parse_import_file(file.filename or "", content)
-    if issues:
-        return {
-            "success": False,
-            "message": "文件校验失败，请先修复数据后导入",
-            "data": {"valid_rows": len(rows), "invalid_rows": len(issues), "issues": issues_to_dict(issues)[:200]},
-        }
+    # 行级问题不阻断：仍导入可解析行；无有效行才失败
     if scope_market:
         rows = _filter_rows_by_scope(rows, scope_market)
+    if not rows:
+        return {
+            "success": False,
+            "message": "没有可导入的有效行",
+            "data": {
+                "valid_rows": 0,
+                "invalid_rows": len(issues),
+                "issues": issues_to_dict(issues)[:200],
+            },
+        }
 
     result = execute_import_rows(db, rows, mode=mode, dry_run=dry_run, max_errors=max_errors)
+    result["parse_issues"] = issues_to_dict(issues)[:50]
     _write_operation_log(
         db,
         log_type="stock_basic_import",

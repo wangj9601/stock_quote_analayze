@@ -342,7 +342,7 @@ def update_stock_shares():
     if not _env_bool("SCHED_STOCK_SHARES_ENABLED", True):
         logging.info("[定时任务] 股本定时同步已关闭（SCHED_STOCK_SHARES_ENABLED=false），跳过。")
         return
-    source = _env("STOCK_SHARES_UPDATE_SOURCE", "akshare").lower()
+    source = _env("STOCK_SHARES_UPDATE_SOURCE", _env("STOCK_SHARES_SOURCE", "auto")).lower()
     try:
         logging.info("[定时任务] 股本数据更新开始... source=%s", source)
         if source == "excel":
@@ -363,13 +363,7 @@ def update_stock_shares():
                 xls, sheet_name=sheet_kw
             )
         else:
-            if source not in ("akshare", ""):
-                logging.warning(
-                    "[定时任务] STOCK_SHARES_UPDATE_SOURCE=%s 未识别，按 akshare 处理",
-                    source,
-                )
-            result = stock_shares_collector.run(mode="incremental")
-        if result and result.get("success", 0) > 0:
+            result = stock_shares_collector.run(mode="incremental", source=source)        if result and result.get("success", 0) > 0:
             logging.info(f"[定时任务] 股本数据更新完成: {result}")
         else:
             logging.warning(f"[定时任务] 股本数据更新结果: {result}")

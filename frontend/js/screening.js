@@ -4596,12 +4596,16 @@ const ScreeningPage = {
     },
 
     _appendCanslimQueryParams(params) {
-        params.set('market_filter', this._canslimLetterEnabled('canslimMarketFilter', true) ? 'true' : 'false');
-        params.set('filter_c', this._canslimLetterEnabled('canslimFilterC', true) ? 'true' : 'false');
-        params.set('filter_a', this._canslimLetterEnabled('canslimFilterA', true) ? 'true' : 'false');
-        params.set('filter_n', this._canslimLetterEnabled('canslimFilterN', true) ? 'true' : 'false');
-        params.set('filter_s', this._canslimLetterEnabled('canslimFilterS', true) ? 'true' : 'false');
-        params.set('filter_l', this._canslimLetterEnabled('canslimFilterL', true) ? 'true' : 'false');
+        // 用 1/0，避免部分环境下 bool 查询串解析异常；默认全开时未改勾选仍传 1
+        params.set('market_filter', this._canslimLetterEnabled('canslimMarketFilter', true) ? '1' : '0');
+        params.set('filter_c', this._canslimLetterEnabled('canslimFilterC', true) ? '1' : '0');
+        params.set('filter_a', this._canslimLetterEnabled('canslimFilterA', true) ? '1' : '0');
+        params.set('filter_n', this._canslimLetterEnabled('canslimFilterN', true) ? '1' : '0');
+        params.set('filter_s', this._canslimLetterEnabled('canslimFilterS', true) ? '1' : '0');
+        params.set('filter_l', this._canslimLetterEnabled('canslimFilterL', true) ? '1' : '0');
+        // 勾选「仅 ROE」→ a_require_growth=0；默认不勾=要求年增速
+        const roeOnly = this._canslimLetterEnabled('canslimARoeOnly', false);
+        params.set('a_require_growth', roeOnly ? '0' : '1');
         const rsVal = this._canslimOptionalNumber('canslimRsMin');
         if (rsVal != null && rsVal > 0) params.set('rs_min', String(Math.round(rsVal)));
         const qEps = this._canslimOptionalNumber('canslimQEpsMin');
@@ -5044,7 +5048,7 @@ const ScreeningPage = {
                 result = await this.handleHttpAndParseScreening(strategy, await fetchFn(url));
             }
 
-            if (result.success && result.data) {
+            if (result.success && Array.isArray(result.data)) {
                 this.lastResults[strategy] = result.data;
                 if (strategy === 'gms' && result.search_date) {
                     this.lastGmsSearchDate = String(result.search_date).slice(0, 10);
@@ -5075,6 +5079,22 @@ const ScreeningPage = {
                 ) {
                     emptyMsg += '。可将「M 大盘上升趋势」改为「关闭」后重新筛选。';
                 }
+                if (strategy === 'canslim' && result.data.length === 0) {
+                    const d = result.diagnostics || {};
+                    const f = result.filters || {};
+                    const on = ['C', 'A', 'N', 'S', 'L', 'M']
+                        .filter((k) => f[k] && f[k].enabled)
+                        .join('+') || '无';
+                    const funnel = `服务端启用[${on}] 池${d.universe || 0} 过A${d.pass_a || 0}/未过${d.fail_a || 0}`
+                        + (d.fail_c ? ` 过C${d.pass_c || 0}/未过${d.fail_c}` : '')
+                        + (d.fail_l ? ` 过L${d.pass_l || 0}/未过${d.fail_l}` : '')
+                        + (d.fail_n ? ` 过N${d.pass_n || 0}/未过${d.fail_n}` : '')
+                        + (d.fail_s ? ` 过S${d.pass_s || 0}/未过${d.fail_s}` : '');
+                    if (!emptyMsg) emptyMsg = `漏斗：${funnel}`;
+                    else if (!String(emptyMsg).includes('漏斗') && (d.universe != null)) {
+                        emptyMsg += `。漏斗：${funnel}`;
+                    }
+                }
                 const gmsPaging = strategy === 'gms' ? result.paging : null;
                 if (strategy === 'gms') {
                     await this.loadGmsObservedCodeSets();
@@ -5102,6 +5122,11 @@ const ScreeningPage = {
                 }
                 if (searchDate) {
                     let dateText = `筛选时间: ${result.search_date}`;
+                    if (strategy === 'canslim' && result.filters) {
+                        const on = ['C', 'A', 'N', 'S', 'L', 'M']
+                            .filter((k) => result.filters[k] && result.filters[k].enabled);
+                        dateText += on.length ? ` · 启用 ${on.join('+')}` : ' · 未启用字母过滤';
+                    }
                     if (strategy === 'urt' && result.signal_quality_mode_label) {
                         dateText += ` · ${result.signal_quality_mode_label}`;
                     }
@@ -5758,7 +5783,7 @@ const ScreeningPage = {
                         <td><span class="stock-name">${stock.name || ''}</span></td>
                         <td>${stock.rs_rating != null ? stock.rs_rating : '--'}</td>
                         <td>${fmt(stock.q_eps_yoy, 1)}</td>
-                        <td>${fmt(stock.roe, 1)}</td>
+                        <td title="${stock.roe_end_date ? ('报告期 ' + stock.roe_end_date) : ''}">${fmt(stock.roe, 1)}</td>
                         <td>${fmt(stock.near_high_pct, 1)}</td>
                         <td>${fmt(stock.circ_shares_yi, 2)}</td>
                         <td>${fmt(stock.volume_ratio, 2)}</td>

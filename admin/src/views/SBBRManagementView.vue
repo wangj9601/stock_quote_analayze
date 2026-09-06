@@ -41,7 +41,7 @@
             <div class="card-header">
               <span>历史回测</span>
               <div class="toolbar inline">
-                <el-button type="primary" @click="loadBacktests">刷新</el-button>
+                <el-button type="primary" @click="() => loadBacktests()">刷新</el-button>
                 <el-button type="success" @click="openBtDialog">创建历史回测</el-button>
               </div>
             </div>
@@ -617,7 +617,7 @@ function deriveDetailRows(summary: any): { entry: any[]; hit: any[] } {
       preview.map((d: any) => [`${d.code}|${d.date || d.signal_date}`, d])
     )
     entry = entry.map((e: any) => {
-      const extra = byKey.get(`${e.code}|${e.date}`) || {}
+      const extra: Record<string, any> = byKey.get(`${e.code}|${e.date}`) || {}
       return { ...extra, ...e, date: e.date || extra.date || extra.signal_date }
     })
   }

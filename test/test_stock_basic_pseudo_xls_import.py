@@ -108,5 +108,22 @@ def test_optional_real_table_xls_smoke() -> None:
     assert len(rows) > 1000
     assert rows[0]["code"].isdigit()
     assert rows[0].get("total_shares") is not None or rows[0].get("free_float_shares") is not None
+    # 华泰行情表：靠 流通值/总市值÷现价 反算
+    derived = sum(1 for r in rows if r.get("shares_derived_from_mv"))
+    assert derived > 1000
     # issues 允许存在，但不应对整文件失败
     assert len(issues) < len(rows)
+
+
+def test_parse_htzq_quote_table_derives_shares_from_mv_price() -> None:
+    """华泰行情导出：流通值/总市值 + 现价 → 股本。"""
+    header = "\t".join(["代码", "名称", "现价", "总市值", "流通值"])
+    row = "\t".join(["SZ000001", "平安银行", "10.00", "20000000000", "15000000000"])
+    content = (header + "\r" + row + "\r").encode("gbk")
+    rows, issues = parse_import_file("Table.xls", content)
+    assert not issues
+    assert len(rows) == 1
+    assert rows[0]["code"] == "000001"
+    assert rows[0]["free_float_shares"] == 1_500_000_000.0
+    assert rows[0]["total_shares"] == 2_000_000_000.0
+    assert rows[0]["shares_derived_from_mv"] is True

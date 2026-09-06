@@ -12,7 +12,7 @@ import logging
 import asyncio
 import math
 import os
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Union
 
 # PVFRS 选股为 CPU 密集型，允许较长超时（秒）；Nginx 的 proxy_read_timeout 需 >= 此值
 PVFRS_SCREENING_TIMEOUT = 300
@@ -23,6 +23,22 @@ def _int_env(name: str, default: int) -> int:
         return int(os.getenv(name, str(default)).strip())
     except (TypeError, ValueError):
         return default
+
+
+def _qflag(v: Optional[Union[str, int, bool]], default: bool = True) -> bool:
+    """查询开关：兼容 1/0、true/false、yes/no。"""
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, int):
+        return v != 0
+    s = str(v).strip().lower()
+    if s in ("1", "true", "yes", "on", "y"):
+        return True
+    if s in ("0", "false", "no", "off", "n"):
+        return False
+    return default
 
 
 GMS_SCREENING_TIMEOUT = max(60, _int_env("GMS_SCREENING_TIMEOUT", 600))
@@ -2818,12 +2834,13 @@ async def get_high_tight_flag_strategy(
 @router.get("/canslim")
 async def get_canslim_strategy(
     asof: Optional[str] = Query(None, description="基准日 YYYY-MM-DD，默认最新交易日"),
-    market_filter: bool = Query(True, description="是否启用大盘 M 过滤"),
-    filter_c: bool = Query(True, description="是否启用 C（季增）过滤"),
-    filter_a: bool = Query(True, description="是否启用 A（年报/ROE）过滤"),
-    filter_n: bool = Query(True, description="是否启用 N（新高/CUPB）过滤"),
-    filter_s: bool = Query(True, description="是否启用 S（流通盘/量）过滤"),
-    filter_l: bool = Query(True, description="是否启用 L（RS）过滤"),
+    market_filter: Optional[str] = Query("1", description="大盘 M：1/0 或 true/false，默认开"),
+    filter_c: Optional[str] = Query("1", description="C：1/0 或 true/false，默认开"),
+    filter_a: Optional[str] = Query("1", description="A：1/0 或 true/false，默认开"),
+    filter_n: Optional[str] = Query("1", description="N：1/0 或 true/false，默认开"),
+    filter_s: Optional[str] = Query("1", description="S：1/0 或 true/false，默认开"),
+    filter_l: Optional[str] = Query("1", description="L：1/0 或 true/false，默认开"),
+    a_require_growth: Optional[str] = Query("1", description="A 是否要求年增速：1=年增速+ROE，0=仅ROE"),
     rs_min: Optional[int] = Query(None, description="RS Rating 最低分，默认配置 80"),
     q_eps_yoy_min: Optional[float] = Query(None, description="C：单季同比下限 %，默认 25"),
     roe_min: Optional[float] = Query(None, description="A：ROE 下限 %，默认 17"),
@@ -2834,6 +2851,7 @@ async def get_canslim_strategy(
 ):
     """
     CAN SLIM 第一期选股：C+A+N+S+L 合取（各项可单独关闭），M 为大盘开关，I 不参与过滤。
+    字母开关默认全开；传 1/0 或 true/false。
     依赖库内 stock_fina_indicator、rs_ratings、index_historical_quotes 等；不现场打外网。
     """
     try:
@@ -2847,12 +2865,13 @@ async def get_canslim_strategy(
         result = iface.screen(
             asof=asof,
             codes=codes,
-            market_filter=market_filter,
-            filter_c=filter_c,
-            filter_a=filter_a,
-            filter_n=filter_n,
-            filter_s=filter_s,
-            filter_l=filter_l,
+            market_filter=_qflag(market_filter, True),
+            filter_c=_qflag(filter_c, True),
+            filter_a=_qflag(filter_a, True),
+            filter_n=_qflag(filter_n, True),
+            filter_s=_qflag(filter_s, True),
+            filter_l=_qflag(filter_l, True),
+            a_require_growth=_qflag(a_require_growth, True),
             rs_min=rs_min,
             q_eps_yoy_min=q_eps_yoy_min,
             roe_min=roe_min,
@@ -2870,6 +2889,7 @@ async def get_canslim_strategy(
                 "market": result.get("market"),
                 "filters": result.get("filters"),
                 "message": result.get("message"),
+                "diagnostics": result.get("diagnostics"),
             }
         )
     except Exception as e:

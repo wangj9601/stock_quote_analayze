@@ -1985,7 +1985,7 @@
                 <ul class="strategy-conditions">
                     <li><strong>股票范围：</strong>A 股（排除 ST / 退市名）</li>
                     <li><strong>C</strong> 最新单季 EPS 同比 ≥ 25%（读库 stock_fina_indicator）</li>
-                    <li><strong>A</strong> 近 3 年年报增速 + ROE ≥ 17%</li>
+                    <li><strong>A</strong> 近 3 年年报增速（默认≥25%）+ ROE（页面可改 ROE；年增速也在条件内，不只看 ROE）</li>
                     <li><strong>N</strong> 接近 52 周新高（≥85%）或 CUPB forming/confirmed</li>
                     <li><strong>S</strong> 流通股本 ≤ 20 亿股；阳线日量 ≥ MAVOL20</li>
                     <li><strong>L</strong> RS Rating ≥ 80</li>
@@ -1999,11 +1999,12 @@
                 <div class="params-grid canslim-letter-grid" style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:14px;">
                     <span style="font-size:13px;color:#475569;font-weight:600;">启用字母：</span>
                     <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterC" checked style="margin-right:4px;">C 季增</label>
-                    <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterA" checked style="margin-right:4px;">A 年报/ROE</label>
+                    <label class="canslim-letter-check" style="cursor:pointer;" title="近3年年报增速≥25%（或 CAGR）且 ROE≥阈值；可勾选下方「仅 ROE」只按 ROE 筛"><input type="checkbox" id="canslimFilterA" checked style="margin-right:4px;">A 年增速+ROE</label>
                     <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterN" checked style="margin-right:4px;">N 新高/CUPB</label>
                     <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterS" checked style="margin-right:4px;">S 流通/量</label>
                     <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterL" checked style="margin-right:4px;">L RS</label>
                     <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimMarketFilter" checked style="margin-right:4px;">M 大盘</label>
+                    <label class="canslim-letter-check" style="cursor:pointer;" title="勾选后 A 只要求 ROE，不再要求近3年年增速"><input type="checkbox" id="canslimARoeOnly" style="margin-right:4px;">A 仅ROE</label>
                 </div>
                 <div class="params-grid" style="display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-end;">
                     <div class="parameter-group">
@@ -2016,7 +2017,7 @@
                     </div>
                     <div class="parameter-group">
                         <label for="canslimRoeMin">A · ROE% ≥</label>
-                        <input type="number" id="canslimRoeMin" class="param-input" value="17" min="0" max="100" step="0.5" style="width:72px;" title="仅当启用 A 时生效">
+                        <input type="number" id="canslimRoeMin" class="param-input" value="17" min="0" max="100" step="0.5" style="width:72px;" title="A 同时要求近3年年报增速≥25%（或CAGR）；此处只调 ROE 门槛。中报/季报 ROE 已年化；仅启用 A 时生效">
                     </div>
                     <div class="parameter-group">
                         <label for="canslimNearHighMin">N · 距新高% ≥</label>
@@ -2059,7 +2060,7 @@
                                 <th>名称</th>
                                 <th>RS</th>
                                 <th>季增%</th>
-                                <th>ROE%</th>
+                                <th title="最新报告期 ROE；中报/季报为年化值">ROE%</th>
                                 <th>距新高%</th>
                                 <th>流通股(亿)</th>
                                 <th>量比</th>
@@ -2083,7 +2084,7 @@
         </div>
     </main>
 
-    <script src="js/config.js"></script>
+    <script src="js/config.js?v=canslim20260906b"></script>
     <script src="js/common.js"></script>
     <script src="components/header.js"></script>
 
@@ -2251,7 +2252,7 @@
     <script src="js/rpe_score_detail.js"></script>
     <script src="js/sbbr_score_detail.js"></script>
     <script src="js/board_roles_panel.js"></script>
-    <script src="js/screening.js"></script>
+    <script src="js/screening.js?v=canslim20260906b"></script>
     <script src="js/sbbr_screening.js"></script>
     <script src="js/rpe_screening.js"></script>
 </body>

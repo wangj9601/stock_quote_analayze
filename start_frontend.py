@@ -77,8 +77,10 @@ def is_production_env() -> bool:
 class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
     """自定义HTTP请求处理器"""
     def __init__(self, *args, **kwargs):
-        # 设置 frontend 目录为根目录
-        super().__init__(*args, directory="frontend", **kwargs)
+        # 始终相对本脚本所在项目根下的 frontend，避免 cwd 不对时端上旧页面
+        root = Path(__file__).resolve().parent
+        frontend_dir = str(root / "frontend")
+        super().__init__(*args, directory=frontend_dir, **kwargs)
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
         # 如果访问根路径，重定向到 login.html

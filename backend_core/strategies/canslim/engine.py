@@ -19,6 +19,64 @@ def _is_annual(end_date: str) -> bool:
     return len(s) >= 8 and s[4:8] == "1231"
 
 
+def _roe_raw(row: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not row:
+        return None
+    roe = row.get("roe_waa")
+    if roe is None:
+        roe = row.get("roe")
+    try:
+        return float(roe) if roe is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _annualize_roe(roe: float, end_date: str) -> float:
+    """东财摘要里的中报/季报 ROE 多为累计值，按报告期粗略年化后与年报门槛比较。"""
+    s = str(end_date or "")
+    if len(s) < 8:
+        return float(roe)
+    md = s[4:8]
+    if md == "1231":
+        return float(roe)
+    if md == "0331":
+        return float(roe) * 4.0
+    if md == "0630":
+        return float(roe) * 2.0
+    if md == "0930":
+        return float(roe) * (4.0 / 3.0)
+    return float(roe)
+
+
+def _pick_roe_for_a(
+    fina_rows: List[Dict[str, Any]],
+    *,
+    source: str = "freshest_annualized",
+) -> Tuple[Optional[float], Optional[str], Optional[float]]:
+    """
+    返回 (用于门槛的 ROE, 报告期 end_date, 原始未年化 ROE)。
+    fina_rows 约定按 end_date DESC。
+    """
+    src = (source or "freshest_annualized").strip().lower()
+    if src in ("annual", "year", "latest_annual"):
+        for r in fina_rows:
+            if not _is_annual(r.get("end_date") or ""):
+                continue
+            raw = _roe_raw(r)
+            if raw is not None:
+                return raw, str(r.get("end_date") or "") or None, raw
+        return None, None, None
+
+    # freshest_annualized：最新一期有 ROE 的报告（含季报/中报，累计 ROE 年化）
+    for r in fina_rows:
+        raw = _roe_raw(r)
+        if raw is None:
+            continue
+        end = str(r.get("end_date") or "")
+        return _annualize_roe(raw, end), end or None, raw
+    return None, None, None
+
+
 def _pick_q_yoy(row: Dict[str, Any]) -> Optional[float]:
     for k in ("q_eps_yoy", "q_netprofit_yoy", "q_profit_yoy"):
         v = row.get(k)
@@ -111,21 +169,9 @@ class CanSlimEngine:
 
     @staticmethod
     def _peek_latest_roe(fina_rows: List[Dict[str, Any]]) -> Optional[float]:
-        """从已加载财务行取最近年报 ROE（展示用，不参与过滤）。"""
-        if not fina_rows:
-            return None
-        annuals = [r for r in fina_rows if _is_annual(r.get("end_date") or "")]
-        candidates = annuals if annuals else list(fina_rows)
-        for r in candidates:
-            roe = r.get("roe_waa")
-            if roe is None:
-                roe = r.get("roe")
-            if roe is not None:
-                try:
-                    return float(roe)
-                except (TypeError, ValueError):
-                    continue
-        return None
+        """展示用：优先最新报告期 ROE（中报/季报做年化），否则回退年报。"""
+        roe, _, _ = _pick_roe_for_a(fina_rows, source="freshest_annualized")
+        return roe
 
     @staticmethod
     def _peek_q_eps_yoy(fina_rows: List[Dict[str, Any]]) -> Optional[float]:
@@ -218,26 +264,42 @@ class CanSlimEngine:
         years = int(acfg.get("annual_years") or 3)
         min_yoy = float(acfg.get("annual_eps_yoy_min") or 25.0)
         roe_min = float(acfg.get("roe_min") or 17.0)
+        require_growth = bool(acfg.get("require_annual_growth", True))
+        roe_source = str(acfg.get("roe_source") or "freshest_annualized")
         annuals = [r for r in fina_rows if _is_annual(r.get("end_date") or "")]
         # fina_rows 已按 end_date DESC
         annuals = annuals[: max(years + 1, 4)]
 
-        def _roe_of(row: Optional[Dict[str, Any]]) -> Optional[float]:
-            if not row:
-                return None
-            roe = row.get("roe_waa")
-            if roe is None:
-                roe = row.get("roe")
-            try:
-                return float(roe) if roe is not None else None
-            except (TypeError, ValueError):
-                return None
+        roe, roe_end, roe_raw = _pick_roe_for_a(fina_rows, source=roe_source)
+        roe_ok = roe is not None and float(roe) >= roe_min
+
+        # 仅 ROE：不要求年报期数与年增速
+        if not require_growth:
+            reason = (
+                f"仅ROE {roe:.1f}%@{roe_end or '?'}≥{roe_min}%"
+                if roe_ok and roe is not None
+                else f"ROE {roe}@{roe_end} < {roe_min}%"
+            )
+            return {
+                "ok": bool(roe_ok),
+                "reason": reason,
+                "annual_eps_yoys": [],
+                "cagr": None,
+                "roe": float(roe) if roe is not None else None,
+                "roe_raw": float(roe_raw) if roe_raw is not None else None,
+                "roe_end_date": roe_end,
+                "end_dates": [],
+                "require_annual_growth": False,
+            }
 
         if len(annuals) < years:
             return {
                 "ok": False,
                 "reason": f"年报不足{years}期（有{len(annuals)}）",
-                "roe": _roe_of(annuals[0]) if annuals else self._peek_latest_roe(fina_rows),
+                "roe": roe,
+                "roe_raw": roe_raw,
+                "roe_end_date": roe_end,
+                "require_annual_growth": True,
             }
         take = annuals[:years]
         yoys = []
@@ -257,9 +319,6 @@ class CanSlimEngine:
                 # 上面 annuals DESC：eps_list[0]=最新，eps_list[years-1]=较旧
                 growth_ok = cagr_val is not None and cagr_val >= float(acfg.get("cagr_min") or min_yoy)
 
-        latest = take[0]
-        roe = _roe_of(latest)
-        roe_ok = roe is not None and float(roe) >= roe_min
         ok = growth_ok and roe_ok
         reason_parts = []
         if growth_ok:
@@ -270,16 +329,25 @@ class CanSlimEngine:
         else:
             reason_parts.append(f"年增速未达标 yoy={yoys} cagr={cagr_val}")
         if roe_ok:
-            reason_parts.append(f"ROE {roe:.1f}%≥{roe_min}%")
+            period = roe_end or "?"
+            if roe_raw is not None and roe_end and not _is_annual(roe_end) and abs(float(roe) - float(roe_raw)) > 1e-6:
+                reason_parts.append(
+                    f"ROE(年化) {roe:.1f}%←{roe_raw:.1f}%@{period}≥{roe_min}%"
+                )
+            else:
+                reason_parts.append(f"ROE {roe:.1f}%@{period}≥{roe_min}%")
         else:
-            reason_parts.append(f"ROE {roe} < {roe_min}%")
+            reason_parts.append(f"ROE {roe}@{roe_end} < {roe_min}%")
         return {
             "ok": bool(ok),
             "reason": "；".join(reason_parts),
             "annual_eps_yoys": yoys,
             "cagr": cagr_val,
             "roe": float(roe) if roe is not None else None,
+            "roe_raw": float(roe_raw) if roe_raw is not None else None,
+            "roe_end_date": roe_end,
             "end_dates": [r.get("end_date") for r in take],
+            "require_annual_growth": True,
         }
 
     def eval_N(
@@ -434,6 +502,7 @@ class CanSlimEngine:
         need_n = self._letter_enabled("N")
         need_s = self._letter_enabled("S")
         need_l = self._letter_enabled("L")
+        need_quotes = need_n or need_s
 
         universe = self.loader.list_universe(exclude_st=bool((self.cfg.get("scan") or {}).get("exclude_st", True)))
         if codes:
@@ -442,47 +511,133 @@ class CanSlimEngine:
 
         code_list = [u["code"] for u in universe]
         name_map = {u["code"]: u for u in universe}
-        # 展示列始终需要指标数据：财务 / RS / CUPB / 均量 一律加载；
-        # 日K仅对通过前置过滤的候选再取，避免全市场无谓扫窗。
         fina_map = self.loader.load_latest_fina_by_codes(code_list)
         rs_map = self.loader.load_rs_map(asof_date)
-        cupb_map = self.loader.load_cupb_codes(
-            asof_date, (self.cfg.get("N") or {}).get("cupb_statuses") or ["forming", "confirmed"]
+        cupb_map = (
+            self.loader.load_cupb_codes(
+                asof_date, (self.cfg.get("N") or {}).get("cupb_statuses") or ["forming", "confirmed"]
+            )
+            if need_n
+            else {}
         )
-        mavol_map = self.loader.load_mavol_map(asof_date, code_list)
+        # mavol 仅对过 C/A/L 的候选批量取，避免全市场扫表
 
         results: List[Dict[str, Any]] = []
         lookback = int((self.cfg.get("N") or {}).get("lookback_bars") or 252)
         use_qfq = bool((self.cfg.get("N") or {}).get("use_qfq", True))
         max_results = int((self.cfg.get("scan") or {}).get("max_results") or 0)
 
+        # 漏斗统计（0 结果时回传，便于排查）
+        stats = {
+            "universe": len(code_list),
+            "pass_c": 0,
+            "pass_a": 0,
+            "pass_l": 0,
+            "pass_n": 0,
+            "pass_s": 0,
+            "fail_c": 0,
+            "fail_a": 0,
+            "fail_l": 0,
+            "fail_n": 0,
+            "fail_s": 0,
+            "no_fina": 0,
+            "quote_candidates": 0,
+        }
+
+        # 第一阶段：C/A/L（不读日 K）
+        phase1: List[Dict[str, Any]] = []
         for code in code_list:
             fina_rows = fina_map.get(code) or []
+            if not fina_rows:
+                stats["no_fina"] += 1
             c_eval = self.eval_C(fina_rows)
-            if need_c and not c_eval.get("ok"):
-                continue
+            if need_c:
+                if not c_eval.get("ok"):
+                    stats["fail_c"] += 1
+                    continue
+                stats["pass_c"] += 1
             a_eval = self.eval_A(fina_rows)
-            if need_a and not a_eval.get("ok"):
-                continue
+            if need_a:
+                if not a_eval.get("ok"):
+                    stats["fail_a"] += 1
+                    continue
+                stats["pass_a"] += 1
             l_eval = self.eval_L(rs_map.get(code))
-            if need_l and not l_eval.get("ok"):
-                continue
-
-            bars = self.loader.load_quote_window(code, asof_date, lookback + 5)
-            if use_qfq and bars:
-                factors = self.loader.load_adj_factors(code)
-                bars = _apply_qfq(bars, factors)
-            n_eval = self.eval_N(bars, cupb_map.get(code))
-            if need_n and not n_eval.get("ok"):
-                continue
-            last_bar = bars[-1] if bars else None
-            s_eval = self.eval_S(
-                (name_map.get(code) or {}).get("free_float_shares"),
-                last_bar,
-                mavol_map.get(code),
+            if need_l:
+                if not l_eval.get("ok"):
+                    stats["fail_l"] += 1
+                    continue
+                stats["pass_l"] += 1
+            phase1.append(
+                {
+                    "code": code,
+                    "c_eval": c_eval,
+                    "a_eval": a_eval,
+                    "l_eval": l_eval,
+                }
             )
-            if need_s and not s_eval.get("ok"):
-                continue
+
+        # 第二阶段：仅对候选批量取日 K / 量能，再评 N/S
+        cand_codes = [p["code"] for p in phase1]
+        stats["quote_candidates"] = len(cand_codes)
+        quote_map: Dict[str, List[Dict[str, Any]]] = {}
+        mavol_map: Dict[str, Dict[str, Any]] = {}
+        if need_quotes and cand_codes:
+            quote_map = self.loader.load_quote_windows_batch(cand_codes, asof_date, lookback + 5)
+            if use_qfq:
+                adj_map = self.loader.load_adj_factors_batch(cand_codes)
+                for c in cand_codes:
+                    bars = quote_map.get(c) or []
+                    if bars:
+                        quote_map[c] = _apply_qfq(bars, adj_map.get(c) or [])
+            if need_s:
+                mavol_map = self.loader.load_mavol_map(asof_date, cand_codes)
+
+        for item in phase1:
+            code = item["code"]
+            c_eval = item["c_eval"]
+            a_eval = item["a_eval"]
+            l_eval = item["l_eval"]
+
+            if need_quotes:
+                bars = quote_map.get(code) or []
+                n_eval = self.eval_N(bars, cupb_map.get(code))
+                if need_n and not n_eval.get("ok"):
+                    stats["fail_n"] += 1
+                    continue
+                if need_n:
+                    stats["pass_n"] += 1
+                last_bar = bars[-1] if bars else None
+                s_eval = self.eval_S(
+                    (name_map.get(code) or {}).get("free_float_shares"),
+                    last_bar,
+                    mavol_map.get(code),
+                )
+                if need_s and not s_eval.get("ok"):
+                    stats["fail_s"] += 1
+                    continue
+                if need_s:
+                    stats["pass_s"] += 1
+            else:
+                # N/S 均关闭：不扫日K
+                ff = (name_map.get(code) or {}).get("free_float_shares")
+                circ_yi = (float(ff) / 1e8) if ff else None
+                n_eval = {
+                    "ok": True,
+                    "reason": "N 未启用",
+                    "near_high_ratio": None,
+                    "high_52w": None,
+                    "close": None,
+                    "cupb_status": None,
+                    "near_high_ok": False,
+                    "cupb_ok": False,
+                }
+                s_eval = {
+                    "ok": True,
+                    "reason": "S 未启用",
+                    "circ_shares_yi": circ_yi,
+                    "volume_ratio": None,
+                }
 
             c_res = self._letter_result("C", need_c, c_eval)
             a_res = self._letter_result("A", need_a, a_eval)
@@ -513,6 +668,7 @@ class CanSlimEngine:
                     "volume_ratio": s_res.get("volume_ratio"),
                     "q_eps_yoy": c_res.get("q_eps_yoy"),
                     "roe": a_res.get("roe"),
+                    "roe_end_date": a_res.get("roe_end_date"),
                     "cupb_status": n_res.get("cupb_status"),
                 }
             )
@@ -521,6 +677,25 @@ class CanSlimEngine:
 
         # RS 降序
         results.sort(key=lambda x: (x.get("rs_rating") or 0), reverse=True)
+        message = None
+        if not results:
+            parts = [f"股票池{stats['universe']}"]
+            if need_c:
+                parts.append(f"过C {stats['pass_c']}（未过{stats['fail_c']}）")
+            if need_a:
+                parts.append(
+                    f"过A {stats['pass_a']}（未过{stats['fail_a']}；A=近3年年报增速+ROE，不单是ROE）"
+                )
+            if need_l:
+                parts.append(f"过L {stats['pass_l']}（未过{stats['fail_l']}）")
+            if need_n:
+                parts.append(f"过N {stats['pass_n']}（未过{stats['fail_n']}）")
+            if need_s:
+                parts.append(f"过S {stats['pass_s']}（未过{stats['fail_s']}）")
+            if stats["no_fina"]:
+                parts.append(f"无财务{stats['no_fina']}")
+            message = "无符合条件的股票。漏斗：" + " → ".join(parts)
+
         return {
             "success": True,
             "asof": asof_date,
@@ -528,7 +703,8 @@ class CanSlimEngine:
             "total": len(results),
             "data": results,
             "filters": self._active_filters_meta(),
-            "message": None,
+            "diagnostics": stats,
+            "message": message,
         }
 
     def _active_filters_meta(self) -> Dict[str, Any]:
