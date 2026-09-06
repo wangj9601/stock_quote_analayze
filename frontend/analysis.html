@@ -188,6 +188,10 @@
                                             data-perm="channel.analyze.tab.trade_observe"
                                             title="将当前分析股票加入统一交易观察（来源：个股分析）"
                                             disabled>交易观察</button>
+                                        <button type="button" class="btn btn-secondary" id="ssaWatchlistBtn"
+                                            data-perm="channel.watchlist.tab.default.btn.add"
+                                            title="将当前股票加入或移出自选股"
+                                            disabled>加自选</button>
                                     </div>
                                 </div>
                             </div>
@@ -592,7 +596,10 @@
                                 </div>
                                 <div class="kde-levels-card current">
                                     <h4>现价</h4>
-                                    <div class="kde-levels-price" id="kdeCurrentPrice">--</div>
+                                    <div class="kde-levels-price-row">
+                                        <div class="kde-levels-price" id="kdeCurrentPrice">--</div>
+                                        <span class="kde-levels-change" id="kdeCurrentChange" hidden></span>
+                                    </div>
                                     <div class="kde-levels-near">
                                         <div>最近支撑：<strong id="kdeNearestSupport">--</strong></div>
                                         <div>最近压力：<strong id="kdeNearestResistance">--</strong></div>
@@ -647,7 +654,13 @@
                                     </div>
                                 </div>
                                 <div class="kde-levels-card vp-compare">
-                                    <h4>与 KDE 对比</h4>
+                                    <h4 class="kde-vp-compare-title">
+                                        <span>与 KDE 对比</span>
+                                        <button type="button" class="btn btn-secondary btn-sm" id="kdeVpSyncLookbackBtn"
+                                            title="将 KDE 与 VP 对齐到同一回看天数（优先取 KDE 当前天数）后重算，便于对照共振">
+                                            同步回看
+                                        </button>
+                                    </h4>
                                     <table class="kde-vp-compare-table" id="kdeVpCompareTable">
                                         <thead>
                                             <tr><th></th><th>KDE</th><th>VP</th><th>差值</th><th>共振</th></tr>

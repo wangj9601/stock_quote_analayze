@@ -1989,23 +1989,52 @@
                     <li><strong>N</strong> 接近 52 周新高（≥85%）或 CUPB forming/confirmed</li>
                     <li><strong>S</strong> 流通股本 ≤ 20 亿股；阳线日量 ≥ MAVOL20</li>
                     <li><strong>L</strong> RS Rating ≥ 80</li>
-                    <li><strong>M</strong> 沪深300 收盘 &gt; MA50 且 MA50 上行（可关闭）</li>
+                    <li><strong>C / A / N / S / L / M</strong> 均可在下方参数中单独启用或关闭；关闭的字母不参与过滤</li>
                     <li><strong>I</strong> 第一期不参与过滤</li>
                 </ul>
             </div>
 
+            <div class="strategy-params-card" id="canslimStrategyParamsCard">
+                <h3>筛选参数（均可选）</h3>
+                <div class="params-grid canslim-letter-grid" style="display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin-bottom:14px;">
+                    <span style="font-size:13px;color:#475569;font-weight:600;">启用字母：</span>
+                    <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterC" checked style="margin-right:4px;">C 季增</label>
+                    <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterA" checked style="margin-right:4px;">A 年报/ROE</label>
+                    <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterN" checked style="margin-right:4px;">N 新高/CUPB</label>
+                    <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterS" checked style="margin-right:4px;">S 流通/量</label>
+                    <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimFilterL" checked style="margin-right:4px;">L RS</label>
+                    <label class="canslim-letter-check" style="cursor:pointer;"><input type="checkbox" id="canslimMarketFilter" checked style="margin-right:4px;">M 大盘</label>
+                </div>
+                <div class="params-grid" style="display:flex;flex-wrap:wrap;gap:16px 24px;align-items:flex-end;">
+                    <div class="parameter-group">
+                        <label for="canslimRsMin">L · RS ≥</label>
+                        <input type="number" id="canslimRsMin" class="param-input" value="80" min="1" max="99" style="width:72px;" title="仅当启用 L 时生效">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="canslimQEpsMin">C · 季增% ≥</label>
+                        <input type="number" id="canslimQEpsMin" class="param-input" value="25" min="0" max="500" step="1" style="width:72px;" title="仅当启用 C 时生效">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="canslimRoeMin">A · ROE% ≥</label>
+                        <input type="number" id="canslimRoeMin" class="param-input" value="17" min="0" max="100" step="0.5" style="width:72px;" title="仅当启用 A 时生效">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="canslimNearHighMin">N · 距新高% ≥</label>
+                        <input type="number" id="canslimNearHighMin" class="param-input" value="85" min="1" max="100" step="1" style="width:72px;" title="收盘/52周高×100；仅当启用 N 时生效">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="canslimCircMax">S · 流通股上限(亿)</label>
+                        <input type="number" id="canslimCircMax" class="param-input" value="20" min="0.1" max="500" step="0.1" style="width:80px;" title="仅当启用 S 时生效">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="canslimDate">基准日</label>
+                        <input type="date" id="canslimDate" class="param-input" title="留空=最新交易日">
+                    </div>
+                </div>
+                <p class="param-rule" style="margin-top:10px;">大盘偏弱时可关闭 M；也可按需关闭部分字母，只保留关心的条件。至少启用 C/A/N/S/L 中一项。</p>
+            </div>
+
             <div class="screening-actions" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
-                <label style="cursor:pointer;">
-                    <input type="checkbox" id="canslimMarketFilter" checked style="margin-right:4px;">启用大盘过滤(M)
-                </label>
-                <label>
-                    RS≥
-                    <input type="number" id="canslimRsMin" class="param-input" value="80" min="1" max="99" style="width:64px;">
-                </label>
-                <label>
-                    基准日
-                    <input type="date" id="canslimDate" class="param-input" title="留空=最新交易日">
-                </label>
                 <button id="refreshBtn-canslim" class="refresh-btn" data-strategy="canslim"
                     data-perm="channel.screening.tab.canslim.btn.refresh">刷新筛选</button>
                 <span id="searchDate-canslim" class="search-date"></span>

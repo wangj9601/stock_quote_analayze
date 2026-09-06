@@ -44,6 +44,27 @@ def test_records_and_attach_yoy_quarter():
     assert by["20241231"]["roe"] == 20.0
 
 
+def test_abstract_wide_parses_roe_with_paren_suffix():
+    """Eastmoney abstract 指标名为「净资产收益率(ROE)」，须能解析入库。"""
+    from backend_core.data_collectors.akshare.fina_indicator import AkshareFinaIndicatorCollector
+
+    df = pd.DataFrame(
+        {
+            "选项": ["常用指标", "常用指标", "常用指标"],
+            "指标": ["基本每股收益", "净资产收益率(ROE)", "归母净利润"],
+            "20241231": [1.2, 15.6, 100.0],
+            "20231231": [1.0, 12.3, 80.0],
+            "20240630": [0.5, 7.1, 40.0],
+        }
+    )
+    c = AkshareFinaIndicatorCollector.__new__(AkshareFinaIndicatorCollector)
+    wide = AkshareFinaIndicatorCollector._from_abstract_wide(c, df, "003004")
+    assert wide["20241231"]["roe"] == 15.6
+    assert wide["20241231"]["roe_waa"] == 15.6
+    assert wide["20231231"]["roe"] == 12.3
+    assert wide["20241231"]["eps"] == 1.2
+
+
 def test_auto_fina_uses_akshare_without_token(monkeypatch):
     import backend_core.data_collectors.tushare.fina_indicator as mod
 

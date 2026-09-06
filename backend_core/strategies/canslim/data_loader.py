@@ -220,7 +220,7 @@ class CanSlimDataLoader:
                 """
                 SELECT date::text, open, high, low, close, volume
                 FROM historical_quotes
-                WHERE code = :code AND date <= CAST(:asof AS DATE)
+                WHERE code = :code AND date::text <= :asof
                 ORDER BY date DESC
                 LIMIT :lim
                 """

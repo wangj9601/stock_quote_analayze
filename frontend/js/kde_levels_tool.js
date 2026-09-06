@@ -124,6 +124,10 @@ const KdeLevelsTool = {
                 }
             });
         }
+        const syncBtn = document.getElementById('kdeVpSyncLookbackBtn');
+        if (syncBtn) {
+            syncBtn.addEventListener('click', () => this.syncStandaloneLookback());
+        }
     },
 
     readVpLookbackParams() {
@@ -194,6 +198,49 @@ const KdeLevelsTool = {
 
     _fmtPrice(v) {
         return v != null && Number.isFinite(Number(v)) ? Number(v).toFixed(2) : '--';
+    },
+
+    /**
+     * 现价旁涨跌展示（A 股习惯：红涨绿跌）。
+     * 优先用接口 change_percent / change_amount；缺失时用 current_price 与 pre_close 推算。
+     */
+    _fmtPriceChangeHtml(d) {
+        const src = d && typeof d === 'object' ? d : {};
+        let pct = src.change_percent;
+        let amt = src.change_amount;
+        const px = src.current_price;
+        const pre = src.pre_close;
+        const num = (v) => {
+            const n = Number(v);
+            return Number.isFinite(n) ? n : null;
+        };
+        let pctN = num(pct);
+        let amtN = num(amt);
+        const pxN = num(px);
+        const preN = num(pre);
+        if (pctN == null && pxN != null && preN != null && preN > 0) {
+            pctN = ((pxN - preN) / preN) * 100;
+        }
+        if (amtN == null && pxN != null && preN != null) {
+            amtN = pxN - preN;
+        }
+        if (pctN == null) return '';
+        const cls = pctN > 0 ? 'is-up' : pctN < 0 ? 'is-down' : 'is-flat';
+        const sign = pctN > 0 ? '+' : '';
+        const amtTxt = amtN != null ? `${sign}${amtN.toFixed(2)}` : '';
+        const pctTxt = `${sign}${pctN.toFixed(2)}%`;
+        const body = amtTxt ? `${amtTxt} ${pctTxt}` : pctTxt;
+        return `<span class="kde-levels-change ${cls}">${body}</span>`;
+    },
+
+    _priceRowHtml(d) {
+        const change = this._fmtPriceChangeHtml(d);
+        return (
+            `<div class="kde-levels-price-row">` +
+            `<div class="kde-levels-price">${this._fmtPrice(d && d.current_price)}</div>` +
+            change +
+            `</div>`
+        );
     },
 
     /** 空价位时优先展示语义说明（如已突破 VAH） */
@@ -489,7 +536,7 @@ const KdeLevelsTool = {
                 <details class="kde-algo-details" open>
                     <summary>现价速览</summary>
                     <div class="kde-levels-card current kde-levels-card--inline">
-                        <div class="kde-levels-price">${fmt(d.current_price)}</div>
+                        ${this._priceRowHtml(d)}
                         <div class="kde-levels-near">
                             <div>KDE 最近支撑：<strong>${fmt(d.nearest_support)}</strong></div>
                             <div>KDE 最近压力：<strong>${fmt(d.nearest_resistance)}</strong></div>
@@ -505,7 +552,7 @@ const KdeLevelsTool = {
                         </div>
                         <div class="kde-levels-card current">
                             <h4>现价 / 回看</h4>
-                            <div class="kde-levels-price">${fmt(d.current_price)}</div>
+                            ${this._priceRowHtml(d)}
                             <div class="kde-levels-near">
                                 <div>最近支撑：<strong>${fmt(d.nearest_support)}</strong></div>
                                 <div>最近压力：<strong>${fmt(d.nearest_resistance)}</strong></div>
@@ -564,7 +611,14 @@ const KdeLevelsTool = {
                             </div>
                         </div>
                         <div class="kde-levels-card vp-compare">
-                            <h4>KDE ↔ VP</h4>
+                            <h4 class="kde-vp-compare-title">
+                                <span>KDE ↔ VP</span>
+                                <button type="button"
+                                    class="btn btn-secondary btn-sm ssa-kde-vp-sync-lookback"
+                                    title="将 KDE 与 VP 对齐到同一回看天数（优先取 KDE 当前天数）后重算，便于对照共振">
+                                    同步回看
+                                </button>
+                            </h4>
                             <table class="kde-vp-compare-table">
                                 <thead><tr><th></th><th>KDE</th><th>VP</th><th>差</th><th>共振</th></tr></thead>
                                 <tbody>
@@ -668,6 +722,7 @@ const KdeLevelsTool = {
         };
         this._bindEmbeddedVpControls(container, bindCtx);
         this._bindEmbeddedKdeControls(container, bindCtx);
+        this._bindEmbeddedSyncLookback(container, bindCtx);
     },
 
     /**
@@ -687,6 +742,7 @@ const KdeLevelsTool = {
         [
             '.ssa-kde-lookback-apply', '.ssa-kde-lookback-days', '.ssa-kde-from-date',
             '.ssa-vp-lookback-apply', '.ssa-vp-lookback-days', '.ssa-vp-from-date',
+            '.ssa-kde-vp-sync-lookback',
         ].forEach((sel) => {
             const el = container.querySelector(sel);
             if (el && el.parentNode) {
@@ -702,6 +758,7 @@ const KdeLevelsTool = {
         };
         this._bindEmbeddedVpControls(container, bindCtx);
         this._bindEmbeddedKdeControls(container, bindCtx);
+        this._bindEmbeddedSyncLookback(container, bindCtx);
     },
 
     _readEmbeddedVpParams(container) {
@@ -793,6 +850,173 @@ const KdeLevelsTool = {
                     run();
                 }
             });
+        }
+    },
+
+    _bindEmbeddedSyncLookback(container, ctx) {
+        if (!container) return;
+        const btn = container.querySelector('.ssa-kde-vp-sync-lookback');
+        if (!btn) return;
+        btn.addEventListener('click', () => this._applyEmbeddedSyncLookback(container, ctx));
+    },
+
+    /**
+     * 取对齐天数：优先 KDE 输入，其次 VP；落在 [20,750]（两边都合法）。
+     */
+    _resolveSyncLookbackDays(kdeLookback, vpLookback, fallback = 60) {
+        let days = null;
+        if (kdeLookback != null && Number.isFinite(Number(kdeLookback))) {
+            days = Number(kdeLookback);
+        } else if (vpLookback != null && Number.isFinite(Number(vpLookback))) {
+            days = Number(vpLookback);
+        } else if (fallback != null && Number.isFinite(Number(fallback))) {
+            days = Number(fallback);
+        } else {
+            days = 60;
+        }
+        return Math.max(20, Math.min(750, Math.round(days)));
+    },
+
+    async syncStandaloneLookback() {
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        const kdeParams = this.readKdeLookbackParams();
+        const vpParams = this.readVpLookbackParams();
+        const days = this._resolveSyncLookbackDays(
+            kdeParams.kde_lookback,
+            vpParams.vp_lookback,
+            60
+        );
+        const kdeDaysInput = document.getElementById('kdeLookbackInput');
+        const vpDaysInput = document.getElementById('kdeVpLookbackInput');
+        const kdeFromInput = document.getElementById('kdeFromDateInput');
+        const vpFromInput = document.getElementById('kdeVpFromDateInput');
+        if (kdeDaysInput) kdeDaysInput.value = String(days);
+        if (vpDaysInput) vpDaysInput.value = String(days);
+        if (kdeFromInput) kdeFromInput.value = '';
+        if (vpFromInput) vpFromInput.value = '';
+        const syncBtn = document.getElementById('kdeVpSyncLookbackBtn');
+        if (syncBtn) {
+            syncBtn.disabled = true;
+            syncBtn.textContent = '同步中…';
+        }
+        try {
+            await this.calculateKdeLevels({
+                adjust: this._pendingAdjust || this.selectedAdjust(),
+                preferKdeLookback: true,
+                preferVpLookback: true,
+            });
+            CommonUtils.showToast(`已按 ${days} 日同步 KDE/VP 回看`, 'success');
+        } finally {
+            if (syncBtn) {
+                syncBtn.disabled = false;
+                syncBtn.textContent = '同步回看';
+            }
+        }
+    },
+
+    async _applyEmbeddedSyncLookback(container, ctx) {
+        let code = String(
+            (ctx && ctx.code)
+            || (container && container.dataset && container.dataset.stockCode)
+            || ''
+        ).trim();
+        if (!code) {
+            const input = document.getElementById('ssaStockCode');
+            const raw = input && input.value ? String(input.value).trim() : '';
+            const token = raw.split(/\s+/)[0] || '';
+            const body = /^(sh|sz|bj|hk)/i.test(token) ? token.slice(2) : token;
+            if (/^\d{4,6}$/.test(body)) code = token;
+        }
+        if (!code) {
+            if (window.CommonUtils) CommonUtils.showToast('缺少股票代码，请先完成分析', 'warning');
+            return;
+        }
+        if (window.CommonUtils && !CommonUtils.checkLoginAndHandleExpiry()) return;
+
+        const kdeParams = this._readEmbeddedKdeParams(container);
+        const vpParams = this._readEmbeddedVpParams(container);
+        const days = this._resolveSyncLookbackDays(
+            kdeParams.kde_lookback,
+            vpParams.vp_lookback,
+            60
+        );
+
+        const kdeDaysEl = container.querySelector('.ssa-kde-lookback-days');
+        const vpDaysEl = container.querySelector('.ssa-vp-lookback-days');
+        const kdeFromEl = container.querySelector('.ssa-kde-from-date');
+        const vpFromEl = container.querySelector('.ssa-vp-from-date');
+        if (kdeDaysEl) kdeDaysEl.value = String(days);
+        if (vpDaysEl) vpDaysEl.value = String(days);
+        if (kdeFromEl) kdeFromEl.value = '';
+        if (vpFromEl) vpFromEl.value = '';
+
+        const syncBtn = container.querySelector('.ssa-kde-vp-sync-lookback');
+        const kdeApplyBtn = container.querySelector('.ssa-kde-lookback-apply');
+        const vpApplyBtn = container.querySelector('.ssa-vp-lookback-apply');
+        const busyBtns = [syncBtn, kdeApplyBtn, vpApplyBtn].filter(Boolean);
+        busyBtns.forEach((btn) => {
+            btn.disabled = true;
+            if (btn === syncBtn) btn.textContent = '同步中…';
+            else btn.textContent = '计算中…';
+        });
+
+        const statusEl = document.getElementById('ssaLevelsStatus');
+        if (statusEl) {
+            statusEl.hidden = false;
+            statusEl.className = 'ssa-block-status is-loading';
+            statusEl.textContent = `正在按 ${days} 日同步重算 KDE 与 Volume Profile…`;
+        }
+
+        try {
+            const fetched = await this.fetchLevels(code, {
+                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                factor_source: (ctx && ctx.factor_source) || 'auto',
+                max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
+                kde_lookback: days,
+                vp_lookback: days,
+            });
+            if (fetched.candidates && fetched.candidates.length > 1 && !fetched.data) {
+                throw new Error(fetched.message || '股票代码不唯一');
+            }
+            if (!fetched.httpOk && !fetched.data) {
+                throw new Error(fetched.message || '同步回看重算失败');
+            }
+            this.renderEmbedded(container, fetched.data || {}, fetched.ok, fetched.message, {
+                code,
+                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                factor_source: (ctx && ctx.factor_source) || 'auto',
+                max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
+                onUpdated: ctx && ctx.onUpdated,
+            });
+            if (ctx && typeof ctx.onUpdated === 'function') {
+                ctx.onUpdated({
+                    ok: !!fetched.ok,
+                    data: fetched.data || {},
+                    message: fetched.message || '',
+                });
+            }
+            if (statusEl) {
+                statusEl.hidden = true;
+                statusEl.textContent = '';
+            }
+            if (window.CommonUtils) {
+                CommonUtils.showToast(`已按 ${days} 日同步 KDE/VP 回看`, 'success');
+            }
+        } catch (e) {
+            console.warn('个股分析·KDE/VP 同步回看失败', e);
+            busyBtns.forEach((btn) => {
+                btn.disabled = false;
+                if (btn.classList.contains('ssa-kde-vp-sync-lookback')) btn.textContent = '同步回看';
+                else btn.textContent = '应用';
+            });
+            if (statusEl) {
+                statusEl.hidden = false;
+                statusEl.className = 'ssa-block-status is-error';
+                statusEl.textContent = e.message || '同步回看重算失败';
+            }
+            if (window.CommonUtils) {
+                CommonUtils.showToast(e.message || '同步回看重算失败', 'error');
+            }
         }
     },
 
@@ -1114,7 +1338,27 @@ const KdeLevelsTool = {
                 ? `${title} · ${adjustBrief}`
                 : `${title} · ${adjustBrief}${message ? `（${message}）` : ''}`;
         }
-        if (priceEl) priceEl.textContent = fmt(data.current_price);
+        if (priceEl) {
+            priceEl.textContent = fmt(data.current_price);
+            const changeEl = document.getElementById('kdeCurrentChange');
+            const changeHtml = this._fmtPriceChangeHtml(data);
+            if (changeEl) {
+                if (changeHtml) {
+                    const tmp = document.createElement('div');
+                    tmp.innerHTML = changeHtml;
+                    const src = tmp.firstElementChild;
+                    if (src) {
+                        changeEl.className = src.className;
+                        changeEl.textContent = src.textContent;
+                        changeEl.hidden = false;
+                    }
+                } else {
+                    changeEl.textContent = '';
+                    changeEl.hidden = true;
+                    changeEl.className = 'kde-levels-change';
+                }
+            }
+        }
         if (nearS) nearS.textContent = fmt(data.nearest_support);
         if (nearR) nearR.textContent = fmt(data.nearest_resistance);
         fillList(supportList, data.support_levels);

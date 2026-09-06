@@ -28,14 +28,46 @@ class CanSlimFrontendInterface:
         asof: Optional[str] = None,
         codes: Optional[Sequence[str]] = None,
         market_filter: Optional[bool] = None,
+        filter_c: Optional[bool] = None,
+        filter_a: Optional[bool] = None,
+        filter_n: Optional[bool] = None,
+        filter_s: Optional[bool] = None,
+        filter_l: Optional[bool] = None,
         rs_min: Optional[int] = None,
+        q_eps_yoy_min: Optional[float] = None,
+        roe_min: Optional[float] = None,
+        near_high_min_pct: Optional[float] = None,
+        circ_shares_max_yi: Optional[float] = None,
         overrides: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         cfg = merge_canslim_config(overrides) if overrides else copy.deepcopy(self.config)
-        if market_filter is not None:
-            cfg.setdefault("M", {})
-            cfg["M"]["enabled"] = bool(market_filter)
+        letter_flags = {
+            "C": filter_c,
+            "A": filter_a,
+            "N": filter_n,
+            "S": filter_s,
+            "L": filter_l,
+            "M": market_filter,
+        }
+        for letter, flag in letter_flags.items():
+            if flag is not None:
+                cfg.setdefault(letter, {})
+                cfg[letter]["enabled"] = bool(flag)
         if rs_min is not None:
             cfg.setdefault("L", {})
             cfg["L"]["rs_rating_min"] = int(rs_min)
+        if q_eps_yoy_min is not None:
+            cfg.setdefault("C", {})
+            cfg["C"]["q_eps_yoy_min"] = float(q_eps_yoy_min)
+        if roe_min is not None:
+            cfg.setdefault("A", {})
+            cfg["A"]["roe_min"] = float(roe_min)
+        if near_high_min_pct is not None:
+            cfg.setdefault("N", {})
+            # 前端传百分比 85 → 内部 ratio 0.85
+            pct = float(near_high_min_pct)
+            cfg["N"]["near_high_min_ratio"] = pct / 100.0 if pct > 1.0 else pct
+        if circ_shares_max_yi is not None:
+            cfg.setdefault("S", {})
+            cfg["S"]["circ_shares_max_yi"] = float(circ_shares_max_yi)
         return CanSlimEngine(self.db, cfg).screen(asof=asof, codes=codes)

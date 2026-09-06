@@ -2819,12 +2819,21 @@ async def get_high_tight_flag_strategy(
 async def get_canslim_strategy(
     asof: Optional[str] = Query(None, description="基准日 YYYY-MM-DD，默认最新交易日"),
     market_filter: bool = Query(True, description="是否启用大盘 M 过滤"),
+    filter_c: bool = Query(True, description="是否启用 C（季增）过滤"),
+    filter_a: bool = Query(True, description="是否启用 A（年报/ROE）过滤"),
+    filter_n: bool = Query(True, description="是否启用 N（新高/CUPB）过滤"),
+    filter_s: bool = Query(True, description="是否启用 S（流通盘/量）过滤"),
+    filter_l: bool = Query(True, description="是否启用 L（RS）过滤"),
     rs_min: Optional[int] = Query(None, description="RS Rating 最低分，默认配置 80"),
+    q_eps_yoy_min: Optional[float] = Query(None, description="C：单季同比下限 %，默认 25"),
+    roe_min: Optional[float] = Query(None, description="A：ROE 下限 %，默认 17"),
+    near_high_min_pct: Optional[float] = Query(None, description="N：距新高最低百分比，默认 85"),
+    circ_shares_max_yi: Optional[float] = Query(None, description="S：流通股本上限（亿股），默认 20"),
     stock_code: Optional[str] = Query(None, description="可选：仅筛单只股票"),
     db: Session = Depends(get_db),
 ):
     """
-    CAN SLIM 第一期选股：C+A+N+S+L 合取，M 为大盘开关，I 不参与过滤。
+    CAN SLIM 第一期选股：C+A+N+S+L 合取（各项可单独关闭），M 为大盘开关，I 不参与过滤。
     依赖库内 stock_fina_indicator、rs_ratings、index_historical_quotes 等；不现场打外网。
     """
     try:
@@ -2839,7 +2848,16 @@ async def get_canslim_strategy(
             asof=asof,
             codes=codes,
             market_filter=market_filter,
+            filter_c=filter_c,
+            filter_a=filter_a,
+            filter_n=filter_n,
+            filter_s=filter_s,
+            filter_l=filter_l,
             rs_min=rs_min,
+            q_eps_yoy_min=q_eps_yoy_min,
+            roe_min=roe_min,
+            near_high_min_pct=near_high_min_pct,
+            circ_shares_max_yi=circ_shares_max_yi,
         )
         data = result.get("data") or []
         return JSONResponse(
@@ -2850,6 +2868,7 @@ async def get_canslim_strategy(
                 "search_date": result.get("asof") or datetime.now().strftime("%Y-%m-%d"),
                 "strategy_name": "CAN SLIM",
                 "market": result.get("market"),
+                "filters": result.get("filters"),
                 "message": result.get("message"),
             }
         )

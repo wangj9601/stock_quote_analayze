@@ -91,6 +91,8 @@ assert(js.includes('_fetchAnalysisBundle'), '批量应并行拉取各股数据')
 assert(html.includes('id="ssaAnalyzeAllSelected"'), '应有一次分析全部勾选选项');
 assert(js.includes('_closeStockTab'), '个股分析 Tab 应支持关闭');
 assert(js.includes('ssa-stock-tab-close'), 'Tab 应有关闭按钮');
+assert(js.includes('_sessionIsBullish'), 'Tab 应判断短线/中长线偏多');
+assert(js.includes('ssa-stock-tab-star'), '偏多 Tab 应有星号角标');
 assert(js.includes('openWatchlistPicker'), '应打开自选股弹窗');
 assert(js.includes('confirmWatchlistPicker'), '应确认自选股选择');
 

@@ -1498,6 +1498,7 @@ a.ba-stock-code-link:focus {
     border-bottom: 1px solid #e2e8f0;
 }
 .ssa-stock-tab {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -1515,6 +1516,35 @@ a.ba-stock-code-link:focus {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+.ssa-stock-tab-star {
+    position: absolute;
+    top: -7px;
+    left: -6px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: #dc2626;
+    color: #fff;
+    font-size: 13px;
+    font-weight: 800;
+    line-height: 1;
+    pointer-events: none;
+    box-shadow: 0 1px 3px rgba(220, 38, 38, 0.45);
+}
+.ssa-stock-tab.is-bullish {
+    border-color: #f87171;
+    background: #fff7f7;
+    padding-left: 14px;
+}
+.ssa-stock-tab.active.is-bullish {
+    border-color: #ef4444;
+    background: #fff1f2;
 }
 .ssa-stock-tab-close {
     flex-shrink: 0;
@@ -1600,6 +1630,15 @@ a.ba-stock-code-link:focus {
 }
 .ssa-action-btns .btn {
     margin: 0;
+}
+.ssa-action-btns .btn.is-watchlisted {
+    color: #b45309;
+    border-color: #fcd34d;
+    background: #fffbeb;
+}
+.ssa-action-btns .btn.is-watchlisted:hover {
+    background: #fef3c7;
+    border-color: #f59e0b;
 }
 .ssa-export-root {
     min-height: 0;
@@ -1907,7 +1946,11 @@ body.ssa-png-capturing .ms-zigzag-svg,
     border: none;
     padding: 0;
     cursor: pointer;
-    text-decoration: underline;
+    text-decoration: none;
+}
+.ssa-rs-trace-link:hover,
+.ssa-rs-trace-toggle:hover {
+    color: #1e40af;
 }
 .ssa-rs-history {
     margin-top: 10px;
@@ -2660,6 +2703,17 @@ body.ssa-png-capturing .ms-zigzag-svg,
     max-width: 9.5rem;
 }
 
+.kde-vp-compare-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.kde-vp-compare-title .btn-sm,
+.ssa-kde-vp-sync-lookback {
+    flex-shrink: 0;
+}
 .kde-vp-lookback-ctrl .btn-sm {
     padding: 0.2rem 0.55rem;
     font-size: 0.8rem;
@@ -2760,11 +2814,38 @@ body.ssa-png-capturing .ms-zigzag-svg,
     color: #9ca3af;
 }
 
+.kde-levels-price-row {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+}
+
 .kde-levels-price {
     font-size: 1.75rem;
     font-weight: 700;
     color: #2563eb;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0;
+}
+
+.kde-levels-change {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.01em;
+}
+
+.kde-levels-change.is-up {
+    color: #dc2626;
+}
+
+.kde-levels-change.is-down {
+    color: #16a34a;
+}
+
+.kde-levels-change.is-flat {
+    color: #64748b;
 }
 
 .kde-levels-near {

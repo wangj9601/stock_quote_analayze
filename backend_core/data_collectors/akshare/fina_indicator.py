@@ -26,7 +26,16 @@ logger = logging.getLogger(__name__)
 
 _COL_PERIOD = ("报告期", "报告日期", "日期")
 _COL_EPS = ("基本每股收益", "每股收益", "每股收益(元)", "EPS")
-_COL_ROE = ("净资产收益率", "净资产收益率-加权", "净资产收益率(加权)", "ROE")
+# Eastmoney abstract 实际名为「净资产收益率(ROE)」；勿只写短名精确匹配
+_COL_ROE = (
+    "净资产收益率(ROE)",
+    "净资产收益率_平均",
+    "净资产收益率-加权",
+    "净资产收益率(加权)",
+    "摊薄净资产收益率",
+    "净资产收益率",
+    "ROE",
+)
 _COL_PROFIT = ("净利润", "归母净利润", "净利润(元)")
 _COL_REVENUE = ("营业总收入", "营业收入", "营业总收入(元)")
 
@@ -117,12 +126,31 @@ def _pick_col(columns: Sequence[str], candidates: Sequence[str]) -> Optional[str
     for cand in candidates:
         if cand in colset:
             return colset[cand]
-    for c in columns:
-        cs = str(c).strip()
-        for cand in candidates:
-            if cand in cs:
+    for cand in candidates:
+        for c in columns:
+            cs = str(c).strip()
+            if cand and cand in cs:
                 return c
     return None
+
+
+def _match_indicator_rows(df: pd.DataFrame, row_name_col: str, candidates: Sequence[str]) -> pd.DataFrame:
+    """按候选名匹配宽表指标行：先精确，再包含；多行时保留全部供取值合并。"""
+    series = df[row_name_col].astype(str).str.strip()
+    for cand in candidates:
+        exact = df.loc[series == cand]
+        if not exact.empty:
+            return exact
+    for cand in candidates:
+        if not cand:
+            continue
+        # 避免「净资产」误匹配「每股净资产」：要求候选为完整指标子串
+        fuzzy = df.loc[series.str.contains(cand, regex=False, na=False)]
+        if not fuzzy.empty:
+            # 优先更短的指标名（更接近主指标）
+            lengths = fuzzy[row_name_col].astype(str).str.len()
+            return fuzzy.loc[[lengths.idxmin()]]
+    return df.iloc[0:0]
 
 
 def _yoy_pct(curr: Optional[float], prev: Optional[float]) -> Optional[float]:
@@ -352,18 +380,21 @@ class AkshareFinaIndicatorCollector(AKShareCollector):
             return {}
 
         def _row_vals(names: Sequence[str]) -> Dict[str, Optional[float]]:
-            for name in names:
-                matched = df.loc[df[row_name_col] == name]
-                if matched.empty:
+            matched = _match_indicator_rows(df, row_name_col, names)
+            if matched.empty:
+                return {}
+            out: Dict[str, Optional[float]] = {}
+            for pc in period_cols:
+                end = normalize_end_date(pc)
+                if not end:
                     continue
-                out: Dict[str, Optional[float]] = {}
-                for pc in period_cols:
-                    end = normalize_end_date(pc)
-                    if not end:
-                        continue
-                    out[end] = _safe_float(matched.iloc[0][pc])
-                return out
-            return {}
+                val = None
+                for i in range(len(matched)):
+                    val = _safe_float(matched.iloc[i][pc])
+                    if val is not None:
+                        break
+                out[end] = val
+            return out
 
         eps_map = _row_vals(_COL_EPS)
         roe_map = _row_vals(_COL_ROE)

@@ -1048,6 +1048,8 @@ class StockAnalysisService:
                     f"Volume Profile（近 {vp_lb} 日 POC/VAH/VAL）与 Fib/Pivot 并列参考，用于对照 KDE，不改策略门槛。"
                 )
 
+            change_meta = self._resolve_change_meta(code, historical_data, price_source)
+
             return {
                 "success": True,
                 "data": {
@@ -1061,6 +1063,9 @@ class StockAnalysisService:
                     if realtime_price
                     else None,
                     "realtime_price_source": realtime_source,
+                    "pre_close": change_meta.get("pre_close"),
+                    "change_amount": change_meta.get("change_amount"),
+                    "change_percent": change_meta.get("change_percent"),
                     "price_adjust": adjust,
                     "adj_factor_source": meta.get("source"),
                     "adj_factor_asof": meta.get("adj_factor_asof"),
@@ -1135,6 +1140,12 @@ class StockAnalysisService:
             # 关键价位（KDE 历史序列仍用日K；仅现价锚点用实时优先价）
             key_levels = KeyLevels.calculate_key_levels(historical_data, current_price)
             key_levels["current_price_source"] = price_source
+            change_meta = self._resolve_change_meta(
+                stock_code, historical_data, price_source
+            )
+            key_levels["pre_close"] = change_meta.get("pre_close")
+            key_levels["change_amount"] = change_meta.get("change_amount")
+            key_levels["change_percent"] = change_meta.get("change_percent")
             
             # AI 深度分析 (Gemini) - 已屏蔽，避免配额超限
             # try:
@@ -1308,10 +1319,21 @@ class StockAnalysisService:
         A 股：stock_realtime_quote；港股：stock_realtime_quote_hk。
         无有效价时返回 None（由调用方回退日K收盘）。
         """
+        meta = self._get_realtime_quote_meta(stock_code)
+        return meta.get("current_price")
+
+    def _get_realtime_quote_meta(self, stock_code: str) -> Dict[str, Optional[float]]:
+        """实时行情：现价 / 昨收 / 涨跌额 / 涨跌幅。"""
+        empty: Dict[str, Optional[float]] = {
+            "current_price": None,
+            "pre_close": None,
+            "change_amount": None,
+            "change_percent": None,
+        }
         try:
             code = str(stock_code or "").strip()
             if not code:
-                return None
+                return empty
             is_hk = self._is_hk_stock(code)
             if is_hk:
                 row = (
@@ -1328,11 +1350,76 @@ class StockAnalysisService:
                     .first()
                 )
             if not row:
-                return None
-            return self._valid_price(getattr(row, "current_price", None))
+                return empty
+            px = self._valid_price(getattr(row, "current_price", None))
+            pre = self._valid_price(getattr(row, "pre_close", None))
+            pct = getattr(row, "change_percent", None)
+            amt = getattr(row, "change_amount", None)
+            try:
+                pct_f = float(pct) if pct is not None else None
+            except (TypeError, ValueError):
+                pct_f = None
+            try:
+                amt_f = float(amt) if amt is not None else None
+            except (TypeError, ValueError):
+                amt_f = None
+            if amt_f is None and px is not None and pre is not None:
+                amt_f = px - pre
+            if pct_f is None and px is not None and pre is not None and pre > 0:
+                pct_f = (px - pre) / pre * 100.0
+            return {
+                "current_price": px,
+                "pre_close": pre,
+                "change_amount": round(amt_f, 4) if amt_f is not None else None,
+                "change_percent": round(pct_f, 4) if pct_f is not None else None,
+            }
         except Exception as e:
-            logger.error(f"获取当前价格失败: {str(e)}")
-            return None
+            logger.error(f"获取实时涨跌失败: {str(e)}")
+            return empty
+
+    @staticmethod
+    def _change_meta_from_bars(historical_data: Optional[List[Dict]]) -> Dict[str, Optional[float]]:
+        """用日K末两日收盘估算涨跌（无实时涨跌时回退）。"""
+        empty: Dict[str, Optional[float]] = {
+            "current_price": None,
+            "pre_close": None,
+            "change_amount": None,
+            "change_percent": None,
+        }
+        if not historical_data or len(historical_data) < 2:
+            return empty
+        try:
+            last = float(historical_data[-1].get("close"))
+            prev = float(historical_data[-2].get("close"))
+        except (TypeError, ValueError, AttributeError, IndexError):
+            return empty
+        if last <= 0 or prev <= 0:
+            return empty
+        amt = last - prev
+        pct = amt / prev * 100.0
+        return {
+            "current_price": last,
+            "pre_close": prev,
+            "change_amount": round(amt, 4),
+            "change_percent": round(pct, 4),
+        }
+
+    def _resolve_change_meta(
+        self,
+        stock_code: str,
+        historical_data: Optional[List[Dict]],
+        price_source: Optional[str],
+    ) -> Dict[str, Optional[float]]:
+        """优先实时涨跌；前复权/日K锚点时用日K估算，避免与展示价口径不一致。"""
+        src = str(price_source or "")
+        if src in ("realtime", "realtime_override"):
+            meta = self._get_realtime_quote_meta(stock_code)
+            if meta.get("change_percent") is not None:
+                return meta
+        bar_meta = self._change_meta_from_bars(historical_data)
+        if bar_meta.get("change_percent") is not None:
+            return bar_meta
+        return self._get_realtime_quote_meta(stock_code)
 
     def _resolve_anchor_price(
         self, stock_code: str, historical_data: Optional[List[Dict]] = None

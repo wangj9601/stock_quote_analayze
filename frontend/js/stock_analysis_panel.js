@@ -40,6 +40,9 @@
           <button type="button" class="btn btn-secondary" id="ssaTradeObserveBtn"
             data-perm="channel.analyze.tab.trade_observe"
             title="加入交易观察" disabled>交易观察</button>
+          <button type="button" class="btn btn-secondary" id="ssaWatchlistBtn"
+            data-perm="channel.watchlist.tab.default.btn.add"
+            title="将当前股票加入或移出自选股" disabled>加自选</button>
         </div>
       </div>
     </div>

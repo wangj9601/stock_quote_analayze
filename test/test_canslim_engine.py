@@ -11,6 +11,8 @@ def test_default_config_shape():
     assert cfg["L"]["rs_rating_min"] == 80
     assert cfg["M"]["index_ts_code"] == "000300.SH"
     assert cfg["I"]["enabled"] is False
+    for k in ("C", "A", "N", "S", "L", "M"):
+        assert cfg[k].get("enabled") is True
 
 
 def test_merge_override_rs():
@@ -95,6 +97,49 @@ def test_eval_L_and_N_and_S():
     assert s_big["ok"] is False
 
 
+def test_peek_roe_and_q_yoy_for_display():
+    """字母关闭时仍可从财务行窥探 ROE / 季增% 供表格展示。"""
+    rows = [
+        {"end_date": "20250331", "q_eps_yoy": 40.0, "roe": 5.0},
+        {"end_date": "20241231", "basic_eps_yoy": 30.0, "roe_waa": 22.5},
+        {"end_date": "20231231", "basic_eps_yoy": 28.0, "roe_waa": 18.0},
+    ]
+    assert CanSlimEngine._peek_latest_roe(rows) == 22.5
+    assert CanSlimEngine._peek_q_eps_yoy(rows) == 40.0
+    assert CanSlimEngine._peek_latest_roe([]) is None
+    assert CanSlimEngine._peek_q_eps_yoy([]) is None
+
+
+def test_letter_result_keeps_metrics_when_disabled():
+    eng = CanSlimEngine.__new__(CanSlimEngine)
+    eng.cfg = get_default_canslim_config()
+    evaluated = {
+        "ok": False,
+        "reason": "未达标",
+        "roe": 8.5,
+        "q_eps_yoy": 40.0,
+        "rs_rating": 72,
+        "near_high_ratio": 0.7,
+        "circ_shares_yi": 12.3,
+        "volume_ratio": 1.5,
+        "cupb_status": "forming",
+    }
+    off = eng._letter_result("A", False, evaluated)
+    assert off["skipped"] is True and off["ok"] is True
+    assert off["roe"] == 8.5
+    on = eng._letter_result("A", True, evaluated)
+    assert on["skipped"] is False and on["ok"] is False and on["roe"] == 8.5
+
+
+def test_eval_A_returns_roe_even_when_years_short():
+    eng = CanSlimEngine.__new__(CanSlimEngine)
+    eng.cfg = get_default_canslim_config()
+    short = [{"end_date": "20241231", "basic_eps_yoy": 30.0, "roe_waa": 19.0}]
+    out = eng.eval_A(short)
+    assert out["ok"] is False
+    assert out["roe"] == 19.0
+
+
 def test_market_disabled_skips_index():
     class FakeLoader:
         def load_index_closes(self, *a, **k):
@@ -105,3 +150,12 @@ def test_market_disabled_skips_index():
     eng.loader = FakeLoader()
     m = eng.check_market("2026-01-01")
     assert m["ok"] is True and m["enabled"] is False
+
+
+def test_skip_letter_helper():
+    eng = CanSlimEngine.__new__(CanSlimEngine)
+    eng.cfg = merge_canslim_config({"C": {"enabled": False}, "L": {"enabled": True}})
+    assert eng._letter_enabled("C") is False
+    assert eng._letter_enabled("L") is True
+    skipped = eng._skip_letter("C")
+    assert skipped["ok"] is True and skipped["skipped"] is True

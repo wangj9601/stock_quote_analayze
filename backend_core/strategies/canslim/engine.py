@@ -82,6 +82,62 @@ class CanSlimEngine:
         self.cfg = merge_canslim_config(config)
         self.loader = CanSlimDataLoader(db)
 
+    def _letter_enabled(self, letter: str) -> bool:
+        return bool((self.cfg.get(letter) or {}).get("enabled", True))
+
+    def _skip_letter(self, letter: str) -> Dict[str, Any]:
+        return {
+            "ok": True,
+            "skipped": True,
+            "enabled": False,
+            "reason": f"{letter} 已关闭（不参与过滤）",
+        }
+
+    def _letter_result(
+        self, letter: str, enabled: bool, evaluated: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """启用：原样返回评估结果；关闭：标记 skipped，但仍保留指标供表格展示。"""
+        if enabled:
+            out = dict(evaluated or {})
+            out["enabled"] = True
+            out["skipped"] = False
+            return out
+        out = self._skip_letter(letter)
+        for k, v in (evaluated or {}).items():
+            if k in ("ok", "skipped", "enabled", "reason"):
+                continue
+            out[k] = v
+        return out
+
+    @staticmethod
+    def _peek_latest_roe(fina_rows: List[Dict[str, Any]]) -> Optional[float]:
+        """从已加载财务行取最近年报 ROE（展示用，不参与过滤）。"""
+        if not fina_rows:
+            return None
+        annuals = [r for r in fina_rows if _is_annual(r.get("end_date") or "")]
+        candidates = annuals if annuals else list(fina_rows)
+        for r in candidates:
+            roe = r.get("roe_waa")
+            if roe is None:
+                roe = r.get("roe")
+            if roe is not None:
+                try:
+                    return float(roe)
+                except (TypeError, ValueError):
+                    continue
+        return None
+
+    @staticmethod
+    def _peek_q_eps_yoy(fina_rows: List[Dict[str, Any]]) -> Optional[float]:
+        """从已加载财务行取最近一期季增%（展示用）。"""
+        if not fina_rows:
+            return None
+        for r in fina_rows:
+            y = _pick_q_yoy(r)
+            if y is not None:
+                return y
+        return None
+
     def check_market(self, asof: str) -> Dict[str, Any]:
         mcfg = self.cfg.get("M") or {}
         if not mcfg.get("enabled", True):
@@ -165,11 +221,23 @@ class CanSlimEngine:
         annuals = [r for r in fina_rows if _is_annual(r.get("end_date") or "")]
         # fina_rows 已按 end_date DESC
         annuals = annuals[: max(years + 1, 4)]
+
+        def _roe_of(row: Optional[Dict[str, Any]]) -> Optional[float]:
+            if not row:
+                return None
+            roe = row.get("roe_waa")
+            if roe is None:
+                roe = row.get("roe")
+            try:
+                return float(roe) if roe is not None else None
+            except (TypeError, ValueError):
+                return None
+
         if len(annuals) < years:
             return {
                 "ok": False,
                 "reason": f"年报不足{years}期（有{len(annuals)}）",
-                "roe": None,
+                "roe": _roe_of(annuals[0]) if annuals else self._peek_latest_roe(fina_rows),
             }
         take = annuals[:years]
         yoys = []
@@ -190,9 +258,7 @@ class CanSlimEngine:
                 growth_ok = cagr_val is not None and cagr_val >= float(acfg.get("cagr_min") or min_yoy)
 
         latest = take[0]
-        roe = latest.get("roe_waa")
-        if roe is None:
-            roe = latest.get("roe")
+        roe = _roe_of(latest)
         roe_ok = roe is not None and float(roe) >= roe_min
         ok = growth_ok and roe_ok
         reason_parts = []
@@ -347,8 +413,27 @@ class CanSlimEngine:
                 "market": market,
                 "total": 0,
                 "data": [],
+                "filters": self._active_filters_meta(),
                 "message": market.get("reason") or "大盘未确认上升",
             }
+
+        letter_keys = ("C", "A", "N", "S", "L")
+        if not any(self._letter_enabled(k) for k in letter_keys):
+            return {
+                "success": True,
+                "asof": asof_date,
+                "market": market,
+                "total": 0,
+                "data": [],
+                "filters": self._active_filters_meta(),
+                "message": "请至少启用 C / A / N / S / L 中一项过滤条件",
+            }
+
+        need_c = self._letter_enabled("C")
+        need_a = self._letter_enabled("A")
+        need_n = self._letter_enabled("N")
+        need_s = self._letter_enabled("S")
+        need_l = self._letter_enabled("L")
 
         universe = self.loader.list_universe(exclude_st=bool((self.cfg.get("scan") or {}).get("exclude_st", True)))
         if codes:
@@ -357,6 +442,8 @@ class CanSlimEngine:
 
         code_list = [u["code"] for u in universe]
         name_map = {u["code"]: u for u in universe}
+        # 展示列始终需要指标数据：财务 / RS / CUPB / 均量 一律加载；
+        # 日K仅对通过前置过滤的候选再取，避免全市场无谓扫窗。
         fina_map = self.loader.load_latest_fina_by_codes(code_list)
         rs_map = self.loader.load_rs_map(asof_date)
         cupb_map = self.loader.load_cupb_codes(
@@ -371,31 +458,37 @@ class CanSlimEngine:
 
         for code in code_list:
             fina_rows = fina_map.get(code) or []
-            c_res = self.eval_C(fina_rows)
-            if not c_res.get("ok"):
+            c_eval = self.eval_C(fina_rows)
+            if need_c and not c_eval.get("ok"):
                 continue
-            a_res = self.eval_A(fina_rows)
-            if not a_res.get("ok"):
+            a_eval = self.eval_A(fina_rows)
+            if need_a and not a_eval.get("ok"):
                 continue
-            l_res = self.eval_L(rs_map.get(code))
-            if not l_res.get("ok"):
+            l_eval = self.eval_L(rs_map.get(code))
+            if need_l and not l_eval.get("ok"):
                 continue
 
             bars = self.loader.load_quote_window(code, asof_date, lookback + 5)
             if use_qfq and bars:
                 factors = self.loader.load_adj_factors(code)
                 bars = _apply_qfq(bars, factors)
-            n_res = self.eval_N(bars, cupb_map.get(code))
-            if not n_res.get("ok"):
+            n_eval = self.eval_N(bars, cupb_map.get(code))
+            if need_n and not n_eval.get("ok"):
                 continue
             last_bar = bars[-1] if bars else None
-            s_res = self.eval_S(
+            s_eval = self.eval_S(
                 (name_map.get(code) or {}).get("free_float_shares"),
                 last_bar,
                 mavol_map.get(code),
             )
-            if not s_res.get("ok"):
+            if need_s and not s_eval.get("ok"):
                 continue
+
+            c_res = self._letter_result("C", need_c, c_eval)
+            a_res = self._letter_result("A", need_a, a_eval)
+            n_res = self._letter_result("N", need_n, n_eval)
+            s_res = self._letter_result("S", need_s, s_eval)
+            l_res = self._letter_result("L", need_l, l_eval)
 
             info = name_map.get(code) or {}
             results.append(
@@ -434,5 +527,12 @@ class CanSlimEngine:
             "market": market,
             "total": len(results),
             "data": results,
+            "filters": self._active_filters_meta(),
             "message": None,
         }
+
+    def _active_filters_meta(self) -> Dict[str, Any]:
+        out: Dict[str, Any] = {}
+        for k in ("C", "A", "N", "S", "L", "M"):
+            out[k] = {"enabled": self._letter_enabled(k)}
+        return out

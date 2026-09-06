@@ -4573,6 +4573,66 @@ const ScreeningPage = {
         }
     },
 
+    /** CAN SLIM：读取「M 大盘上升趋势」是否启用（select 或 checkbox） */
+    _canslimMarketFilterEnabled() {
+        return this._canslimLetterEnabled('canslimMarketFilter', true);
+    },
+
+    _canslimLetterEnabled(elId, defaultOn) {
+        const el = document.getElementById(elId);
+        if (!el) return defaultOn !== false;
+        if (el.tagName === 'SELECT') {
+            return String(el.value || 'true').toLowerCase() !== 'false';
+        }
+        if (el.type === 'checkbox') return !!el.checked;
+        return String(el.value || 'true').toLowerCase() !== 'false';
+    },
+
+    _canslimOptionalNumber(elId) {
+        const el = document.getElementById(elId);
+        if (!el || el.value === '' || el.value == null) return null;
+        const n = Number(el.value);
+        return Number.isFinite(n) ? n : null;
+    },
+
+    _appendCanslimQueryParams(params) {
+        params.set('market_filter', this._canslimLetterEnabled('canslimMarketFilter', true) ? 'true' : 'false');
+        params.set('filter_c', this._canslimLetterEnabled('canslimFilterC', true) ? 'true' : 'false');
+        params.set('filter_a', this._canslimLetterEnabled('canslimFilterA', true) ? 'true' : 'false');
+        params.set('filter_n', this._canslimLetterEnabled('canslimFilterN', true) ? 'true' : 'false');
+        params.set('filter_s', this._canslimLetterEnabled('canslimFilterS', true) ? 'true' : 'false');
+        params.set('filter_l', this._canslimLetterEnabled('canslimFilterL', true) ? 'true' : 'false');
+        const rsVal = this._canslimOptionalNumber('canslimRsMin');
+        if (rsVal != null && rsVal > 0) params.set('rs_min', String(Math.round(rsVal)));
+        const qEps = this._canslimOptionalNumber('canslimQEpsMin');
+        if (qEps != null) params.set('q_eps_yoy_min', String(qEps));
+        const roe = this._canslimOptionalNumber('canslimRoeMin');
+        if (roe != null) params.set('roe_min', String(roe));
+        const nearHigh = this._canslimOptionalNumber('canslimNearHighMin');
+        if (nearHigh != null) params.set('near_high_min_pct', String(nearHigh));
+        const circ = this._canslimOptionalNumber('canslimCircMax');
+        if (circ != null && circ > 0) params.set('circ_shares_max_yi', String(circ));
+        const dEl = document.getElementById('canslimDate');
+        if (dEl && dEl.value) params.set('asof', dEl.value);
+        return params;
+    },
+
+    _updateCanslimMarketHint(market) {
+        const hint = document.getElementById('canslimMarketHint');
+        if (!hint) return;
+        const m = market || {};
+        hint.textContent = m.reason || '';
+        if (m.enabled === false) {
+            hint.style.color = '#64748b';
+        } else if (m.ok === false) {
+            hint.style.color = '#b45309';
+        } else if (m.ok === true) {
+            hint.style.color = '#166534';
+        } else {
+            hint.style.color = '#64748b';
+        }
+    },
+
     _fillUrtParamPlaceholders(item) {
         const vmEl = document.getElementById('urtVolumeMultiple');
         const msEl = document.getElementById('urtMinScore');
@@ -4969,13 +5029,7 @@ const ScreeningPage = {
                 url = `${apiBaseUrl}/api/screening/urt-strategy?${params.toString()}`;
             } else if (strategy === 'canslim') {
                 const params = new URLSearchParams();
-                const mf = document.getElementById('canslimMarketFilter');
-                params.set('market_filter', mf && mf.checked ? 'true' : 'false');
-                const rsEl = document.getElementById('canslimRsMin');
-                const rsVal = rsEl ? parseInt(rsEl.value, 10) : NaN;
-                if (!isNaN(rsVal) && rsVal > 0) params.set('rs_min', String(rsVal));
-                const dEl = document.getElementById('canslimDate');
-                if (dEl && dEl.value) params.set('asof', dEl.value);
+                this._appendCanslimQueryParams(params);
                 url = `${apiBaseUrl}/api/screening/canslim?${params.toString()}`;
             } else {
                 throw new Error('未知的策略类型');
@@ -5011,7 +5065,16 @@ const ScreeningPage = {
                         scoring_mechanism_label: traceMeta.scoring_mechanism_label || (selLabel.includes('增强版') ? '增强版·阶梯+减分' : (selLabel.includes('标准版') ? '标准版·双模块阶梯' : '')),
                     };
                 }
-                const emptyMsg = (result.data.length === 0 && result.message) ? result.message : null;
+                let emptyMsg = (result.data.length === 0 && result.message) ? result.message : null;
+                if (
+                    strategy === 'canslim'
+                    && emptyMsg
+                    && result.market
+                    && result.market.enabled
+                    && result.market.ok === false
+                ) {
+                    emptyMsg += '。可将「M 大盘上升趋势」改为「关闭」后重新筛选。';
+                }
                 const gmsPaging = strategy === 'gms' ? result.paging : null;
                 if (strategy === 'gms') {
                     await this.loadGmsObservedCodeSets();
@@ -5022,11 +5085,7 @@ const ScreeningPage = {
                 }
                 this.renderResults(result.data, result.search_date, strategy, emptyMsg, gmsPaging);
                 if (strategy === 'canslim') {
-                    const hint = document.getElementById('canslimMarketHint');
-                    if (hint) {
-                        const m = result.market || {};
-                        hint.textContent = m.reason || '';
-                    }
+                    this._updateCanslimMarketHint(result.market || {});
                 }
                 if (strategy === 'gms') {
                     this._refreshGmsTradeObserveButtonsInSignalTable();
@@ -5689,6 +5748,7 @@ const ScreeningPage = {
                 const pass = (letter) => {
                     const b = stock[letter];
                     if (!b) return '--';
+                    if (b.skipped) return '—';
                     return b.ok ? '✓' : '×';
                 };
                 const fmt = (v, d = 1) => (v == null || v === '' || Number.isNaN(Number(v)) ? '--' : Number(v).toFixed(d));

@@ -43,12 +43,12 @@ UPSERT_SQL = text(
         q_eps = EXCLUDED.q_eps,
         basic_eps_yoy = EXCLUDED.basic_eps_yoy,
         dt_eps_yoy = EXCLUDED.dt_eps_yoy,
-        q_eps_yoy = EXCLUDED.q_eps_yoy,
-        q_profit_yoy = EXCLUDED.q_profit_yoy,
-        q_netprofit_yoy = EXCLUDED.q_netprofit_yoy,
-        q_sales_yoy = EXCLUDED.q_sales_yoy,
-        roe = EXCLUDED.roe,
-        roe_waa = EXCLUDED.roe_waa,
+        q_eps_yoy = COALESCE(EXCLUDED.q_eps_yoy, stock_fina_indicator.q_eps_yoy),
+        q_profit_yoy = COALESCE(EXCLUDED.q_profit_yoy, stock_fina_indicator.q_profit_yoy),
+        q_netprofit_yoy = COALESCE(EXCLUDED.q_netprofit_yoy, stock_fina_indicator.q_netprofit_yoy),
+        q_sales_yoy = COALESCE(EXCLUDED.q_sales_yoy, stock_fina_indicator.q_sales_yoy),
+        roe = COALESCE(EXCLUDED.roe, stock_fina_indicator.roe),
+        roe_waa = COALESCE(EXCLUDED.roe_waa, stock_fina_indicator.roe_waa),
         update_time = CURRENT_TIMESTAMP
     """
 )

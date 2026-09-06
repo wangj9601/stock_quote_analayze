@@ -10,11 +10,13 @@ from typing import Any, Dict, Optional
 def get_default_canslim_config() -> Dict[str, Any]:
     return {
         "C": {
+            "enabled": True,
             "q_eps_yoy_min": 25.0,  # 单季 EPS 同比 %
             "require_sales_yoy": False,
             "q_sales_yoy_min": 20.0,
         },
         "A": {
+            "enabled": True,
             "annual_eps_yoy_min": 25.0,  # 近 3 年每年同比 %
             "annual_years": 3,
             "roe_min": 17.0,
@@ -22,6 +24,7 @@ def get_default_canslim_config() -> Dict[str, Any]:
             "cagr_min": 25.0,
         },
         "N": {
+            "enabled": True,
             "near_high_min_ratio": 0.85,  # 收盘 / 52 周高 ≥
             "lookback_bars": 252,
             "allow_cupb": True,
@@ -29,12 +32,14 @@ def get_default_canslim_config() -> Dict[str, Any]:
             "use_qfq": True,
         },
         "S": {
+            "enabled": True,
             "circ_shares_max_yi": 20.0,  # 流通股本上限（亿股）
             "require_up_day_volume": True,
             "volume_vs_mavol": "mavol20",  # mavol20 | mavol50（mavol50 用 mavol60 近似若无 50）
             "volume_ratio_min": 1.0,
         },
         "L": {
+            "enabled": True,
             "rs_rating_min": 80,
             "rs_strong_min": 90,
         },

@@ -55,6 +55,10 @@ const StockMultiStrategy = {
         if (observeBtn) {
             observeBtn.addEventListener('click', () => this.addTradeObserve());
         }
+        const watchlistBtn = document.getElementById('ssaWatchlistBtn');
+        if (watchlistBtn) {
+            watchlistBtn.addEventListener('click', () => this.toggleWatchlist());
+        }
         const gannObserveBtn = document.getElementById('ssaGannTradeObserveBtn');
         if (gannObserveBtn) {
             gannObserveBtn.addEventListener('click', () => this.addGannTradeObserve());
@@ -70,6 +74,7 @@ const StockMultiStrategy = {
             codeInput.addEventListener('input', () => {
                 this.updateTradeObserveBtn();
                 this.updateGannTradeObserveBtn();
+                this.updateWatchlistBtn();
             });
         }
         this.bindWatchlistPanel();
@@ -81,6 +86,8 @@ const StockMultiStrategy = {
         this.updateExportBtn();
         this.updateTradeObserveBtn();
         this.bindScrollFab();
+        this._bindRsHistoryDelegation();
+        void this.ensureUserWatchlistCodes().then(() => this.updateWatchlistBtn());
     },
 
     /** 个股详情页嵌入式面板：无代码输入框，按钮文案为「刷新」。 */
@@ -109,6 +116,10 @@ const StockMultiStrategy = {
         if (observeBtn) {
             observeBtn.addEventListener('click', () => this.addTradeObserve());
         }
+        const watchlistBtn = document.getElementById('ssaWatchlistBtn');
+        if (watchlistBtn) {
+            watchlistBtn.addEventListener('click', () => this.toggleWatchlist());
+        }
         const gannObserveBtn = document.getElementById('ssaGannTradeObserveBtn');
         if (gannObserveBtn) {
             gannObserveBtn.addEventListener('click', () => this.addGannTradeObserve());
@@ -119,6 +130,8 @@ const StockMultiStrategy = {
         }
         this.updateExportBtn();
         this.updateTradeObserveBtn();
+        this._bindRsHistoryDelegation();
+        void this.ensureUserWatchlistCodes().then(() => this.updateWatchlistBtn());
     },
 
     /** 嵌入模式：由详情页传入 code/name 触发分析。 */
@@ -517,7 +530,11 @@ const StockMultiStrategy = {
             });
             this.watchlistStocks = items;
             this._watchlistLoaded = true;
+            this._userWatchlistCodes = new Set(
+                items.map((s) => this._normalizeObserveCode(s.code)).filter(Boolean)
+            );
             this.updateWatchlistSummary();
+            this.updateWatchlistBtn();
         } catch (e) {
             console.warn('加载自选股失败', e);
         }
@@ -1129,6 +1146,29 @@ const StockMultiStrategy = {
         if (tabsEl) tabsEl.hidden = false;
     },
 
+    _sessionTradePlan(session) {
+        if (!session) return null;
+        const fromState = session.state && session.state.lastTradePlan;
+        const fromBundle = session.bundle && session.bundle.tradePlan;
+        const tp = fromState || fromBundle;
+        if (!tp || !tp.ok) return null;
+        return tp.plan || null;
+    },
+
+    /** 短线买入/承接，或中长线偏多 → Tab 角标星号 */
+    _sessionIsBullish(session) {
+        const plan = this._sessionTradePlan(session);
+        if (!plan || typeof plan !== 'object') return false;
+        const short = String(plan.stance_short || '').toLowerCase();
+        const medium = String(plan.stance_medium || '').toLowerCase();
+        if (short === 'buy') return true;
+        if (medium === 'bull' || medium === 'bullish') return true;
+        const shortLab = String(plan.stance_short_label || plan.short_term?.action_label || '');
+        const mediumLab = String(plan.stance_medium_label || plan.medium_term?.bias_label || '');
+        if (shortLab.includes('偏多') || mediumLab.includes('偏多')) return true;
+        return false;
+    },
+
     _renderStockTabs() {
         const host = document.getElementById('ssaStockTabs');
         if (!host || this.embeddedMode) return;
@@ -1144,16 +1184,21 @@ const StockMultiStrategy = {
         host.innerHTML = keys.map((key) => {
             const s = this.stockSessions[key];
             const label = s.name ? `${s.code} ${s.name}` : s.code;
+            const bullish = this._sessionIsBullish(s);
             const cls = [
                 'ssa-stock-tab',
                 key === this.activeSessionKey ? 'active' : '',
                 s.status === 'loading' || s.status === 'fetched' ? 'is-loading' : '',
                 s.status === 'error' ? 'is-error' : '',
+                bullish ? 'is-bullish' : '',
             ].filter(Boolean).join(' ');
+            const star = bullish
+                ? `<span class="ssa-stock-tab-star" title="短线或中长线偏多" aria-label="短线或中长线偏多">★</span>`
+                : '';
             const closeBtn = canClose
                 ? `<span class="ssa-stock-tab-close" data-close-key="${this.escAttr(key)}" title="关闭" role="button" tabindex="0" aria-label="关闭 ${this.escAttr(label)}">×</span>`
                 : '';
-            return `<button type="button" class="${cls}" data-session-key="${this.escAttr(key)}" role="tab" aria-selected="${key === this.activeSessionKey ? 'true' : 'false'}"><span class="ssa-stock-tab-label">${this.esc(label)}</span>${closeBtn}</button>`;
+            return `<button type="button" class="${cls}" data-session-key="${this.escAttr(key)}" role="tab" aria-selected="${key === this.activeSessionKey ? 'true' : 'false'}">${star}<span class="ssa-stock-tab-label">${this.esc(label)}</span>${closeBtn}</button>`;
         }).join('');
         if (!host.dataset.bound) {
             host.dataset.bound = '1';
@@ -1385,9 +1430,12 @@ const StockMultiStrategy = {
         this._restoreDom(session.dom);
         // innerHTML 恢复会丢掉 KDE/VP「应用」监听，需按当前标的重新绑定
         this._rebindLevelsControls();
+        // RS「展开近期历史」改为 document 事件委托，恢复 DOM 后无需再绑
+        this._bindRsHistoryDelegation();
         this.updateExportBtn();
         this.updateTradeObserveBtn();
         this.updateGannTradeObserveBtn();
+        this.updateWatchlistBtn();
     },
 
     _levelsStockCode() {
@@ -1485,6 +1533,7 @@ const StockMultiStrategy = {
             if (!this.exporting) pngBtn.textContent = '导出 PNG';
         }
         this.updateTradeObserveBtn();
+        this.updateWatchlistBtn();
     },
 
     _normalizeObserveCode(raw) {
@@ -1573,6 +1622,177 @@ const StockMultiStrategy = {
         }
         btn.disabled = !ok;
         btn.textContent = '交易观察';
+    },
+
+    async ensureUserWatchlistCodes(force) {
+        if (!force && this._userWatchlistCodes instanceof Set) return;
+        const set = new Set();
+        try {
+            const userInfo = CommonUtils.auth && CommonUtils.auth.getUserInfo
+                ? CommonUtils.auth.getUserInfo()
+                : null;
+            if (!userInfo || !userInfo.id) {
+                this._userWatchlistCodes = set;
+                return;
+            }
+            const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
+            if (!resp.ok) {
+                this._userWatchlistCodes = set;
+                return;
+            }
+            const payload = await resp.json().catch(() => ({}));
+            const raw = Array.isArray(payload)
+                ? payload
+                : (payload.data || payload.items || payload.stocks || []);
+            if (Array.isArray(raw)) {
+                raw.forEach((item) => {
+                    const code = this._normalizeObserveCode(item.code || item.stock_code);
+                    if (code) set.add(code);
+                });
+            }
+        } catch (e) {
+            console.warn('加载自选股状态失败', e);
+        }
+        this._userWatchlistCodes = set;
+    },
+
+    _isCurrentInWatchlist(code) {
+        const c = this._normalizeObserveCode(code);
+        if (!c || !(this._userWatchlistCodes instanceof Set)) return false;
+        return this._userWatchlistCodes.has(c);
+    },
+
+    updateWatchlistBtn() {
+        const btn = document.getElementById('ssaWatchlistBtn');
+        if (!btn) return;
+        if (this._watchlistToggling) {
+            btn.disabled = true;
+            return;
+        }
+        const stock = this.resolveObserveStock();
+        const ok = !!(stock && stock.code);
+        btn.disabled = !ok;
+        if (!ok) {
+            btn.classList.remove('is-watchlisted');
+            btn.textContent = '加自选';
+            btn.title = '将当前股票加入自选股';
+            return;
+        }
+        const inList = this._isCurrentInWatchlist(stock.code);
+        if (inList) {
+            btn.classList.add('is-watchlisted');
+            btn.textContent = '取消自选';
+            btn.title = `从自选股中移除 ${stock.name || stock.code}`;
+        } else {
+            btn.classList.remove('is-watchlisted');
+            btn.textContent = '加自选';
+            btn.title = `将 ${stock.name || stock.code} 加入自选股`;
+        }
+    },
+
+    async toggleWatchlist() {
+        if (this._watchlistToggling) return;
+        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        const stock = this.resolveObserveStock();
+        if (!stock || !stock.code) {
+            CommonUtils.showToast('请先输入有效的股票代码', 'warning');
+            return;
+        }
+        await this.ensureUserWatchlistCodes();
+        if (this._isCurrentInWatchlist(stock.code)) {
+            await this.removeCurrentFromWatchlist(stock);
+        } else {
+            await this.addCurrentToWatchlist(stock);
+        }
+    },
+
+    async addCurrentToWatchlist(stock) {
+        const btn = document.getElementById('ssaWatchlistBtn');
+        this._watchlistToggling = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '加入中…';
+        }
+        try {
+            const userInfo = CommonUtils.auth.getUserInfo();
+            const res = await authFetch(`${this.API_BASE_URL}/api/watchlist`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userInfo.id,
+                    stock_code: stock.code,
+                    stock_name: stock.name || stock.code,
+                    group_name: 'default',
+                }),
+            });
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok || !result.success) {
+                throw new Error(result.message || `添加失败 ${res.status}`);
+            }
+            if (!(this._userWatchlistCodes instanceof Set)) {
+                this._userWatchlistCodes = new Set();
+            }
+            this._userWatchlistCodes.add(stock.code);
+            if (Array.isArray(this.watchlistStocks)
+                && !this.watchlistStocks.some((s) => this._normalizeObserveCode(s.code) === stock.code)) {
+                this.watchlistStocks.push({ code: stock.code, name: stock.name || '' });
+            }
+            CommonUtils.showToast(`已添加 ${stock.name || stock.code} 到自选股`, 'success');
+            authFetch(`${this.API_BASE_URL}/api/watchlist/collect-and-calculate-indicators`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stock_code: stock.code }),
+            }).then((r) => r.json()).then((data) => {
+                if (data && data.success) {
+                    CommonUtils.showToast('行情与指标已更新', 'success');
+                }
+            }).catch(() => {});
+        } catch (e) {
+            console.error('添加到自选股失败', e);
+            CommonUtils.showToast(e.message || '添加自选失败', 'error');
+        } finally {
+            this._watchlistToggling = false;
+            this.updateWatchlistBtn();
+        }
+    },
+
+    async removeCurrentFromWatchlist(stock) {
+        const btn = document.getElementById('ssaWatchlistBtn');
+        this._watchlistToggling = true;
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '移除中…';
+        }
+        try {
+            const userInfo = CommonUtils.auth.getUserInfo();
+            const res = await authFetch(`${this.API_BASE_URL}/api/watchlist/delete_by_code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    user_id: userInfo.id,
+                    stock_code: stock.code,
+                }),
+            });
+            const result = await res.json().catch(() => ({}));
+            if (!res.ok || !result.success) {
+                throw new Error(result.message || `移除失败 ${res.status}`);
+            }
+            if (this._userWatchlistCodes instanceof Set) {
+                this._userWatchlistCodes.delete(stock.code);
+            }
+            if (Array.isArray(this.watchlistStocks)) {
+                this.watchlistStocks = this.watchlistStocks.filter(
+                    (s) => this._normalizeObserveCode(s.code) !== stock.code
+                );
+            }
+            CommonUtils.showToast(`已从自选股中移除 ${stock.name || stock.code}`, 'info');
+        } catch (e) {
+            console.error('从自选股删除失败', e);
+            CommonUtils.showToast(e.message || '取消自选失败', 'error');
+        } finally {
+            this._watchlistToggling = false;
+            this.updateWatchlistBtn();
+        }
     },
 
     updateGannTradeObserveBtn() {
@@ -2788,6 +3008,7 @@ const StockMultiStrategy = {
                 throw new Error(payload.message || `相对强度加载失败 ${resp.status}`);
             }
             const data = payload.data || {};
+            if (!data.code && code) data.code = code;
             this.renderRsRating(host, data, payload.reason, payload.message);
             this._syncRsTraceLink(data.code || code, data.name || '');
             this.lastRs = { ok: true, data, reason: payload.reason || null, error: null };
@@ -2828,8 +3049,12 @@ const StockMultiStrategy = {
             reason === 'rating_unpublished'
                 ? message || '当日覆盖率不足，未发布 1–99 评级'
                 : '';
-        const code = data.code || '';
-        const name = data.name || '';
+        const code = String(
+            data.code
+            || (this.lastStock && this.lastStock.code)
+            || ''
+        ).trim();
+        const name = data.name || (this.lastStock && this.lastStock.name) || '';
         const traceHref = `stock_rs_trace.html?code=${encodeURIComponent(code)}`;
         host.innerHTML = `
             <div class="ssa-rs-card">
@@ -2841,7 +3066,7 @@ const StockMultiStrategy = {
                   ${note ? `<div class="ssa-rs-note">${this.esc(note)}</div>` : ''}
                   <div class="ssa-rs-actions">
                     <a class="ssa-rs-trace-link" href="${this.esc(traceHref)}" target="_blank" rel="noopener noreferrer">历史追溯</a>
-                    <button type="button" class="ssa-rs-trace-toggle" id="ssaRsHistoryToggle">展开近期历史</button>
+                    <button type="button" class="ssa-rs-trace-toggle" id="ssaRsHistoryToggle" data-code="${this.esc(code)}">展开近期历史</button>
                   </div>
                 </div>
               </div>
@@ -2866,10 +3091,43 @@ const StockMultiStrategy = {
             </div>
         `;
         this._syncRsTraceLink(code, name);
-        const toggle = host.querySelector('#ssaRsHistoryToggle');
-        if (toggle && code) {
-            toggle.addEventListener('click', () => this.toggleRsHistoryInline(code, toggle));
+        this._bindRsHistoryDelegation();
+    },
+
+    /** 委托绑定 RS「展开近期历史」，避免 innerHTML 重绘/会话恢复后监听丢失。 */
+    _bindRsHistoryDelegation() {
+        if (this._rsHistoryDelegated) return;
+        this._rsHistoryDelegated = true;
+        document.addEventListener('click', (e) => {
+            const toggle = e.target && e.target.closest
+                ? e.target.closest('.ssa-rs-trace-toggle')
+                : null;
+            if (!toggle) return;
+            if (!toggle.closest('#ssaRsHost, .ssa-rs-host, .ssa-rs-card, .ssa-rs-actions')) return;
+            e.preventDefault();
+            const code = this._resolveRsHistoryCode(toggle);
+            if (!code) {
+                const root = toggle.closest('.ssa-rs-card') || document;
+                const status = root.querySelector('#ssaRsHistoryStatus, .ssa-rs-history-status');
+                const panel = root.querySelector('#ssaRsHistoryPanel, .ssa-rs-history');
+                if (panel) panel.hidden = false;
+                if (status) status.textContent = '无法确定股票代码';
+                return;
+            }
+            void this.toggleRsHistoryInline(code, toggle);
+        });
+    },
+
+    _resolveRsHistoryCode(toggle) {
+        const fromBtn = toggle && toggle.getAttribute('data-code');
+        if (fromBtn && String(fromBtn).trim()) return String(fromBtn).trim();
+        if (this.lastRs && this.lastRs.data && this.lastRs.data.code) {
+            return String(this.lastRs.data.code).trim();
         }
+        if (this.lastStock && this.lastStock.code) {
+            return String(this.lastStock.code).trim();
+        }
+        return this._levelsStockCode() || '';
     },
 
     _syncRsTraceLink(code, name) {
@@ -2886,9 +3144,13 @@ const StockMultiStrategy = {
     },
 
     async toggleRsHistoryInline(code, toggleBtn) {
-        const panel = document.getElementById('ssaRsHistoryPanel');
-        const status = document.getElementById('ssaRsHistoryStatus');
-        const table = document.getElementById('ssaRsHistoryTable');
+        const root = (toggleBtn && toggleBtn.closest('.ssa-rs-card')) || document;
+        const panel = root.querySelector('#ssaRsHistoryPanel')
+            || document.getElementById('ssaRsHistoryPanel');
+        const status = root.querySelector('#ssaRsHistoryStatus')
+            || document.getElementById('ssaRsHistoryStatus');
+        const table = root.querySelector('#ssaRsHistoryTable')
+            || document.getElementById('ssaRsHistoryTable');
         if (!panel || !table) return;
         if (!panel.hidden) {
             panel.hidden = true;

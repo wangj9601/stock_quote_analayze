@@ -22,7 +22,16 @@ def test_canslim_route_signature():
     params = set(sig.parameters)
     assert "asof" in params
     assert "market_filter" in params
+    assert "filter_c" in params
+    assert "filter_a" in params
+    assert "filter_n" in params
+    assert "filter_s" in params
+    assert "filter_l" in params
     assert "rs_min" in params
+    assert "q_eps_yoy_min" in params
+    assert "roe_min" in params
+    assert "near_high_min_pct" in params
+    assert "circ_shares_max_yi" in params
     assert "stock_code" in params
     assert "db" in params
 
