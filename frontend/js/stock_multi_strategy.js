@@ -168,6 +168,7 @@ const StockMultiStrategy = {
     /**
      * 从 URL 启动分析（仅执行一次）：
      * - ?batch=watchlist：自选股「全部交易分析」，每只一个 Tab
+     * - ?batch=selected：板块/龙头中军勾选后的批量交易分析
      * - ?code=&name=：单只自动分析
      */
     bootstrapFromUrl() {
@@ -179,9 +180,9 @@ const StockMultiStrategy = {
             return;
         }
         const batch = (params.get('batch') || '').trim();
-        if (batch === 'watchlist') {
+        if (batch === 'watchlist' || batch === 'selected') {
             this._urlBootstrapped = true;
-            void this._bootstrapWatchlistBatch(params);
+            void this._bootstrapWatchlistBatch(params, batch);
             return;
         }
         const code = (params.get('code') || '').trim();
@@ -195,41 +196,59 @@ const StockMultiStrategy = {
         void this.analyze();
     },
 
-    /** 读取并清除自选批量分析载荷（跨标签页 localStorage） */
-    _consumeWatchlistBatchStorage() {
-        const key = 'ssa_watchlist_batch';
-        let raw = null;
-        try {
-            raw = localStorage.getItem(key);
-            if (raw != null) localStorage.removeItem(key);
-        } catch (e) {
-            return [];
+    /** 读取并清除批量分析载荷（跨标签页 localStorage） */
+    _consumeWatchlistBatchStorage(batchKind) {
+        const keys = [];
+        if (batchKind === 'selected') {
+            keys.push(
+                (window.StockTradeLink && StockTradeLink.BATCH_STORAGE_KEY) ||
+                    'ssa_trade_analysis_batch'
+            );
+        } else {
+            keys.push('ssa_watchlist_batch');
+            // 兼容：若自选入口改写为统一 key，仍可读
+            keys.push(
+                (window.StockTradeLink && StockTradeLink.BATCH_STORAGE_KEY) ||
+                    'ssa_trade_analysis_batch'
+            );
         }
-        if (!raw) return [];
-        try {
-            const data = JSON.parse(raw);
-            const ts = Number(data && data.ts) || 0;
-            if (ts && (Date.now() - ts) > 5 * 60 * 1000) return [];
-            const stocks = Array.isArray(data && data.stocks) ? data.stocks : [];
-            return stocks
-                .map((s) => ({
-                    code: String((s && s.code) || '').trim(),
-                    name: String((s && s.name) || '').trim(),
-                }))
-                .filter((s) => s.code);
-        } catch (e) {
-            return [];
+        let stocks = [];
+        for (const key of keys) {
+            let raw = null;
+            try {
+                raw = localStorage.getItem(key);
+                if (raw != null) localStorage.removeItem(key);
+            } catch (e) {
+                continue;
+            }
+            if (!raw) continue;
+            try {
+                const data = JSON.parse(raw);
+                const ts = Number(data && data.ts) || 0;
+                if (ts && Date.now() - ts > 5 * 60 * 1000) continue;
+                const list = Array.isArray(data && data.stocks) ? data.stocks : [];
+                stocks = list
+                    .map((s) => ({
+                        code: String((s && s.code) || '').trim(),
+                        name: String((s && s.name) || '').trim(),
+                    }))
+                    .filter((s) => s.code);
+                if (stocks.length) break;
+            } catch (e) {
+                /* try next key */
+            }
         }
+        return stocks;
     },
 
     /**
-     * 自选股批量入口：勾选「一次分析全部」、按只建 Tab 并并行分析。
+     * 自选股 / 勾选角色批量入口：勾选「一次分析全部」、按只建 Tab 并并行分析。
      */
-    async _bootstrapWatchlistBatch(params) {
+    async _bootstrapWatchlistBatch(params, batchKind) {
         const allowAllEl = document.getElementById('ssaAnalyzeAllSelected');
         if (allowAllEl) allowAllEl.checked = true;
 
-        let stocks = this._consumeWatchlistBatchStorage();
+        let stocks = this._consumeWatchlistBatchStorage(batchKind || 'watchlist');
         if (!stocks.length) {
             const codesRaw = (params.get('codes') || '').trim();
             const codes = codesRaw
@@ -246,7 +265,10 @@ const StockMultiStrategy = {
         }
         if (!stocks.length) {
             if (window.CommonUtils) {
-                CommonUtils.showToast('未找到待分析的自选股', 'warning');
+                CommonUtils.showToast(
+                    batchKind === 'selected' ? '未找到待分析的龙头/中军' : '未找到待分析的自选股',
+                    'warning'
+                );
             }
             return;
         }
@@ -2631,7 +2653,7 @@ const StockMultiStrategy = {
         const opts = options || {};
         let list = (stocks || []).slice();
         if (!list.length) {
-            CommonUtils.showToast('请勾选至少一只自选股', 'warning');
+            CommonUtils.showToast('请勾选至少一只股票', 'warning');
             return;
         }
 

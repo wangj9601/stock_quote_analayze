@@ -44,7 +44,7 @@
                 <!-- 板块分析（行业/概念 × 多策略） -->
                 <div class="tab-panel active" id="board-analysis">
                     <div class="ba-workbench" data-perm="channel.analyze.tab.board">
-                        <p class="ba-desc">先选行业或概念板块（可多选），再按 GMS / URT / SBBR / RPE 筛可观察股票；买卖建议以策略与 KDE/箱体为主，Fibonacci 与经典 Pivot 为参考价。</p>
+                        <p class="ba-desc">先选行业或概念板块（可多选），再按 GMS / URT / SBBR / RPE 筛可观察股票；买卖建议以策略与 KDE/箱体为主，Fibonacci 与经典 Pivot 为参考价。短线角色中的<strong>龙头 / 中军可多选</strong>，点击「交易分析」对新标签批量做个股交易分析。</p>
                         <div class="ba-toolbar">
                             <div class="ba-kind">
                                 <label><input type="radio" name="baBoardKind" value="industry" checked> 行业板块</label>
@@ -65,6 +65,10 @@
                                 <label><input type="checkbox" name="baStrategy" value="rpe" checked> RPE</label>
                             </div>
                             <button type="button" class="btn btn-primary" id="baRunBtn" data-perm="channel.analyze.tab.board.btn.run">开始分析</button>
+                            <button type="button" class="btn btn-secondary" id="baSelectAllRolesBtn" title="勾选当前已加载的全部龙头与中军">全选龙头中军</button>
+                            <button type="button" class="btn btn-secondary" id="baClearRolesBtn" title="清空已勾选的龙头与中军">清空勾选</button>
+                            <button type="button" class="btn btn-primary" id="baTradeAnalysisBtn" data-perm="channel.analyze.tab.board.btn.run" title="对新标签打开个股分析，对勾选的龙头/中军逐只做交易分析" disabled>交易分析</button>
+                            <span id="baRoleSelectSummary" class="lm-board-picker-summary ba-role-select-summary">暂无可选龙头/中军</span>
                             <button type="button" class="btn btn-secondary" id="baExportPdfBtn" data-perm="channel.analyze.tab.board.btn.run">导出 PDF</button>
                             <button type="button" class="btn btn-secondary" id="baExportExcelBtn" data-perm="channel.analyze.tab.board.btn.run" title="导出当前板块分析结果为 Excel">导出 Excel</button>
                         </div>
@@ -79,7 +83,7 @@
                 <!-- 龙头中军 × 四策略命中 -->
                 <div class="tab-panel" id="leader-mid">
                     <div class="lm-workbench" data-perm="channel.analyze.tab.leader_mid">
-                        <p class="lm-desc">按行业或概念查看板块龙头/中军标签，并对照是否命中 GMS、URT、SBBR、RPE（仅角色股，不跑全成分）。</p>
+                        <p class="lm-desc">按行业或概念查看板块龙头/中军标签，并对照是否命中 GMS、URT、SBBR、RPE（仅角色股，不跑全成分）。<strong>龙头 / 中军可多选</strong>，点击「交易分析」对新标签批量做个股交易分析。</p>
                         <div class="lm-subtabs" role="tablist">
                             <button type="button" class="lm-subtab active" data-lm-kind="industry">行业板块龙头中军</button>
                             <button type="button" class="lm-subtab" data-lm-kind="concept">概念板块龙头中军</button>
@@ -94,6 +98,10 @@
                                 <span id="lmBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
                             </div>
                             <button type="button" class="btn btn-primary" id="lmRunBtn" data-perm="channel.analyze.tab.leader_mid.btn.run">查询命中</button>
+                            <button type="button" class="btn btn-secondary" id="lmSelectAllRolesBtn" title="勾选当前已加载的全部龙头与中军">全选龙头中军</button>
+                            <button type="button" class="btn btn-secondary" id="lmClearRolesBtn" title="清空已勾选的龙头与中军">清空勾选</button>
+                            <button type="button" class="btn btn-primary" id="lmTradeAnalysisBtn" data-perm="channel.analyze.tab.leader_mid.btn.run" title="对新标签打开个股分析，对勾选的龙头/中军逐只做交易分析" disabled>交易分析</button>
+                            <span id="lmRoleSelectSummary" class="lm-board-picker-summary ba-role-select-summary">暂无可选龙头/中军</span>
                             <button type="button" class="btn btn-secondary" id="lmExportExcelBtn" title="导出当前龙头/中军明细与板块汇总为 Excel">导出 Excel</button>
                         </div>
                         <div id="lmBoardMeta" class="lm-meta"></div>

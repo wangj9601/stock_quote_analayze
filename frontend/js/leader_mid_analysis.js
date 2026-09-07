@@ -84,6 +84,18 @@ const LeaderMidAnalysis = {
     if (exportBtn) {
       exportBtn.addEventListener('click', () => this.exportExcel());
     }
+    const selectAllRolesBtn = document.getElementById('lmSelectAllRolesBtn');
+    if (selectAllRolesBtn) {
+      selectAllRolesBtn.addEventListener('click', () => this.selectAllRoles(true));
+    }
+    const clearRolesBtn = document.getElementById('lmClearRolesBtn');
+    if (clearRolesBtn) {
+      clearRolesBtn.addEventListener('click', () => this.selectAllRoles(false));
+    }
+    const tradeBtn = document.getElementById('lmTradeAnalysisBtn');
+    if (tradeBtn) {
+      tradeBtn.addEventListener('click', () => this.openTradeAnalysis());
+    }
 
     const overlay = document.getElementById('lmBoardPickerModal');
     ['lmBoardPickerClose', 'lmBoardPickerCancel'].forEach((id) => {
@@ -333,6 +345,50 @@ const LeaderMidAnalysis = {
     });
   },
 
+  /** 短线角色面板：可多选龙头/中军并跳转交易分析 */
+  rolesPanelOpts(extra) {
+    return Object.assign(
+      {
+        panelId: 'lmRolesHost',
+        boardType: this.boardKind,
+        boardCodeSource: 'tonghuashun',
+        visible: true,
+        variant: 'shortline',
+        showGmsWatchlistActions: true,
+        gmsWatchlistPerm: 'channel.analyze.tab.leader_mid.btn.gms_watchlist',
+        selectableRoles: true,
+        selectSummaryId: 'lmRoleSelectSummary',
+        tradeBtnId: 'lmTradeAnalysisBtn',
+      },
+      extra || {}
+    );
+  },
+
+  selectAllRoles(checked) {
+    if (!window.BoardRolesPanel || typeof BoardRolesPanel.setAllSelected !== 'function') return;
+    BoardRolesPanel.setAllSelected('lmRolesHost', !!checked);
+    if (window.CommonUtils) {
+      const n =
+        typeof BoardRolesPanel.getSelectedStocks === 'function'
+          ? BoardRolesPanel.getSelectedStocks('lmRolesHost').length
+          : 0;
+      CommonUtils.showToast(checked ? `已全选 ${n} 只龙头/中军` : '已清空勾选', 'info');
+    }
+  },
+
+  openTradeAnalysis() {
+    if (!window.BoardRolesPanel || typeof BoardRolesPanel.getSelectedStocks !== 'function') {
+      if (window.CommonUtils) CommonUtils.showToast('角色选择模块未加载', 'error');
+      return;
+    }
+    const stocks = BoardRolesPanel.getSelectedStocks('lmRolesHost');
+    if (window.StockTradeLink && typeof StockTradeLink.openBatchAnalysis === 'function') {
+      StockTradeLink.openBatchAnalysis(stocks, { toastPrefix: '已打开交易分析' });
+      return;
+    }
+    if (window.CommonUtils) CommonUtils.showToast('交易分析跳转模块未加载', 'error');
+  },
+
   applySelectedBoardCodes(codes) {
     this.selectedBoardCodes = Array.isArray(codes) ? codes.slice() : [];
     this.lastResult = null;
@@ -343,16 +399,11 @@ const LeaderMidAnalysis = {
       host.innerHTML = '<p class="lm-empty">选择板块后点击「查询命中」</p>';
     }
     if (this.selectedBoardCodes.length && window.BoardRolesPanel) {
-      BoardRolesPanel.refresh({
-        panelId: 'lmRolesHost',
-        boardType: this.boardKind,
-        boardCodes: this.selectedBoardCodes,
-        boardCodeSource: 'tonghuashun',
-        visible: true,
-        variant: 'shortline',
-        showGmsWatchlistActions: true,
-        gmsWatchlistPerm: 'channel.analyze.tab.leader_mid.btn.gms_watchlist',
-      });
+      BoardRolesPanel.refresh(
+        this.rolesPanelOpts({
+          boardCodes: this.selectedBoardCodes,
+        })
+      );
     }
   },
 
@@ -392,13 +443,12 @@ const LeaderMidAnalysis = {
     const meta = document.getElementById('lmBoardMeta');
     if (meta) meta.innerHTML = '';
     if (window.BoardRolesPanel) {
-      BoardRolesPanel.refresh({
-        panelId: 'lmRolesHost',
-        boardType: this.boardKind,
-        boardCodes: [],
-        visible: false,
-        variant: 'shortline',
-      });
+      BoardRolesPanel.refresh(
+        this.rolesPanelOpts({
+          boardCodes: [],
+          visible: false,
+        })
+      );
     }
   },
 

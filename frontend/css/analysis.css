@@ -954,6 +954,38 @@ a.ba-stock-code-link:focus {
   gap: 4px;
   margin: 2px 6px 2px 0;
 }
+.ba-role-item--selectable {
+  padding: 2px 4px 2px 2px;
+  border-radius: 4px;
+  background: transparent;
+}
+.ba-role-item--selectable:has(.ba-role-select:checked) {
+  background: #eff6ff;
+  outline: 1px solid #93c5fd;
+}
+.ba-role-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  cursor: pointer;
+}
+.ba-role-select {
+  width: 14px;
+  height: 14px;
+  margin: 0 2px 0 0;
+  cursor: pointer;
+  accent-color: #2563eb;
+  flex-shrink: 0;
+}
+.ba-role-select-board {
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-left: 2px;
+}
+.ba-role-select-summary {
+  min-width: 8.5rem;
+  color: #475569;
+}
 .ba-gms-wl-add,
 .ba-gms-wl-add-all {
   flex-shrink: 0;

@@ -69,13 +69,25 @@
     if (rawCode && rawName) show = `${esc(rawCode)} ${esc(rawName)}`;
     else show = esc(rawName || rawCode || '--');
     const pill = `<a class="${cls}" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}">${label} ${show}${pctHtml}</a>`;
-    if (!opts || !opts.showGmsWatchlistActions || !rawCode) return pill;
+    const selectable = !!(opts && opts.selectableRoles && rawCode);
+    const selectHtml = selectable
+      ? `<label class="ba-role-select-wrap" title="勾选后可批量交易分析">
+          <input type="checkbox" class="ba-role-select" data-code="${esc(rawCode)}"
+            data-name="${esc(rawName)}" data-role="${esc(kind)}" value="${esc(rawCode)}">
+        </label>`
+      : '';
+    if ((!opts || !opts.showGmsWatchlistActions) && !selectable) return pill;
     const perm = esc(opts.gmsWatchlistPerm || 'channel.analyze.tab.board.btn.gms_watchlist');
-    return `<span class="ba-role-item">
+    const wlBtn =
+      opts && opts.showGmsWatchlistActions && rawCode
+        ? `<button type="button" class="btn btn-secondary btn-sm ba-gms-wl-add"
+            data-code="${esc(rawCode)}" data-name="${esc(rawName)}" data-role="${esc(kind)}"
+            data-perm="${perm}" title="加入 GMS 策略观察股">+观察股</button>`
+        : '';
+    return `<span class="ba-role-item${selectable ? ' ba-role-item--selectable' : ''}">
+      ${selectHtml}
       ${pill}
-      <button type="button" class="btn btn-secondary btn-sm ba-gms-wl-add"
-        data-code="${esc(rawCode)}" data-name="${esc(rawName)}" data-role="${esc(kind)}"
-        data-perm="${perm}" title="加入 GMS 策略观察股">+观察股</button>
+      ${wlBtn}
     </span>`;
   }
 
@@ -97,10 +109,14 @@
     let actions = '';
     if (opts && opts.showGmsWatchlistActions && pills.length) {
       const perm = esc(opts.gmsWatchlistPerm || 'channel.analyze.tab.board.btn.gms_watchlist');
-      actions = `<button type="button" class="btn btn-secondary btn-sm ba-gms-wl-add-all"
+      actions += `<button type="button" class="btn btn-secondary btn-sm ba-gms-wl-add-all"
         data-perm="${perm}"
         data-board-code="${esc(boardCode)}" data-board-name="${esc(boardName)}"
         title="将本板块龙头与中军全部加入 GMS 策略观察股">龙头+中军全部加入</button>`;
+    }
+    if (opts && opts.selectableRoles && pills.length) {
+      actions += `<button type="button" class="btn btn-secondary btn-sm ba-role-select-board"
+        data-board-code="${esc(boardCode)}" title="勾选本板块全部龙头与中军">全选本板</button>`;
     }
     return `<div class="ba-short-roles" data-board-code="${esc(boardCode)}" data-board-name="${esc(boardName)}">
       <span class="ba-short-roles-label">短线角色${boardLabel ? '' : '：'}</span>
@@ -213,6 +229,78 @@
     toast(parts.join('，') || data.message || '完成', failed ? 'warning' : 'success');
   }
 
+  /** 读取面板内已勾选的龙头/中军（按代码去重） */
+  function getSelectedStocks(panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return [];
+    const map = new Map();
+    panel.querySelectorAll('.ba-role-select:checked').forEach((el) => {
+      const code = String(el.getAttribute('data-code') || el.value || '').trim();
+      if (!code || map.has(code)) return;
+      map.set(code, {
+        code,
+        name: String(el.getAttribute('data-name') || '').trim(),
+        role: String(el.getAttribute('data-role') || '').trim(),
+      });
+    });
+    return Array.from(map.values());
+  }
+
+  function setAllSelected(panelId, checked, scopeEl) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const root = scopeEl || panel;
+    root.querySelectorAll('.ba-role-select').forEach((el) => {
+      el.checked = !!checked;
+    });
+    updateSelectSummary(panelId);
+  }
+
+  function updateSelectSummary(panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    const n = getSelectedStocks(panelId).length;
+    const total = panel.querySelectorAll('.ba-role-select').length;
+    const summaryId = panel.getAttribute('data-select-summary-id');
+    if (summaryId) {
+      const el = document.getElementById(summaryId);
+      if (el) {
+        el.textContent = total
+          ? `已选龙头/中军 ${n} / ${total}`
+          : '暂无可选龙头/中军';
+      }
+    }
+    const tradeBtnId = panel.getAttribute('data-trade-btn-id');
+    if (tradeBtnId) {
+      const btn = document.getElementById(tradeBtnId);
+      // 无可选龙头/中军时禁用；有可选但未勾选时仍可点，点击时再提示
+      if (btn) btn.disabled = total === 0;
+    }
+  }
+
+  function bindSelectableRoles(panel) {
+    if (!panel || panel._baRoleSelectBound) return;
+    panel._baRoleSelectBound = true;
+    panel.addEventListener('change', (e) => {
+      if (!e.target || !e.target.classList || !e.target.classList.contains('ba-role-select')) return;
+      updateSelectSummary(panel.id);
+    });
+    panel.addEventListener('click', (e) => {
+      const selBoard = e.target.closest('.ba-role-select-board');
+      if (!selBoard) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const row = selBoard.closest('.ba-short-roles');
+      if (!row) return;
+      const boxes = [...row.querySelectorAll('.ba-role-select')];
+      const allOn = boxes.length > 0 && boxes.every((cb) => cb.checked);
+      boxes.forEach((cb) => {
+        cb.checked = !allOn;
+      });
+      updateSelectSummary(panel.id);
+    });
+  }
+
   function bindGmsWatchlistActions(panel) {
     if (!panel || panel._baGmsWlBound) return;
     panel._baGmsWlBound = true;
@@ -284,6 +372,9 @@
    * @param {object} [opts.data] - 已有 roles 数据时跳过请求（单板）
    * @param {boolean} [opts.showGmsWatchlistActions]
    * @param {string} [opts.gmsWatchlistPerm]
+   * @param {boolean} [opts.selectableRoles] - 龙头/中军可多选（交易分析）
+   * @param {string} [opts.selectSummaryId] - 已选数量文案元素 id
+   * @param {string} [opts.tradeBtnId] - 交易分析按钮 id（无可选时禁用）
    */
   async function refreshBoardRolesPanel(opts) {
     const panel = document.getElementById(opts.panelId);
@@ -292,7 +383,10 @@
     const actionOpts = {
       showGmsWatchlistActions: !!opts.showGmsWatchlistActions,
       gmsWatchlistPerm: opts.gmsWatchlistPerm || 'channel.analyze.tab.board.btn.gms_watchlist',
+      selectableRoles: !!opts.selectableRoles,
     };
+    if (opts.selectSummaryId) panel.setAttribute('data-select-summary-id', opts.selectSummaryId);
+    if (opts.tradeBtnId) panel.setAttribute('data-trade-btn-id', opts.tradeBtnId);
     const codes = (opts.boardCodes || []).map((c) => String(c || '').trim()).filter(Boolean);
     const visible = opts.visible !== false && (codes.length > 0 || opts.data);
     panel.style.display = visible ? 'block' : 'none';
@@ -300,6 +394,7 @@
       panel.innerHTML = '';
       panel._lastRolesPayloads = [];
       panel._lastRolesMeta = null;
+      updateSelectSummary(opts.panelId);
       return;
     }
     if (opts.data && typeof opts.data === 'object') {
@@ -318,6 +413,10 @@
         if (typeof PermissionEngine !== 'undefined' && PermissionEngine.applyToPage) {
           PermissionEngine.applyToPage();
         }
+      }
+      if (actionOpts.selectableRoles) {
+        bindSelectableRoles(panel);
+        updateSelectSummary(opts.panelId);
       }
       return;
     }
@@ -371,6 +470,10 @@
         PermissionEngine.applyToPage();
       }
     }
+    if (actionOpts.selectableRoles) {
+      bindSelectableRoles(panel);
+      updateSelectSummary(opts.panelId);
+    }
   }
 
   global.BoardRolesPanel = {
@@ -378,6 +481,9 @@
     fetchBoardRoles,
     renderShortlineRoles,
     addToGmsStrategyWatchlist,
+    getSelectedStocks,
+    setAllSelected,
+    updateSelectSummary,
     getLastRolesPayloads(panelId) {
       const panel = document.getElementById(panelId || 'lmRolesHost');
       if (!panel) return { payloads: [], meta: null };

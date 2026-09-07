@@ -39,6 +39,23 @@ def normalize_urt_board_keys(boards: Optional[List[str]]) -> List[str]:
     return out
 
 
+def code_matches_urt_boards(code: Any, boards: Optional[List[str]]) -> bool:
+    """按 URT 板块前缀判断代码是否命中（无 boards 或无法识别键时视为不过滤）。"""
+    keys = normalize_urt_board_keys(boards)
+    if not keys:
+        return True
+    s = str(code or "").replace("\u2060", "").strip()
+    if s.isdigit() and 0 < len(s) < 6:
+        s = s.zfill(6)
+    if not s:
+        return False
+    for key in keys:
+        for p in URT_BOARD_PREFIX_GROUPS.get(key) or ():
+            if s.startswith(p):
+                return True
+    return False
+
+
 def normalize_hk_code(code: str) -> Optional[str]:
     s = str(code or "").strip()
     if not s:

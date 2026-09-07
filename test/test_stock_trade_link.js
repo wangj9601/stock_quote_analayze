@@ -71,6 +71,73 @@ const { api: link4, calls: noCodeCalls } = makeSandbox('?tab=stock-ai');
 assert(link4.redirectFromAnalysisDeepLink() === false, '无 code 不重定向');
 assertEq(noCodeCalls.length, 0, '无 code 不 replace');
 
+assert(typeof link1.normalizeBatchStocks === 'function', '应提供 normalizeBatchStocks');
+assert(typeof link1.openBatchAnalysis === 'function', '应提供 openBatchAnalysis');
+assertEq(link1.BATCH_STORAGE_KEY, 'ssa_trade_analysis_batch', '批量载荷 key');
+
+const norm = link1.normalizeBatchStocks([
+  { code: '600519', name: '贵州茅台' },
+  { stock_code: '600519', stock_name: '重复' },
+  { code: '000001', name: '平安银行' },
+  { code: '' },
+]);
+assertEq(norm.length, 2, '批量股票应按 code 去重');
+assertEq(norm[0].code, '600519', '保留首次');
+assertEq(norm[0].name, '贵州茅台', '保留首次名称');
+assertEq(norm[1].code, '000001', '第二只');
+
+const openCalls = [];
+const store = {};
+const sandboxOpen = {
+  console,
+  document: {
+    documentElement: { classList: { add() {} } },
+    body: { classList: { add() {} } },
+  },
+  location: { search: '', href: '', replace() {} },
+  localStorage: {
+    setItem(k, v) {
+      store[k] = v;
+    },
+    getItem(k) {
+      return store[k] || null;
+    },
+    removeItem(k) {
+      delete store[k];
+    },
+  },
+  open(url) {
+    openCalls.push(url);
+    return { closed: false };
+  },
+  CommonUtils: { showToast() {} },
+  confirm() {
+    return true;
+  },
+};
+sandboxOpen.window = sandboxOpen;
+sandboxOpen.globalThis = sandboxOpen;
+sandboxOpen.URLSearchParams = URLSearchParams;
+vm.runInNewContext(src, sandboxOpen);
+assert(
+  sandboxOpen.StockTradeLink.openBatchAnalysis([]) === false,
+  '空列表不打开'
+);
+assert(
+  sandboxOpen.StockTradeLink.openBatchAnalysis([
+    { code: '002230', name: '科大讯飞' },
+    { code: '603228', name: '景旺电子' },
+  ]) === true,
+  '有股票应打开'
+);
+assert(openCalls.length === 1, '应 window.open 一次');
+assert(openCalls[0].indexOf('batch=selected') >= 0, 'URL 应带 batch=selected');
+assert(openCalls[0].indexOf('tab=stock-ai') >= 0, 'URL 应打开个股分析 Tab');
+assert(openCalls[0].indexOf('002230') >= 0, 'URL 应带 codes 兜底');
+assert(store.ssa_trade_analysis_batch, '应写入 localStorage');
+const payload = JSON.parse(store.ssa_trade_analysis_batch);
+assertEq(payload.stocks.length, 2, '载荷含 2 只');
+
 const stockJs = fs.readFileSync(path.join(root, 'frontend', 'js', 'stock.js'), 'utf8');
 assert(stockJs.includes('bootstrapTabFromUrl'), 'stock.js 应支持 URL tab 引导');
 assert(stockJs.includes("this.currentTab === 'analysis'"), '仅 analysis Tab 自动加载面板');
@@ -80,5 +147,19 @@ assert(stockHtml.includes('stock-popup-window'), '详情页应支持弹出窗样
 
 const css = fs.readFileSync(path.join(root, 'frontend', 'css', 'stock.css'), 'utf8');
 assert(css.includes('html.stock-popup-window'), 'stock.css 应有弹出窗规则');
+
+const analysisHtml = fs.readFileSync(path.join(root, 'frontend', 'analysis.html'), 'utf8');
+assert(analysisHtml.includes('baTradeAnalysisBtn'), '板块分析应有交易分析按钮');
+assert(analysisHtml.includes('lmTradeAnalysisBtn'), '龙头中军应有交易分析按钮');
+assert(analysisHtml.includes('baSelectAllRolesBtn'), '板块分析应有全选龙头中军');
+assert(analysisHtml.includes('lmSelectAllRolesBtn'), '龙头中军应有全选龙头中军');
+
+const rolesJs = fs.readFileSync(path.join(root, 'frontend', 'js', 'board_roles_panel.js'), 'utf8');
+assert(rolesJs.includes('selectableRoles'), '角色面板支持多选');
+assert(rolesJs.includes('ba-role-select'), '角色复选框 class');
+assert(rolesJs.includes('getSelectedStocks'), '应导出 getSelectedStocks');
+
+const multiJs = fs.readFileSync(path.join(root, 'frontend', 'js', 'stock_multi_strategy.js'), 'utf8');
+assert(multiJs.includes("batch === 'selected'"), '个股分析应支持 batch=selected');
 
 console.log('test_stock_trade_link.js: all passed');

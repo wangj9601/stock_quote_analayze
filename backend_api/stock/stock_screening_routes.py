@@ -3449,6 +3449,16 @@ async def get_urt_strategy(
                 "data": [],
             },
         )
+    except Exception as e:
+        logger.exception("URT 选股失败 scope=%s: %s", scope_raw, e)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "message": f"上升趋势选股失败: {e}",
+                "data": [],
+            },
+        )
 
     if isinstance(payload, dict):
         payload["scope"] = scope_raw

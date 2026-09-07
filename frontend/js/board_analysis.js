@@ -102,6 +102,18 @@ const BoardAnalysis = {
     if (exportExcelBtn) {
       exportExcelBtn.addEventListener('click', () => this.exportExcel());
     }
+    const selectAllRolesBtn = document.getElementById('baSelectAllRolesBtn');
+    if (selectAllRolesBtn) {
+      selectAllRolesBtn.addEventListener('click', () => this.selectAllRoles(true));
+    }
+    const clearRolesBtn = document.getElementById('baClearRolesBtn');
+    if (clearRolesBtn) {
+      clearRolesBtn.addEventListener('click', () => this.selectAllRoles(false));
+    }
+    const tradeBtn = document.getElementById('baTradeAnalysisBtn');
+    if (tradeBtn) {
+      tradeBtn.addEventListener('click', () => this.openTradeAnalysis());
+    }
 
     const overlay = document.getElementById('baBoardPickerModal');
     ['baBoardPickerClose', 'baBoardPickerCancel'].forEach((id) => {
@@ -349,22 +361,61 @@ const BoardAnalysis = {
     });
   },
 
+  /** 短线角色面板：可多选龙头/中军并跳转交易分析 */
+  rolesPanelOpts(extra) {
+    return Object.assign(
+      {
+        panelId: 'baRolesHost',
+        boardType: this.boardKind,
+        boardCodeSource: 'tonghuashun',
+        visible: true,
+        variant: 'shortline',
+        showGmsWatchlistActions: true,
+        gmsWatchlistPerm: 'channel.analyze.tab.board.btn.gms_watchlist',
+        selectableRoles: true,
+        selectSummaryId: 'baRoleSelectSummary',
+        tradeBtnId: 'baTradeAnalysisBtn',
+      },
+      extra || {}
+    );
+  },
+
+  selectAllRoles(checked) {
+    if (!window.BoardRolesPanel || typeof BoardRolesPanel.setAllSelected !== 'function') return;
+    BoardRolesPanel.setAllSelected('baRolesHost', !!checked);
+    if (window.CommonUtils) {
+      const n =
+        typeof BoardRolesPanel.getSelectedStocks === 'function'
+          ? BoardRolesPanel.getSelectedStocks('baRolesHost').length
+          : 0;
+      CommonUtils.showToast(checked ? `已全选 ${n} 只龙头/中军` : '已清空勾选', 'info');
+    }
+  },
+
+  openTradeAnalysis() {
+    if (!window.BoardRolesPanel || typeof BoardRolesPanel.getSelectedStocks !== 'function') {
+      if (window.CommonUtils) CommonUtils.showToast('角色选择模块未加载', 'error');
+      return;
+    }
+    const stocks = BoardRolesPanel.getSelectedStocks('baRolesHost');
+    if (window.StockTradeLink && typeof StockTradeLink.openBatchAnalysis === 'function') {
+      StockTradeLink.openBatchAnalysis(stocks, { toastPrefix: '已打开交易分析' });
+      return;
+    }
+    if (window.CommonUtils) CommonUtils.showToast('交易分析跳转模块未加载', 'error');
+  },
+
   applySelectedBoardCodes(codes) {
     this.selectedBoardCodes = Array.isArray(codes) ? codes.slice() : [];
     this.lastResult = null;
     this.updateBoardSummary();
     this.clearMeta();
     if (this.selectedBoardCodes.length && window.BoardRolesPanel) {
-      BoardRolesPanel.refresh({
-        panelId: 'baRolesHost',
-        boardType: this.boardKind,
-        boardCodes: this.selectedBoardCodes,
-        boardCodeSource: 'tonghuashun',
-        visible: true,
-        variant: 'shortline',
-        showGmsWatchlistActions: true,
-        gmsWatchlistPerm: 'channel.analyze.tab.board.btn.gms_watchlist',
-      });
+      BoardRolesPanel.refresh(
+        this.rolesPanelOpts({
+          boardCodes: this.selectedBoardCodes,
+        })
+      );
     }
   },
 
@@ -404,12 +455,12 @@ const BoardAnalysis = {
     const meta = document.getElementById('baBoardMeta');
     if (meta) meta.innerHTML = '';
     if (window.BoardRolesPanel) {
-      BoardRolesPanel.refresh({
-        panelId: 'baRolesHost',
-        boardType: this.boardKind,
-        boardCodes: [],
-        visible: false,
-      });
+      BoardRolesPanel.refresh(
+        this.rolesPanelOpts({
+          boardCodes: [],
+          visible: false,
+        })
+      );
     }
     const results = document.getElementById('baResults');
     if (results) {
@@ -472,17 +523,13 @@ const BoardAnalysis = {
           ? board.selected_board_codes
           : codes;
       if (window.BoardRolesPanel) {
-        BoardRolesPanel.refresh({
-          panelId: 'baRolesHost',
-          boardType: this.boardKind,
-          boardCodes: roleCodes,
-          boardCodeSource: first.board_code_source || 'tonghuashun',
-          visible: true,
-          variant: 'shortline',
-          data: board.multi_boards ? undefined : board,
-          showGmsWatchlistActions: true,
-          gmsWatchlistPerm: 'channel.analyze.tab.board.btn.gms_watchlist',
-        });
+        BoardRolesPanel.refresh(
+          this.rolesPanelOpts({
+            boardCodes: roleCodes,
+            boardCodeSource: first.board_code_source || 'tonghuashun',
+            data: board.multi_boards ? undefined : board,
+          })
+        );
       }
       this.renderResults(this.lastResult);
       if (window.CommonUtils) CommonUtils.showToast('板块分析完成', 'success');

@@ -4291,13 +4291,17 @@ const ScreeningPage = {
         const gateway502Msg =
             strategy === 'gms'
                 ? '网关502/503：全A股 GMS 耗时常达数分钟。请确认 Nginx 已用 location ^~ /api/screening/gms-strategy 且 proxy_read_timeout≥600s，并已 nginx -t 与 reload；若经 Cloudflare 等 CDN，免费版约 100s 也会断连。也可改用「港股」或「自选股」。'
-                : '服务暂时不可用，请稍后重试';
+                : strategy === 'urt'
+                    ? '网关502/503：URT 全市场扫描过久或上游断开。请确认：① 已跑 URT 预计算；② Nginx ^~ /api/screening/urt-strategy 的 proxy_read_timeout≥600s；③ Gunicorn --timeout≥600。也可改用「自选股」。'
+                    : '服务暂时不可用，请稍后重试';
         if (!response.ok) {
             if (response.status === 504) {
                 throw new Error(
                     strategy === 'gms'
                         ? '请求超时(504)，全A股 GMS 计算耗时较长，请稍后重试或缩小股票范围'
-                        : '请求超时(504)，选股计算耗时较长，请稍后重试'
+                        : strategy === 'urt'
+                            ? '请求超时(504)，URT 计算耗时较长。请确认已预计算，或改用自选股后重试'
+                            : '请求超时(504)，选股计算耗时较长，请稍后重试'
                 );
             }
             if (response.status === 502 || response.status === 503) {
@@ -5177,6 +5181,22 @@ const ScreeningPage = {
                         if (errorMsg === '{}') errorMsg = error.toString();
                     } catch (e) {
                         errorMsg = error.toString();
+                    }
+                }
+
+                // 浏览器 Failed to fetch / CONNECTION_RESET：多为网关或 worker 中途掐断，无 HTTP 状态码
+                const fetchFailed = /failed to fetch|networkerror|err_connection|connection reset|load failed/i.test(
+                    String(errorMsg || '')
+                );
+                if (fetchFailed) {
+                    if (strategy === 'urt') {
+                        errorMsg =
+                            '连接被重置（多为 URT 全量/多板块实时扫描过久）。请确认：① 已跑 URT 预计算；② Nginx proxy_read_timeout≥600s；③ Gunicorn --timeout≥600。也可先改「自选股」或缩小板块重试。';
+                    } else if (strategy === 'gms') {
+                        errorMsg =
+                            '连接被重置（全A股 GMS 耗时常达数分钟）。请确认 Nginx/Gunicorn 超时≥600s，或改用港股/自选股。';
+                    } else {
+                        errorMsg = '网络连接失败或被中断，请稍后重试；若为大范围选股，请检查网关超时配置。';
                     }
                 }
 

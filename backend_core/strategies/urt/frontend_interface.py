@@ -4,15 +4,25 @@
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
 from .config import URTConfigManager
-from .data_loader import URTDataLoader, is_hk_stock_code, normalize_urt_board_keys
+from .data_loader import (
+    URTDataLoader,
+    code_matches_urt_boards,
+    is_hk_stock_code,
+    normalize_urt_board_keys,
+)
 from .strategy_engine import URTStrategyEngine
-from .trace_store import get_trace_freshness, query_buy_signals_for_date
+from .trace_store import (
+    dates_ready_for_universe_backtest,
+    get_trace_freshness,
+    query_buy_signals_for_date,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -196,13 +206,14 @@ class URTFrontendInterface:
                 "message": "scope=watchlist 需要 stock_codes",
             }
 
-        # 无 Query 覆盖时优先读预计算；限定股票池时再按代码过滤
+        # 无 Query 覆盖时优先读预计算；限定股票池 / A 股板块后再过滤。
+        # 勾选 MAIN/SZ_SME 等也必须可读缓存，否则误走全量实时扫描，生产易 502。
+        # 当日已预计算但买点为 0（或板块过滤后为空）也视为缓存命中，禁止再全市场实时扫。
         # 单股跳过筛选时不走「仅买点」缓存，避免未过筛股票查不到
         if (
             prefer_cache
             and not force_realtime
             and not overrides_active
-            and not board_keys
             and resolved_id is not None
             and require_pass
         ):
@@ -213,55 +224,125 @@ class URTFrontendInterface:
                     config_id=resolved_id,
                     min_score=float(cfg.get("min_score") or 70),
                     limit=None if stock_codes is not None else limit,
-                )
-                if cached:
-                    if stock_codes is not None:
-                        if mkt == "HK":
-                            allow = {
-                                str(c).strip().zfill(5) if str(c).strip().isdigit() else str(c).strip()
-                                for c in stock_codes
-                            }
+                ) or []
+                date_trace_ready = False
+                if stock_codes is None and mkt != "HK":
+                    try:
+                        date_trace_ready = effective in dates_ready_for_universe_backtest(
+                            db,
+                            config_id=int(resolved_id),
+                            dates=[effective],
+                        )
+                    except Exception as e:
+                        logger.debug("URT date_trace_ready check failed: %s", e)
+
+                if cached or date_trace_ready:
+                    if cached:
+                        if stock_codes is not None:
+                            if mkt == "HK":
+                                allow = {
+                                    str(c).strip().zfill(5) if str(c).strip().isdigit() else str(c).strip()
+                                    for c in stock_codes
+                                }
+                                cached = [
+                                    r
+                                    for r in cached
+                                    if str(r.get("code") or "").strip() in allow
+                                    or str(r.get("code") or "").strip().zfill(5) in allow
+                                ]
+                            else:
+                                allow = {
+                                    str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip()
+                                    for c in stock_codes
+                                }
+                                cached = [
+                                    r
+                                    for r in cached
+                                    if str(r.get("code") or "").zfill(6) in allow
+                                    or str(r.get("code")) in allow
+                                ]
+                        elif mkt == "HK":
                             cached = [
-                                r
-                                for r in cached
-                                if str(r.get("code") or "").strip() in allow
-                                or str(r.get("code") or "").strip().zfill(5) in allow
+                                r for r in cached if is_hk_stock_code(str(r.get("code") or ""))
                             ]
                         else:
-                            allow = {
-                                str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip()
-                                for c in stock_codes
-                            }
                             cached = [
                                 r
                                 for r in cached
-                                if str(r.get("code") or "").zfill(6) in allow or str(r.get("code")) in allow
+                                if not is_hk_stock_code(str(r.get("code") or ""))
                             ]
-                    elif mkt == "HK":
-                        cached = [r for r in cached if is_hk_stock_code(str(r.get("code") or ""))]
-                    else:
-                        cached = [
-                            r
-                            for r in cached
-                            if not is_hk_stock_code(str(r.get("code") or ""))
-                        ]
-                    if cached:
+                        if board_keys and mkt != "HK":
+                            cached = [
+                                r
+                                for r in cached
+                                if code_matches_urt_boards(r.get("code"), board_keys)
+                            ]
                         if limit and len(cached) > int(limit):
                             cached = cached[: int(limit)]
-                        from backend_core.strategies.urt.signal_detector import build_buy_logic
+                        if cached:
+                            from backend_core.strategies.urt.signal_detector import build_buy_logic
 
-                        for row in cached:
-                            row["buy_logic"] = build_buy_logic(row, cfg)
-                            row["filter_ok"] = row["buy_logic"].get("filter_ok")
-                            row["score_ok"] = row["buy_logic"].get("score_ok")
-                        data = _apply_quality_filter(cached)
-                        data_source = "urt_signal_trace"
-                        cache_served = True
+                            for row in cached:
+                                row["buy_logic"] = build_buy_logic(row, cfg)
+                                row["filter_ok"] = row["buy_logic"].get("filter_ok")
+                                row["score_ok"] = row["buy_logic"].get("score_ok")
+                            data = _apply_quality_filter(cached)
+                        else:
+                            data = []
+                    else:
+                        data = []
+                    data_source = "urt_signal_trace"
+                    cache_served = True
+                    if not data and date_trace_ready and not hint:
+                        hint = f"基准日 {effective} 已有预计算，当日无符合条件的买点。"
             except Exception as e:
                 logger.debug("URT cache read failed: %s", e)
 
         if not cache_served and not data:
             pool_codes = stock_codes if stock_codes is not None else None
+
+            # 全市场且无预计算：禁止默认同步实时扫（生产 Nginx/Gunicorn 易 502）。
+            # 设 URT_ALLOW_FULL_MARKET_REALTIME=1 可恢复旧行为。
+            allow_full_rt = (os.getenv("URT_ALLOW_FULL_MARKET_REALTIME") or "").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+            full_market = pool_codes is None and not limit
+            if full_market and not allow_full_rt and mkt != "HK":
+                msg = (
+                    f"全市场暂无可用预计算（基准日 {effective}，config_id={resolved_id}）。"
+                    "请先在管理端执行 URT 预计算，或改用自选股/缩小范围；"
+                    "直接全量实时扫描易导致网关 502。"
+                )
+                if hint:
+                    msg = f"{hint} {msg}"
+                return {
+                    "success": False,
+                    "data": [],
+                    "total": 0,
+                    "strategy_name": "上升趋势策略",
+                    "scope": scope,
+                    "parameters": {
+                        "config_id": resolved_id,
+                        "market": mkt,
+                        "screening_date_requested": req_norm,
+                        "screening_date_effective": effective,
+                        "data_source": "none",
+                        "boards": board_keys,
+                        "need_precompute": True,
+                        "signal_quality_mode": quality_mode,
+                        "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
+                    },
+                    "search_date": effective,
+                    "data_source": "none",
+                    "need_precompute": True,
+                    "signal_quality_mode": quality_mode,
+                    "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
+                    "message": msg,
+                }
+
             if mkt == "HK":
                 stocks = loader.list_hk_share_candidates(
                     limit=limit if pool_codes is None else None,
@@ -274,8 +355,8 @@ class URTFrontendInterface:
                     boards=board_keys or None,
                 )
             if limit and pool_codes is not None and len(stocks) > int(limit):
-                # 缩池很大时仍可用 limit 限制扫描量
                 stocks = stocks[: int(limit)]
+
             engine = URTStrategyEngine(loader, cfg)
             data = engine.screen_universe(
                 stocks,
