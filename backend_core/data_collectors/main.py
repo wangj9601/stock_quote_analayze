@@ -363,7 +363,8 @@ def update_stock_shares():
                 xls, sheet_name=sheet_kw
             )
         else:
-            result = stock_shares_collector.run(mode="incremental", source=source)        if result and result.get("success", 0) > 0:
+            result = stock_shares_collector.run(mode="incremental", source=source)
+        if result and result.get("success", 0) > 0:
             logging.info(f"[定时任务] 股本数据更新完成: {result}")
         else:
             logging.warning(f"[定时任务] 股本数据更新结果: {result}")

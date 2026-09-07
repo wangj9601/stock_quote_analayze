@@ -70,11 +70,16 @@ class URTStrategyEngine:
         stock_rows: List[Tuple[str, str]],
         start_s: str,
         end_s: str,
+        *,
+        chunk_size: Optional[int] = None,
     ) -> Optional[Dict[str, List[Dict[str, Any]]]]:
         codes = [str(c) for c, _n in stock_rows]
         try:
             return self.loader.fetch_historical_desc_batch(
-                codes, start_date=start_s, end_date=end_s
+                codes,
+                start_date=start_s,
+                end_date=end_s,
+                chunk_size=chunk_size,
             )
         except Exception as e:
             logger.warning("URT 批量拉行情失败，回退逐股: %s", e)
@@ -96,7 +101,11 @@ class URTStrategyEngine:
         results: List[Dict[str, Any]] = []
         if not stock_rows:
             return results
-        hist_map = self._load_hist_map(stock_rows, start_s, end_s)
+        batch_n = URTDataLoader.resolve_hist_batch_chunk_size(
+            start_date=start_s, end_date=end_s
+        )
+        # 先整池一次批量（内部再按 batch_n 切 codes）；失败则回退逐股
+        hist_map = self._load_hist_map(stock_rows, start_s, end_s, chunk_size=batch_n)
         for code, name in stock_rows:
             try:
                 if hist_map is not None:
@@ -127,7 +136,7 @@ class URTStrategyEngine:
         require_pass: bool = True,
         progress_cb: Optional[ProgressCb] = None,
         cancel_check: Optional[CancelCheck] = None,
-        chunk_size: int = 400,
+        chunk_size: Optional[int] = None,
     ) -> Tuple[Dict[str, List[Dict[str, Any]]], bool]:
         """
         一次拉齐 [最早日-回看, 最晚日] 行情，在内存中对多个交易日评买点。
@@ -145,18 +154,21 @@ class URTStrategyEngine:
         # 回看相对最早扫描日，结束日取区间最晚，整段只拉一次行情
         start_s, _ = URTDataLoader.default_date_window(cal_days, min(date_list))
         end_s = max(date_list)
-        n_chunk = max(50, int(chunk_size or 400))
+        n_chunk = URTDataLoader.resolve_hist_batch_chunk_size(
+            start_date=start_s, end_date=end_s, chunk_size=chunk_size
+        )
         workers = _screen_workers()
         total = len(stock_rows)
         done_stocks = 0
         cfg = self.config
 
         logger.info(
-            "URT 区间扫描 stocks=%s days=%s window=%s~%s workers=%s",
+            "URT 区间扫描 stocks=%s days=%s window=%s~%s batch_codes=%s workers=%s",
             total,
             len(date_list),
             start_s,
             end_s,
+            n_chunk,
             workers,
         )
         if progress_cb:
@@ -167,7 +179,7 @@ class URTStrategyEngine:
                 logger.info("URT 区间扫描已取消 stocks_done=%s/%s", done_stocks, total)
                 return hits_by_date, False
             chunk = stock_rows[i : i + n_chunk]
-            hist_map = self._load_hist_map(chunk, start_s, end_s)
+            hist_map = self._load_hist_map(chunk, start_s, end_s, chunk_size=n_chunk)
             jobs: List[Tuple[str, str, List[Dict[str, Any]]]] = []
             for code, name in chunk:
                 if hist_map is not None:

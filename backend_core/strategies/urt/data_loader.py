@@ -186,6 +186,46 @@ class URTDataLoader:
         rows = self.db.execute(text(sql), params).fetchall()
         return [self._quote_row_to_bar(row) for row in rows]
 
+    @staticmethod
+    def resolve_hist_batch_chunk_size(
+        *,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        chunk_size: Optional[int] = None,
+    ) -> int:
+        """按日期跨度估算批量拉行情的 codes 分块大小，避免单次结果集撑爆客户端内存。
+
+        生产曾出现：400 只 × ~3 年日 K → psycopg2「out of memory for query result」。
+        """
+        import os
+
+        env_raw = (os.getenv("URT_HIST_BATCH_CODES") or "").strip()
+        if env_raw.isdigit():
+            return max(10, min(200, int(env_raw)))
+
+        if chunk_size is not None:
+            try:
+                requested = int(chunk_size)
+            except (TypeError, ValueError):
+                requested = 0
+            if requested > 0:
+                return max(10, min(200, requested))
+
+        cal_days = 120
+        try:
+            if start_date and end_date:
+                d0 = datetime.strptime(str(start_date)[:10], "%Y-%m-%d").date()
+                d1 = datetime.strptime(str(end_date)[:10], "%Y-%m-%d").date()
+                cal_days = max(1, (d1 - d0).days + 1)
+        except ValueError:
+            pass
+
+        # 粗估：目标单批约 ≤ 4 万行（codes × 交易日≈日历日×0.7）
+        approx_bars = max(30, int(cal_days * 0.7))
+        target_rows = 40_000
+        auto = max(10, min(80, target_rows // approx_bars))
+        return int(auto)
+
     def fetch_historical_desc_batch(
         self,
         codes: List[str],
@@ -193,9 +233,12 @@ class URTDataLoader:
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         market: Optional[str] = None,
-        chunk_size: int = 400,
+        chunk_size: Optional[int] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """按代码批量拉取日 K（每只日期 DESC）。减少全市场扫描的逐股查询。"""
+        """按代码批量拉取日 K（每只日期 DESC）。减少全市场扫描的逐股查询。
+
+        分块 + yield_per 流式取回，避免大结果集一次进客户端内存。
+        """
         from sqlalchemy import bindparam
 
         mkt = str(market or self.market or "CN").strip().upper()
@@ -211,9 +254,13 @@ class URTDataLoader:
         out: Dict[str, List[Dict[str, Any]]] = {c: [] for c in uniq}
         if not uniq:
             return out
-        n = max(50, int(chunk_size or 400))
-        for i in range(0, len(uniq), n):
-            chunk = uniq[i : i + n]
+
+        n = self.resolve_hist_batch_chunk_size(
+            start_date=start_date, end_date=end_date, chunk_size=chunk_size
+        )
+        yield_per = 2000
+
+        def _fetch_chunk(chunk: List[str]) -> None:
             clauses = ["code IN :codes"]
             params: Dict[str, Any] = {"codes": chunk}
             if start_date:
@@ -222,22 +269,79 @@ class URTDataLoader:
             if end_date:
                 clauses.append("date <= :end_date")
                 params["end_date"] = str(end_date)[:10]
+            # 不选 name：结果集更小；名称由选股列表侧提供
             sql = text(
                 f"""
-                SELECT code, name, date, open, close, high, low,
+                SELECT code, date, open, close, high, low,
                        change_percent, volume, amount, turnover_rate
                 FROM {table}
                 WHERE {' AND '.join(clauses)}
                 ORDER BY code ASC, date DESC
                 """
             ).bindparams(bindparam("codes", expanding=True))
-            rows = self.db.execute(sql, params).fetchall()
-            for row in rows:
-                bar = self._quote_row_to_bar(row)
+            result = self.db.execute(
+                sql,
+                params,
+                execution_options={"yield_per": yield_per},
+            )
+            for row in result:
+                bar = self._quote_row_to_bar_compact(row)
                 code = str(bar.get("code") or "")
                 if code in out:
                     out[code].append(bar)
+
+        i = 0
+        while i < len(uniq):
+            chunk = uniq[i : i + n]
+            try:
+                _fetch_chunk(chunk)
+                i += len(chunk)
+            except Exception as e:
+                msg = str(e).lower()
+                is_oom = (
+                    "out of memory" in msg
+                    or "memoryerror" in type(e).__name__.lower()
+                    or "query result" in msg
+                )
+                if is_oom and n > 10:
+                    new_n = max(10, n // 2)
+                    logger.warning(
+                        "URT 批量拉行情 OOM，缩小分块 %s→%s（本批 %s 只）: %s",
+                        n,
+                        new_n,
+                        len(chunk),
+                        e,
+                    )
+                    try:
+                        self.db.rollback()
+                    except Exception:
+                        pass
+                    n = new_n
+                    continue
+                raise
         return out
+
+    @staticmethod
+    def _quote_row_to_bar_compact(row: Any) -> Dict[str, Any]:
+        """无 name 列的批量查询行 → bar（与 _quote_row_to_bar 字段对齐）。"""
+        date_val = row[1]
+        if hasattr(date_val, "strftime"):
+            date_str = date_val.strftime("%Y-%m-%d")
+        else:
+            date_str = str(date_val)[:10]
+        return {
+            "code": row[0],
+            "name": None,
+            "date": date_str,
+            "open": float(row[2]) if row[2] is not None else 0.0,
+            "close": float(row[3]) if row[3] is not None else 0.0,
+            "high": float(row[4]) if row[4] is not None else 0.0,
+            "low": float(row[5]) if row[5] is not None else 0.0,
+            "change_percent": float(row[6]) if row[6] is not None else 0.0,
+            "volume": float(row[7]) if row[7] is not None else 0.0,
+            "amount": float(row[8]) if row[8] is not None else 0.0,
+            "turnover_rate": float(row[9]) if row[9] is not None else None,
+        }
 
     @staticmethod
     def _quote_row_to_bar(row: Any) -> Dict[str, Any]:

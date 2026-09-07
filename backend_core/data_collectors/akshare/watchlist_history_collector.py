@@ -29,6 +29,61 @@ except Exception as e:
 # 配置日志
 logger = logging.getLogger(__name__)
 
+
+def _is_transient_network_error(exc: BaseException) -> bool:
+    """远端断开、连接重置等瞬时网络错误，适合短退避重试。"""
+    name = type(exc).__name__
+    if name in (
+        "RemoteDisconnected",
+        "ConnectionError",
+        "ConnectionResetError",
+        "ConnectTimeout",
+        "ReadTimeout",
+        "Timeout",
+        "ChunkedEncodingError",
+        "ProtocolError",
+        "ProxyError",
+    ):
+        return True
+    msg = str(exc).lower()
+    needles = (
+        "remotedisconnected",
+        "connection aborted",
+        "connection reset",
+        "closed connection without response",
+        "timed out",
+        "temporarily unavailable",
+        "max retries exceeded",
+    )
+    return any(n in msg for n in needles)
+
+
+def _call_ak_with_retry(label: str, func, *args, max_retries: int = 3, base_delay: float = 1.5, **kwargs):
+    """调用 akshare 接口；瞬时网络错误指数退避重试。"""
+    last_exc: BaseException | None = None
+    attempts = max(1, int(max_retries))
+    for i in range(attempts):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            last_exc = e
+            if i >= attempts - 1 or not _is_transient_network_error(e):
+                raise
+            delay = float(base_delay) * (2 ** i)
+            logger.warning(
+                "%s 瞬时网络失败，%d/%d 次后 %.1fs 重试: %s",
+                label,
+                i + 1,
+                attempts,
+                delay,
+                e,
+            )
+            time.sleep(delay)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"{label} 重试失败")
+
+
 def get_watchlist_codes(db: Session):
     """获取自选股股票代码列表，去重。"""
     codes = db.query(Watchlist.stock_code).distinct().all()
@@ -567,7 +622,15 @@ def collect_one_stock_history_and_indicators(db: Session, stock_code: str):
         is_hk = is_hk_stock(db, stock_code)
         if is_hk:
             hk_code = stock_code.zfill(5) if stock_code.isdigit() else stock_code
-            df = ak.stock_hk_hist(symbol=hk_code, period='daily', start_date='19950101', end_date=end_date, adjust='')
+            df = _call_ak_with_retry(
+                f"港股历史 {stock_code}",
+                ak.stock_hk_hist,
+                symbol=hk_code,
+                period="daily",
+                start_date="19950101",
+                end_date=end_date,
+                adjust="",
+            )
             if df.empty:
                 return {"success": False, "message": "港股返回空数据"}
             db.execute(text("DELETE FROM historical_quotes_hk WHERE code = :code"), {"code": stock_code})
@@ -582,7 +645,15 @@ def collect_one_stock_history_and_indicators(db: Session, stock_code: str):
             a_code = stock_code.zfill(6) if stock_code.isdigit() and len(stock_code) < 6 else stock_code
             df = None
             try:
-                df = ak.stock_zh_a_hist(symbol=a_code, period='daily', start_date='19950101', end_date=end_date, adjust='')
+                df = _call_ak_with_retry(
+                    f"A股历史 {stock_code}",
+                    ak.stock_zh_a_hist,
+                    symbol=a_code,
+                    period="daily",
+                    start_date="19950101",
+                    end_date=end_date,
+                    adjust="",
+                )
             except Exception as e1:
                 market = get_market_from_db(db, stock_code)
                 if not market:
@@ -590,7 +661,15 @@ def collect_one_stock_history_and_indicators(db: Session, stock_code: str):
                 sina_symbol = build_sina_symbol(a_code, market)
                 if not sina_symbol:
                     return {"success": False, "message": f"无法构建新浪 symbol: {e1}"}
-                df = ak.stock_zh_a_hist(symbol=sina_symbol, period='daily', start_date='19950101', end_date=end_date, adjust='')
+                df = _call_ak_with_retry(
+                    f"A股历史(新浪) {stock_code}",
+                    ak.stock_zh_a_hist,
+                    symbol=sina_symbol,
+                    period="daily",
+                    start_date="19950101",
+                    end_date=end_date,
+                    adjust="",
+                )
             if df is None or df.empty:
                 return {"success": False, "message": "A股返回空数据"}
             db.query(HistoricalQuotes).filter(HistoricalQuotes.code == stock_code).delete()
@@ -663,7 +742,9 @@ def collect_watchlist_history():
                 if is_hk:
                     logger.info("[collect_watchlist_history] 检测到港股代码: %s", stock_code)
                     hk_code = stock_code.zfill(5) if stock_code.isdigit() else stock_code
-                    df = ak.stock_hk_hist(
+                    df = _call_ak_with_retry(
+                        f"港股历史 {stock_code}",
+                        ak.stock_hk_hist,
                         symbol=hk_code,
                         period="daily",
                         start_date="19950101",
@@ -704,7 +785,9 @@ def collect_watchlist_history():
                     df = None
 
                     try:
-                        df = ak.stock_zh_a_hist(
+                        df = _call_ak_with_retry(
+                            f"A股历史 {stock_code}",
+                            ak.stock_zh_a_hist,
                             symbol=a_code,
                             period="daily",
                             start_date="19950101",
@@ -742,7 +825,9 @@ def collect_watchlist_history():
                             logger.info(
                                 "[collect_watchlist_history] 使用新浪接口，symbol: %s", sina_symbol
                             )
-                            df = ak.stock_zh_a_hist(
+                            df = _call_ak_with_retry(
+                                f"A股历史(新浪) {stock_code}",
+                                ak.stock_zh_a_hist,
                                 symbol=sina_symbol,
                                 period="daily",
                                 start_date="19950101",
