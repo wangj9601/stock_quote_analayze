@@ -2085,8 +2085,10 @@ const formatVolume = (value: any) => {
 const formatAmount = (value: any) => {
   if (value === null || value === undefined || value === '') return '-'
   const num = Number(value)
-  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
-  if (num >= 10000) return `${(num / 10000).toFixed(2)}万`
+  if (Number.isNaN(num)) return '-'
+  const abs = Math.abs(num)
+  if (abs >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
+  if (abs >= 10000) return `${(num / 10000).toFixed(2)}万`
   return num.toFixed(2)
 }
 

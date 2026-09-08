@@ -63,31 +63,10 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
                 total_market_value REAL,
                 pb_ratio REAL,
                 circulating_market_value REAL,
-                buy_price REAL,
-                sell_price REAL,
                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY(code, trade_date),
                 FOREIGN KEY(code) REFERENCES stock_basic_info(code)
             )
-        '''))
-        session.commit()
-
-        # 确保新浪买一/卖一价字段存在
-        session.execute(text('''
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                               WHERE table_name='stock_realtime_quote'
-                               AND column_name='buy_price') THEN
-                    ALTER TABLE stock_realtime_quote ADD COLUMN buy_price REAL;
-                END IF;
-                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                               WHERE table_name='stock_realtime_quote'
-                               AND column_name='sell_price') THEN
-                    ALTER TABLE stock_realtime_quote ADD COLUMN sell_price REAL;
-                END IF;
-            END
-            $$;
         '''))
         session.commit()
 

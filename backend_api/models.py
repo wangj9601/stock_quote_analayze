@@ -507,9 +507,6 @@ class StockRealtimeQuote(Base):
     total_market_value = Column(Float)
     pb_ratio = Column(Float)
     circulating_market_value = Column(Float)
-    # 遗留列：曾误存新浪买一/卖一价，采集已停写；勿当作流入/流出资金额
-    buy_price = Column(Float)
-    sell_price = Column(Float)
     # 同花顺日资金流（与 stock_fund_flow_daily 同步，单位：元）
     inflow_amount = Column(Float)
     outflow_amount = Column(Float)
