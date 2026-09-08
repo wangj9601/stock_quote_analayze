@@ -1337,9 +1337,14 @@ class HistoricalQuoteCollector(TushareCollector):
                     pass
 
     def _run_indicators_for_date(self, session, date_str: str) -> None:
-        """采集写入 historical_quotes 后，为指定日期运行扩展涨跌幅与各类指标。date_str 格式 YYYYMMDD。"""
+        """采集写入 historical_quotes 后，仅计算扩展/30日涨跌幅。
+
+        技术指标（MA/MAVOL/KDJ/RSI/BOLL/MACD/PVFRS）不再按自选股单独批算：
+        - MA/MAVOL/PVFRS 由 ``_run_full_market_supplement_indicators`` 全市场补充；
+        - MACD 由独立工作流节点 ``macd_cn`` 负责。
+        date_str 格式 YYYYMMDD。
+        """
         target_date = datetime.datetime.strptime(date_str, "%Y%m%d").strftime("%Y-%m-%d")
-        watchlist_codes = self._get_watchlist_codes(session)
         try:
             self.logger.info("开始自动计算扩展涨跌幅（5日、10日、60日）...")
             calculator = ExtendedChangeCalculator(session)
@@ -1416,19 +1421,7 @@ class HistoricalQuoteCollector(TushareCollector):
             except Exception as log_error:
                 self.logger.error("记录30日涨跌幅计算失败日志时出错: %s", log_error)
 
-        for calc_name, calc_method in [
-            ('MACD', lambda: self._calculate_and_save_macd_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-            ('MA+MAVOL', lambda: self._calculate_and_save_ma_and_mavol_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-            ('KDJ', lambda: self._calculate_and_save_kdj_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-            ('RSI', lambda: self._calculate_and_save_rsi_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-            ('BOLL', lambda: self._calculate_and_save_boll_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-            ('mean_frequency_resonance', lambda: self._calculate_and_save_mean_frequency_for_date(session, target_date, watchlist_codes=watchlist_codes)),
-        ]:
-            try:
-                self.logger.info("开始自动计算%s指标...", calc_name)
-                result = calc_method()
-                if isinstance(result, dict):
-                    self.logger.info("%s指标计算完成: 成功 %s, 失败 %s", calc_name, result.get('success', 0), result.get('failed', 0))
-                session.commit()
-            except Exception as err:
-                self.logger.error("自动计算%s指标失败: %s", calc_name, err)
+        self.logger.info(
+            "跳过日采内自选股技术指标批算（MA/MAVOL/KDJ/RSI/BOLL/MACD/PVFRS），"
+            "改由全市场补充节点与独立指标工作流负责"
+        )

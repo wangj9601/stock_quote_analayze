@@ -1,4 +1,4 @@
-"""采集流程引擎：串行执行、失败策略、重试、取消、强制重启当前环节、DB 状态持久化。"""
+"""采集流程引擎：串行执行、失败策略、重试、取消、强制重启、失败后从失败环节恢复、DB 状态持久化。"""
 
 from __future__ import annotations
 
@@ -580,19 +580,183 @@ class CollectionWorkflowEngine:
         finally:
             db.close()
 
-    def restart_node(self, run_id: str, order_index: Optional[int] = None) -> bool:
+    def resume_from(self, run_id: str, order_index: Optional[int] = None) -> bool:
         """
-        强制停止并重启正在运行的环节。
+        流程已失败/取消后，从失败（或指定）环节重新执行并继续后续节点。
 
-        - order_index 为空：重启 run.current_node_index 对应节点
-        - 立刻 terminate 当前节点子进程；若引擎线程已丢失则恢复线程并重跑
+        - 已完成节点保持跳过；目标及之后的 failed 节点重置为 pending
+        - 需重新占用互斥并启动引擎线程
         """
         db = SessionLocal()
         try:
-            run = db.query(CollectionWorkflowRun).filter(CollectionWorkflowRun.run_id == run_id).first()
+            run = (
+                db.query(CollectionWorkflowRun)
+                .filter(CollectionWorkflowRun.run_id == run_id)
+                .first()
+            )
             if not run:
                 return False
-            if run.status not in ("running", "pending"):
+            if run.status not in ("failed", "cancelled"):
+                return False
+
+            target = order_index if order_index is not None else run.current_node_index
+            if target is None:
+                first_failed = (
+                    db.query(CollectionWorkflowNodeRun)
+                    .filter(
+                        CollectionWorkflowNodeRun.run_id == run_id,
+                        CollectionWorkflowNodeRun.status == "failed",
+                    )
+                    .order_by(CollectionWorkflowNodeRun.order_index.asc())
+                    .first()
+                )
+                if first_failed is None:
+                    return False
+                target = int(first_failed.order_index)
+            target = int(target)
+
+            node_run = (
+                db.query(CollectionWorkflowNodeRun)
+                .filter(
+                    CollectionWorkflowNodeRun.run_id == run_id,
+                    CollectionWorkflowNodeRun.order_index == target,
+                )
+                .first()
+            )
+            if not node_run:
+                return False
+            if node_run.status not in ("failed", "pending", "cancelled", "running"):
+                return False
+
+            ok, kind, existing = mutex_try_acquire("workflow", run_id)
+            if not ok and existing != run_id:
+                logger.warning(
+                    "失败后恢复失败：互斥占用中 kind=%s existing=%s run_id=%s",
+                    kind,
+                    existing,
+                    run_id,
+                )
+                return False
+
+            clear_cancel(run_id)
+            clear_restart(run_id)
+            _clear_persisted_restart(run)
+
+            # 目标之前的 failed：标记跳过，避免恢复时又重跑更早失败点
+            earlier_failed = (
+                db.query(CollectionWorkflowNodeRun)
+                .filter(
+                    CollectionWorkflowNodeRun.run_id == run_id,
+                    CollectionWorkflowNodeRun.order_index < target,
+                    CollectionWorkflowNodeRun.status == "failed",
+                )
+                .all()
+            )
+            for nr in earlier_failed:
+                nr.status = "skipped"
+                nr.message = (nr.message or "") + "（从后续环节恢复时跳过）"
+                if not nr.finished_at:
+                    nr.finished_at = datetime.now()
+
+            # 目标及之后的 failed / cancelled：重置为 pending 以便重跑
+            to_reset = (
+                db.query(CollectionWorkflowNodeRun)
+                .filter(
+                    CollectionWorkflowNodeRun.run_id == run_id,
+                    CollectionWorkflowNodeRun.order_index >= target,
+                    CollectionWorkflowNodeRun.status.in_(("failed", "cancelled", "running")),
+                )
+                .all()
+            )
+            for nr in to_reset:
+                nr.status = "pending"
+                nr.progress = 0
+                nr.error = None
+                nr.result = {}
+                nr.finished_at = None
+                nr.started_at = None
+                nr.message = (
+                    "失败后恢复，即将重跑" if nr.order_index == target else "等待执行"
+                )
+
+            if node_run.status != "pending":
+                node_run.status = "pending"
+                node_run.progress = 0
+                node_run.error = None
+                node_run.result = {}
+                node_run.finished_at = None
+                node_run.started_at = None
+                node_run.message = "失败后恢复，即将重跑"
+
+            run.status = "running"
+            run.current_node_index = target
+            run.finished_at = None
+            prev_err = (run.error_message or "").strip()
+            run.error_message = (
+                f"已从环节 #{target + 1} 恢复重跑"
+                + (f"；原错误：{prev_err}" if prev_err else "")
+            )
+            ctx = dict(run.context or {})
+            ctx["resumed_from_order_index"] = target
+            ctx["resumed_at"] = datetime.now().isoformat(timespec="seconds")
+            run.context = ctx
+            db.commit()
+
+            if is_engine_thread_alive(run_id):
+                logger.warning(
+                    "resume_from 时引擎线程仍存活，改为登记重启标记 run_id=%s order=%s",
+                    run_id,
+                    target,
+                )
+                _persist_restart_order(run, target)
+                db.commit()
+                request_restart(run_id, target)
+            else:
+                self._spawn_engine_thread(run_id)
+
+            logger.info(
+                "已从失败环节恢复 run_id=%s order_index=%s",
+                run_id,
+                target,
+            )
+            return True
+        finally:
+            db.close()
+
+    def restart_node(self, run_id: str, order_index: Optional[int] = None) -> bool:
+        """
+        强制停止并重启正在运行的环节；若流程已失败/取消，则从失败环节恢复继续。
+
+        - order_index 为空：重启 run.current_node_index 对应节点（失败态则取首个 failed）
+        - 进行中：立刻 terminate 当前节点子进程；若引擎线程已丢失则恢复线程并重跑
+        """
+        db = SessionLocal()
+        run_status: Optional[str] = None
+        try:
+            run = (
+                db.query(CollectionWorkflowRun)
+                .filter(CollectionWorkflowRun.run_id == run_id)
+                .first()
+            )
+            if not run:
+                return False
+            run_status = run.status
+        finally:
+            db.close()
+
+        if run_status in ("failed", "cancelled"):
+            return self.resume_from(run_id, order_index)
+        if run_status not in ("running", "pending"):
+            return False
+
+        db = SessionLocal()
+        try:
+            run = (
+                db.query(CollectionWorkflowRun)
+                .filter(CollectionWorkflowRun.run_id == run_id)
+                .first()
+            )
+            if not run or run.status not in ("running", "pending"):
                 return False
 
             target = order_index if order_index is not None else run.current_node_index
@@ -610,7 +774,9 @@ class CollectionWorkflowEngine:
             if not node_run:
                 return False
             # 允许：正在执行；或已标记为当前节点（等待/重试间隙）
-            if node_run.status not in ("running", "pending") and run.current_node_index != int(target):
+            if node_run.status not in ("running", "pending") and run.current_node_index != int(
+                target
+            ):
                 return False
 
             # DB + 内存双写，避免热重载后仅内存标记无人消费

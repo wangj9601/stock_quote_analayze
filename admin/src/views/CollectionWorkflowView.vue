@@ -273,7 +273,7 @@
           <el-table-column label="结束" min-width="150">
             <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="120">
+          <el-table-column label="操作" width="160">
             <template #default="{ row }">
               <el-button
                 v-if="row.status === 'running' || row.status === 'pending'"
@@ -281,6 +281,13 @@
                 type="danger"
                 @click.stop="cancelRun(row.run_id)"
               >取消</el-button>
+              <el-button
+                v-if="row.status === 'failed' || row.status === 'cancelled'"
+                link
+                type="warning"
+                :loading="restartingKey === `${row.run_id}:resume`"
+                @click.stop="resumeFailedRun(row.run_id)"
+              >从失败继续</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -306,8 +313,8 @@
                   type="warning"
                   size="small"
                   :loading="restartingKey === `${currentRunDetail.run_id}:${nr.order_index}`"
-                  @click.stop="restartNode(currentRunDetail.run_id, nr.order_index)"
-                >重启</el-button>
+                  @click.stop="restartNode(currentRunDetail.run_id, nr.order_index, currentRunDetail.status)"
+                >{{ isFailedRun(currentRunDetail) ? '从失败继续' : '重启' }}</el-button>
               </div>
               <div class="muted">{{ nr.message }}</div>
               <div v-if="nr.error" class="error-text">{{ nr.error }}</div>
@@ -686,27 +693,73 @@ async function cancelRun(runId: string) {
   }
 }
 
-function canRestartNode(run: WorkflowRun, nr: { status: string; order_index: number }) {
-  if (run.status !== 'running' && run.status !== 'pending') return false
-  if (nr.status === 'running') return true
-  return run.current_node_index === nr.order_index
+function isFailedRun(run: WorkflowRun) {
+  return run.status === 'failed' || run.status === 'cancelled'
 }
 
-async function restartNode(runId: string, orderIndex: number) {
-  const key = `${runId}:${orderIndex}`
+function canRestartNode(run: WorkflowRun, nr: { status: string; order_index: number }) {
+  if (run.status === 'running' || run.status === 'pending') {
+    if (nr.status === 'running') return true
+    return run.current_node_index === nr.order_index
+  }
+  if (isFailedRun(run)) {
+    // 失败/取消后：允许在失败节点或当前节点重启继续
+    if (nr.status === 'failed') return true
+    return run.current_node_index === nr.order_index && nr.status !== 'completed'
+  }
+  return false
+}
+
+async function resumeFailedRun(runId: string) {
   try {
     await ElMessageBox.confirm(
-      `确认强制停止并重跑第 ${orderIndex + 1} 个环节？将立即终止当前节点进程，然后重新执行该节点并继续后续环节。`,
-      '强制重启环节',
-      { type: 'warning', confirmButtonText: '强制重启', cancelButtonText: '取消' }
+      '确认从失败环节重新执行并继续后续节点？已完成环节将跳过。',
+      '从失败继续',
+      { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  restartingKey.value = `${runId}:resume`
+  try {
+    await collectionWorkflowService.resumeRun(runId)
+    ElMessage.success('已从失败环节恢复执行')
+    await selectRun({ run_id: runId } as WorkflowRun)
+    await loadRuns()
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '恢复失败')
+  } finally {
+    restartingKey.value = null
+  }
+}
+
+async function restartNode(runId: string, orderIndex: number, runStatus?: string) {
+  const key = `${runId}:${orderIndex}`
+  const resume = runStatus === 'failed' || runStatus === 'cancelled'
+  try {
+    await ElMessageBox.confirm(
+      resume
+        ? `确认从第 ${orderIndex + 1} 个环节重新执行并继续后续？已完成环节将跳过。`
+        : `确认强制停止并重跑第 ${orderIndex + 1} 个环节？将立即终止当前节点进程，然后重新执行该节点并继续后续环节。`,
+      resume ? '从失败继续' : '强制重启环节',
+      {
+        type: 'warning',
+        confirmButtonText: resume ? '继续' : '强制重启',
+        cancelButtonText: '取消',
+      }
     )
   } catch {
     return
   }
   restartingKey.value = key
   try {
-    await collectionWorkflowService.restartNode(runId, orderIndex)
-    ElMessage.success('已强制停止该环节，即将重跑')
+    if (resume) {
+      await collectionWorkflowService.resumeRun(runId, orderIndex)
+      ElMessage.success('已从失败环节恢复执行')
+    } else {
+      await collectionWorkflowService.restartNode(runId, orderIndex)
+      ElMessage.success('已强制停止该环节，即将重跑')
+    }
     await selectRun({ run_id: runId } as WorkflowRun)
     await loadRuns()
   } catch (e: any) {

@@ -37,11 +37,12 @@ if load_dotenv is not None:
 def _get_hk_indicator_mode() -> str:
     """
     港股历史采集后指标计算模式：
-    - watchlist: 仅计算自选港股的 MA/MAVOL/KDJ/BOLL/MACD/RSI（不含 PVFRS）
+    - watchlist: 日采内跳过自选股指标批算（MACD 等改由独立工作流节点负责）
     - full: 计算全部港股的 MA/MAVOL（不含 PVFRS）
+    - off: 完全跳过指标计算
     """
     mode = (os.getenv("HK_HISTORICAL_INDICATOR_MODE", "watchlist") or "watchlist").strip().lower()
-    return mode if mode in ("watchlist", "full") else "watchlist"
+    return mode if mode in ("watchlist", "full", "off") else "watchlist"
 
 class HKHistoricalQuoteCollector(AKShareCollector):
     """港股历史行情数据采集器"""
@@ -435,32 +436,18 @@ class HKHistoricalQuoteCollector(AKShareCollector):
             self.logger.info(f"主循环同步耗时: {loop_time:.2f}s, 共处理 {affected} 条记录")
             
             # 计算指标（按 .env 开关模式）
+            # watchlist 模式已停用：日采内不再单独为自选港股批算指标（MACD 由 macd_hk 节点负责）
             indicators_start = time.time()
             if calculate_indicators and affected_stocks:
                 indicator_mode = _get_hk_indicator_mode()
                 target_stocks = []
-                if indicator_mode == "watchlist":
-                    # 仅自选港股：按自选表全量代码，筛选出在本交易日存在历史行情的港股
-                    watchlist_codes = self._get_watchlist_codes(session)
-                    for code in watchlist_codes:
-                        exists_row = session.execute(text("""
-                            SELECT 1 FROM historical_quotes_hk
-                            WHERE code = :code AND date = :target_date
-                            LIMIT 1
-                        """), {"code": str(code), "target_date": target_date}).fetchone()
-                        if exists_row:
-                            target_stocks.append(str(code))
-                    funcs = [
-                        self._calculate_and_save_ma_mavol_hk,
-                        self._calculate_and_save_kdj_hk,
-                        self._calculate_and_save_boll_hk,
-                        self._calculate_and_save_macd_hk,
-                        self._calculate_and_save_rsi_hk,
-                    ]
+                if indicator_mode in ("watchlist", "off"):
                     self.logger.info(
-                        f"港股指标模式=watchlist，本次将为 {len(target_stocks)} 只自选港股计算 "
-                        f"MA/MAVOL/KDJ/BOLL/MACD/RSI（已停用 PVFRS），目标日期={target_date}"
+                        f"港股指标模式={indicator_mode}：日采内已跳过自选股/嵌入式指标批算 "
+                        f"（MA/MAVOL/KDJ/BOLL/MACD/RSI），目标日期={target_date}；"
+                        "MACD 请用独立 macd_hk 节点；全市场 MA/MAVOL 可设 HK_HISTORICAL_INDICATOR_MODE=full"
                     )
+                    funcs = []
                 else:
                     # 全量港股：与 manual_scripts/mavol_indicators_backfill.py 保持一致，
                     # 使用 historical_quotes_hk 在目标日期存在数据的全量代码集合

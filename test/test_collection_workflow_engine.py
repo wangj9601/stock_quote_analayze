@@ -578,6 +578,97 @@ def test_request_restart_terminates_process(monkeypatch):
     eng_mod.clear_restart("r_force")
 
 
+def test_resume_from_failed_run_respawns(monkeypatch):
+    """failed 整单后 resume_from 应重置失败节点、改回 running 并启动引擎线程。"""
+    from backend_core.data_collectors.workflow import engine as eng_mod
+    from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine
+
+    run_id = "cwr_resume_failed_ut"
+    engine = CollectionWorkflowEngine()
+    spawned = []
+
+    run = MagicMock()
+    run.run_id = run_id
+    run.status = "failed"
+    run.current_node_index = 1
+    run.context = {"node_snapshot": [], "params": {}}
+    run.finished_at = "x"
+    run.error_message = "节点 boom 失败"
+
+    node_run = MagicMock()
+    node_run.status = "failed"
+    node_run.order_index = 1
+    node_run.message = "boom"
+
+    earlier = MagicMock()
+    earlier.status = "failed"
+    earlier.order_index = 0
+    earlier.message = "old"
+    earlier.finished_at = None
+
+    db = MagicMock()
+    q = MagicMock()
+    db.query.return_value = q
+    q.filter.return_value = q
+    q.order_by.return_value = q
+    # resume_from queries: run, node_run, earlier_failed.all(), to_reset.all()
+    q.first.side_effect = [run, node_run]
+    q.all.side_effect = [[earlier], [node_run]]
+
+    monkeypatch.setattr(eng_mod, "SessionLocal", lambda: db)
+    monkeypatch.setattr(eng_mod, "is_engine_thread_alive", lambda rid: False)
+    monkeypatch.setattr(eng_mod, "clear_cancel", lambda rid: None)
+    monkeypatch.setattr(eng_mod, "clear_restart", lambda rid: None)
+    monkeypatch.setattr(
+        eng_mod,
+        "mutex_try_acquire",
+        lambda kind, rid: (True, None, None),
+    )
+    monkeypatch.setattr(
+        engine,
+        "_spawn_engine_thread",
+        lambda rid: spawned.append(rid) or True,
+    )
+
+    assert engine.resume_from(run_id, 1) is True
+    assert spawned == [run_id]
+    assert run.status == "running"
+    assert run.finished_at is None
+    assert run.current_node_index == 1
+    assert node_run.status == "pending"
+    assert earlier.status == "skipped"
+    assert "恢复" in (run.error_message or "")
+    db.commit.assert_called()
+    db.close.assert_called()
+
+
+def test_restart_node_delegates_to_resume_when_failed(monkeypatch):
+    from backend_core.data_collectors.workflow import engine as eng_mod
+    from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine
+
+    engine = CollectionWorkflowEngine()
+    called = {}
+
+    run = MagicMock()
+    run.status = "failed"
+    db = MagicMock()
+    q = MagicMock()
+    db.query.return_value = q
+    q.filter.return_value = q
+    q.first.return_value = run
+
+    monkeypatch.setattr(eng_mod, "SessionLocal", lambda: db)
+
+    def _resume(rid, oi=None):
+        called["rid"] = rid
+        called["oi"] = oi
+        return True
+
+    monkeypatch.setattr(engine, "resume_from", _resume)
+    assert engine.restart_node("cwr_x", 2) is True
+    assert called == {"rid": "cwr_x", "oi": 2}
+
+
 def test_restart_node_respawns_dead_engine(monkeypatch):
     """引擎线程已丢失时，restart_node 应恢复线程并写入 DB 重启意图。"""
     from backend_core.data_collectors.workflow import engine as eng_mod
@@ -602,7 +693,8 @@ def test_restart_node_respawns_dead_engine(monkeypatch):
     q = MagicMock()
     db.query.return_value = q
     q.filter.return_value = q
-    q.first.side_effect = [run, node_run]
+    # restart_node: status check session + working session
+    q.first.side_effect = [run, run, node_run]
 
     monkeypatch.setattr(eng_mod, "SessionLocal", lambda: db)
     monkeypatch.setattr(eng_mod, "is_engine_thread_alive", lambda rid: False)

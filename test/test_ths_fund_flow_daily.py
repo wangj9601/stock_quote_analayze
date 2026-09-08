@@ -102,5 +102,7 @@ def test_sync_to_quote_tables_updates_both(monkeypatch):
     )
     assert out["historical_updated"] == 1
     assert out["realtime_updated"] == 1
-    assert any("historical_quotes" in s for s, _ in calls)
+    hist_sqls = [s for s, _ in calls if "historical_quotes" in s]
+    assert hist_sqls
+    assert "CAST" not in hist_sqls[0].upper()
     assert any("stock_realtime_quote" in s for s, _ in calls)

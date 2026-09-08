@@ -135,13 +135,29 @@ class CollectionWorkflowService {
     return apiService.post(`/collection-workflows/runs/${runId}/cancel`)
   }
 
-  /** 重启正在运行的环节；orderIndex 省略则重启当前节点 */
+  /** 重启正在运行的环节；失败/取消后则从该环节恢复。orderIndex 省略则取当前/首个失败节点 */
   restartNode(runId: string, orderIndex?: number) {
     return apiService.post(`/collection-workflows/runs/${runId}/restart-node`, {
       order_index: orderIndex ?? null,
     }) as Promise<{
       success: boolean
-      data: { restarted: boolean; run_id: string; order_index?: number | null }
+      data: {
+        restarted: boolean
+        resumed?: boolean
+        run_id: string
+        order_index?: number | null
+        force?: boolean
+      }
+    }>
+  }
+
+  /** 失败/取消后从失败环节继续 */
+  resumeRun(runId: string, orderIndex?: number) {
+    return apiService.post(`/collection-workflows/runs/${runId}/resume`, {
+      order_index: orderIndex ?? null,
+    }) as Promise<{
+      success: boolean
+      data: { resumed: boolean; run_id: string; order_index?: number | null; status?: string }
     }>
   }
 

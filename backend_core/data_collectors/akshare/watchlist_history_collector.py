@@ -769,12 +769,7 @@ def collect_watchlist_history():
                     affected_rows = insert_historical_quotes_hk(db, stock_code, df)
                     log_collection(db, stock_code, affected_rows, "success")
                     success_count += 1
-                    try:
-                        start_d, end_d = _get_date_range_from_df(df)
-                        if start_d and end_d:
-                            _calculate_indicators_after_collect(db, stock_code, "HK", start_d, end_d)
-                    except Exception as ind_err:
-                        logger.warning("港股 %s 采集后指标计算失败: %s", stock_code, ind_err)
+                    # 日采/批量自选历史采集不再单独计算指标（由全市场补充与独立工作流节点负责）
                 else:
                     logger.info("[collect_watchlist_history] 开始采集A股 %s 的历史数据", stock_code)
                     a_code = (
@@ -857,12 +852,7 @@ def collect_watchlist_history():
                     affected_rows = insert_historical_quotes(db, stock_code, df)
                     log_collection(db, stock_code, affected_rows, "success")
                     success_count += 1
-                    try:
-                        start_d, end_d = _get_date_range_from_df(df)
-                        if start_d and end_d:
-                            _calculate_indicators_after_collect(db, stock_code, "CN", start_d, end_d)
-                    except Exception as ind_err:
-                        logger.warning("A股 %s 采集后指标计算失败: %s", stock_code, ind_err)
+                    # 日采/批量自选历史采集不再单独计算指标（由全市场补充与独立工作流节点负责）
             except Exception as e:
                 db.rollback()
                 error_msg = str(e)

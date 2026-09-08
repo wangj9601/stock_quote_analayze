@@ -290,26 +290,63 @@ async def api_restart_node(
 ):
     """
     强制停止流程中正在执行的环节并立即重跑该节点，然后继续后续环节。
+    若整单已 failed/cancelled，则从失败（或指定）环节恢复并继续后续。
 
-    节点在独立子进程中执行，重启时会对子进程 terminate/kill。
+    节点在独立子进程中执行，运行中重启时会对子进程 terminate/kill。
     """
     run = db.query(CollectionWorkflowRun).filter(CollectionWorkflowRun.run_id == run_id).first()
     if not run:
         raise HTTPException(status_code=404, detail="运行记录不存在")
     order_index = body.order_index if body else None
+    was_terminal = run.status in ("failed", "cancelled")
     ok = workflow_engine.restart_node(run_id, order_index=order_index)
     if not ok:
         raise HTTPException(
             status_code=409,
-            detail="无法重启：流程未在运行，或目标节点不是当前/运行中环节",
+            detail=(
+                "无法从失败环节恢复：状态不允许、目标节点无效，或互斥占用中"
+                if was_terminal
+                else "无法重启：流程未在运行，或目标节点不是当前/运行中环节"
+            ),
         )
+    db.refresh(run)
     return {
         "success": True,
         "data": {
             "restarted": True,
+            "resumed": was_terminal,
             "run_id": run_id,
             "order_index": order_index if order_index is not None else run.current_node_index,
-            "force": True,
+            "force": not was_terminal,
+        },
+    }
+
+
+@router.post("/runs/{run_id}/resume")
+async def api_resume_run(
+    run_id: str,
+    body: Optional[RestartNodeRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """流程 failed/cancelled 后，从失败（或指定）环节继续执行后续节点。"""
+    run = db.query(CollectionWorkflowRun).filter(CollectionWorkflowRun.run_id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    order_index = body.order_index if body else None
+    ok = workflow_engine.resume_from(run_id, order_index=order_index)
+    if not ok:
+        raise HTTPException(
+            status_code=409,
+            detail="无法恢复：仅支持 failed/cancelled；或目标节点无效/互斥占用中",
+        )
+    db.refresh(run)
+    return {
+        "success": True,
+        "data": {
+            "resumed": True,
+            "run_id": run_id,
+            "order_index": order_index if order_index is not None else run.current_node_index,
+            "status": run.status,
         },
     }
 

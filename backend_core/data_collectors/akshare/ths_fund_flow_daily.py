@@ -267,13 +267,14 @@ class ThsFundFlowDailyCollector:
         if not rows:
             return {"realtime_updated": 0, "historical_updated": 0}
 
+        # historical_quotes.date 在库中为 text（YYYY-MM-DD），勿 CAST 成 date，否则 text=date 报错
         hist_sql = text(
             """
             UPDATE historical_quotes
             SET inflow_amount = :inflow_amount,
                 outflow_amount = :outflow_amount,
                 net_amount = :net_amount
-            WHERE code = :code AND date = CAST(:trade_date AS DATE)
+            WHERE code = :code AND date = :trade_date
             """
         )
         rt_sql = text(
