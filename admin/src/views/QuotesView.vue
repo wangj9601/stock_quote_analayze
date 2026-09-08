@@ -61,6 +61,7 @@
                         <el-option label="成交量（高到低）" value="volume" />
                         <el-option label="成交额（高到低）" value="amount" />
                         <el-option label="换手率（高到低）" value="turnover_rate" />
+                        <el-option label="净流入（高到低）" value="net_amount" />
                         <el-option label="更新时间（倒序）" value="update_time" />
                       </el-select>
                     </el-col>
@@ -136,6 +137,23 @@
                       {{ formatAmount(scope.row.amount) }}
                     </template>
                   </el-table-column>
+                  <el-table-column prop="inflow_amount" label="流入额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-up">{{ formatAmount(scope.row.inflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="outflow_amount" label="流出额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-down">{{ formatAmount(scope.row.outflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="net_amount" label="净流入" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span :class="getChangeClass(scope.row.net_amount)">
+                        {{ formatAmount(scope.row.net_amount) }}
+                      </span>
+                    </template>
+                  </el-table-column>
                   <el-table-column prop="update_time" label="更新时间" min-width="120" show-overflow-tooltip />
                   <el-table-column label="操作" width="100" fixed="right" align="center">
                     <template #default="scope">
@@ -154,6 +172,129 @@
                     layout="total, sizes, prev, pager, next, jumper"
                     @size-change="handleStockPageSizeChange"
                     @current-change="handleStockPageChange"
+                  />
+                </div>
+              </div>
+            </el-tab-pane>
+
+            <!-- A股股票资金流向（stock_fund_flow_daily） -->
+            <el-tab-pane label="股票资金流向" name="fund-flow">
+              <div class="tab-content">
+                <div class="search-section">
+                  <el-row :gutter="16" align="middle">
+                    <el-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
+                      <el-input
+                        v-model="fundFlowSearchKeyword"
+                        placeholder="搜索股票代码或名称"
+                        clearable
+                        @input="handleFundFlowSearch"
+                      >
+                        <template #prefix>
+                          <el-icon><Search /></el-icon>
+                        </template>
+                      </el-input>
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="4" :lg="4" :xl="4">
+                      <el-date-picker
+                        v-model="fundFlowTradeDate"
+                        type="date"
+                        placeholder="交易日（默认最新）"
+                        format="YYYY-MM-DD"
+                        value-format="YYYY-MM-DD"
+                        clearable
+                        @change="handleFundFlowDateChange"
+                        :style="{ width: '100%' }"
+                      />
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="4" :lg="4" :xl="4">
+                      <el-select
+                        v-model="fundFlowSortBy"
+                        placeholder="排序方式"
+                        @change="handleFundFlowSortChange"
+                        :style="{ width: '100%' }"
+                      >
+                        <el-option label="净流入（高到低）" value="net_amount" />
+                        <el-option label="流入额（高到低）" value="inflow_amount" />
+                        <el-option label="流出额（高到低）" value="outflow_amount" />
+                        <el-option label="成交额（高到低）" value="turnover_amount" />
+                        <el-option label="涨跌幅（高到低）" value="change_percent" />
+                        <el-option label="代码" value="code" />
+                      </el-select>
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button @click="refreshFundFlowData" :loading="fundFlowLoading" :style="{ width: '100%' }">
+                        <el-icon><Refresh /></el-icon>
+                        刷新
+                      </el-button>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :md="7" :lg="7" :xl="7">
+                      <span class="muted" v-if="fundFlowResolvedDate">当前交易日：{{ fundFlowResolvedDate }}</span>
+                    </el-col>
+                  </el-row>
+                </div>
+
+                <el-table
+                  :data="fundFlowData"
+                  :loading="fundFlowLoading"
+                  stripe
+                  :style="{ width: '100%' }"
+                  class="responsive-table"
+                >
+                  <el-table-column prop="code" label="代码" width="90" show-overflow-tooltip fixed="left" />
+                  <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip fixed="left" />
+                  <el-table-column prop="trade_date" label="交易日" width="110" show-overflow-tooltip />
+                  <el-table-column prop="current_price" label="现价" min-width="80" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatPrice(scope.row.current_price) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="change_percent" label="涨跌幅" min-width="90" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span :class="getChangeClass(scope.row.change_percent)">
+                        {{ formatPercent(scope.row.change_percent) }}
+                      </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="inflow_amount" label="流入额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-up">{{ formatAmount(scope.row.inflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="outflow_amount" label="流出额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-down">{{ formatAmount(scope.row.outflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="net_amount" label="净流入" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span :class="getChangeClass(scope.row.net_amount)">
+                        {{ formatAmount(scope.row.net_amount) }}
+                      </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="turnover_amount" label="成交额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatAmount(scope.row.turnover_amount) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="turnover_rate" label="换手率" min-width="90" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatPercent(scope.row.turnover_rate) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="source" label="来源" width="80" show-overflow-tooltip />
+                  <el-table-column prop="updated_at" label="更新时间" min-width="160" show-overflow-tooltip />
+                </el-table>
+
+                <div class="pagination-section">
+                  <el-pagination
+                    v-model:current-page="fundFlowCurrentPage"
+                    v-model:page-size="fundFlowPageSize"
+                    :total="fundFlowTotal"
+                    :page-sizes="[20, 50, 100, 200]"
+                    layout="total, sizes, prev, pager, next, jumper"
+                    @size-change="handleFundFlowPageSizeChange"
+                    @current-change="handleFundFlowPageChange"
                   />
                 </div>
               </div>
@@ -373,6 +514,23 @@
                     <template #default="scope">
                       <span :class="getChangeClass(scope.row.change_percent)">
                         {{ formatPercent(scope.row.change_percent) }}
+                      </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="inflow_amount" label="流入额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-up">{{ formatAmount(scope.row.inflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="outflow_amount" label="流出额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-down">{{ formatAmount(scope.row.outflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="net_amount" label="净流入" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span :class="getChangeClass(scope.row.net_amount)">
+                        {{ formatAmount(scope.row.net_amount) }}
                       </span>
                     </template>
                   </el-table-column>
@@ -1691,6 +1849,18 @@ const stockSearchKeyword = ref('')
 const stockMarketFilter = ref('')
 const stockSortBy = ref('update_time')
 const turnoverImportDialogVisible = ref(false)
+
+// 股票资金流向（stock_fund_flow_daily）
+const fundFlowData = ref<any[]>([])
+const fundFlowLoading = ref(false)
+const fundFlowCurrentPage = ref(1)
+const fundFlowPageSize = ref(20)
+const fundFlowTotal = ref(0)
+const fundFlowSearchKeyword = ref('')
+const fundFlowTradeDate = ref('')
+const fundFlowResolvedDate = ref('')
+const fundFlowSortBy = ref('net_amount')
+let fundFlowSearchTimer: number | null = null
 const turnoverImportTradeDate = ref('')
 const turnoverImportFile = ref<File | null>(null)
 const turnoverImportLoading = ref(false)
@@ -2052,6 +2222,9 @@ const handleAShareTabChange = (tab: any) => {
     case 'stocks':
       fetchStockData()
       break
+    case 'fund-flow':
+      fetchFundFlowData()
+      break
     case 'indices':
       fetchIndexData()
       break
@@ -2143,6 +2316,55 @@ const fetchStockData = async () => {
 }
 
 const refreshStockData = () => fetchStockData()
+
+const fetchFundFlowData = async () => {
+  fundFlowLoading.value = true
+  const loadingInstance = showLoading()
+  try {
+    const response = await quotesService.getFundFlowDaily({
+      page: fundFlowCurrentPage.value,
+      pageSize: fundFlowPageSize.value,
+      keyword: fundFlowSearchKeyword.value || undefined,
+      tradeDate: fundFlowTradeDate.value || undefined,
+      sortBy: fundFlowSortBy.value,
+      sortOrder: 'desc',
+    })
+    if (response.success) {
+      fundFlowData.value = response.data || []
+      fundFlowTotal.value = response.total || 0
+      fundFlowResolvedDate.value = (response as any).trade_date || fundFlowTradeDate.value || ''
+    }
+  } catch (error) {
+    console.error('获取股票资金流向失败:', error)
+    ElMessage.error('获取股票资金流向失败')
+  } finally {
+    fundFlowLoading.value = false
+    loadingInstance.close()
+  }
+}
+
+const refreshFundFlowData = () => fetchFundFlowData()
+const handleFundFlowSearch = () => {
+  if (fundFlowSearchTimer) window.clearTimeout(fundFlowSearchTimer)
+  fundFlowSearchTimer = window.setTimeout(() => {
+    fundFlowCurrentPage.value = 1
+    fetchFundFlowData()
+  }, 300)
+}
+const handleFundFlowDateChange = () => {
+  fundFlowCurrentPage.value = 1
+  fetchFundFlowData()
+}
+const handleFundFlowSortChange = () => {
+  fundFlowCurrentPage.value = 1
+  fetchFundFlowData()
+}
+const handleFundFlowPageChange = () => fetchFundFlowData()
+const handleFundFlowPageSizeChange = () => {
+  fundFlowCurrentPage.value = 1
+  fetchFundFlowData()
+}
+
 const handleStockSearch = () => {
   stockCurrentPage.value = 1
   fetchStockData()
@@ -3507,6 +3729,12 @@ onMounted(() => {
 
 .search-section {
   margin-bottom: 20px;
+}
+
+.muted {
+  color: #909399;
+  font-size: 13px;
+  line-height: 32px;
 }
 
 .pagination-section {

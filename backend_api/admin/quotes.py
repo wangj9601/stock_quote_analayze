@@ -36,6 +36,7 @@ from backend_api.models import (
     HKIndexHistoricalQuotes,
     FundRealtimeQuote,
     FundHistoricalQuotes,
+    StockFundFlowDaily,
 )
 from backend_api.database import get_db
 from backend_api.auth import get_current_user, get_current_admin
@@ -581,6 +582,89 @@ async def download_turnover_import_template(
     )
 
 # 行情数据相关路由
+@router.get("/fund-flow/daily")
+async def get_stock_fund_flow_daily(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    keyword: Optional[str] = Query(None, description="股票代码或名称关键词"),
+    trade_date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD；不传则取最新交易日"),
+    sort_by: str = Query(
+        "net_amount",
+        description="排序字段：net_amount|inflow_amount|outflow_amount|turnover_amount|change_percent|code|trade_date|updated_at",
+    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """分页查询同花顺个股资金流日表 stock_fund_flow_daily。"""
+    sort_map = {
+        "net_amount": StockFundFlowDaily.net_amount,
+        "inflow_amount": StockFundFlowDaily.inflow_amount,
+        "outflow_amount": StockFundFlowDaily.outflow_amount,
+        "turnover_amount": StockFundFlowDaily.turnover_amount,
+        "change_percent": StockFundFlowDaily.change_percent,
+        "code": StockFundFlowDaily.code,
+        "trade_date": StockFundFlowDaily.trade_date,
+        "updated_at": StockFundFlowDaily.updated_at,
+    }
+    sort_col = sort_map.get(sort_by, StockFundFlowDaily.net_amount)
+
+    resolved_date = (trade_date or "").strip() or None
+    if not resolved_date:
+        resolved_date = db.query(func.max(StockFundFlowDaily.trade_date)).scalar()
+
+    query = db.query(StockFundFlowDaily)
+    if resolved_date:
+        query = query.filter(StockFundFlowDaily.trade_date == resolved_date)
+    if keyword:
+        kw = keyword.strip()
+        if kw:
+            like = f"%{kw}%"
+            query = query.filter(
+                (StockFundFlowDaily.code.ilike(like)) | (StockFundFlowDaily.name.ilike(like))
+            )
+
+    total = query.count()
+    order_expr = sort_col.asc() if sort_order == "asc" else sort_col.desc()
+    # 次要排序保证分页稳定
+    rows = (
+        query.order_by(order_expr, StockFundFlowDaily.code.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    def _row(r: StockFundFlowDaily) -> Dict[str, Any]:
+        return {
+            "code": r.code,
+            "trade_date": r.trade_date,
+            "name": r.name,
+            "inflow_amount": r.inflow_amount,
+            "outflow_amount": r.outflow_amount,
+            "net_amount": r.net_amount,
+            "turnover_amount": r.turnover_amount,
+            "change_percent": r.change_percent,
+            "turnover_rate": r.turnover_rate,
+            "current_price": r.current_price,
+            "source": r.source,
+            "created_at": r.created_at.isoformat(sep=" ", timespec="seconds")
+            if r.created_at
+            else None,
+            "updated_at": r.updated_at.isoformat(sep=" ", timespec="seconds")
+            if r.updated_at
+            else None,
+        }
+
+    return {
+        "success": True,
+        "data": [_row(r) for r in rows],
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+        "trade_date": resolved_date,
+    }
+
+
 @router.get("/realtime", response_model=PaginatedResponse)
 async def get_realtime_quotes(
     page: int = Query(1, ge=1),

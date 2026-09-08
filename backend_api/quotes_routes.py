@@ -48,7 +48,7 @@ def _historical_quotes_etf_to_api(row: FundHistoricalQuotes) -> dict:
 
 
 def _historical_quotes_cn_to_api(row: HistoricalQuotes) -> dict:
-    """A 股 historical_quotes 序列化（显式字段，含 turnover_rate），供管理端/前端与 ORM 一致。"""
+    """A 股 historical_quotes 序列化（显式字段，含 turnover_rate / 资金流），供管理端/前端与 ORM 一致。"""
     d = row.date
     date_str = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
     return {
@@ -68,6 +68,9 @@ def _historical_quotes_cn_to_api(row: HistoricalQuotes) -> dict:
         "change_percent": row.change_percent,
         "change": row.change,
         "turnover_rate": row.turnover_rate,
+        "inflow_amount": getattr(row, "inflow_amount", None),
+        "outflow_amount": getattr(row, "outflow_amount", None),
+        "net_amount": getattr(row, "net_amount", None),
         "collected_source": row.collected_source,
         "collected_date": row.collected_date.isoformat() if row.collected_date and hasattr(row.collected_date, "isoformat") else None,
     }

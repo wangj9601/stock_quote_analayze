@@ -66,11 +66,29 @@ export interface QuotesResponse<T> {
   message?: string
 }
 
-export interface QuotesStats {
-  totalStocks: number
-  totalIndices: number
-  totalIndustries: number
-  lastUpdateTime: string
+export interface FundFlowDailyParams {
+  page: number
+  pageSize: number
+  keyword?: string
+  tradeDate?: string
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}
+
+export interface FundFlowDailyRow {
+  code: string
+  trade_date: string
+  name?: string
+  inflow_amount?: number | null
+  outflow_amount?: number | null
+  net_amount?: number | null
+  turnover_amount?: number | null
+  change_percent?: number | null
+  turnover_rate?: number | null
+  current_price?: number | null
+  source?: string
+  created_at?: string | null
+  updated_at?: string | null
 }
 
 class QuotesService {
@@ -255,6 +273,22 @@ class QuotesService {
       start_date: params.startDate || undefined,
       end_date: params.endDate || undefined
     })
+  }
+
+  /**
+   * 获取股票资金流向日表（stock_fund_flow_daily，管理端）
+   */
+  async getFundFlowDaily(params: FundFlowDailyParams): Promise<QuotesResponse<FundFlowDailyRow> & { trade_date?: string | null }> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('page', params.page.toString())
+    queryParams.append('page_size', params.pageSize.toString())
+    if (params.keyword) queryParams.append('keyword', params.keyword)
+    if (params.tradeDate) queryParams.append('trade_date', params.tradeDate)
+    if (params.sortBy) queryParams.append('sort_by', params.sortBy)
+    if (params.sortOrder) queryParams.append('sort_order', params.sortOrder)
+    return apiService.get(`/quotes/fund-flow/daily?${queryParams}`) as Promise<
+      QuotesResponse<FundFlowDailyRow> & { trade_date?: string | null }
+    >
   }
 
   /**
