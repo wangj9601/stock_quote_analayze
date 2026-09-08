@@ -63,10 +63,31 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
                 total_market_value REAL,
                 pb_ratio REAL,
                 circulating_market_value REAL,
+                buy_price REAL,
+                sell_price REAL,
                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY(code, trade_date),
                 FOREIGN KEY(code) REFERENCES stock_basic_info(code)
             )
+        '''))
+        session.commit()
+
+        # 确保新浪买一/卖一价字段存在
+        session.execute(text('''
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_realtime_quote'
+                               AND column_name='buy_price') THEN
+                    ALTER TABLE stock_realtime_quote ADD COLUMN buy_price REAL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_realtime_quote'
+                               AND column_name='sell_price') THEN
+                    ALTER TABLE stock_realtime_quote ADD COLUMN sell_price REAL;
+                END IF;
+            END
+            $$;
         '''))
         session.commit()
 
@@ -135,6 +156,8 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
                 
             self.logger.info("采集到 %d 条股票行情数据", len(df))
             session = SessionLocal()
+            # 新浪含「买入」列且通常无「换手率」；东财相反
+            is_sina = ("买入" in df.columns) and ("换手率" not in df.columns)
 
             for _, row in df.iterrows():
                 code = row['代码']
@@ -144,23 +167,29 @@ class EnhancedRealtimeQuoteCollector(EnhancedAKShareCollector):
                     continue
                 # 获取当前交易日期
                 trade_date = datetime.now().strftime('%Y-%m-%d')
+                raw_vol = self._safe_value(row['成交量']) if '成交量' in row.index else None
+                volume = (raw_vol / 100) if (is_sina and raw_vol is not None) else raw_vol
                 data = {
                     'code': code,
                     'name': name,
                     'trade_date': trade_date,
-                    'current_price': self._safe_value(row['最新价']),
-                    'change_percent': self._safe_value(row['涨跌幅']),
-                    'volume': self._safe_value(row['成交量']),
-                    'amount': self._safe_value(row['成交额']),
-                    'high': self._safe_value(row['最高']),
-                    'low': self._safe_value(row['最低']),
-                    'open': self._safe_value(row['今开']),
-                    'pre_close': self._safe_value(row['昨收']),
-                    'turnover_rate': self._safe_value(row['换手率']),
-                    'pe_dynamic': self._safe_value(row['市盈率-动态']),
-                    'total_market_value': self._safe_value(row['总市值']),
-                    'pb_ratio': self._safe_value(row['市净率']),
-                    'circulating_market_value': self._safe_value(row['流通市值']),
+                    'current_price': self._safe_value(row['最新价']) if '最新价' in row.index else None,
+                    'change_percent': self._safe_value(row['涨跌幅']) if '涨跌幅' in row.index else None,
+                    'volume': volume,
+                    'amount': self._safe_value(row['成交额']) if '成交额' in row.index else None,
+                    'high': self._safe_value(row['最高']) if '最高' in row.index else None,
+                    'low': self._safe_value(row['最低']) if '最低' in row.index else None,
+                    'open': self._safe_value(row['今开']) if '今开' in row.index else None,
+                    'pre_close': self._safe_value(row['昨收']) if '昨收' in row.index else None,
+                    'turnover_rate': self._safe_value(row['换手率']) if '换手率' in row.index else None,
+                    'pe_dynamic': (
+                        self._safe_value(row['市盈率-动态']) if '市盈率-动态' in row.index
+                        else self._safe_value(row['市盈率']) if '市盈率' in row.index
+                        else None
+                    ),
+                    'total_market_value': self._safe_value(row['总市值']) if '总市值' in row.index else None,
+                    'pb_ratio': self._safe_value(row['市净率']) if '市净率' in row.index else None,
+                    'circulating_market_value': self._safe_value(row['流通市值']) if '流通市值' in row.index else None,
                     'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
 

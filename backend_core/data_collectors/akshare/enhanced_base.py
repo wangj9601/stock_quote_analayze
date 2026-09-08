@@ -225,12 +225,24 @@ class EnhancedAKShareCollector:
     
     def get_realtime_quotes_with_fallback(self) -> pd.DataFrame:
         """
-        获取实时行情数据，支持多种数据源的回退机制
+        获取实时行情数据，支持多种数据源的回退机制。
+        优先新浪 stock_zh_a_spot；失败后再用东财系列并合并。
         
         Returns:
             DataFrame: 实时行情数据
         """
-        # 定义多个数据源，按优先级排序
+        # 1) 优先新浪（成功即返回，避免与东财合并导致重复/单位混用）
+        try:
+            self.logger.info("尝试使用数据源: stock_zh_a_spot")
+            df_sina = self._retry_on_failure(ak.stock_zh_a_spot)
+            if df_sina is not None and hasattr(df_sina, "empty") and not df_sina.empty:
+                self.logger.info(f"成功从 stock_zh_a_spot 获取 {len(df_sina)} 条数据")
+                return df_sina
+            self.logger.warning("数据源 stock_zh_a_spot 返回空数据，将尝试东方财富系列")
+        except Exception as e:
+            self.logger.warning(f"数据源 stock_zh_a_spot 失败: {e}，将尝试东方财富系列")
+
+        # 2) 东财系列兜底（可合并沪/深/北）
         data_sources = [
             ('stock_zh_a_spot_em', ak.stock_zh_a_spot_em, []),
             ('stock_sh_a_spot_em', ak.stock_sh_a_spot_em, []),

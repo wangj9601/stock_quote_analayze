@@ -513,6 +513,12 @@ def _rs_rating_hk() -> Any:
     return result
 
 
+def _ths_fund_flow_daily() -> Any:
+    from backend_core.data_collectors.akshare.ths_fund_flow_daily import collect_ths_fund_flow_daily
+
+    return collect_ths_fund_flow_daily()
+
+
 def _fina_indicator_cn() -> Any:
     """A 股财务指标增量采集（CAN SLIM C/A）。Tushare 优先，可回退 AkShare。"""
     import logging
@@ -619,8 +625,61 @@ exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
 exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
+exec_ths_fund_flow_daily = _wrap_cn(_ths_fund_flow_daily, "同花顺资金流入流出日采")
 exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")
 exec_index_daily_cn = _wrap_plain(_index_daily_cn, "A股指数日线采集")
 exec_market_news = _wrap_plain(_market_news, "市场新闻采集")
 exec_watchlist_history = _wrap_plain(_watchlist_history, "自选股历史")
 exec_triple_volume_scan = _wrap_plain(_triple_volume_scan, "3倍量扫描")
+
+
+def _resolve_macd_trade_date(ctx: WorkflowContext) -> Optional[str]:
+    for src in (ctx.node_params, ctx.params):
+        raw = src.get("trade_date") or src.get("end_date")
+        if raw:
+            return str(raw)[:10]
+    if ctx.trade_date:
+        return ctx.trade_date.isoformat()
+    if ctx.end_date:
+        return str(ctx.end_date)[:10]
+    return None
+
+
+def exec_macd_cn(ctx: WorkflowContext) -> NodeResult:
+    """A股历史行情采集后的 MACD 日指标独立计算。"""
+    if cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过MACD(A股)")
+    try:
+        from backend_core.data_collectors.indicators.macd_daily import run_macd_cn
+
+        trade_date = _resolve_macd_trade_date(ctx)
+        result = run_macd_cn(trade_date=trade_date)
+        if isinstance(result, dict) and result.get("failed", 0) > 0 and result.get("ok", 0) == 0:
+            return NodeResult.fail(
+                f"全部失败 failed={result.get('failed')}",
+                message="A股MACD日算失败",
+            )
+        return NodeResult.ok("A股MACD日算完成", data={"result": _safe(result)})
+    except Exception as e:
+        logger.exception("A股MACD日算异常")
+        return NodeResult.fail(str(e), message="A股MACD日算失败")
+
+
+def exec_macd_hk(ctx: WorkflowContext) -> NodeResult:
+    """港股历史行情采集后的 MACD 日指标独立计算。"""
+    if hk_session_closed_today():
+        return NodeResult.skip("港股休市，跳过MACD(港股)")
+    try:
+        from backend_core.data_collectors.indicators.macd_daily import run_macd_hk
+
+        trade_date = _resolve_macd_trade_date(ctx)
+        result = run_macd_hk(trade_date=trade_date)
+        if isinstance(result, dict) and result.get("failed", 0) > 0 and result.get("ok", 0) == 0:
+            return NodeResult.fail(
+                f"全部失败 failed={result.get('failed')}",
+                message="港股MACD日算失败",
+            )
+        return NodeResult.ok("港股MACD日算完成", data={"result": _safe(result)})
+    except Exception as e:
+        logger.exception("港股MACD日算异常")
+        return NodeResult.fail(str(e), message="港股MACD日算失败")

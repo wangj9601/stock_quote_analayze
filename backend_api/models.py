@@ -507,11 +507,37 @@ class StockRealtimeQuote(Base):
     total_market_value = Column(Float)
     pb_ratio = Column(Float)
     circulating_market_value = Column(Float)
+    # 遗留列：曾误存新浪买一/卖一价，采集已停写；勿当作流入/流出资金额
+    buy_price = Column(Float)
+    sell_price = Column(Float)
+    # 同花顺日资金流（与 stock_fund_flow_daily 同步，单位：元）
+    inflow_amount = Column(Float)
+    outflow_amount = Column(Float)
+    net_amount = Column(Float)
     update_time = Column(DateTime)
     
     __table_args__ = (
         UniqueConstraint('code', 'trade_date', name='uq_stock_realtime_quote_code_date'),
     )
+
+
+class StockFundFlowDaily(Base):
+    """同花顺个股资金流日快照：流入/流出/净额/成交额（单位：元）。"""
+
+    __tablename__ = "stock_fund_flow_daily"
+    code = Column(StockCodeTextPK(), primary_key=True)
+    trade_date = Column(String(10), primary_key=True)
+    name = Column(String)
+    inflow_amount = Column(Float)
+    outflow_amount = Column(Float)
+    net_amount = Column(Float)
+    turnover_amount = Column(Float)
+    change_percent = Column(Float)
+    turnover_rate = Column(Float)
+    current_price = Column(Float)
+    source = Column(String(20), default="ths")
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
 
 class StockRealtimeQuoteHK(Base):
     __tablename__ = "stock_realtime_quote_hk"
@@ -772,6 +798,10 @@ class HistoricalQuotes(Base):
     thirty_day_change_percent = Column(Float)  # 30天升跌%
     sixty_day_change_percent = Column(Float)   # 60天升跌%
     remarks = Column(String)                   # 备注
+    # 同花顺日资金流（与 stock_fund_flow_daily 同步，单位：元）
+    inflow_amount = Column(Float)
+    outflow_amount = Column(Float)
+    net_amount = Column(Float)
 
 
 class StockAdjFactor(Base):

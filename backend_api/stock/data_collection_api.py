@@ -3128,31 +3128,31 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                 max_retries = 3
                 retry_delay = 2
                 
-                # 尝试多个A股数据源，带重试机制
+                # 尝试多个A股数据源，带重试机制（优先新浪，失败后东财）
                 for attempt in range(max_retries):
                     try:
                         logger.info(f"A股数据采集尝试 {attempt + 1}/{max_retries}")
                         
-                        # 尝试第一个接口
+                        # 优先新浪财经
                         try:
-                            df = ak.stock_zh_a_spot_em()
-                            data_source = 'em'
-                            logger.info(f"使用 stock_zh_a_spot_em 接口获取数据")
+                            df = ak.stock_zh_a_spot()
+                            data_source = 'sina'
+                            logger.info(f"使用 stock_zh_a_spot 接口获取数据")
                             if df is not None and not df.empty:
                                 break
                         except Exception as e:
-                            logger.warning(f"A股实时接口 stock_zh_a_spot_em 调用失败: {e}")
+                            logger.warning(f"A股实时接口 stock_zh_a_spot 调用失败: {e}")
                         
-                        # 如果第一个接口失败，尝试第二个接口
+                        # 新浪失败或为空时，切换东方财富
                         if df is None or df.empty:
                             try:
-                                df = ak.stock_zh_a_spot()
-                                data_source = 'sina'
-                                logger.info(f"使用 stock_zh_a_spot 接口获取数据")
+                                df = ak.stock_zh_a_spot_em()
+                                data_source = 'em'
+                                logger.info(f"使用 stock_zh_a_spot_em 接口获取数据")
                                 if df is not None and not df.empty:
                                     break
                             except Exception as e:
-                                logger.warning(f"A股实时接口 stock_zh_a_spot 调用失败: {e}")
+                                logger.warning(f"A股实时接口 stock_zh_a_spot_em 调用失败: {e}")
                         
                         # 如果获取到数据，跳出重试循环
                         if df is not None and not df.empty:

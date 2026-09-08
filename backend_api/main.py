@@ -185,6 +185,13 @@ except ImportError as e:
     stock_router = None
 
 try:
+    from .stock.stock_fund_flow import router as stock_fund_flow_router
+    print("stock_fund_flow_router 导入成功")
+except ImportError as e:
+    print(f"stock_fund_flow_router 导入失败: {e}")
+    stock_fund_flow_router = None
+
+try:
     from .triple_volume_observe_routes import router as triple_volume_observe_router, admin_router as triple_volume_observe_admin_router
     print("triple_volume_observe_router 导入成功")
 except ImportError as e:
@@ -677,6 +684,7 @@ else:
 _include_router(app, watchlist_router, "watchlist")
 _include_router(app, market_router, "market")
 _include_router(app, stock_router, "stock")
+_include_router(app, stock_fund_flow_router, "stock_fund_flow")
 _include_router(app, triple_volume_observe_router, "triple_volume_observe")
 _include_router(app, triple_volume_observe_admin_router, "triple_volume_observe_admin")
 _include_router(app, vsb_observe_stocks_router, "vsb_observe_stocks")

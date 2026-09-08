@@ -87,10 +87,31 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
                 total_market_value REAL,
                 pb_ratio REAL,
                 circulating_market_value REAL,
+                buy_price REAL,
+                sell_price REAL,
                 update_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY(code, trade_date),
                 FOREIGN KEY(code) REFERENCES stock_basic_info(code)
             )
+        '''))
+        session.commit()
+
+        # 已有库补齐新浪买一/卖一价字段
+        session.execute(text('''
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_realtime_quote'
+                               AND column_name='buy_price') THEN
+                    ALTER TABLE stock_realtime_quote ADD COLUMN buy_price REAL;
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                               WHERE table_name='stock_realtime_quote'
+                               AND column_name='sell_price') THEN
+                    ALTER TABLE stock_realtime_quote ADD COLUMN sell_price REAL;
+                END IF;
+            END
+            $$;
         '''))
         session.commit()
 
@@ -389,30 +410,40 @@ class AkshareRealtimeQuoteCollector(AKShareCollector):
         session = None
         try:
             affected_rows = 0
-            data_source = "em"  # 东方财富 stock_zh_a_spot_em：成交量单位为「手」
+            data_source = "sina"  # 优先新浪 stock_zh_a_spot：成交量单位为「股」
+            df = None
             # HTTP 必须在开 Session 之前，避免空会话/异常路径泄漏连接
             try:
-                df = self._retry_on_failure(ak.stock_zh_a_spot_em)
+                df_sina = self._retry_on_failure(ak.stock_zh_a_spot)
+                if df_sina is not None and hasattr(df_sina, "empty") and not df_sina.empty:
+                    df = df_sina
+                    self.logger.info(f"新浪行情接口采集到 {len(df)} 条股票数据")
+                else:
+                    self.logger.warning("新浪数据源（stock_zh_a_spot）采集数据为空，将尝试切换至东方财富接口")
             except Exception as e:
-                self.logger.warning(f"东方财富数据接口（stock_zh_a_spot_em）调用失败: {e}，将尝试切换至新浪接口")
+                self.logger.warning(
+                    f"新浪数据接口（stock_zh_a_spot）调用失败: {e}，将尝试切换至东方财富接口"
+                )
+
+            if df is None or (hasattr(df, "empty") and df.empty):
                 try:
-                    # 直接尝试新浪行情数据源（新浪：成交量单位为「股」）
-                    data_source = "sina"
-                    df_sina = self._retry_on_failure(ak.stock_zh_a_spot)
-                    if df_sina is not None and hasattr(df_sina, 'empty') and not df_sina.empty:
-                        df = df_sina
-                        self.logger.info(f"新浪行情接口采集到 {len(df)} 条股票数据")
+                    # 东方财富：成交量单位为「手」
+                    data_source = "em"
+                    df_em = self._retry_on_failure(ak.stock_zh_a_spot_em)
+                    if df_em is not None and hasattr(df_em, "empty") and not df_em.empty:
+                        df = df_em
+                        self.logger.info(f"东方财富行情接口采集到 {len(df)} 条股票数据")
                     else:
-                        self.logger.error("新浪数据源（stock_zh_a_spot）采集数据为空")
+                        self.logger.error("东方财富数据源（stock_zh_a_spot_em）采集数据为空")
                         df = None
                 except Exception as e4:
-                    self.logger.error(f"调用新浪数据源（stock_zh_a_spot）失败: {e4}")
+                    self.logger.error(f"调用东方财富数据源（stock_zh_a_spot_em）失败: {e4}")
                     df = None
 
             if df is None or (hasattr(df, 'empty') and df.empty):
                 self.logger.error("akshare主数据源采集到的实时行情数据为空")
                 return False
-            self.logger.info("采集到 %d 条股票行情数据", len(df))
+            self.logger.info("采集到 %d 条股票行情数据（数据源: %s）", len(df), data_source)
 
             session = SessionLocal()
             disabled_codes, free_float_by_code = self._load_collect_policy(session)

@@ -38,6 +38,9 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_index_daily_cn,
     exec_rs_rating_cn,
     exec_rs_rating_hk,
+    exec_ths_fund_flow_daily,
+    exec_macd_cn,
+    exec_macd_hk,
     exec_sbbr_cn,
     exec_stock_shares,
     exec_triple_volume_scan,
@@ -114,6 +117,24 @@ NODE_DEFS: List[CollectionNodeDef] = [
     # A股
     _n("cn_realtime", "A股实时行情", "cn", exec_cn_realtime, description="AkShare A股实时"),
     _n("cn_historical", "A股日K（实时表/Tushare）", "cn", exec_cn_historical),
+    _n(
+        "macd_cn",
+        "A股MACD日算",
+        "cn",
+        exec_macd_cn,
+        param_schema={
+            "type": "object",
+            "properties": {
+                "trade_date": {
+                    "type": "string",
+                    "title": "交易日(可选)",
+                    "format": "date",
+                    "description": "默认取 historical_quotes 最新交易日",
+                }
+            },
+        },
+        description="A股日K采集后独立计算当日 MACD → macd_indicators",
+    ),
     _n("cn_index_realtime", "A股指数实时", "cn", exec_cn_index_realtime),
     _n("cn_index_historical", "A股指数历史归档", "cn", exec_cn_index_historical),
     _n("cn_industry_board", "行业板块实时", "cn", exec_cn_industry_board),
@@ -123,6 +144,24 @@ NODE_DEFS: List[CollectionNodeDef] = [
     # 港股
     _n("hk_realtime", "港股实时行情", "hk", exec_hk_realtime),
     _n("hk_historical", "港股日K", "hk", exec_hk_historical),
+    _n(
+        "macd_hk",
+        "港股MACD日算",
+        "hk",
+        exec_macd_hk,
+        param_schema={
+            "type": "object",
+            "properties": {
+                "trade_date": {
+                    "type": "string",
+                    "title": "交易日(可选)",
+                    "format": "date",
+                    "description": "默认取 historical_quotes_hk 最新交易日",
+                }
+            },
+        },
+        description="港股日K采集后独立计算当日 MACD → macd_indicators",
+    ),
     _n("hk_index_realtime", "港股指数实时", "hk", exec_hk_index_realtime),
     _n("hk_index_historical", "港股指数历史归档", "hk", exec_hk_index_historical),
     # ETF
@@ -148,6 +187,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
     _n("rpe_signals_cn", "RPE信号预计算(A股)", "strategy", exec_rpe_cn),
     _n("rs_rating_cn", "A股相对强度RS预计算", "strategy", exec_rs_rating_cn),
     _n("rs_rating_hk", "港股相对强度RS预计算", "strategy", exec_rs_rating_hk),
+    _n(
+        "ths_fund_flow_daily",
+        "同花顺资金流入流出日采",
+        "cn",
+        exec_ths_fund_flow_daily,
+        description="stock_fund_flow_individual(即时) → stock_fund_flow_daily",
+    ),
     _n("triple_volume_scan", "3倍量爆量扫描", "strategy", exec_triple_volume_scan),
     _n(
         "fina_indicator_cn",
