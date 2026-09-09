@@ -1010,7 +1010,7 @@ const StockPage = {
         this.profitChart.setOption(option);
     },
 
-    // 初始化资金流向图表
+    // 初始化资金流向图表（本地入库：流入/流出/净额）
     initFlowChart() {
         const chartDom = document.getElementById('flowChart');
         if (!chartDom) return;
@@ -1022,7 +1022,7 @@ const StockPage = {
             grid: {
                 left: '10%',
                 right: '8%',
-                top: '8%',
+                top: '12%',
                 bottom: '15%'
             },
             xAxis: [{
@@ -1031,32 +1031,29 @@ const StockPage = {
             }],
             yAxis: [{
                 type: 'value',
-                name: '资金流入(亿)'
+                name: '金额(亿)'
             }],
             series: [{
-                name: '主力净流入',
+                name: '流入',
                 type: 'bar',
                 data: [],
-                itemStyle: {
-                    color: function (params) {
-                        return params.value > 0 ? '#dc2626' : '#16a34a';
-                    }
-                }
+                itemStyle: { color: '#dc2626' }
             }, {
-                name: '大单净流入',
+                name: '流出',
                 type: 'bar',
                 data: [],
-                itemStyle: {
-                    color: function (params) {
-                        return params.value > 0 ? '#fbbf24' : '#6b7280';
-                    }
-                }
+                itemStyle: { color: '#16a34a' }
+            }, {
+                name: '净流入',
+                type: 'line',
+                data: [],
+                itemStyle: { color: '#2563eb' }
             }],
             tooltip: {
                 trigger: 'axis'
             },
             legend: {
-                data: ['主力净流入', '大单净流入']
+                data: ['流入', '流出', '净流入']
             }
         };
 
@@ -1070,6 +1067,8 @@ const StockPage = {
                 this.klineChart.resize();
             } else if (chartType === 'minute' && this.minuteChart) {
                 this.minuteChart.resize();
+            } else if (chartType === 'flow' && this.flowChart) {
+                this.flowChart.resize();
             }
         }, 100);
     },
@@ -2603,61 +2602,65 @@ const StockPage = {
         }
     },
 
-    // 加载资金流向数据，调用后端API
+    // 加载资金流向数据（本地入库日表）
     async loadFlowData() {
         if (!this.flowChart) return;
+        const fmtYi = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return null;
+            return Number(v) / 1e8;
+        };
+        const setFlowEl = (key, yi) => {
+            const el = document.querySelector(`.flow-summary .flow-value[data-flow="${key}"]`);
+            if (!el) return;
+            if (yi == null) {
+                el.textContent = '-';
+                el.className = 'flow-value';
+                return;
+            }
+            el.textContent = (yi > 0 ? '+' : '') + yi.toFixed(2) + '亿';
+            el.className = 'flow-value ' + (yi >= 0 ? 'positive' : 'negative');
+        };
         try {
-            // 1. 先获取当日资金流向数据
-            const todayUrl = `${API_BASE_URL}/api/stock_fund_flow/history?code=${this.stockCode}`;
-            const todayResp = await fetch(todayUrl);
-            const todayData = await todayResp.json();
-            if (todayData.success && todayData.data) {
-                // 依次赋值到页面
-                const values = [
-                    todayData.data["今日主力净流入-净额"],
-                    todayData.data["今日超大单净流入-净额"],
-                    todayData.data["今日大单净流入-净额"],
-                    todayData.data["今日中单净流入-净额"],
-                    todayData.data["今日小单净流入-净额"]
-                ];
-                document.querySelectorAll('.flow-summary .flow-value').forEach((el, idx) => {
-                    const val = values[idx];
-                    if (val == null) {
-                        el.textContent = '-';
-                        el.className = 'flow-value';
-                    } else {
-                        const num = Number(val) / 1e8;
-                        el.textContent = (num > 0 ? '+' : '') + num.toFixed(2) + '亿';
-                        el.className = 'flow-value ' + (num >= 0 ? 'positive' : 'negative');
-                    }
-                });
-            } else {
-                // 可选：清空或提示
-            }
-
-            // 2. 再获取多天资金流向数据，渲染图表            
-            const url = `${API_BASE_URL}/api/stock_fund_flow/today?code=${this.stockCode}`;
+            const url = `${API_BASE_URL}/api/stock_fund_flow/daily?code=${encodeURIComponent(this.stockCode)}&days=20`;
             const resp = await fetch(url);
-            const data = await resp.json();
-            if (data.success && Array.isArray(data.data)) {
-                // 回退：直接取原始数值（不除以1e8，不toFixed）
-                const mainFlow = [];
-                const largeFlow = [];
-                data.data.forEach(item => {
-                    mainFlow.push(Number(item.main_net_inflow || 0));
-                    largeFlow.push(Number(item.large_net_inflow || 0));
-                });
-                // 更新ECharts配置
-                const option = this.flowChart.getOption();
-                option.xAxis[0].data = this.generateDateData();
-                option.series[0].data = mainFlow;
-                option.series[1].data = largeFlow;
-                this.flowChart.setOption(option);
-            } else {
-                CommonUtils.showToast('资金流向获取失败: ' + (data.message || '无数据'), 'error');
+            const payload = await resp.json();
+            if (!payload.success || !payload.data) {
+                CommonUtils.showToast('资金流向获取失败: ' + (payload.message || '无数据'), 'error');
+                return;
             }
+            const data = payload.data;
+            const series = Array.isArray(data.series) ? data.series : [];
+            const analysis = data.analysis || {};
+            const latest = series.length ? series[series.length - 1] : null;
+            setFlowEl('inflow', latest ? fmtYi(latest.inflow_amount) : null);
+            setFlowEl('outflow', latest ? fmtYi(latest.outflow_amount) : null);
+            setFlowEl('net', latest ? fmtYi(latest.net_amount) : null);
+            setFlowEl('net_sum', fmtYi(analysis.net_sum));
+            setFlowEl('net_change', fmtYi(analysis.net_change));
 
+            const dates = series.map((r) => r.trade_date || '');
+            const inflow = series.map((r) => {
+                const y = fmtYi(r.inflow_amount);
+                return y == null ? null : Number(y.toFixed(4));
+            });
+            const outflow = series.map((r) => {
+                const y = fmtYi(r.outflow_amount);
+                return y == null ? null : Number(y.toFixed(4));
+            });
+            const net = series.map((r) => {
+                const y = fmtYi(r.net_amount);
+                return y == null ? null : Number(y.toFixed(4));
+            });
+            this.flowChart.setOption({
+                xAxis: [{ data: dates }],
+                series: [
+                    { name: '流入', data: inflow },
+                    { name: '流出', data: outflow },
+                    { name: '净流入', data: net },
+                ],
+            });
         } catch (e) {
+            console.error(e);
             CommonUtils.showToast('资金流向请求异常', 'error');
         }
     },

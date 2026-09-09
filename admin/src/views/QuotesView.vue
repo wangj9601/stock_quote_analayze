@@ -25,9 +25,9 @@
                     <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="stockSearchKeyword"
-                        placeholder="搜索股票代码或名称"
+                        placeholder="搜索股票代码或名称，回车查询"
                         clearable
-                        @input="handleStockSearch"
+                        @keyup.enter="handleStockSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -185,9 +185,9 @@
                     <el-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="fundFlowSearchKeyword"
-                        placeholder="搜索股票代码或名称"
+                        placeholder="搜索股票代码或名称，回车查询"
                         clearable
-                        @input="handleFundFlowSearch"
+                        @keyup.enter="handleFundFlowSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -308,9 +308,9 @@
                     <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="indexSearchKeyword"
-                        placeholder="搜索指数代码或名称"
+                        placeholder="搜索指数代码或名称，回车查询"
                         clearable
-                        @input="handleIndexSearch"
+                        @keyup.enter="handleIndexSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -404,9 +404,9 @@
                     <el-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="historicalSearchKeyword"
-                        placeholder="搜索股票代码或名称"
+                        placeholder="搜索股票代码或名称，回车查询"
                         clearable
-                        @input="handleHistoricalSearch"
+                        @keyup.enter="handleHistoricalSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -563,9 +563,9 @@
                     <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="industrySearchKeyword"
-                        placeholder="搜索行业名称"
+                        placeholder="搜索行业名称，回车查询"
                         clearable
-                        @input="handleIndustrySearch"
+                        @keyup.enter="handleIndustrySearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -653,9 +653,9 @@
                     <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="hkStockSearchKeyword"
-                        placeholder="搜索港股代码或名称"
+                        placeholder="搜索港股代码或名称，回车查询"
                         clearable
-                        @input="handleHKStockSearch"
+                        @keyup.enter="handleHKStockSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -750,9 +750,9 @@
                     <el-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="hkHistoricalSearchKeyword"
-                        placeholder="搜索港股代码或名称"
+                        placeholder="搜索港股代码或名称，回车查询"
                         clearable
-                        @input="handleHKHistoricalSearch"
+                        @keyup.enter="handleHKHistoricalSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -876,6 +876,124 @@
               </div>
             </el-tab-pane>
 
+            <!-- 港股资金流向（stock_fund_flow_daily_hk） -->
+            <el-tab-pane label="港股资金流向" name="hk-fund-flow">
+              <div class="tab-content">
+                <div class="search-section">
+                  <el-row :gutter="16" align="middle">
+                    <el-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
+                      <el-input
+                        v-model="hkFundFlowSearchKeyword"
+                        placeholder="搜索港股代码或名称，回车查询"
+                        clearable
+                        @keyup.enter="handleHkFundFlowSearch"
+                      >
+                        <template #prefix>
+                          <el-icon><Search /></el-icon>
+                        </template>
+                      </el-input>
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="4" :lg="4" :xl="4">
+                      <el-date-picker
+                        v-model="hkFundFlowTradeDate"
+                        type="date"
+                        placeholder="交易日（默认最新）"
+                        format="YYYY-MM-DD"
+                        value-format="YYYY-MM-DD"
+                        clearable
+                        @change="handleHkFundFlowDateChange"
+                        :style="{ width: '100%' }"
+                      />
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="4" :lg="4" :xl="4">
+                      <el-select
+                        v-model="hkFundFlowSortBy"
+                        placeholder="排序方式"
+                        @change="handleHkFundFlowSortChange"
+                        :style="{ width: '100%' }"
+                      >
+                        <el-option label="净流入（高到低）" value="net_amount" />
+                        <el-option label="流入额（高到低）" value="inflow_amount" />
+                        <el-option label="流出额（高到低）" value="outflow_amount" />
+                        <el-option label="成交额（高到低）" value="turnover_amount" />
+                        <el-option label="涨跌幅（高到低）" value="change_percent" />
+                        <el-option label="代码" value="code" />
+                      </el-select>
+                    </el-col>
+                    <el-col :xs="12" :sm="6" :md="3" :lg="3" :xl="3">
+                      <el-button @click="refreshHkFundFlowData" :loading="hkFundFlowLoading" :style="{ width: '100%' }">
+                        <el-icon><Refresh /></el-icon>
+                        刷新
+                      </el-button>
+                    </el-col>
+                    <el-col :xs="24" :sm="12" :md="7" :lg="7" :xl="7">
+                      <span class="muted" v-if="hkFundFlowResolvedDate">当前交易日：{{ hkFundFlowResolvedDate }}</span>
+                    </el-col>
+                  </el-row>
+                </div>
+
+                <el-table
+                  :data="hkFundFlowData"
+                  :loading="hkFundFlowLoading"
+                  stripe
+                  :style="{ width: '100%' }"
+                  class="responsive-table"
+                >
+                  <el-table-column prop="code" label="代码" width="90" show-overflow-tooltip fixed="left" />
+                  <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip fixed="left" />
+                  <el-table-column prop="trade_date" label="交易日" width="110" show-overflow-tooltip />
+                  <el-table-column prop="current_price" label="现价" min-width="80" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatPrice(scope.row.current_price) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="change_percent" label="涨跌幅" min-width="90" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span :class="getChangeClass(scope.row.change_percent)">
+                        {{ formatPercent(scope.row.change_percent) }}
+                      </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="inflow_amount" label="流入额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-up">{{ formatAmount(scope.row.inflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="outflow_amount" label="流出额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span class="price-down">{{ formatAmount(scope.row.outflow_amount) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="net_amount" label="净流入" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      <span :class="getChangeClass(scope.row.net_amount)">
+                        {{ formatAmount(scope.row.net_amount) }}
+                      </span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="turnover_amount" label="成交额" min-width="100" show-overflow-tooltip>
+                    <template #default="scope">
+                      {{ formatAmount(scope.row.turnover_amount) }}
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="source" label="来源" width="80" show-overflow-tooltip />
+                  <el-table-column prop="updated_at" label="更新时间" min-width="160" show-overflow-tooltip />
+                </el-table>
+
+                <div class="pagination-section">
+                  <el-pagination
+                    v-model:current-page="hkFundFlowCurrentPage"
+                    v-model:page-size="hkFundFlowPageSize"
+                    :total="hkFundFlowTotal"
+                    :page-sizes="[20, 50, 100, 200]"
+                    layout="total, sizes, prev, pager, next, jumper"
+                    @size-change="handleHkFundFlowPageSizeChange"
+                    @current-change="handleHkFundFlowPageChange"
+                  />
+                </div>
+              </div>
+            </el-tab-pane>
+
             <!-- 港股指数实时行情 -->
             <el-tab-pane label="港股指数实时行情" name="hk-indices">
               <div class="tab-content">
@@ -884,9 +1002,9 @@
                     <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="hkIndexSearchKeyword"
-                        placeholder="搜索指数代码或名称"
+                        placeholder="搜索指数代码或名称，回车查询"
                         clearable
-                        @input="handleHKIndexSearch"
+                        @keyup.enter="handleHKIndexSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -981,9 +1099,9 @@
                     <el-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="hkIndexHistoricalSearchKeyword"
-                        placeholder="搜索指数代码或名称"
+                        placeholder="搜索指数代码或名称，回车查询"
                         clearable
-                        @input="handleHKIndexHistoricalSearch"
+                        @keyup.enter="handleHKIndexHistoricalSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -1102,9 +1220,9 @@
                     <el-col :xs="24" :sm="24" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="etfSearchKeyword"
-                        placeholder="搜索ETF代码或名称"
+                        placeholder="搜索ETF代码或名称，回车查询"
                         clearable
-                        @input="handleETFSearch"
+                        @keyup.enter="handleETFSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -1204,9 +1322,9 @@
                     <el-col :xs="24" :sm="12" :md="6" :lg="6" :xl="6">
                       <el-input
                         v-model="etfHistoricalSearchKeyword"
-                        placeholder="搜索ETF代码或名称"
+                        placeholder="搜索ETF代码或名称，回车查询"
                         clearable
-                        @input="handleETFHistoricalSearch"
+                        @keyup.enter="handleETFHistoricalSearch"
                       >
                         <template #prefix>
                           <el-icon><Search /></el-icon>
@@ -1860,7 +1978,17 @@ const fundFlowSearchKeyword = ref('')
 const fundFlowTradeDate = ref('')
 const fundFlowResolvedDate = ref('')
 const fundFlowSortBy = ref('net_amount')
-let fundFlowSearchTimer: number | null = null
+
+// 港股资金流向（stock_fund_flow_daily_hk）
+const hkFundFlowData = ref<any[]>([])
+const hkFundFlowLoading = ref(false)
+const hkFundFlowCurrentPage = ref(1)
+const hkFundFlowPageSize = ref(20)
+const hkFundFlowTotal = ref(0)
+const hkFundFlowSearchKeyword = ref('')
+const hkFundFlowTradeDate = ref('')
+const hkFundFlowResolvedDate = ref('')
+const hkFundFlowSortBy = ref('net_amount')
 const turnoverImportTradeDate = ref('')
 const turnoverImportFile = ref<File | null>(null)
 const turnoverImportLoading = ref(false)
@@ -2249,6 +2377,9 @@ const handleHKShareTabChange = (tab: any) => {
     case 'hk-historical':
       fetchHKHistoricalData()
       break
+    case 'hk-fund-flow':
+      fetchHkFundFlowData()
+      break
     case 'hk-indices':
       fetchHKIndexData()
       break
@@ -2347,11 +2478,8 @@ const fetchFundFlowData = async () => {
 
 const refreshFundFlowData = () => fetchFundFlowData()
 const handleFundFlowSearch = () => {
-  if (fundFlowSearchTimer) window.clearTimeout(fundFlowSearchTimer)
-  fundFlowSearchTimer = window.setTimeout(() => {
-    fundFlowCurrentPage.value = 1
-    fetchFundFlowData()
-  }, 300)
+  fundFlowCurrentPage.value = 1
+  fetchFundFlowData()
 }
 const handleFundFlowDateChange = () => {
   fundFlowCurrentPage.value = 1
@@ -2365,6 +2493,51 @@ const handleFundFlowPageChange = () => fetchFundFlowData()
 const handleFundFlowPageSizeChange = () => {
   fundFlowCurrentPage.value = 1
   fetchFundFlowData()
+}
+
+const fetchHkFundFlowData = async () => {
+  hkFundFlowLoading.value = true
+  const loadingInstance = showLoading()
+  try {
+    const response = await quotesService.getHkFundFlowDaily({
+      page: hkFundFlowCurrentPage.value,
+      pageSize: hkFundFlowPageSize.value,
+      keyword: hkFundFlowSearchKeyword.value || undefined,
+      tradeDate: hkFundFlowTradeDate.value || undefined,
+      sortBy: hkFundFlowSortBy.value,
+      sortOrder: 'desc',
+    })
+    if (response.success) {
+      hkFundFlowData.value = response.data || []
+      hkFundFlowTotal.value = response.total || 0
+      hkFundFlowResolvedDate.value = (response as any).trade_date || hkFundFlowTradeDate.value || ''
+    }
+  } catch (error) {
+    console.error('获取港股资金流向失败:', error)
+    ElMessage.error('获取港股资金流向失败')
+  } finally {
+    hkFundFlowLoading.value = false
+    loadingInstance.close()
+  }
+}
+
+const refreshHkFundFlowData = () => fetchHkFundFlowData()
+const handleHkFundFlowSearch = () => {
+  hkFundFlowCurrentPage.value = 1
+  fetchHkFundFlowData()
+}
+const handleHkFundFlowDateChange = () => {
+  hkFundFlowCurrentPage.value = 1
+  fetchHkFundFlowData()
+}
+const handleHkFundFlowSortChange = () => {
+  hkFundFlowCurrentPage.value = 1
+  fetchHkFundFlowData()
+}
+const handleHkFundFlowPageChange = () => fetchHkFundFlowData()
+const handleHkFundFlowPageSizeChange = () => {
+  hkFundFlowCurrentPage.value = 1
+  fetchHkFundFlowData()
 }
 
 const handleStockSearch = () => {

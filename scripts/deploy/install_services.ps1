@@ -191,7 +191,15 @@ function Write-WarnBadPythonUtf8EnvironmentVariable {
     }
 }
 
-function Ensure-Service([string]$ServiceName, [string]$ScriptPath, [string]$WorkDir, [string]$StdoutFile, [string]$StderrFile) {
+function Ensure-Service(
+    [string]$ServiceName,
+    [string]$ScriptPath,
+    [string]$WorkDir,
+    [string]$StdoutFile,
+    [string]$StderrFile,
+    [string]$EnvironmentExtra = 'PYTHONNOUSERSITE=1',
+    [int]$AppRestartDelayMs = 3000
+) {
     if (-not (Test-Path -LiteralPath $ScriptPath)) {
         throw ('Missing script: ' + $ScriptPath)
     }
@@ -231,8 +239,9 @@ function Ensure-Service([string]$ServiceName, [string]$ScriptPath, [string]$Work
     $null = Invoke-Nssm @('set', $ServiceName, 'AppRotateOnline', '1')
     $null = Invoke-Nssm @('set', $ServiceName, 'AppRotateSeconds', '86400')
     $null = Invoke-Nssm @('set', $ServiceName, 'AppExit', 'Default', 'Restart')
-    # 仅一行：多行 AppEnvironmentExtra 在部分 NSSM/编码下仍会弄坏 PYTHONUTF8。PYTHONUTF8 请在系统环境变量中删除非法值。
-    $null = Invoke-Nssm @('set', $ServiceName, 'AppEnvironmentExtra', 'PYTHONNOUSERSITE=1')
+    $null = Invoke-Nssm @('set', $ServiceName, 'AppRestartDelay', ([string]$AppRestartDelayMs))
+    # 多行环境变量：每行 KEY=VALUE（勿把非法 PYTHONUTF8 写进这里）
+    $null = Invoke-Nssm @('set', $ServiceName, 'AppEnvironmentExtra', $EnvironmentExtra)
 
     Write-Host ('[OK] Service installed: ' + $ServiceName)
 }
@@ -330,11 +339,27 @@ Ensure-Service `
     -StdoutFile (Join-Path $sharedLogs "stock-quote-notify.out.log") `
     -StderrFile (Join-Path $sharedLogs "stock-quote-notify.err.log")
 
+# 主站前端 8000：与 nginx upstream frontend_server 对齐；异常退出自动重启
+$frontendEnv = @"
+PYTHONNOUSERSITE=1
+FRONTEND_PORT=8000
+ENVIRONMENT=production
+"@
+Ensure-Service `
+    -ServiceName "stock-quote-frontend" `
+    -ScriptPath (Join-Path $current "start_frontend.py") `
+    -WorkDir $current `
+    -StdoutFile (Join-Path $sharedLogs "stock-quote-frontend.out.log") `
+    -StderrFile (Join-Path $sharedLogs "stock-quote-frontend.err.log") `
+    -EnvironmentExtra $frontendEnv `
+    -AppRestartDelayMs 3000
+
 if ($StartAfterInstall) {
     $startPairs = @(
         @{ Name = "stock-quote-api"; Err = (Join-Path $sharedLogs "stock-quote-api.err.log") },
         @{ Name = "stock-quote-core"; Err = (Join-Path $sharedLogs "stock-quote-core.err.log") },
-        @{ Name = "stock-quote-notify"; Err = (Join-Path $sharedLogs "stock-quote-notify.err.log") }
+        @{ Name = "stock-quote-notify"; Err = (Join-Path $sharedLogs "stock-quote-notify.err.log") },
+        @{ Name = "stock-quote-frontend"; Err = (Join-Path $sharedLogs "stock-quote-frontend.err.log") }
     )
     $anyFail = $false
     foreach ($sp in $startPairs) {

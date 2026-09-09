@@ -637,26 +637,43 @@
                     </div>
                   </template>
                   <div class="text-sm text-blue-600 space-y-2">
-                    <p>1. 请先将港股行情数据文件（.txt、.csv 或 .xlsx）上传到服务器指定的目录：<code class="bg-blue-100 px-1 rounded">backend_core/data/</code></p>
-                    <p>2. 文件名可为<strong>单日</strong>（如 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_20260205.xlsx</code>）或<strong>日期区间</strong>（如 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_2026-02-10_to_2026-02-13.xlsx</code>）；区间内每个交易日会匹配同一文件。</p>
-                    <p>3. <strong>CSV/XLSX</strong> 多日期合并文件须含「日期 / trade_date / date」列；系统按<strong>当前循环日</strong>只导入该日行，不会把其它交易日写入当天。</p>
-                    <p>4. 若目录下仅有<strong>一个</strong> <code class="bg-blue-100 px-1 rounded">hk_historical_quotes*</code> 文件且无单日名匹配时，会作为汇总表按行内日期拆分导入。</p>
+                    <p>1. 上传同花顺港股报价导出（.xls/.xlsx/.csv）后，系统会<strong>自动解析并重命名</strong>为 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_YYYYMMDD.csv</code></p>
+                    <p>2. 请先在下方选择<strong>开始/结束日期</strong>（上传时用开始日期作为交易日后缀）；今日休市须手动指定日期</p>
+                    <p>3. 规范后请将「文件类型」选为 <strong>CSV</strong>，再点「开始采集」</p>
+                    <p>4. 亦可手动放入 <code class="bg-blue-100 px-1 rounded">backend_core/data/</code>，命名如 <code class="bg-blue-100 px-1 rounded">hk_historical_quotes_20260909.csv</code></p>
                   </div>
-                  <div class="mt-4 flex justify-center">
-                    <el-upload
-                      class="upload-demo"
-                      :action="API_BASE + '/api/data-collection/upload-historical-file'"
-                      multiple
-                      :limit="50"
-                      :show-file-list="true"
-                      :on-success="handleFileUploadSuccess"
-                      :on-error="handleFileUploadError"
-                    >
-                      <el-button type="primary" plain>
-                        <el-icon class="mr-1"><UploadFilled /></el-icon>
-                        上传文件到服务器
-                      </el-button>
-                    </el-upload>
+                  <div class="mt-4">
+                    <el-form label-width="100px" class="mb-3">
+                      <el-form-item label="上传交易日">
+                        <el-date-picker
+                          v-model="hkHistUploadTradeDate"
+                          type="date"
+                          placeholder="默认用下方开始日期"
+                          format="YYYY-MM-DD"
+                          value-format="YYYY-MM-DD"
+                          clearable
+                          style="width: 100%"
+                        />
+                      </el-form-item>
+                    </el-form>
+                    <div class="flex justify-center">
+                      <el-upload
+                        class="upload-demo"
+                        :action="`${API_BASE}/api/data-collection/upload-hk-historical-file`"
+                        :data="hkHistUploadData"
+                        :headers="getAuthHeader()"
+                        :limit="10"
+                        :show-file-list="true"
+                        accept=".xlsx,.xls,.csv,.txt"
+                        :on-success="handleHkHistoricalUploadSuccess"
+                        :on-error="handleFileUploadError"
+                      >
+                        <el-button type="primary" plain>
+                          <el-icon class="mr-1"><UploadFilled /></el-icon>
+                          上传并规范命名
+                        </el-button>
+                      </el-upload>
+                    </div>
                   </div>
                 </el-card>
               </div>
@@ -749,6 +766,88 @@
                       {{ hkFileLoading ? '启动中...' : (currentTaskIsRunning ? '等待当前任务完成' : '开始采集') }}
                     </el-button>
                     <el-button @click="resetHKFileForm">重置</el-button>
+                  </el-form-item>
+                </el-form>
+              </div>
+            </el-card>
+          </el-tab-pane>
+
+          <el-tab-pane label="港股资金流向文件" name="hk_fund_flow">
+            <el-card>
+              <div class="text-center mb-8">
+                <el-icon class="text-6xl text-gray-400 mb-4"><Upload /></el-icon>
+                <h2 class="text-2xl font-bold text-gray-900 mb-2">港股资金流向文件上传</h2>
+                <p class="text-gray-600">上传同花顺港股报价导出文件，保存为当日交易日后缀供采集节点入库</p>
+              </div>
+
+              <div class="max-w-2xl mx-auto mb-8">
+                <el-card shadow="never" class="bg-blue-50 border-blue-100">
+                  <template #header>
+                    <div class="flex items-center">
+                      <el-icon class="text-blue-500 mr-2"><Upload /></el-icon>
+                      <span class="font-bold text-blue-700">上传说明</span>
+                    </div>
+                  </template>
+                  <div class="text-sm text-blue-600 space-y-2">
+                    <p>1. 文件保存到服务器目录：<code class="bg-blue-100 px-1 rounded">backend_core/data/</code></p>
+                    <p>2. 上传后自动重命名为 <code class="bg-blue-100 px-1 rounded">hk_fund_flow_YYYYMMDD.xlsx</code>（或 .xls / .csv）；同花顺导出的「伪 xls」文本亦可识别</p>
+                    <p>3. 需含列：代码、名称、金额、外盘、内盘（涨幅%/现价等可选）；代码如 HK0001 会归一为 00001</p>
+                    <p>4. 采集流程节点 <code class="bg-blue-100 px-1 rounded">hk_fund_flow_daily</code> 按<strong>流程执行当日</strong>读取对应文件入库（自动节点逻辑不变）</p>
+                    <p>5. 本页「开始采集」可按下方指定交易日独立入库（可补采历史日）</p>
+                    <p>6. 今日港股休市时上传/采集均须手动选择交易日</p>
+                  </div>
+                </el-card>
+              </div>
+
+              <div class="max-w-2xl mx-auto">
+                <el-form label-width="120px">
+                  <el-form-item label="交易日">
+                    <el-date-picker
+                      v-model="hkFundFlowTradeDate"
+                      type="date"
+                      placeholder="默认今日（休市须指定）"
+                      format="YYYY-MM-DD"
+                      value-format="YYYY-MM-DD"
+                      clearable
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                  <el-form-item label="上传文件" required>
+                    <el-upload
+                      class="upload-demo"
+                      :action="`${API_BASE}/api/data-collection/upload-hk-fund-flow-file`"
+                      :data="hkFundFlowUploadData"
+                      :headers="getAuthHeader()"
+                      :on-success="handleHkFundFlowUploadSuccess"
+                      :on-error="handleFileUploadError"
+                      :before-upload="beforeHkFundFlowUpload"
+                      :limit="5"
+                      accept=".xlsx,.xls,.csv"
+                      drag
+                    >
+                      <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+                      <div class="el-upload__text">
+                        将文件拖到此处，或<em>点击上传</em>
+                      </div>
+                      <template #tip>
+                        <div class="el-upload__tip">
+                          支持 .xlsx / .xls / .csv；同日文件会被覆盖
+                        </div>
+                      </template>
+                    </el-upload>
+                  </el-form-item>
+                  <el-form-item label="独立采集">
+                    <el-button
+                      type="primary"
+                      :loading="hkFundFlowCollectLoading"
+                      @click="startHkFundFlowCollection"
+                    >
+                      <el-icon v-if="!hkFundFlowCollectLoading" class="mr-1"><DataAnalysis /></el-icon>
+                      {{ hkFundFlowCollectLoading ? '采集中...' : '开始采集' }}
+                    </el-button>
+                    <div class="text-sm text-gray-500 mt-2">
+                      读取服务器上对应交易日的 <code>hk_fund_flow_YYYYMMDD</code> 文件并入库；请先上传或确认文件已存在
+                    </div>
                   </el-form-item>
                 </el-form>
               </div>
@@ -1220,6 +1319,8 @@ import {
   Warning, 
   Loading, 
   Refresh,
+  DocumentCopy,
+  Upload,
   UploadFilled,
   Calendar,
   Plus,
@@ -1377,7 +1478,7 @@ const hkFileForm = ref<FileFormData>({
   end_date: '',
   force_update: false,
   indicators: [],
-  file_type: 'txt'
+  file_type: 'csv'
 })
 
 // 状态数据
@@ -1392,6 +1493,19 @@ const fileLoading = ref(false)
 const ashareRealtimeLoading = ref(false)
 const hkRealtimeLoading = ref(false)
 const hkFileLoading = ref(false)
+const hkHistUploadTradeDate = ref('')
+const hkHistUploadData = computed(() => {
+  const d =
+    (hkHistUploadTradeDate.value || '').trim() ||
+    (hkFileForm.value.start_date || '').trim()
+  return d ? { trade_date: d } : {}
+})
+const hkFundFlowTradeDate = ref('')
+const hkFundFlowCollectLoading = ref(false)
+const hkFundFlowUploadData = computed(() => {
+  const d = (hkFundFlowTradeDate.value || '').trim()
+  return d ? { trade_date: d } : {}
+})
 const pollingInterval = ref<NodeJS.Timeout | null>(null)
 
 // ETF 相关数据
@@ -1975,6 +2089,76 @@ const handleFileUploadError = (error: any) => {
   ElMessage.error('文件上传过程出错，请检查网络或后端接口')
 }
 
+const beforeHkFundFlowUpload = (file: File) => {
+  const name = (file.name || '').toLowerCase()
+  if (!(/\.(xlsx|xls|csv)$/.test(name))) {
+    ElMessage.error('仅支持 .xlsx / .xls / .csv 文件')
+    return false
+  }
+  return true
+}
+
+const handleHkFundFlowUploadSuccess = (response: any) => {
+  if (response && response.success) {
+    ElMessage.success(
+      response.message ||
+        `上传成功：${response.filename || ''}（交易日 ${response.trade_date || ''}）`
+    )
+  } else {
+    ElMessage.error((response && response.message) || '港股资金流向文件上传失败')
+  }
+}
+
+const handleHkHistoricalUploadSuccess = (response: any) => {
+  if (response && response.success) {
+    ElMessage.success(response.message || `已保存为 ${response.filename || ''}`)
+    if (response.trade_date) {
+      hkFileForm.value.start_date = response.trade_date
+      hkFileForm.value.end_date = response.trade_date
+      hkHistUploadTradeDate.value = response.trade_date
+    }
+    if (response.file_type) {
+      hkFileForm.value.file_type = response.file_type
+    }
+  } else {
+    ElMessage.error((response && response.message) || '港股历史文件上传失败')
+  }
+}
+
+const startHkFundFlowCollection = async () => {
+  try {
+    hkFundFlowCollectLoading.value = true
+    const params: Record<string, string> = {}
+    const d = (hkFundFlowTradeDate.value || '').trim()
+    if (d) params.trade_date = d
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/hk-fund-flow/collect`,
+      null,
+      { params, headers: getAuthHeader() }
+    )
+    const data = response.data
+    if (data && data.success) {
+      const r = data.data || {}
+      ElMessage.success(
+        `${data.message || '采集完成'}：写入 ${r.written ?? 0} 条` +
+          `（历史回写 ${r.historical_updated ?? 0}，实时回写 ${r.realtime_updated ?? 0}）`
+      )
+    } else {
+      ElMessage.error((data && (data.detail || data.message)) || '采集失败')
+    }
+  } catch (error: any) {
+    console.error('港股资金流向采集失败:', error)
+    const detail =
+      error?.response?.data?.detail ||
+      error?.response?.data?.message ||
+      error?.message ||
+      '港股资金流向采集失败'
+    ElMessage.error(typeof detail === 'string' ? detail : JSON.stringify(detail))
+  } finally {
+    hkFundFlowCollectLoading.value = false
+  }
+}
+
 const startFileCollection = async () => {
   try {
     fileLoading.value = true
@@ -2072,7 +2256,7 @@ const resetHKFileForm = () => {
   hkFileForm.value = {
     start_date: '',
     end_date: '',
-    file_type: 'txt',
+    file_type: 'csv',
     force_update: false,
     indicators: []
   }

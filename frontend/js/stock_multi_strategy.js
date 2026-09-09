@@ -1346,6 +1346,7 @@ const StockMultiStrategy = {
             lastTradeDate: this.lastTradeDate,
             lastLevels: this.lastLevels,
             lastRs: this.lastRs,
+            lastFundFlow: this.lastFundFlow,
             lastPattern: this.lastPattern,
             lastSwing: this.lastSwing,
             lastGann: this.lastGann,
@@ -1361,6 +1362,7 @@ const StockMultiStrategy = {
         this.lastTradeDate = state.lastTradeDate;
         this.lastLevels = state.lastLevels;
         this.lastRs = state.lastRs;
+        this.lastFundFlow = state.lastFundFlow;
         this.lastPattern = state.lastPattern;
         this.lastSwing = state.lastSwing;
         this.lastGann = state.lastGann;
@@ -1385,6 +1387,9 @@ const StockMultiStrategy = {
             rsHost: pick('ssaRsHost'),
             rsBlock: pick('ssaRsBlock'),
             rsStatus: pick('ssaRsStatus'),
+            fundFlowHost: pick('ssaFundFlowHost'),
+            fundFlowBlock: pick('ssaFundFlowBlock'),
+            fundFlowStatus: pick('ssaFundFlowStatus'),
             levelsHost: pick('ssaLevelsHost'),
             levelsBlock: pick('ssaLevelsBlock'),
             levelsStatus: pick('ssaLevelsStatus'),
@@ -1418,6 +1423,9 @@ const StockMultiStrategy = {
         apply('ssaRsHost', dom.rsHost);
         apply('ssaRsBlock', dom.rsBlock);
         apply('ssaRsStatus', dom.rsStatus);
+        apply('ssaFundFlowHost', dom.fundFlowHost);
+        apply('ssaFundFlowBlock', dom.fundFlowBlock);
+        apply('ssaFundFlowStatus', dom.fundFlowStatus);
         apply('ssaLevelsHost', dom.levelsHost);
         apply('ssaLevelsBlock', dom.levelsBlock);
         apply('ssaLevelsStatus', dom.levelsStatus);
@@ -1512,6 +1520,7 @@ const StockMultiStrategy = {
         this.lastTradeDate = null;
         this.lastLevels = null;
         this.lastRs = null;
+        this.lastFundFlow = null;
         this.lastPattern = null;
         this.lastSwing = null;
         this.lastGann = null;
@@ -1534,6 +1543,7 @@ const StockMultiStrategy = {
             this.lastStrategy ||
             this.lastLevels ||
             this.lastRs ||
+            this.lastFundFlow ||
             this.lastPattern ||
             this.lastSwing ||
             this.lastGann ||
@@ -2068,29 +2078,32 @@ const StockMultiStrategy = {
     },
 
     hideResultBlocks() {
-        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
+        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaFundFlowBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
         const planHost = document.getElementById('ssaTradePlanHost');
         const rsHost = document.getElementById('ssaRsHost');
+        const fundFlowHost = document.getElementById('ssaFundFlowHost');
         const levelsHost = document.getElementById('ssaLevelsHost');
         const patternHost = document.getElementById('ssaPatternHost');
         const swingHost = document.getElementById('ssaSwingHost');
         const gannHost = document.getElementById('ssaGannHost');
         if (planHost) planHost.innerHTML = '';
         if (rsHost) rsHost.innerHTML = '';
+        if (fundFlowHost) fundFlowHost.innerHTML = '';
         if (levelsHost) levelsHost.innerHTML = '';
         if (patternHost) patternHost.innerHTML = '';
         if (swingHost) swingHost.innerHTML = '';
         if (gannHost) gannHost.innerHTML = '';
         const rsStatus = document.getElementById('ssaRsStatus');
+        const fundFlowStatus = document.getElementById('ssaFundFlowStatus');
         const levelsStatus = document.getElementById('ssaLevelsStatus');
         const patternStatus = document.getElementById('ssaPatternStatus');
         const swingStatus = document.getElementById('ssaSwingStatus');
         const gannStatus = document.getElementById('ssaGannStatus');
         const planStatus = document.getElementById('ssaTradePlanStatus');
-        [rsStatus, levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
+        [rsStatus, fundFlowStatus, levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
             if (status) {
                 status.textContent = '';
                 status.hidden = false;
@@ -2214,7 +2227,7 @@ const StockMultiStrategy = {
         const rtOpts = useRealtime ? { use_realtime: true } : {};
         const levelsAdjust = useRealtime ? 'none' : 'qfq';
 
-        const [rsFetched, levelsFetched, patternFetched, swingFetched, gannFetched] = await Promise.all([
+        const [rsFetched, fundFlowFetched, levelsFetched, patternFetched, swingFetched, gannFetched] = await Promise.all([
             authFetch(
                 `${this.API_BASE_URL}/api/analysis/rs-rating?${new URLSearchParams({
                     code: resolvedCode,
@@ -2229,6 +2242,20 @@ const StockMultiStrategy = {
                     return body;
                 })
                 .catch((e) => ({ __error: e.message || '相对强度加载失败' })),
+            authFetch(
+                `${this.API_BASE_URL}/api/stock_fund_flow/daily?${new URLSearchParams({
+                    code: resolvedCode,
+                    days: '20',
+                })}`
+            )
+                .then(async (r) => {
+                    const body = await r.json().catch(() => ({}));
+                    if (!r.ok || !body.success) {
+                        return { __error: body.message || `资金流向加载失败 ${r.status}` };
+                    }
+                    return body;
+                })
+                .catch((e) => ({ __error: e.message || '资金流向加载失败' })),
             (typeof KdeLevelsTool !== 'undefined' && KdeLevelsTool.fetchLevels)
                 ? KdeLevelsTool.fetchLevels(resolvedCode, {
                     adjust: levelsAdjust,
@@ -2274,6 +2301,21 @@ const StockMultiStrategy = {
                 data: null,
                 reason: null,
                 error: (rsFetched && rsFetched.__error) || '相对强度加载失败',
+            };
+        }
+
+        let fundFlow = null;
+        if (fundFlowFetched && !fundFlowFetched.__error) {
+            fundFlow = {
+                ok: true,
+                data: fundFlowFetched.data || {},
+                error: null,
+            };
+        } else {
+            fundFlow = {
+                ok: false,
+                data: null,
+                error: (fundFlowFetched && fundFlowFetched.__error) || '资金流向加载失败',
             };
         }
 
@@ -2420,6 +2462,7 @@ const StockMultiStrategy = {
             stock,
             tradeDate,
             rs,
+            fundFlow,
             levels,
             pattern,
             swing,
@@ -2444,6 +2487,13 @@ const StockMultiStrategy = {
                 data: bundle.rs.data,
                 reason: bundle.rs.reason || null,
                 error: bundle.rs.error,
+            }
+            : null;
+        this.lastFundFlow = bundle.fundFlow
+            ? {
+                ok: bundle.fundFlow.ok,
+                data: bundle.fundFlow.data,
+                error: bundle.fundFlow.error,
             }
             : null;
         this.lastLevels = bundle.levels
@@ -2514,6 +2564,22 @@ const StockMultiStrategy = {
                 rsBlock.hidden = false;
                 rsHost.innerHTML = `<p class="ssa-rs-empty">${this.esc((bundle.rs && bundle.rs.error) || '相对强度暂不可用')}</p>`;
                 this.setBlockError('ssaRsStatus', (bundle.rs && bundle.rs.error) || '相对强度暂不可用');
+            }
+        }
+
+        // 资金流向
+        const fundFlowBlock = document.getElementById('ssaFundFlowBlock');
+        const fundFlowHost = document.getElementById('ssaFundFlowHost');
+        if (fundFlowBlock && fundFlowHost) {
+            fundFlowBlock.hidden = false;
+            if (bundle.fundFlow && bundle.fundFlow.ok && bundle.fundFlow.data) {
+                this.renderFundFlow(fundFlowHost, bundle.fundFlow.data);
+                this.setBlockOk('ssaFundFlowStatus', '');
+                const st = document.getElementById('ssaFundFlowStatus');
+                if (st) st.hidden = true;
+            } else {
+                fundFlowHost.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc((bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用')}</p>`;
+                this.setBlockError('ssaFundFlowStatus', (bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用');
             }
         }
 
@@ -2842,6 +2908,7 @@ const StockMultiStrategy = {
             const tradeDate = this.lastTradeDate || '';
             await Promise.all([
                 this.loadRsRatingSection(resolvedCode, tradeDate),
+                this.loadFundFlowSection(resolvedCode),
                 this.loadLevelsSection(resolvedCode, { useRealtime }),
                 this.loadPatternSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
                 this.loadSwingSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
@@ -2895,6 +2962,7 @@ const StockMultiStrategy = {
                 }
                 await Promise.all([
                     this.loadRsRatingSection(firstToken, asofFallback),
+                    this.loadFundFlowSection(firstToken),
                     this.loadLevelsSection(firstToken),
                     this.loadPatternSection(firstToken, asofFallback),
                     this.loadSwingSection(firstToken, asofFallback),
@@ -3045,6 +3113,106 @@ const StockMultiStrategy = {
             this.setBlockError('ssaRsStatus', e.message || '相对强度暂不可用（需日终预计算）');
         }
         this.updateExportBtn();
+    },
+
+    async loadFundFlowSection(code) {
+        const block = document.getElementById('ssaFundFlowBlock');
+        const host = document.getElementById('ssaFundFlowHost');
+        if (!block || !host) return;
+        this.setBlockLoading('ssaFundFlowBlock', 'ssaFundFlowStatus', '正在加载资金流向…');
+        try {
+            const q = new URLSearchParams({ code: code || '', days: '20' });
+            const resp = await authFetch(
+                `${this.API_BASE_URL}/api/stock_fund_flow/daily?${q}`
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok || !payload.success) {
+                throw new Error(payload.message || `资金流向加载失败 ${resp.status}`);
+            }
+            const data = payload.data || {};
+            this.renderFundFlow(host, data);
+            this.lastFundFlow = { ok: true, data, error: null };
+            this.setBlockOk('ssaFundFlowStatus', '');
+            const st = document.getElementById('ssaFundFlowStatus');
+            if (st) st.hidden = true;
+        } catch (e) {
+            console.warn('个股分析·资金流向失败', e);
+            host.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc(e.message || '资金流向暂不可用')}</p>`;
+            this.lastFundFlow = { ok: false, data: null, error: e.message || '资金流向加载失败' };
+            this.setBlockError('ssaFundFlowStatus', e.message || '资金流向暂无数据（需日终采集入库）');
+        }
+        this.updateExportBtn();
+    },
+
+    renderFundFlow(host, data) {
+        if (!host) return;
+        const series = Array.isArray(data && data.series) ? data.series : [];
+        const analysis = (data && data.analysis) || {};
+        const fmtYi = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return '--';
+            const yi = Number(v) / 1e8;
+            const sign = yi > 0 ? '+' : '';
+            return `${sign}${yi.toFixed(2)}亿`;
+        };
+        const clsYi = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return '';
+            return Number(v) >= 0 ? 'is-up' : 'is-down';
+        };
+        const latest = series.length ? series[series.length - 1] : null;
+        const recent = series.slice(-8).reverse();
+        const rowsHtml = recent.length
+            ? recent
+                  .map(
+                      (r) => `
+              <tr>
+                <td>${this.esc(r.trade_date || '--')}</td>
+                <td class="${clsYi(r.inflow_amount)}">${fmtYi(r.inflow_amount)}</td>
+                <td class="${clsYi(r.outflow_amount)}">${fmtYi(r.outflow_amount)}</td>
+                <td class="${clsYi(r.net_amount)}">${fmtYi(r.net_amount)}</td>
+              </tr>`
+                  )
+                  .join('')
+            : `<tr><td colspan="4">暂无日资金流记录</td></tr>`;
+        const market = data.market === 'HK' ? '港股' : 'A股';
+        host.innerHTML = `
+            <div class="ssa-fund-flow-card">
+              <div class="ssa-fund-flow-meta">
+                <span>${this.esc(market)} · 近 ${this.esc(String(analysis.days || series.length || 0))} 日</span>
+                <span>来源 ${this.esc(data.series_source || '--')}</span>
+                <span>区间 ${this.esc(analysis.first_date || '--')} ~ ${this.esc(analysis.last_date || '--')}</span>
+              </div>
+              <div class="ssa-fund-flow-summary">
+                <div class="ssa-fund-flow-metric">
+                  <span>最新流入</span>
+                  <strong class="${clsYi(latest && latest.inflow_amount)}">${fmtYi(latest && latest.inflow_amount)}</strong>
+                </div>
+                <div class="ssa-fund-flow-metric">
+                  <span>最新流出</span>
+                  <strong class="${clsYi(latest && latest.outflow_amount)}">${fmtYi(latest && latest.outflow_amount)}</strong>
+                </div>
+                <div class="ssa-fund-flow-metric">
+                  <span>最新净流入</span>
+                  <strong class="${clsYi(latest && latest.net_amount)}">${fmtYi(latest && latest.net_amount)}</strong>
+                </div>
+                <div class="ssa-fund-flow-metric">
+                  <span>区间净流入合计</span>
+                  <strong class="${clsYi(analysis.net_sum)}">${fmtYi(analysis.net_sum)}</strong>
+                </div>
+                <div class="ssa-fund-flow-metric">
+                  <span>区间净流入变化</span>
+                  <strong class="${clsYi(analysis.net_change)}">${fmtYi(analysis.net_change)}</strong>
+                </div>
+              </div>
+              <div class="ssa-fund-flow-table-wrap">
+                <table class="ssa-fund-flow-table">
+                  <thead>
+                    <tr><th>日期</th><th>流入</th><th>流出</th><th>净流入</th></tr>
+                  </thead>
+                  <tbody>${rowsHtml}</tbody>
+                </table>
+              </div>
+              <p class="ssa-fund-flow-hint">口径：同花顺/文件采集入库的流入、流出、净额（元）；详情页「资金流向」Tab 可查看近 20 日图表。</p>
+            </div>`;
     },
 
     renderRsRating(host, data, reason, message) {

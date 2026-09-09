@@ -39,6 +39,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_rs_rating_cn,
     exec_rs_rating_hk,
     exec_ths_fund_flow_daily,
+    exec_hk_fund_flow_daily,
     exec_macd_cn,
     exec_macd_hk,
     exec_sbbr_cn,
@@ -193,6 +194,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
         "cn",
         exec_ths_fund_flow_daily,
         description="stock_fund_flow_individual(即时) → stock_fund_flow_daily",
+    ),
+    _n(
+        "hk_fund_flow_daily",
+        "港股资金流向文件日采",
+        "hk",
+        exec_hk_fund_flow_daily,
+        description="hk_fund_flow_YYYYMMDD → stock_fund_flow_daily_hk",
     ),
     _n("triple_volume_scan", "3倍量爆量扫描", "strategy", exec_triple_volume_scan),
     _n(

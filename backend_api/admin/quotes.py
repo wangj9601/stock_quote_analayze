@@ -37,6 +37,7 @@ from backend_api.models import (
     FundRealtimeQuote,
     FundHistoricalQuotes,
     StockFundFlowDaily,
+    StockFundFlowDailyHK,
 )
 from backend_api.database import get_db
 from backend_api.auth import get_current_user, get_current_admin
@@ -646,6 +647,90 @@ async def get_stock_fund_flow_daily(
             "change_percent": r.change_percent,
             "turnover_rate": r.turnover_rate,
             "current_price": r.current_price,
+            "source": r.source,
+            "created_at": r.created_at.isoformat(sep=" ", timespec="seconds")
+            if r.created_at
+            else None,
+            "updated_at": r.updated_at.isoformat(sep=" ", timespec="seconds")
+            if r.updated_at
+            else None,
+        }
+
+    return {
+        "success": True,
+        "data": [_row(r) for r in rows],
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+        "trade_date": resolved_date,
+    }
+
+
+@router.get("/hk/fund-flow/daily")
+async def get_stock_fund_flow_daily_hk(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=200),
+    keyword: Optional[str] = Query(None, description="股票代码或名称关键词"),
+    trade_date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD；不传则取最新交易日"),
+    sort_by: str = Query(
+        "net_amount",
+        description="排序字段：net_amount|inflow_amount|outflow_amount|turnover_amount|change_percent|code|trade_date|updated_at",
+    ),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    current_user: Any = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """分页查询港股资金流日表 stock_fund_flow_daily_hk。"""
+    sort_map = {
+        "net_amount": StockFundFlowDailyHK.net_amount,
+        "inflow_amount": StockFundFlowDailyHK.inflow_amount,
+        "outflow_amount": StockFundFlowDailyHK.outflow_amount,
+        "turnover_amount": StockFundFlowDailyHK.turnover_amount,
+        "change_percent": StockFundFlowDailyHK.change_percent,
+        "code": StockFundFlowDailyHK.code,
+        "trade_date": StockFundFlowDailyHK.trade_date,
+        "updated_at": StockFundFlowDailyHK.updated_at,
+    }
+    sort_col = sort_map.get(sort_by, StockFundFlowDailyHK.net_amount)
+
+    resolved_date = (trade_date or "").strip() or None
+    if not resolved_date:
+        resolved_date = db.query(func.max(StockFundFlowDailyHK.trade_date)).scalar()
+
+    query = db.query(StockFundFlowDailyHK)
+    if resolved_date:
+        query = query.filter(StockFundFlowDailyHK.trade_date == resolved_date)
+    if keyword:
+        kw = keyword.strip()
+        if kw:
+            like = f"%{kw}%"
+            query = query.filter(
+                (StockFundFlowDailyHK.code.ilike(like)) | (StockFundFlowDailyHK.name.ilike(like))
+            )
+
+    total = query.count()
+    order_expr = sort_col.asc() if sort_order == "asc" else sort_col.desc()
+    rows = (
+        query.order_by(order_expr, StockFundFlowDailyHK.code.asc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    def _row(r: StockFundFlowDailyHK) -> Dict[str, Any]:
+        return {
+            "code": r.code,
+            "trade_date": r.trade_date,
+            "name": r.name,
+            "inflow_amount": r.inflow_amount,
+            "outflow_amount": r.outflow_amount,
+            "net_amount": r.net_amount,
+            "turnover_amount": r.turnover_amount,
+            "change_percent": r.change_percent,
+            "turnover_rate": r.turnover_rate,
+            "current_price": r.current_price,
+            "outer_volume": r.outer_volume,
+            "inner_volume": r.inner_volume,
             "source": r.source,
             "created_at": r.created_at.isoformat(sep=" ", timespec="seconds")
             if r.created_at

@@ -302,7 +302,7 @@ function Restart-IfExists([string]$Name) {
 function Stop-StockQuoteServicesIfRunning {
     # 非管理员或 SCM 异常时 Stop-Service 会抛「无法打开…服务」；禁止因此中断整次 release。
     $scExe = Join-Path $env:SystemRoot "System32\sc.exe"
-    foreach ($svcName in @('stock-quote-api', 'stock-quote-core', 'stock-quote-notify')) {
+    foreach ($svcName in @('stock-quote-api', 'stock-quote-core', 'stock-quote-notify', 'stock-quote-frontend')) {
         $svc = Get-Service -Name $svcName -ErrorAction SilentlyContinue
         if ($null -eq $svc) { continue }
         if ($svc.Status -ne 'Running' -and $svc.Status -ne 'Paused') { continue }
@@ -853,9 +853,38 @@ function Start-ManualStockQuoteProcesses {
                 Write-Host ('[WARN] Missing script, skip: {0}' -f $scriptFull) -ForegroundColor Yellow
                 continue
             }
+            # 若已用 NSSM 托管 frontend，发布时改走服务重启，避免与手工进程抢 8000
+            if ($t.Name -eq 'manual-frontend') {
+                $feSvc = Get-Service -Name 'stock-quote-frontend' -ErrorAction SilentlyContinue
+                if ($null -ne $feSvc) {
+                    try {
+                        if ($feSvc.Status -eq 'Running') {
+                            Restart-Service -Name 'stock-quote-frontend' -Force -ErrorAction Stop
+                            Write-Host '[START] stock-quote-frontend service restarted (skip manual process)' -ForegroundColor Green
+                        }
+                        else {
+                            Start-Service -Name 'stock-quote-frontend' -ErrorAction Stop
+                            Write-Host '[START] stock-quote-frontend service started (skip manual process)' -ForegroundColor Green
+                        }
+                    }
+                    catch {
+                        Write-Host ('[WARN] stock-quote-frontend service control failed: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+                    }
+                    continue
+                }
+            }
             $argList = @($scriptFull)
         }
+        $prevFrontendPort = $env:FRONTEND_PORT
+        $prevEnvironment = $env:ENVIRONMENT
         try {
+            # 与 nginx upstream frontend_server(127.0.0.1:8000) 对齐，禁止生产静默换端口
+            if ($t.Name -eq 'manual-frontend') {
+                $env:FRONTEND_PORT = '8000'
+                if ([string]::IsNullOrWhiteSpace($env:ENVIRONMENT)) {
+                    $env:ENVIRONMENT = 'production'
+                }
+            }
             $p = Start-Process -FilePath $PythonExePath `
                 -ArgumentList $argList `
                 -WorkingDirectory $workForTask `
@@ -871,6 +900,10 @@ function Start-ManualStockQuoteProcesses {
         }
         catch {
             Write-Host ('[WARN] Failed to start ({0}): {1}' -f $t.Display, $_.Exception.Message) -ForegroundColor Yellow
+        }
+        finally {
+            if ($null -eq $prevFrontendPort) { Remove-Item Env:FRONTEND_PORT -ErrorAction SilentlyContinue } else { $env:FRONTEND_PORT = $prevFrontendPort }
+            if ($null -eq $prevEnvironment) { Remove-Item Env:ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:ENVIRONMENT = $prevEnvironment }
         }
     }
 }
@@ -1097,6 +1130,7 @@ try {
         Restart-IfExists 'stock-quote-api'
         Restart-IfExists 'stock-quote-core'
         Restart-IfExists 'stock-quote-notify'
+        Restart-IfExists 'stock-quote-frontend'
     }
 
     if ($ManualProcessDeploy) {
@@ -1168,6 +1202,7 @@ catch {
         Restart-IfExists 'stock-quote-api'
         Restart-IfExists 'stock-quote-core'
         Restart-IfExists 'stock-quote-notify'
+        Restart-IfExists 'stock-quote-frontend'
     }
     throw
 }

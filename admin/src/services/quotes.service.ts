@@ -66,6 +66,13 @@ export interface QuotesResponse<T> {
   message?: string
 }
 
+export interface QuotesStats {
+  totalStocks: number
+  totalIndices: number
+  totalIndustries: number
+  lastUpdateTime: string
+}
+
 export interface FundFlowDailyParams {
   page: number
   pageSize: number
@@ -287,6 +294,22 @@ class QuotesService {
     if (params.sortBy) queryParams.append('sort_by', params.sortBy)
     if (params.sortOrder) queryParams.append('sort_order', params.sortOrder)
     return apiService.get(`/quotes/fund-flow/daily?${queryParams}`) as Promise<
+      QuotesResponse<FundFlowDailyRow> & { trade_date?: string | null }
+    >
+  }
+
+  /**
+   * 获取港股资金流向日表（stock_fund_flow_daily_hk，管理端）
+   */
+  async getHkFundFlowDaily(params: FundFlowDailyParams): Promise<QuotesResponse<FundFlowDailyRow> & { trade_date?: string | null }> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('page', params.page.toString())
+    queryParams.append('page_size', params.pageSize.toString())
+    if (params.keyword) queryParams.append('keyword', params.keyword)
+    if (params.tradeDate) queryParams.append('trade_date', params.tradeDate)
+    if (params.sortBy) queryParams.append('sort_by', params.sortBy)
+    if (params.sortOrder) queryParams.append('sort_order', params.sortOrder)
+    return apiService.get(`/quotes/hk/fund-flow/daily?${queryParams}`) as Promise<
       QuotesResponse<FundFlowDailyRow> & { trade_date?: string | null }
     >
   }

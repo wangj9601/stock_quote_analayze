@@ -9,6 +9,107 @@ from sqlalchemy import text
 from .base import AKShareCollector
 
 
+HK_HIST_DATA_DIR = Path("backend_core") / "data"
+HK_HIST_FILE_PREFIX = "hk_historical_quotes_"
+
+
+def load_hk_quote_file_dataframe(file_path: Path) -> pd.DataFrame:
+    """读取港股行情文件；兼容同花顺伪 xls（GBK 制表符文本）。"""
+    from io import BytesIO, StringIO
+
+    path = Path(file_path)
+    content = path.read_bytes()
+    if not content:
+        raise RuntimeError(f"文件为空: {path}")
+
+    suffix = path.suffix.lower()
+    parse_errors = []
+
+    def _ok(trial):
+        return trial is not None and not trial.empty and len(trial.columns) >= 2
+
+    def _score_headers(trial) -> int:
+        """已知中文/英列表头命中越多越优先（避免错误编码“伪成功”）。"""
+        known = {
+            "代码", "名称", "现价", "总手", "昨收", "开盘", "最高", "最低",
+            "涨幅", "涨跌", "成交额", "成交量", "换手率",
+            "code", "name", "open", "high", "low", "close", "vol", "amount",
+        }
+        hits = 0
+        for c in trial.columns:
+            s = str(c).strip().replace("%", "").replace("％", "")
+            if s in known or s.lower() in known:
+                hits += 1
+        return hits
+
+    def _pick_best(candidates):
+        best = None
+        best_score = -1
+        for trial in candidates:
+            if not _ok(trial):
+                continue
+            sc = _score_headers(trial)
+            if sc > best_score:
+                best, best_score = trial, sc
+        return best
+
+    # OLE Compound / ZIP(xlsx) 才优先走 Excel；同花顺伪 xls 实为文本
+    is_ole = content[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+    is_zip = content[:2] == b"PK"
+    looks_like_text = (b"\t" in content[:4096]) or (not is_ole and not is_zip)
+
+    if suffix == ".csv":
+        trials = []
+        for enc in ("utf-8-sig", "utf-8", "gbk", "gb18030"):
+            try:
+                trials.append(pd.read_csv(BytesIO(content), encoding=enc))
+            except Exception as e:  # noqa: BLE001
+                parse_errors.append(f"csv({enc}): {e}")
+        picked = _pick_best(trials)
+        if picked is not None:
+            return picked
+
+    text_trials = []
+    if looks_like_text or suffix in (".xls", ".txt", ".csv"):
+        for enc in ("gb18030", "gbk", "utf-8-sig", "utf-8"):
+            try:
+                txt = content.decode(enc, errors="strict")
+                if "\t" in txt:
+                    text_trials.append(pd.read_csv(StringIO(txt), sep="\t"))
+                else:
+                    text_trials.append(pd.read_csv(StringIO(txt), sep=None, engine="python"))
+            except Exception as e:  # noqa: BLE001
+                parse_errors.append(f"text({enc}): {e}")
+        picked = _pick_best(text_trials)
+        if picked is not None and (_score_headers(picked) > 0 or looks_like_text):
+            return picked
+
+    if suffix in (".xlsx", ".xls") and (is_ole or is_zip or not looks_like_text):
+        engines = ("openpyxl", "xlrd") if suffix == ".xlsx" else ("xlrd", "openpyxl")
+        for engine in engines:
+            try:
+                trial = pd.read_excel(BytesIO(content), engine=engine)
+                if _ok(trial):
+                    return trial
+            except Exception as e:  # noqa: BLE001
+                parse_errors.append(f"excel({engine}): {e}")
+
+    picked = _pick_best(text_trials)
+    if picked is not None:
+        return picked
+
+    for enc in ("utf-8", "gbk", "gb18030"):
+        try:
+            tables = pd.read_html(BytesIO(content), encoding=enc)
+            if tables and _ok(tables[0]):
+                return tables[0]
+        except Exception as e:  # noqa: BLE001
+            parse_errors.append(f"html({enc}): {e}")
+
+    detail = "; ".join(parse_errors[-6:]) if parse_errors else "未知原因"
+    raise RuntimeError(f"港股行情文件解析失败: {path.name} ({detail})")
+
+
 def complete_hk_change_fields(
     pre_close: Optional[float],
     close_v: Optional[float],
@@ -62,7 +163,9 @@ class HKHistoricalQuoteImportFromFileCollector(AKShareCollector):
         'change_percent': 'pct_chg', 'chg_pct': 'pct_chg', 'quote_change_pct': 'pct_chg',
         '涨跌幅(%)': 'pct_chg', '涨跌幅％': 'pct_chg', '涨跌幅度': 'pct_chg',
         'vol': 'vol', 'volume': 'vol', 'qty': 'vol', '成交量': 'vol', 'vol.': 'vol',
-        'amount': 'amount', '成交额': 'amount', 'turnover': 'amount', 'amt': 'amount',
+        '总手': 'vol', '现价': 'close', '最新价': 'close',
+        '涨幅': 'pct_chg', '涨跌幅%': 'pct_chg',
+        'amount': 'amount', '成交额': 'amount', 'turnover': 'amount', 'amt': 'amount', '金额': 'amount',
         'turnover_rate': 'turnover_rate', '换手率': 'turnover_rate',
     }
 
@@ -310,44 +413,60 @@ class HKHistoricalQuoteImportFromFileCollector(AKShareCollector):
             elif file_type == 'csv':
                 import csv
                 allowed_hk = {'code', 'trade_date', 'name', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol', 'amount', 'turnover_rate'}
-                with open(file_path, "r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for row in reader:
-                        try:
-                            norm_row = {}
-                            for k, v in row.items():
-                                if k is None:
-                                    continue
-                                nk = self._normalize_hk_file_column(k)
-                                if nk:
-                                    norm_row[nk] = v
-                            td_norm = self._normalize_trade_date_key(norm_row.get('trade_date'))
-                            if td_norm and td_norm != date_str:
+                rows_loaded = None
+                last_enc_err = None
+                for enc in ('utf-8-sig', 'utf-8', 'gbk', 'gb18030'):
+                    try:
+                        with open(file_path, "r", encoding=enc) as f:
+                            reader = csv.DictReader(f)
+                            rows_loaded = list(reader)
+                        break
+                    except Exception as e:
+                        last_enc_err = e
+                        rows_loaded = None
+                if rows_loaded is None:
+                    self.logger.error(f"CSV 读取失败 {file_path}: {last_enc_err}")
+                    return False
+                for row in rows_loaded:
+                    try:
+                        norm_row = {}
+                        for k, v in row.items():
+                            if k is None:
                                 continue
-                            field_list = [c for c in norm_row.keys() if c in allowed_hk]
-                            if not field_list:
-                                continue
-                            fields = ', '.join(field_list)
-                            values = []
-                            for k in field_list:
-                                v = norm_row.get(k, '')
-                                if v is None or v == '':
-                                    values.append('NULL')
-                                elif k in ('code', 'trade_date', 'name'):
-                                    values.append(f"'{v}'")
-                                else:
-                                    values.append(str(v))
-                            values_str = ', '.join(values)
-                            update_clause = ', '.join([f"{f}=EXCLUDED.{f}" for f in field_list if f not in ('code', 'trade_date')])
-                            sql = f"INSERT INTO MKT_STK_BASICINFO_HK ({fields}) VALUES ({values_str}) ON CONFLICT (code, trade_date) DO UPDATE SET {update_clause};"
-                            session.execute(text(sql))
-                            insert_count += 1
-                        except Exception:
-                            session.rollback()
+                            nk = self._normalize_hk_file_column(k)
+                            if nk:
+                                norm_row[nk] = v
+                        td_norm = self._normalize_trade_date_key(norm_row.get('trade_date'))
+                        if td_norm and td_norm != date_str:
                             continue
+                        field_list = [c for c in norm_row.keys() if c in allowed_hk]
+                        if not field_list:
+                            continue
+                        fields = ', '.join(field_list)
+                        values = []
+                        for k in field_list:
+                            v = norm_row.get(k, '')
+                            if v is None or v == '':
+                                values.append('NULL')
+                            elif k in ('code', 'trade_date', 'name'):
+                                values.append(f"'{v}'")
+                            else:
+                                values.append(str(v))
+                        values_str = ', '.join(values)
+                        update_clause = ', '.join([f"{f}=EXCLUDED.{f}" for f in field_list if f not in ('code', 'trade_date')])
+                        sql = f"INSERT INTO MKT_STK_BASICINFO_HK ({fields}) VALUES ({values_str}) ON CONFLICT (code, trade_date) DO UPDATE SET {update_clause};"
+                        session.execute(text(sql))
+                        insert_count += 1
+                    except Exception:
+                        session.rollback()
+                        continue
                 session.commit()
             elif file_type == 'xlsx':
-                df = pd.read_excel(file_path)
+                try:
+                    df = load_hk_quote_file_dataframe(file_path)
+                except Exception as e:
+                    self.logger.error(f"读取港股历史文件失败 {file_path}: {e}")
+                    return False
                 allowed_cols = ['code', 'trade_date', 'name', 'open', 'high', 'low', 'close', 'pre_close', 'change', 'pct_chg', 'vol', 'amount', 'turnover_rate']
                 df.columns = [self._normalize_hk_file_column(c) for c in df.columns]
                 for index, row in df.iterrows():
@@ -522,3 +641,143 @@ class HKHistoricalQuoteImportFromFileCollector(AKShareCollector):
             return False
         finally:
             session.close()
+
+
+def normalize_hk_historical_upload_df(df: pd.DataFrame, trade_date_ymd: str) -> pd.DataFrame:
+    """
+    将上传表规范为采集器 CSV 列：
+    code,trade_date,name,open,high,low,close,pre_close,change,pct_chg,vol,amount,turnover_rate
+    trade_date_ymd: YYYYMMDD
+    """
+    from backend_api.utils.equity_code import normalize_equity_code
+
+    collector = HKHistoricalQuoteImportFromFileCollector()
+    # 必须保留 DataFrame 原始列对象（同花顺表头常带尾部空格）
+    col_norm = {}  # original_col -> canonical
+    for c in df.columns:
+        col_norm[c] = collector._normalize_hk_file_column(c)
+
+    alias_extra = {
+        "现价": "close",
+        "最新价": "close",
+        "收盘": "close",
+        "收盘价": "close",
+        "总手": "vol",
+        "成交量": "vol",
+        "金额": "amount",
+        "成交额": "amount",
+        "涨幅%": "pct_chg",
+        "涨幅": "pct_chg",
+        "涨跌幅": "pct_chg",
+        "涨跌": "change",
+        "昨收": "pre_close",
+        "开盘": "open",
+        "最高": "high",
+        "最低": "low",
+        "换手率": "turnover_rate",
+        "代码": "code",
+        "名称": "name",
+    }
+    for orig in list(col_norm.keys()):
+        raw = str(orig).strip()
+        raw2 = raw.replace("%", "").replace("％", "").strip()
+        if raw in alias_extra:
+            col_norm[orig] = alias_extra[raw]
+        elif raw2 in alias_extra:
+            col_norm[orig] = alias_extra[raw2]
+
+    rev = {}
+    for orig, canon in col_norm.items():
+        if canon and canon not in rev:
+            rev[canon] = orig
+
+    def series_of(*names):
+        for n in names:
+            orig = rev.get(n)
+            if orig is not None:
+                return df[orig]
+        return None
+
+    code_s = series_of("code")
+    if code_s is None:
+        raise RuntimeError(f"缺少代码列，实际列: {list(df.columns)}")
+
+    out_rows = []
+    for i in range(len(df)):
+        raw_code = code_s.iloc[i]
+        code = normalize_equity_code(raw_code)
+        if not code or not str(code).isdigit():
+            s = str(raw_code or "").strip().upper()
+            if s.startswith("HK") and s[2:].isdigit():
+                code = s[2:].zfill(5)
+            else:
+                continue
+        if len(code) <= 5:
+            code = code.zfill(5)
+
+        def cell(*names):
+            s = series_of(*names)
+            if s is None:
+                return None
+            v = s.iloc[i]
+            if v is None or (isinstance(v, float) and pd.isna(v)):
+                return None
+            if isinstance(v, str):
+                t = v.strip().replace(",", "").replace("%", "")
+                if t in ("", "-", "--"):
+                    return None
+                return t
+            return v
+
+        name = cell("name")
+        name = str(name).strip() if name is not None else ""
+        if name in ("-", "--", "nan", "None"):
+            name = ""
+
+        out_rows.append(
+            {
+                "code": code,
+                "trade_date": trade_date_ymd,
+                "name": name,
+                "open": cell("open"),
+                "high": cell("high"),
+                "low": cell("low"),
+                "close": cell("close"),
+                "pre_close": cell("pre_close"),
+                "change": cell("change"),
+                "pct_chg": cell("pct_chg"),
+                "vol": cell("vol"),
+                "amount": cell("amount"),
+                "turnover_rate": cell("turnover_rate"),
+            }
+        )
+
+    if not out_rows:
+        raise RuntimeError("规范化后无有效港股行")
+    return pd.DataFrame(out_rows)
+
+
+def save_hk_historical_upload_as_csv(
+    source_path: Path,
+    trade_date: str,
+    data_dir: Optional[Path] = None,
+) -> Dict[str, Any]:
+    """解析上传文件并保存为 hk_historical_quotes_YYYYMMDD.csv。"""
+    ymd = str(trade_date).strip().replace("-", "").replace("/", "")
+    if len(ymd) != 8 or not ymd.isdigit():
+        raise ValueError(f"无效交易日: {trade_date}")
+    root = Path(data_dir) if data_dir else HK_HIST_DATA_DIR
+    root.mkdir(parents=True, exist_ok=True)
+
+    df_raw = load_hk_quote_file_dataframe(Path(source_path))
+    df_out = normalize_hk_historical_upload_df(df_raw, ymd)
+    saved_name = f"{HK_HIST_FILE_PREFIX}{ymd}.csv"
+    out_path = root / saved_name
+    df_out.to_csv(out_path, index=False, encoding="utf-8-sig")
+    return {
+        "filename": saved_name,
+        "path": str(out_path),
+        "trade_date": f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:8]}",
+        "rows": len(df_out),
+        "file_type": "csv",
+    }

@@ -74,32 +74,78 @@ def is_production_env() -> bool:
     v = (os.getenv("ENVIRONMENT") or os.getenv("VITE_ENVIRONMENT") or os.getenv("APP_ENV") or "").strip().lower()
     return v in ("prod", "production", "release")
 
+# nginx / 浏览器提前断开时常见；不应打成 ERROR 刷屏
+_CLIENT_DISCONNECT_ERRORS = (
+    BrokenPipeError,
+    ConnectionResetError,
+    ConnectionAbortedError,
+    TimeoutError,
+)
+
+
 class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
     """自定义HTTP请求处理器"""
+
     def __init__(self, *args, **kwargs):
         # 始终相对本脚本所在项目根下的 frontend，避免 cwd 不对时端上旧页面
-        root = Path(__file__).resolve().parent
-        frontend_dir = str(root / "frontend")
+        self._project_root = str(Path(__file__).resolve().parent)
+        frontend_dir = str(Path(self._project_root) / "frontend")
         super().__init__(*args, directory=frontend_dir, **kwargs)
+
+    def handle_one_request(self):
+        """捕获客户端断开，避免 ThreadingHTTPServer 刷 Exception occurred..."""
+        try:
+            super().handle_one_request()
+        except _CLIENT_DISCONNECT_ERRORS as exc:
+            _print_safe(f"[WARN] client disconnected: {type(exc).__name__}: {exc}")
+
     def do_GET(self):
         parsed_path = urllib.parse.urlparse(self.path)
-        # 如果访问根路径，重定向到 login.html
+        # 根路径重定向到登录页（nginx 反代看到的 301 属正常）
         if parsed_path.path == "/" or parsed_path.path == "":
-            self.send_response(301)
-            self.send_header('Location', '/login.html')
+            self.send_response(302)
+            self.send_header("Location", "/login.html")
             self.end_headers()
             return
-        # 如果访问 admin 路径，重定向到 admin 目录
+        # /admin* 从项目根提供（管理端静态资源；生产通常由 nginx 直转 8001）
         if parsed_path.path.startswith("/admin"):
             self.path = parsed_path.path
-            self.directory = "."  # 项目根目录
+            self.directory = self._project_root
         super().do_GET()
+
     def end_headers(self):
-        self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
         super().end_headers()
+
+    def log_message(self, format, *args):
+        # 与原有 access log 格式兼容，统一走可安全编码的输出
+        _print_safe("%s - - [%s] %s" % (self.address_string(), self.log_date_time_string(), format % args))
+
+
+class _QuietClientDisconnectServer:
+    """Mixin: 忽略客户端断开类异常的默认 traceback 噪音。"""
+
+    def handle_error(self, request, client_address):
+        exc = sys.exc_info()[1]
+        if isinstance(exc, _CLIENT_DISCONNECT_ERRORS):
+            _print_safe(
+                f"[WARN] client disconnected from {client_address}: {type(exc).__name__}: {exc}"
+            )
+            return
+        # 其它异常保留完整堆栈，便于生产排障
+        super().handle_error(request, client_address)
+
+
+class FrontendHTTPServer(_QuietClientDisconnectServer, HTTPServer):
+    pass
+
+
+class FrontendThreadingHTTPServer(_QuietClientDisconnectServer, ThreadingHTTPServer):
+    pass
+
 
 def check_port(port):
     """检查端口是否可用（Windows兼容版本）"""
@@ -108,7 +154,7 @@ def check_port(port):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             # 尝试绑定到端口
-            result = sock.bind(('0.0.0.0', port))
+            sock.bind(("0.0.0.0", port))
             # 如果绑定成功，说明端口可用
             return True
     except OSError:
@@ -117,6 +163,7 @@ def check_port(port):
     except Exception:
         # 其他错误，认为端口不可用
         return False
+
 
 def find_available_port(start_port=8000, max_attempts=100):
     """查找可用端口"""
@@ -129,10 +176,11 @@ def find_available_port(start_port=8000, max_attempts=100):
         attempts += 1
     return None
 
+
 def start_server(port):
     _reconfigure_stdio_utf8()
     try:
-        server_cls = ThreadingHTTPServer if is_production_env() else HTTPServer
+        server_cls = FrontendThreadingHTTPServer if is_production_env() else FrontendHTTPServer
         with server_cls(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
             _print_safe("[OK] frontend HTTP server started")
             _print_safe(f"[OK] URL: http://localhost:{port}")
@@ -145,7 +193,7 @@ def start_server(port):
             _print_safe("-" * 60)
             def open_browser():
                 time.sleep(1)
-                webbrowser.open(f'http://localhost:{port}/login.html')
+                webbrowser.open(f"http://localhost:{port}/login.html")
             browser_thread = threading.Thread(target=open_browser)
             browser_thread.daemon = True
             browser_thread.start()
@@ -159,11 +207,16 @@ def start_server(port):
 def _resolve_listen_port() -> int:
     """
     监听端口：
-    - 若设置环境变量 FRONTEND_PORT（或别名 STOCK_FRONTEND_PORT），则使用该端口（须空闲）；
-    - 否则从 8000 起递增查找第一个空闲端口（与原先行为一致）。
-    可在系统环境或项目根 .env 中配置（本脚本会先 load_dotenv_file）。
+    - 若设置 FRONTEND_PORT / STOCK_FRONTEND_PORT，则使用该端口（须空闲）；
+    - 否则固定尝试 8000（与 nginx upstream 一致）；
+    - 仅当显式 ALLOW_FRONTEND_PORT_FALLBACK=1 时，8000 占用才递增找空闲口；
+      生产禁止静默换端口，否则 nginx 仍反代 8000 会出现 10061。
     """
     raw = (os.getenv("FRONTEND_PORT") or os.getenv("STOCK_FRONTEND_PORT") or "").strip()
+    if not raw and is_production_env():
+        raw = "8000"
+        _print_safe("[OK] production default FRONTEND_PORT=8000 (match nginx upstream)")
+
     if raw:
         try:
             port = int(raw)
@@ -174,17 +227,28 @@ def _resolve_listen_port() -> int:
             _print_safe("[ERROR] FRONTEND_PORT out of range 1-65535")
             sys.exit(1)
         if not check_port(port):
-            _print_safe(f"[ERROR] port {port} is already in use (set FRONTEND_PORT to a free port)")
+            _print_safe(f"[ERROR] port {port} is already in use (free it or set FRONTEND_PORT)")
             sys.exit(1)
         _print_safe(f"[OK] listen port from env: {port}")
         return port
 
-    port = find_available_port(8000)
-    if not port:
-        _print_safe("[ERROR] no free port found from 8000 (set FRONTEND_PORT to pick a port)")
+    if check_port(8000):
+        return 8000
+
+    allow_fallback = (os.getenv("ALLOW_FRONTEND_PORT_FALLBACK") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+    if not allow_fallback:
+        _print_safe("[ERROR] port 8000 is already in use")
+        _print_safe("[ERROR] nginx expects 127.0.0.1:8000; refuse silent port fallback")
+        _print_safe("[ERROR] free 8000, or set FRONTEND_PORT / ALLOW_FRONTEND_PORT_FALLBACK=1")
         sys.exit(1)
-    if port != 8000:
-        _print_safe(f"[INFO] port 8000 busy, using {port} (set FRONTEND_PORT=8000 after freeing 8000)")
+
+    port = find_available_port(8001)
+    if not port:
+        _print_safe("[ERROR] no free port found from 8001")
+        sys.exit(1)
+    _print_safe(f"[WARN] port 8000 busy, fallback to {port} (ALLOW_FRONTEND_PORT_FALLBACK=1)")
     return port
 
 
@@ -196,6 +260,8 @@ def main():
     # 尝试读取项目根目录 .env（不覆盖已存在环境变量）
     project_root = Path(__file__).resolve().parent
     load_dotenv_file(str(project_root / ".env"))
+    # 生产常见：DeployRoot\shared\.env（current 的上一级）
+    load_dotenv_file(str(project_root.parent / "shared" / ".env"))
     port = _resolve_listen_port()
     start_server(port)
 

@@ -1963,6 +1963,73 @@ body.ssa-png-capturing .ms-zigzag-svg,
 .ssa-rs-roc strong { font-size: 14px; color: #0f172a; }
 .ssa-rs-roc em { font-size: 10px; color: #94a3b8; font-style: normal; }
 .ssa-rs-hint { margin: 10px 0 0; }
+.ssa-fund-flow-host { margin-top: 4px; }
+.ssa-fund-flow-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: #fff;
+}
+.ssa-fund-flow-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    font-size: 12px;
+    color: #64748b;
+    margin-bottom: 10px;
+}
+.ssa-fund-flow-summary {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+}
+.ssa-fund-flow-metric {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.ssa-fund-flow-metric span { font-size: 11px; color: #64748b; }
+.ssa-fund-flow-metric strong { font-size: 14px; color: #0f172a; }
+.ssa-fund-flow-metric strong.is-up { color: #dc2626; }
+.ssa-fund-flow-metric strong.is-down { color: #16a34a; }
+.ssa-fund-flow-table-wrap { margin-top: 12px; overflow-x: auto; }
+.ssa-fund-flow-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    table-layout: fixed;
+}
+.ssa-fund-flow-table th,
+.ssa-fund-flow-table td {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 6px 8px;
+    text-align: right;
+}
+.ssa-fund-flow-table th:first-child,
+.ssa-fund-flow-table td:first-child {
+    text-align: left;
+    width: 7.2em;
+    white-space: nowrap;
+}
+.ssa-fund-flow-table th:not(:first-child),
+.ssa-fund-flow-table td:not(:first-child) {
+    width: auto;
+}
+.ssa-fund-flow-table th { color: #64748b; font-weight: 600; background: #f8fafc; }
+.ssa-fund-flow-table td.is-up { color: #dc2626; }
+.ssa-fund-flow-table td.is-down { color: #16a34a; }
+.ssa-fund-flow-hint,
+.ssa-fund-flow-empty {
+    margin: 10px 0 0;
+    font-size: 12px;
+    color: #94a3b8;
+}
+@media (max-width: 900px) {
+    .ssa-fund-flow-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .ssa-rs-actions {
     display: flex;
     flex-wrap: wrap;

@@ -125,6 +125,7 @@
                                 输入股票代码或名称后，一次分析即可得到：
                                 <strong>RPE / SBBR / GMS / URT</strong> 策略命中与得分、
                                 <strong>阻力支撑位</strong>（与技术工具同口径）、
+                                <strong>资金流向</strong>（本地入库日数据）、
                                 <strong>形态识别</strong>（与技术工具同口径）、
                                 <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
@@ -230,6 +231,12 @@
                                 </div>
                                 <div class="ssa-block-status" id="ssaRsStatus"></div>
                                 <div class="ssa-rs-host" id="ssaRsHost"></div>
+                            </section>
+
+                            <section class="ssa-block" id="ssaFundFlowBlock" hidden>
+                                <h4 class="ssa-block-title">资金流向</h4>
+                                <div class="ssa-block-status" id="ssaFundFlowStatus"></div>
+                                <div class="ssa-fund-flow-host" id="ssaFundFlowHost"></div>
                             </section>
 
                             <section class="ssa-block" id="ssaLevelsBlock" hidden>

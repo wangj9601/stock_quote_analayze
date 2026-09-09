@@ -536,6 +536,28 @@ class StockFundFlowDaily(Base):
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
 
+
+class StockFundFlowDailyHK(Base):
+    """港股资金流日快照（文件采集）：流入/流出/净额/成交额（单位：元）。"""
+
+    __tablename__ = "stock_fund_flow_daily_hk"
+    code = Column(StockCodeTextPK(), primary_key=True)
+    trade_date = Column(String(10), primary_key=True)
+    name = Column(String)
+    inflow_amount = Column(Float)
+    outflow_amount = Column(Float)
+    net_amount = Column(Float)
+    turnover_amount = Column(Float)
+    change_percent = Column(Float)
+    turnover_rate = Column(Float)
+    current_price = Column(Float)
+    outer_volume = Column(Float)
+    inner_volume = Column(Float)
+    source = Column(String(20), default="file")
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+
 class StockRealtimeQuoteHK(Base):
     __tablename__ = "stock_realtime_quote_hk"
     code = Column(StockCodeTextPK(), primary_key=True)
@@ -551,6 +573,10 @@ class StockRealtimeQuoteHK(Base):
     low = Column(Float)
     open = Column(Float)
     pre_close = Column(Float)
+    # 港股资金流（与 stock_fund_flow_daily_hk 同步，单位：元）
+    inflow_amount = Column(Float)
+    outflow_amount = Column(Float)
+    net_amount = Column(Float)
     update_time = Column(DateTime)
     
     __table_args__ = (
@@ -847,6 +873,10 @@ class HistoricalQuotesHK(Base):
     thirty_day_change_percent = Column(Float)
     collected_source = Column(String)
     collected_date = Column(DateTime, default=datetime.now)
+    # 港股资金流（与 stock_fund_flow_daily_hk 同步，单位：元）
+    inflow_amount = Column(Float)
+    outflow_amount = Column(Float)
+    net_amount = Column(Float)
 
 class MACDIndicators(Base):
     """MACD指标数据表（A股和港股共用）"""

@@ -4,7 +4,7 @@
 历史数据采集API服务
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -2492,6 +2492,224 @@ async def upload_historical_file(
     except Exception as e:
         logger.error(f"文件上传失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
+
+
+@router.post("/upload-hk-historical-file")
+async def upload_hk_historical_file(
+    file: UploadFile = File(...),
+    trade_date: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """
+    上传港股历史/当日行情文件：自动解析（含同花顺伪 xls）、规范列，
+    并保存为 backend_core/data/hk_historical_quotes_YYYYMMDD.csv。
+    """
+    import tempfile
+
+    from datetime import date as date_cls
+
+    from backend_api.utils.trading_calendar_utils import is_market_session_closed
+    from backend_core.data_collectors.akshare.hk_historical_import_from_file import (
+        save_hk_historical_upload_as_csv,
+    )
+
+    original = file.filename or ""
+    ext = os.path.splitext(original)[1].lower()
+    if ext not in (".xlsx", ".xls", ".csv", ".txt"):
+        raise HTTPException(status_code=400, detail="仅支持 .xlsx / .xls / .csv / .txt")
+
+    resolved = (trade_date or "").strip() or None
+    if not resolved:
+        today = date_cls.today()
+        if is_market_session_closed(db, "HK", today):
+            raise HTTPException(
+                status_code=400,
+                detail="今日港股休市，请显式指定 trade_date（YYYY-MM-DD）",
+            )
+        resolved = today.strftime("%Y-%m-%d")
+    else:
+        s = resolved.replace("/", "-")
+        if len(s) == 8 and s.isdigit():
+            resolved = f"{s[:4]}-{s[4:6]}-{s[6:8]}"
+        try:
+            datetime.strptime(resolved, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="trade_date 格式错误，请使用 YYYY-MM-DD 或 YYYYMMDD",
+            )
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext or ".bin") as tmp:
+            shutil.copyfileobj(file.file, tmp)
+            tmp_path = tmp.name
+        result = save_hk_historical_upload_as_csv(tmp_path, resolved)
+        logger.info(
+            "港股历史行情文件已规范化: %s -> %s rows=%s trade_date=%s",
+            original,
+            result["filename"],
+            result["rows"],
+            result["trade_date"],
+        )
+        return {
+            "success": True,
+            "message": (
+                f"已规范保存为 {result['filename']}（{result['rows']} 行），"
+                f"采集时请选文件类型 CSV、日期 {result['trade_date']}"
+            ),
+            "original_filename": original,
+            **result,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("港股历史行情文件上传规范化失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"文件处理失败: {e}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+
+
+@router.post("/upload-hk-fund-flow-file")
+async def upload_hk_fund_flow_file(
+    file: UploadFile = File(...),
+    trade_date: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+):
+    """
+    上传港股资金流向文件到 backend_core/data/，并重命名为 hk_fund_flow_YYYYMMDD.{ext}。
+
+    trade_date：YYYY-MM-DD 或 YYYYMMDD；未传时若今日港股开市则用今日，否则须显式传入。
+    """
+    try:
+        from datetime import date as date_cls
+
+        from backend_api.utils.trading_calendar_utils import is_market_session_closed
+        from backend_core.data_collectors.akshare.hk_fund_flow_from_file import (
+            DATA_DIR,
+            FILE_PREFIX,
+            trade_date_to_yyyymmdd,
+            resolve_trade_date_str,
+        )
+
+        original = file.filename or ""
+        ext = os.path.splitext(original)[1].lower()
+        if ext not in (".xlsx", ".xls", ".csv"):
+            raise HTTPException(
+                status_code=400,
+                detail="仅支持 .xlsx / .xls / .csv 文件",
+            )
+
+        resolved = (trade_date or "").strip() or None
+        if not resolved:
+            today = date_cls.today()
+            if is_market_session_closed(db, "HK", today):
+                raise HTTPException(
+                    status_code=400,
+                    detail="今日港股休市，请显式指定 trade_date（YYYY-MM-DD）",
+                )
+            resolved = today.strftime("%Y-%m-%d")
+        else:
+            try:
+                resolved = resolve_trade_date_str(resolved)
+                datetime.strptime(resolved, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="trade_date 格式错误，请使用 YYYY-MM-DD 或 YYYYMMDD",
+                )
+
+        ymd = trade_date_to_yyyymmdd(resolved)
+        upload_dir = str(DATA_DIR)
+        os.makedirs(upload_dir, exist_ok=True)
+        saved_name = f"{FILE_PREFIX}{ymd}{ext}"
+        file_path = os.path.join(upload_dir, saved_name)
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        logger.info(
+            "港股资金流向文件上传成功: %s -> %s (trade_date=%s)",
+            original,
+            file_path,
+            resolved,
+        )
+        return {
+            "success": True,
+            "message": f"已保存为 {saved_name}",
+            "filename": saved_name,
+            "path": file_path,
+            "trade_date": resolved,
+            "original_filename": original,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("港股资金流向文件上传失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")
+
+
+@router.post("/hk-fund-flow/collect")
+async def collect_hk_fund_flow_manual(
+    trade_date: Optional[str] = Query(
+        None, description="交易日 YYYY-MM-DD；未传则用今日（与流程节点一致）"
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    手动触发港股资金流向文件采集（可指定交易日）。
+
+    读取 backend_core/data/hk_fund_flow_YYYYMMDD.* 并入库；
+    流程自动节点 hk_fund_flow_daily 仍只采执行当日，逻辑不变。
+    """
+    from datetime import date as date_cls
+
+    from backend_api.utils.trading_calendar_utils import is_market_session_closed
+    from backend_core.data_collectors.akshare.hk_fund_flow_from_file import (
+        collect_hk_fund_flow_from_file,
+        resolve_trade_date_str,
+    )
+
+    resolved = (trade_date or "").strip() or None
+    if not resolved:
+        today = date_cls.today()
+        if is_market_session_closed(db, "HK", today):
+            raise HTTPException(
+                status_code=400,
+                detail="今日港股休市，请显式指定 trade_date（YYYY-MM-DD）",
+            )
+        resolved = today.strftime("%Y-%m-%d")
+    else:
+        try:
+            resolved = resolve_trade_date_str(resolved)
+            datetime.strptime(resolved, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail="trade_date 格式错误，请使用 YYYY-MM-DD 或 YYYYMMDD",
+            )
+
+    try:
+        result = collect_hk_fund_flow_from_file(trade_date=resolved)
+    except Exception as e:
+        logger.error("港股资金流向手动采集异常 trade_date=%s: %s", resolved, e)
+        raise HTTPException(status_code=500, detail=f"采集失败: {e}")
+
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=400,
+            detail=result.get("error") or "采集失败（未找到对应交易日文件）",
+        )
+    return {
+        "success": True,
+        "message": f"港股资金流向采集完成（交易日 {resolved}）",
+        "data": result,
+    }
+
 
 @router.post("/historical", response_model=DataCollectionResponse)
 async def start_historical_collection(
