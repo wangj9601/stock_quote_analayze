@@ -3194,13 +3194,9 @@ const StockMultiStrategy = {
                   <span>最新净流入</span>
                   <strong class="${clsYi(latest && latest.net_amount)}">${fmtYi(latest && latest.net_amount)}</strong>
                 </div>
-                <div class="ssa-fund-flow-metric">
+                <div class="ssa-fund-flow-metric" title="区间内每日净流入代数和（正负相加）">
                   <span>区间净流入合计</span>
                   <strong class="${clsYi(analysis.net_sum)}">${fmtYi(analysis.net_sum)}</strong>
-                </div>
-                <div class="ssa-fund-flow-metric">
-                  <span>区间净流入变化</span>
-                  <strong class="${clsYi(analysis.net_change)}">${fmtYi(analysis.net_change)}</strong>
                 </div>
               </div>
               <div class="ssa-fund-flow-table-wrap">
@@ -3211,7 +3207,7 @@ const StockMultiStrategy = {
                   <tbody>${rowsHtml}</tbody>
                 </table>
               </div>
-              <p class="ssa-fund-flow-hint">口径：同花顺/文件采集入库的流入、流出、净额（元）；详情页「资金流向」Tab 可查看近 20 日图表。</p>
+              <p class="ssa-fund-flow-hint">口径：同花顺/文件采集入库的流入、流出、净额（元）。「区间净流入合计」= 区间内每日净流入代数和（含正负）。详情页「资金流向」Tab 可查看近 20 日图表。</p>
             </div>`;
     },
 

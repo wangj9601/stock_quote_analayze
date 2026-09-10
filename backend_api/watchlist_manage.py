@@ -7,7 +7,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, and_
 from pydantic import BaseModel
 
 from .models import (
@@ -21,6 +21,33 @@ from .auth import get_current_user
 from .permissions import require_permission
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
+
+
+def _latest_quotes_by_codes(db: Session, model, codes: list):
+    """按代码取各自最新一条行情（避免全局最新日缺票导致无数据）。"""
+    if not codes:
+        return []
+    subq = (
+        db.query(
+            model.code.label("code"),
+            func.max(model.trade_date).label("max_date"),
+        )
+        .filter(model.code.in_(codes))
+        .group_by(model.code)
+        .subquery()
+    )
+    return (
+        db.query(model)
+        .join(
+            subq,
+            and_(
+                model.code == subq.c.code,
+                model.trade_date == subq.c.max_date,
+            ),
+        )
+        .all()
+    )
+
 
 @router.get("", response_model=None)
 async def get_watchlist(
@@ -62,54 +89,29 @@ async def get_watchlist(
 
         today = datetime.now().strftime('%Y-%m-%d')
         today_pattern = f"{today}%"
-        
-        # 1. 先从A股实时行情表查询
+
+        # 1. 优先取当日；缺票再按代码回退到各自最新交易日
         quotes_today_a = db.query(StockRealtimeQuote).filter(
             StockRealtimeQuote.code.in_(unique_codes),
             StockRealtimeQuote.trade_date.like(today_pattern)
         ).all()
-        print(f"[watchlist] A股当日行情数量: {len(quotes_today_a)}")
+        quote_map_a = {q.code: q for q in quotes_today_a}
+        missing_a = [c for c in unique_codes if c not in quote_map_a]
+        if missing_a:
+            for q in _latest_quotes_by_codes(db, StockRealtimeQuote, missing_a):
+                quote_map_a.setdefault(q.code, q)
+        print(f"[watchlist] A股行情数量: 当日={len(quotes_today_a)} 合计={len(quote_map_a)}")
 
-        quotes_a = quotes_today_a
-        target_trade_date_a = today
-
-        if not quotes_a:
-            latest_trade_date_a = db.query(func.max(StockRealtimeQuote.trade_date)).scalar()
-            if latest_trade_date_a:
-                quotes_a = db.query(StockRealtimeQuote).filter(
-                    StockRealtimeQuote.code.in_(unique_codes),
-                    StockRealtimeQuote.trade_date == latest_trade_date_a
-                ).all()
-                target_trade_date_a = latest_trade_date_a
-                print(f"[watchlist] A股当日无数据，回退至最新交易日 {latest_trade_date_a}，行情数量: {len(quotes_a)}")
-
-        # 2. 从港股实时行情表查询
         quotes_today_hk = db.query(StockRealtimeQuoteHK).filter(
             StockRealtimeQuoteHK.code.in_(unique_codes),
             StockRealtimeQuoteHK.trade_date.like(today_pattern)
         ).all()
-        print(f"[watchlist] 港股当日行情数量: {len(quotes_today_hk)}")
-
-        quotes_hk = quotes_today_hk
-        target_trade_date_hk = today
-
-        if not quotes_hk:
-            latest_trade_date_hk = db.query(func.max(StockRealtimeQuoteHK.trade_date)).scalar()
-            if latest_trade_date_hk:
-                quotes_hk = db.query(StockRealtimeQuoteHK).filter(
-                    StockRealtimeQuoteHK.code.in_(unique_codes),
-                    StockRealtimeQuoteHK.trade_date == latest_trade_date_hk
-                ).all()
-                target_trade_date_hk = latest_trade_date_hk
-                print(f"[watchlist] 港股当日无数据，回退至最新交易日 {latest_trade_date_hk}，行情数量: {len(quotes_hk)}")
-
-        # 3. 合并行情数据：A股优先，港股作为补充
-        quote_map_a = {q.code: q for q in quotes_a}
-        quote_map_hk = {q.code: q for q in quotes_hk}
-        
-        # 找出在A股中不存在的代码，从港股中补充
-        codes_not_in_a = set(unique_codes) - set(quote_map_a.keys())
-        print(f"[watchlist] A股中不存在的代码数量: {len(codes_not_in_a)}")
+        quote_map_hk = {q.code: q for q in quotes_today_hk}
+        missing_hk = [c for c in unique_codes if c not in quote_map_hk]
+        if missing_hk:
+            for q in _latest_quotes_by_codes(db, StockRealtimeQuoteHK, missing_hk):
+                quote_map_hk.setdefault(q.code, q)
+        print(f"[watchlist] 港股行情数量: 当日={len(quotes_today_hk)} 合计={len(quote_map_hk)}")
 
         for row in watchlist_rows:
             code = row.stock_code
@@ -119,7 +121,7 @@ async def get_watchlist(
             if not q:
                 q_hk = quote_map_hk.get(code)
                 if q_hk:
-                    print(f"[watchlist] {code} 从港股表获取行情数据")
+                    print(f"[watchlist] {code} 从港股表获取行情数据 trade_date={getattr(q_hk, 'trade_date', None)}")
                     # 使用港股数据，字段映射
                     watchlist.append({
                         'code': code,

@@ -146,6 +146,13 @@ except ImportError as e:
     sbbr_frontend_router = None
 
 try:
+    from .stock.csb_frontend_routes import router as csb_frontend_router
+    print("csb_frontend_router 导入成功")
+except ImportError as e:
+    print(f"csb_frontend_router 导入失败: {e}")
+    csb_frontend_router = None
+
+try:
     from .stock.urt_public_frontend_routes import router as urt_public_frontend_router
     print("urt_public_frontend_router 导入成功")
 except ImportError as e:
@@ -1055,6 +1062,19 @@ if urt_admin_router is not None:
 else:
     print("URT admin 路由未注册")
 
+try:
+    from backend_api.admin.csb_admin_routes import router as csb_admin_router
+    print("csb_admin_router 导入成功")
+except Exception as e:
+    print(f"csb_admin_router 导入失败: {e}")
+    csb_admin_router = None
+
+if csb_admin_router is not None:
+    app.include_router(csb_admin_router)
+    print("CSB admin 路由注册成功 (/api/admin/csb)")
+else:
+    print("CSB admin 路由未注册")
+
 # 环境数据同步（生产网关 + 管理端包装）
 try:
     from backend_api.env_sync.gateway_routes import router as env_sync_gateway_router
@@ -1098,6 +1118,10 @@ if urt_frontend_router is not None:
 if sbbr_frontend_router is not None:
     app.include_router(sbbr_frontend_router)
     print("SBBR frontend 路由注册成功 (/api/stock/sbbr-signal-*)")
+
+if csb_frontend_router is not None:
+    app.include_router(csb_frontend_router)
+    print("CSB frontend 路由注册成功 (/api/stock/csb/*)")
 
 if urt_public_frontend_router is not None:
     app.include_router(urt_public_frontend_router)

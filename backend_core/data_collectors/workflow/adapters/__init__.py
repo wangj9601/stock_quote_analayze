@@ -495,6 +495,13 @@ def _rpe_cn() -> Any:
     return True
 
 
+def _csb_cn() -> Any:
+    from backend_core.strategies.csb.scheduled_precompute import scheduled_csb_signals_cn
+
+    scheduled_csb_signals_cn()
+    return True
+
+
 def _rs_rating_cn() -> Any:
     from backend_core.indicators.rs_rating.scheduled_precompute import scheduled_rs_rating_cn
 
@@ -634,6 +641,7 @@ exec_urt_cn = _wrap_plain(_urt_cn, "URT信号预计算(A股)")
 exec_urt_hk = _wrap_plain(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
 exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
+exec_csb_cn = _wrap_plain(_csb_cn, "CSB信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
 exec_ths_fund_flow_daily = _wrap_cn(_ths_fund_flow_daily, "同花顺资金流入流出日采")

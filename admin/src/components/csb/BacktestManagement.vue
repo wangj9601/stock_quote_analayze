@@ -1,0 +1,970 @@
+<template>
+  <div class="csb-backtest">
+    <el-card shadow="never" header="创建回测任务">
+      <el-form label-width="110px" class="task-form">
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="任务名称">
+              <el-input v-model="form.task_name" placeholder="可选，默认自动生成" clearable />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="参数版本">
+              <el-select
+                v-model="form.strategy_config_id"
+                class="w-full"
+                filterable
+                @change="onStrategyConfigChange"
+              >
+                <el-option
+                  v-for="c in configs"
+                  :key="c.id"
+                  :label="`${c.name}${c.is_default ? ' (默认/生效)' : ''}`"
+                  :value="c.id"
+                />
+              </el-select>
+              <div v-if="configDivergeHint" class="hint warn">{{ configDivergeHint }}</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="开始日期" required>
+              <el-date-picker v-model="form.start_date" type="date" value-format="YYYY-MM-DD" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="结束日期" required>
+              <el-date-picker v-model="form.end_date" type="date" value-format="YYYY-MM-DD" class="w-full" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="目标涨幅下限(%)">
+              <el-input-number v-model="targetPctMinPercent" :min="0.1" :max="100" :step="0.5" :precision="2" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="目标涨幅上限(%)">
+              <el-input-number v-model="targetPctMaxPercent" :min="0.1" :max="100" :step="0.5" :precision="2" class="w-full" />
+              <span class="hint">缺省 10%～10%。命中率=最大涨幅 ≥ 下限；上下限不等时上限/「落在区间内」为辅助统计</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="观察日数">
+              <el-input-number v-model="form.horizon_days" :min="1" :max="120" class="w-full" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="最低得分">
+              <el-input-number
+                v-model="form.min_score"
+                :min="0"
+                :max="100"
+                :step="5"
+                class="w-full"
+                controls-position="right"
+                :value-on-clear="undefined"
+                placeholder="用参数版本"
+              />
+              <span class="hint">空=使用所选参数版本的 min_score（当前包内 {{ packageMinScoreLabel }}）</span>
+              <div v-if="minScoreDivergeHint" class="hint warn">{{ minScoreDivergeHint }}</div>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="股票池">
+              <el-select v-model="form.stock_pool_mode" class="w-full" @change="onStockPoolModeChange">
+                <el-option label="全市场" value="all" />
+                <el-option label="GMS观察股" value="gms_watchlist" />
+                <el-option label="自选股" value="watchlist" />
+                <el-option label="行业板块" value="industry_board" />
+                <el-option label="概念板块" value="concept_board" />
+                <el-option label="单股回测" value="single" />
+                <el-option label="自定义列表" value="custom" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="优先读缓存">
+              <el-switch v-model="form.use_trace" />
+              <span class="hint">全市场务必开启：用预计算信号，避免逐日实时扫五千只。关掉约需十余小时。</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="信号质量">
+              <el-select v-model="form.signal_quality_mode" class="w-full">
+                <el-option label="标准（排除均线多头分中段）" value="standard" />
+                <el-option label="精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）" value="premium" />
+              </el-select>
+              <span class="hint">标准模式默认排除 f_ma_bull∈[4,7)；精选再筛近支撑、过高得分、贴身HVZ强压</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="出场模式">
+              <el-select v-model="form.exit_mode" class="w-full">
+                <el-option label="命中率（不止损）" value="hit_rate" />
+                <el-option label="纪律出场（止损/连跌/回撤）" value="risk_exit" />
+                <el-option label="结构出场（支撑止损/阻力止盈）" value="structure_exit" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col v-if="form.exit_mode !== 'hit_rate'" :span="12">
+            <el-form-item label="命中率对照">
+              <el-switch v-model="form.compare_hit_rate" />
+              <span class="hint">完成后自动再跑一条同配置「命中率（不止损）」</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row :gutter="16">
+          <el-col :span="24">
+            <el-form-item label="A股板块">
+              <el-radio-group v-model="cnBoardSegment">
+                <el-radio label="ALL">全部A股</el-radio>
+                <el-radio label="MAIN">主板</el-radio>
+                <el-radio label="CYB">创业板</el-radio>
+                <el-radio label="SZ_SME">中小板</el-radio>
+                <el-radio label="KCB">科创板</el-radio>
+                <el-radio label="BJ">北证</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row v-if="form.stock_pool_mode === 'single'" :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="股票代码" required>
+              <el-input v-model="form.stock_code" placeholder="如 000676" clearable />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row v-if="form.stock_pool_mode === 'custom'" :gutter="16">
+          <el-col :span="24">
+            <el-form-item label="股票列表" required>
+              <el-input
+                v-model="form.stock_list"
+                type="textarea"
+                :rows="3"
+                placeholder="多个代码用逗号或换行分隔，如 000001,000676"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row v-if="form.stock_pool_mode === 'watchlist'" :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="自选股范围">
+              <el-radio-group v-model="watchlistScope">
+                <el-radio label="all">全部用户</el-radio>
+                <el-radio label="user">指定用户</el-radio>
+              </el-radio-group>
+            </el-form-item>
+          </el-col>
+          <el-col v-if="watchlistScope === 'user'" :span="12">
+            <el-form-item label="用户">
+              <el-select v-model="watchlistUserId" filterable clearable placeholder="选择用户" class="w-full">
+                <el-option
+                  v-for="u in watchlistUsers"
+                  :key="u.user_id"
+                  :label="`${u.username}（${u.watchlist_count}）`"
+                  :value="u.user_id"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row v-if="form.stock_pool_mode === 'industry_board'" :gutter="16">
+          <el-col :span="24">
+            <el-form-item label="行业板块" required>
+              <el-select
+                v-model="selectedIndustryBoardCodes"
+                multiple
+                filterable
+                remote
+                :remote-method="searchIndustryBoards"
+                :loading="industryBoardLoading"
+                placeholder="搜索并选择行业板块"
+                class="w-full"
+              >
+                <el-option
+                  v-for="b in industryBoardOptions"
+                  :key="b.board_code"
+                  :label="`${b.board_name}（${b.board_code}）`"
+                  :value="b.board_code"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-row v-if="form.stock_pool_mode === 'concept_board'" :gutter="16">
+          <el-col :span="24">
+            <el-form-item label="概念板块" required>
+              <el-select
+                v-model="selectedConceptBoardCodes"
+                multiple
+                filterable
+                remote
+                :remote-method="searchConceptBoards"
+                :loading="conceptBoardLoading"
+                placeholder="搜索并选择概念板块"
+                class="w-full"
+              >
+                <el-option
+                  v-for="b in conceptBoardOptions"
+                  :key="b.board_code"
+                  :label="`${b.board_name}（${b.board_code}）`"
+                  :value="b.board_code"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-alert
+          v-if="form.stock_pool_mode === 'all' && !form.use_trace"
+          type="warning"
+          show-icon
+          :closable="false"
+          class="mb-3"
+          title="全市场未开「优先读缓存」会按交易日实时扫描约五千只，进度可能长时间停在个位数。请开启缓存；区间缺数时任务会先自动补预计算。"
+        />
+        <el-form-item>
+          <el-button type="primary" :loading="creating" @click="createTask">创建并运行</el-button>
+          <el-button :loading="precomputing" @click="openPrecomputeDialog">手动预计算（单日）</el-button>
+          <el-button :loading="traceRefreshing" @click="openTraceRefreshDialog">强制刷新区间预计算</el-button>
+          <el-button type="danger" plain :loading="tracePurging" @click="confirmPurgeTrace">清空该版本 trace</el-button>
+        </el-form-item>
+        <el-form-item>
+          <span class="hint">
+            单日预计算只写选定交易日。改参数或要与实时扫对齐时：先「清空 trace」或「强制刷新区间」（与回测同引擎），再开「优先读缓存」创建任务。
+            <template v-if="traceStatsLabel">当前 trace：{{ traceStatsLabel }}</template>
+          </span>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
+    <el-dialog v-model="precomputeVisible" title="CSB 信号预计算（单日）" width="440px">
+      <el-form label-width="90px">
+        <el-form-item label="交易日" required>
+          <el-date-picker
+            v-model="precomputeDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="选择交易日"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="市场">
+          <el-radio-group v-model="precomputeMarket">
+            <el-radio-button label="CN">A股</el-radio-button>
+            <el-radio-button label="HK">港股</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="参数版本">
+          <span>{{ form.strategy_config_id ? `ID ${form.strategy_config_id}` : '默认/全部启用版本' }}</span>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="precomputeVisible = false">取消</el-button>
+        <el-button type="primary" :loading="precomputing" @click="runPrecompute">启动</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="traceRefreshVisible" title="强制刷新区间预计算" width="480px">
+      <el-alert
+        type="warning"
+        show-icon
+        :closable="false"
+        class="mb-3"
+        title="将先删除所选参数版本的全部 csb_signal_trace，再按区间全市场一次扫描写入（与关缓存实时扫同源）。任务在后台执行，耗时可与全市场回测补预计算相当。"
+      />
+      <el-form label-width="100px">
+        <el-form-item label="参数版本" required>
+          <el-select v-model="traceRefreshConfigId" filterable placeholder="选择参数版本" class="w-full">
+            <el-option
+              v-for="c in configs"
+              :key="c.id"
+              :label="`${c.name}${c.is_default ? ' (默认)' : ''} · ID ${c.id}`"
+              :value="c.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="开始日期" required>
+          <el-date-picker v-model="traceRefreshStart" type="date" value-format="YYYY-MM-DD" class="w-full" />
+        </el-form-item>
+        <el-form-item label="结束日期" required>
+          <el-date-picker v-model="traceRefreshEnd" type="date" value-format="YYYY-MM-DD" class="w-full" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="traceRefreshVisible = false">取消</el-button>
+        <el-button type="primary" :loading="traceRefreshing" @click="runTraceRefresh">启动刷新</el-button>
+      </template>
+    </el-dialog>
+
+    <el-card class="mt-3" shadow="never">
+      <template #header>
+        <div class="list-header">
+          <span>任务列表</span>
+          <div class="list-actions">
+            <el-select v-model="statusFilter" clearable placeholder="状态筛选" style="width: 130px" @change="loadTasks">
+              <el-option label="全部" value="" />
+              <el-option label="pending" value="pending" />
+              <el-option label="running" value="running" />
+              <el-option label="completed" value="completed" />
+              <el-option label="failed" value="failed" />
+              <el-option label="cancelled" value="cancelled" />
+            </el-select>
+            <el-button size="small" @click="loadTasks">刷新</el-button>
+            <el-button size="small" type="danger" plain :disabled="!selectedIds.length" @click="batchDelete">批量删除</el-button>
+          </div>
+        </div>
+      </template>
+      <el-table
+        :data="tasks"
+        v-loading="loading"
+        size="small"
+        @selection-change="onSelectionChange"
+      >
+        <el-table-column type="selection" width="42" />
+        <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+        <el-table-column prop="status" label="状态" width="100" />
+        <el-table-column prop="progress" label="进度" width="70" />
+        <el-table-column label="股票池" width="110">
+          <template #default="{ row }">{{ poolModeLabel(row.config?.stock_pool_mode) }}</template>
+        </el-table-column>
+        <el-table-column label="出场模式" width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ exitModeLabel(resolveExitMode(row)) }}</template>
+        </el-table-column>
+        <el-table-column label="摘要" min-width="240">
+            <template #default="{ row }">
+            <span v-if="row.summary">
+              信号 {{ row.summary.total_signals ?? 0 }} · 命中率 {{ pct(row.summary.hit_rate) }}
+              <template v-if="isHitRateMode(row) && isTargetRangeOpen(row)">
+                · 落在区间内 {{ pct(row.summary.in_band_rate) }}
+                · 上限触及 {{ pct(row.summary.hit_rate_upper) }}
+              </template>
+              <template v-if="isHitRateMode(row)">
+                · 均最大涨幅 {{ row.summary.avg_max_gain_pct ?? '-' }}%
+              </template>
+              <template v-else>
+                · 胜率 {{ pct(row.summary.win_rate) }} · 均盈亏 {{ row.summary.avg_pnl_pct }}%
+              </template>
+            </span>
+            <span v-else>{{ row.message || '--' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="完成时间" width="168">
+          <template #default="{ row }">{{ formatDateTime(row.completed_at) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="300" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openDetail(row.task_id)">详情</el-button>
+            <el-button link @click="exportCsv(row.task_id)" :disabled="!row.has_details_csv">导出</el-button>
+            <el-button link @click="rerun(row.task_id)" :disabled="['pending','running'].includes(row.status)">重跑</el-button>
+            <el-button link type="warning" @click="cancel(row.task_id)" :disabled="['completed','failed','cancelled'].includes(row.status)">取消</el-button>
+            <el-button link type="danger" @click="remove(row.task_id)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <CsbTaskDetail
+      v-model="detailVisible"
+      :task-id="selectedTaskId"
+      @task-updated="onTaskUpdated"
+    />
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { csbApiService, type CSBStrategyConfig } from '@/services/csbApi'
+import { boardConstituentsService, type BoardSummary } from '@/services/boardConstituents.service'
+import CsbTaskDetail from './TaskDetail.vue'
+
+const form = reactive({
+  task_name: '',
+  start_date: '',
+  end_date: '',
+  target_pct: 0.1,
+  target_pct_max: 0.1,
+  horizon_days: 10,
+  min_score: undefined as number | undefined,
+  strategy_config_id: undefined as number | undefined,
+  use_trace: true,
+  exit_mode: 'hit_rate' as 'hit_rate' | 'risk_exit' | 'structure_exit',
+  compare_hit_rate: true,
+  signal_quality_mode: 'standard' as 'standard' | 'premium',
+  stock_pool_mode: 'all',
+  stock_code: '',
+  stock_list: '',
+})
+
+function clampPctDecimal(v: number) {
+  return Math.min(1, Math.max(0.001, Number(v)))
+}
+
+const targetPctMinPercent = computed({
+  get: () => Math.round(form.target_pct * 10000) / 100,
+  set: (v: number | undefined) => {
+    if (v == null) return
+    form.target_pct = clampPctDecimal(Number(v) / 100)
+    if (form.target_pct > form.target_pct_max) {
+      form.target_pct_max = form.target_pct
+    }
+  },
+})
+
+const targetPctMaxPercent = computed({
+  get: () => Math.round(form.target_pct_max * 10000) / 100,
+  set: (v: number | undefined) => {
+    if (v == null) return
+    form.target_pct_max = clampPctDecimal(Number(v) / 100)
+    if (form.target_pct_max < form.target_pct) {
+      form.target_pct = form.target_pct_max
+    }
+  },
+})
+
+const cnBoardSegment = ref<'ALL' | 'MAIN' | 'CYB' | 'SZ_SME' | 'KCB' | 'BJ'>('ALL')
+const watchlistScope = ref<'all' | 'user'>('all')
+const watchlistUserId = ref<number | undefined>()
+const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
+const selectedIndustryBoardCodes = ref<string[]>([])
+const selectedConceptBoardCodes = ref<string[]>([])
+const industryBoardOptions = ref<BoardSummary[]>([])
+const conceptBoardOptions = ref<BoardSummary[]>([])
+const industryBoardLoading = ref(false)
+const conceptBoardLoading = ref(false)
+
+const configs = ref<CSBStrategyConfig[]>([])
+const effectiveConfigId = computed(() => {
+  const d = configs.value.find((c) => c.is_default)
+  return d?.id
+})
+
+const selectedConfig = computed(() => {
+  const id = form.strategy_config_id
+  if (id == null) return null
+  return configs.value.find((c) => c.id === id) || null
+})
+
+const packageMinScore = computed(() => {
+  const p = selectedConfig.value?.config_params as Record<string, any> | undefined
+  const v = p?.min_score
+  return v == null || Number.isNaN(Number(v)) ? null : Number(v)
+})
+
+const packageMinScoreLabel = computed(() =>
+  packageMinScore.value == null ? '—' : String(packageMinScore.value),
+)
+
+const configDivergeHint = computed(() => {
+  if (form.strategy_config_id == null || effectiveConfigId.value == null) return ''
+  if (form.strategy_config_id === effectiveConfigId.value) return ''
+  return '已选非生效（非默认）版本，与前台日常选股/信号跟踪可能不一致'
+})
+
+const minScoreDivergeHint = computed(() => {
+  if (form.min_score == null || packageMinScore.value == null) return ''
+  if (Number(form.min_score) === Number(packageMinScore.value)) return ''
+  return `最低得分已偏离参数版本（${packageMinScore.value}），将覆盖策略包并标记为偏离`
+})
+
+const traceStatsLabel = computed(() => {
+  const cid = resolveTraceConfigId()
+  if (cid == null || traceStatsRows.value == null) return ''
+  return `版本 ID ${cid} 约 ${traceStatsRows.value} 行`
+})
+
+function resolveTraceConfigId(): number | undefined {
+  if (form.strategy_config_id != null) return form.strategy_config_id
+  if (effectiveConfigId.value != null) return effectiveConfigId.value
+  return undefined
+}
+
+async function loadTraceStats() {
+  const cid = resolveTraceConfigId()
+  if (cid == null) {
+    traceStatsRows.value = null
+    return
+  }
+  try {
+    const data = await csbApiService.getTraceStats(cid)
+    traceStatsRows.value = data?.total_rows ?? null
+  } catch {
+    traceStatsRows.value = null
+  }
+}
+
+function syncMinScoreFromSelectedConfig(forceClear = true) {
+  if (forceClear) {
+    form.min_score = undefined
+  }
+}
+
+function onStrategyConfigChange() {
+  syncMinScoreFromSelectedConfig(true)
+  void loadTraceStats()
+}
+const tasks = ref<any[]>([])
+const loading = ref(false)
+const creating = ref(false)
+const precomputing = ref(false)
+const precomputeVisible = ref(false)
+const precomputeDate = ref(new Date().toISOString().slice(0, 10))
+const precomputeMarket = ref<'CN' | 'HK'>('CN')
+const tracePurging = ref(false)
+const traceRefreshing = ref(false)
+const traceRefreshVisible = ref(false)
+const traceRefreshConfigId = ref<number | undefined>()
+const traceRefreshStart = ref('')
+const traceRefreshEnd = ref('')
+const traceStatsRows = ref<number | null>(null)
+const statusFilter = ref('')
+const selectedIds = ref<string[]>([])
+const detailVisible = ref(false)
+const selectedTaskId = ref('')
+let timer: number | undefined
+
+function pct(v: any) {
+  if (v == null) return '--'
+  return `${(Number(v) * 100).toFixed(1)}%`
+}
+
+/** 列表展示：未完成显示 --；ISO/UTC 转为本地 YYYY-MM-DD HH:mm:ss */
+function formatDateTime(v: unknown) {
+  if (v == null || v === '') return '--'
+  const raw = String(v).trim()
+  const d = new Date(raw.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(raw) ? raw : raw + 'Z')
+  if (Number.isNaN(d.getTime())) return raw
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
+}
+
+function poolModeLabel(mode?: string) {
+  const map: Record<string, string> = {
+    all: '全市场',
+    gms_watchlist: 'GMS观察股',
+    watchlist: '自选股',
+    industry_board: '行业板块',
+    concept_board: '概念板块',
+    single: '单股',
+    custom: '自定义',
+  }
+  return map[mode || 'all'] || mode || '全市场'
+}
+
+function resolveExitMode(row: any): string {
+  const raw =
+    row?.summary?.exit_mode ||
+    row?.config?.exit_mode ||
+    row?.summary?.risk_params?.exit_mode ||
+    row?.config?.risk_params?.exit_mode ||
+    row?.summary?.backtest_mode ||
+    ''
+  const m = String(raw || '').trim().toLowerCase()
+  if (m === 'structure_exit') return 'structure_exit'
+  if (m === 'risk_exit') return 'risk_exit'
+  if (m === 'signal_hit_rate' || m === 'hit_rate') return 'hit_rate'
+  // 旧任务：仅有 apply_stop_loss 时推断
+  if (row?.summary?.apply_stop_loss === true) return 'risk_exit'
+  return 'hit_rate'
+}
+
+function isHitRateMode(row: any): boolean {
+  return resolveExitMode(row) === 'hit_rate'
+}
+
+function isTargetRangeOpen(row: any): boolean {
+  const s = row?.summary || row?.config
+  if (!s) return false
+  if (s.target_range_open === true) return true
+  const lo = Number(s.target_pct || 0)
+  const hi = s.target_pct_max == null || s.target_pct_max === '' ? lo : Number(s.target_pct_max)
+  return Number.isFinite(hi) && Math.abs(hi - lo) > 1e-9
+}
+
+function exitModeLabel(mode?: string) {
+  const map: Record<string, string> = {
+    hit_rate: '命中率(不止损)',
+    risk_exit: '纪律出场',
+    structure_exit: '结构出场',
+  }
+  const m = String(mode || 'hit_rate').trim().toLowerCase()
+  return map[m] || m || '命中率(不止损)'
+}
+
+function onStockPoolModeChange() {
+  if (form.stock_pool_mode === 'industry_board') void searchIndustryBoards('')
+  if (form.stock_pool_mode === 'concept_board') void searchConceptBoards('')
+  if (form.stock_pool_mode === 'watchlist') void loadWatchlistUsers()
+}
+
+async function searchIndustryBoards(keyword = '') {
+  industryBoardLoading.value = true
+  try {
+    const res = await boardConstituentsService.listBoards({
+      boardType: 'industry',
+      keyword: keyword.trim() || undefined,
+      page: 1,
+      pageSize: 80,
+    })
+    industryBoardOptions.value = res.data || []
+  } catch {
+    industryBoardOptions.value = []
+  } finally {
+    industryBoardLoading.value = false
+  }
+}
+
+async function searchConceptBoards(keyword = '') {
+  conceptBoardLoading.value = true
+  try {
+    const res = await boardConstituentsService.listBoards({
+      boardType: 'concept',
+      keyword: keyword.trim() || undefined,
+      page: 1,
+      pageSize: 80,
+    })
+    conceptBoardOptions.value = res.data || []
+  } catch {
+    conceptBoardOptions.value = []
+  } finally {
+    conceptBoardLoading.value = false
+  }
+}
+
+async function loadWatchlistUsers() {
+  try {
+    watchlistUsers.value = await csbApiService.getWatchlistUsers()
+  } catch {
+    watchlistUsers.value = []
+  }
+}
+
+async function loadConfigs() {
+  configs.value = await csbApiService.listStrategyConfigs(true)
+  const def = configs.value.find((c) => c.is_default) || configs.value[0]
+  if (def?.id != null) {
+    form.strategy_config_id = def.id
+  }
+  syncMinScoreFromSelectedConfig(true)
+  await loadTraceStats()
+}
+
+async function loadTasks() {
+  loading.value = true
+  try {
+    tasks.value = await csbApiService.listBacktests(50, statusFilter.value || undefined)
+  } catch (e: any) {
+    ElMessage.error(e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function parseCustomPool(text: string): string[] {
+  return text
+    .split(/[\s,;，；\n\r]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+async function createTask() {
+  if (!form.start_date || !form.end_date) {
+    ElMessage.warning('请填写日期区间')
+    return
+  }
+  const mode = form.stock_pool_mode
+  if (mode === 'single' && !form.stock_code.trim()) {
+    ElMessage.warning('请填写股票代码')
+    return
+  }
+  if (mode === 'custom' && !parseCustomPool(form.stock_list).length) {
+    ElMessage.warning('请填写自定义股票列表')
+    return
+  }
+  if (mode === 'watchlist' && watchlistScope.value === 'user' && !watchlistUserId.value) {
+    ElMessage.warning('请选择自选股用户')
+    return
+  }
+  if (mode === 'industry_board' && !selectedIndustryBoardCodes.value.length) {
+    ElMessage.warning('请选择行业板块')
+    return
+  }
+  if (mode === 'concept_board' && !selectedConceptBoardCodes.value.length) {
+    ElMessage.warning('请选择概念板块')
+    return
+  }
+  if (mode === 'all' && !form.use_trace) {
+    try {
+      await ElMessageBox.confirm(
+        '全市场未开启「优先读缓存」会按每个交易日实时扫描约五千只，可能十余小时。建议取消并打开缓存（缺数时任务会自动补预计算）。仍要继续？',
+        '扫描会很慢',
+        { type: 'warning', confirmButtonText: '仍要运行', cancelButtonText: '去开缓存' },
+      )
+    } catch {
+      return
+    }
+  }
+
+  if (configDivergeHint.value || minScoreDivergeHint.value) {
+    try {
+      await ElMessageBox.confirm(
+        [configDivergeHint.value, minScoreDivergeHint.value].filter(Boolean).join('\n'),
+        '参数与前台生效配置不一致',
+        { type: 'warning', confirmButtonText: '仍要创建', cancelButtonText: '返回修改' },
+      )
+    } catch {
+      return
+    }
+  }
+
+  creating.value = true
+  try {
+    const body: Record<string, any> = {
+      start_date: form.start_date,
+      end_date: form.end_date,
+      task_name: form.task_name || undefined,
+      target_pct: form.target_pct,
+      target_pct_max: form.target_pct_max,
+      horizon_days: form.horizon_days,
+      strategy_config_id: form.strategy_config_id,
+      use_trace: form.use_trace,
+      exit_mode: form.exit_mode,
+      compare_hit_rate: form.exit_mode === 'hit_rate' ? false : form.compare_hit_rate,
+      signal_quality_mode: form.signal_quality_mode,
+      stock_pool_mode: mode,
+      cn_board_segment: cnBoardSegment.value === 'ALL' ? undefined : cnBoardSegment.value,
+    }
+    // 空=不覆盖，使用参数版本 min_score（禁止静默写死 70）
+    if (form.min_score != null && form.min_score !== ('' as any)) {
+      body.min_score = form.min_score
+    }
+    if (mode === 'single') body.stock_code = form.stock_code.trim()
+    if (mode === 'custom') body.stock_pool = parseCustomPool(form.stock_list)
+    if (mode === 'watchlist' && watchlistScope.value === 'user') {
+      body.watchlist_user_id = watchlistUserId.value
+    }
+    if (mode === 'industry_board') body.industry_board_codes = selectedIndustryBoardCodes.value
+    if (mode === 'concept_board') body.concept_board_codes = selectedConceptBoardCodes.value
+
+    await csbApiService.createBacktest(body)
+    ElMessage.success('任务已创建')
+    await loadTasks()
+  } catch (e: any) {
+    ElMessage.error(e.message || '创建失败')
+  } finally {
+    creating.value = false
+  }
+}
+
+function openPrecomputeDialog() {
+  precomputeDate.value = form.end_date || new Date().toISOString().slice(0, 10)
+  precomputeVisible.value = true
+}
+
+async function runPrecompute() {
+  if (!precomputeDate.value) {
+    ElMessage.warning('请选择交易日')
+    return
+  }
+  precomputing.value = true
+  try {
+    await csbApiService.runPrecompute({
+      date: precomputeDate.value,
+      config_id: form.strategy_config_id,
+      market: precomputeMarket.value,
+    })
+    ElMessage.success(`预计算已启动（${precomputeMarket.value} / ${precomputeDate.value}）`)
+    precomputeVisible.value = false
+    await loadTraceStats()
+  } catch (e: any) {
+    ElMessage.error(e.message || '启动失败')
+  } finally {
+    precomputing.value = false
+  }
+}
+
+function openTraceRefreshDialog() {
+  const cid = resolveTraceConfigId()
+  if (cid == null) {
+    ElMessage.warning('请先选择参数版本')
+    return
+  }
+  if (!form.start_date || !form.end_date) {
+    ElMessage.warning('请填写回测开始/结束日期作为刷新区间')
+    return
+  }
+  traceRefreshConfigId.value = cid
+  traceRefreshStart.value = form.start_date
+  traceRefreshEnd.value = form.end_date
+  traceRefreshVisible.value = true
+}
+
+async function runTraceRefresh() {
+  const cid = traceRefreshConfigId.value
+  if (cid == null) {
+    ElMessage.warning('请选择参数版本')
+    return
+  }
+  if (!traceRefreshStart.value || !traceRefreshEnd.value) {
+    ElMessage.warning('请填写日期区间')
+    return
+  }
+  if (traceRefreshStart.value > traceRefreshEnd.value) {
+    ElMessage.warning('开始日期不能晚于结束日期')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将删除参数版本 ID ${cid} 的全部 trace，并重新扫描 ${traceRefreshStart.value}～${traceRefreshEnd.value} 全市场买点。耗时较长，在后台执行。`,
+      '确认强制刷新',
+      { type: 'warning', confirmButtonText: '启动', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  traceRefreshing.value = true
+  try {
+    const res = await csbApiService.refreshTraceRange({
+      config_id: cid,
+      start_date: traceRefreshStart.value,
+      end_date: traceRefreshEnd.value,
+      purge_first: true,
+    })
+    ElMessage.success(res.message || '区间 trace 刷新已启动')
+    traceRefreshVisible.value = false
+    traceStatsRows.value = 0
+  } catch (e: any) {
+    ElMessage.error(e.message || '启动失败')
+  } finally {
+    traceRefreshing.value = false
+  }
+}
+
+async function confirmPurgeTrace() {
+  const cid = resolveTraceConfigId()
+  if (cid == null) {
+    ElMessage.warning('请先选择参数版本')
+    return
+  }
+  const label = selectedConfig.value?.name || `ID ${cid}`
+  try {
+    await ElMessageBox.confirm(
+      `将删除参数版本「${label}」(ID ${cid}) 在 csb_signal_trace 中的全部记录（含扫描占位）。之后开缓存回测会先补预计算。`,
+      '清空 trace',
+      { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  tracePurging.value = true
+  try {
+    const res = await csbApiService.purgeTrace(cid)
+    ElMessage.success(res.message || `已删除 ${res.deleted_rows} 行`)
+    traceStatsRows.value = 0
+  } catch (e: any) {
+    ElMessage.error(e.message || '清空失败')
+  } finally {
+    tracePurging.value = false
+  }
+}
+
+function openDetail(id: string) {
+  selectedTaskId.value = id
+  detailVisible.value = true
+}
+
+function onTaskUpdated(task: any) {
+  const idx = tasks.value.findIndex((t) => t.task_id === task.task_id)
+  if (idx >= 0) tasks.value[idx] = { ...tasks.value[idx], ...task }
+}
+
+function exportCsv(id: string) {
+  window.open(csbApiService.backtestExportUrl(id), '_blank')
+}
+
+async function cancel(id: string) {
+  await csbApiService.cancelBacktest(id)
+  await loadTasks()
+}
+
+async function rerun(id: string) {
+  try {
+    await csbApiService.rerunBacktest(id)
+    ElMessage.success('已重新排队')
+    await loadTasks()
+  } catch (e: any) {
+    ElMessage.error(e.message || '重跑失败')
+  }
+}
+
+async function remove(id: string) {
+  try {
+    await ElMessageBox.confirm('确认删除该任务？', '提示', { type: 'warning' })
+    await csbApiService.deleteBacktest(id)
+    await loadTasks()
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e.message || '删除失败')
+  }
+}
+
+function onSelectionChange(rows: any[]) {
+  selectedIds.value = rows.map((r) => r.task_id)
+}
+
+async function batchDelete() {
+  try {
+    await ElMessageBox.confirm(`确认删除选中的 ${selectedIds.value.length} 个任务？`, '提示', { type: 'warning' })
+    await csbApiService.batchDeleteBacktests(selectedIds.value)
+    ElMessage.success('已删除')
+    await loadTasks()
+  } catch (e: any) {
+    if (e !== 'cancel') ElMessage.error(e.message || '批量删除失败')
+  }
+}
+
+onMounted(async () => {
+  const end = new Date()
+  const start = new Date()
+  start.setMonth(start.getMonth() - 3)
+  form.end_date = end.toISOString().slice(0, 10)
+  form.start_date = start.toISOString().slice(0, 10)
+  await loadConfigs()
+  await loadTasks()
+  timer = window.setInterval(() => {
+    if (tasks.value.some((t) => t.status === 'running' || t.status === 'pending')) {
+      loadTasks()
+    }
+  }, 4000)
+})
+
+onUnmounted(() => {
+  if (timer) window.clearInterval(timer)
+})
+</script>
+
+<style scoped>
+.mt-3 { margin-top: 12px; }
+.w-full { width: 100%; }
+.hint { margin-left: 8px; color: #6b7280; font-size: 12px; }
+.hint.warn { display: block; margin: 4px 0 0; margin-left: 0; color: #b45309; }
+.list-header { display: flex; justify-content: space-between; align-items: center; }
+.list-actions { display: flex; gap: 8px; align-items: center; }
+</style>

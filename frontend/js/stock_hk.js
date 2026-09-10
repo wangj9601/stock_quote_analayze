@@ -2436,7 +2436,6 @@ const StockPage = {
             setFlowEl('outflow', latest ? fmtYi(latest.outflow_amount) : null);
             setFlowEl('net', latest ? fmtYi(latest.net_amount) : null);
             setFlowEl('net_sum', fmtYi(analysis.net_sum));
-            setFlowEl('net_change', fmtYi(analysis.net_change));
 
             const dates = series.map((r) => r.trade_date || '');
             const inflow = series.map((r) => {

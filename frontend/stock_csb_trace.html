@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通道突破 — 策略信号历史</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+</head>
+<body>
+    <script src="components/header.js"></script>
+    <script>loadHeader('quotes');</script>
+    <div class="container">
+        <div class="gms-trace-card">
+            <div class="gms-trace-title">CSB 通道粘合突破 — 策略信号历史</div>
+            <p class="gms-backtest-hint" style="margin:8px 0 12px;">
+                读取 <strong>csb_signal_trace</strong> 预计算记录；需要刷新入库时可点「强制重新计算」（按当前参数版本对该股历史重算并写回 trace）。
+            </p>
+            <div class="toolbar">
+                <div class="toolbar-row">
+                    <label>股票: <span id="stockDisplay">--</span></label>
+                    <label>开始日期: <input type="date" id="startDate"></label>
+                    <label>结束日期: <input type="date" id="endDate"></label>
+                    <label>参数版本:
+                        <select id="configSelect"></select>
+                    </label>
+                    <label><input type="checkbox" id="entryOnly"> 仅入场</label>
+                    <button id="searchBtn" type="button">查询</button>
+                    <button id="forceComputeBtn" class="btn-secondary" type="button">强制重新计算</button>
+                </div>
+            </div>
+            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>
+            <div id="metaMsg" class="gms-meta-text" style="margin:6px 0;"></div>
+            <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
+            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无信号记录</div>
+            <div class="table-wrapper">
+                <table class="trace-table" id="traceTable">
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>信号类型</th>
+                            <th>SETUP</th>
+                            <th>入场</th>
+                            <th>得分</th>
+                            <th>收盘</th>
+                            <th>通道下轨</th>
+                            <th>通道上轨</th>
+                            <th>粘合天数</th>
+                            <th>入场下沿</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="pagination">
+                <button type="button" id="firstPage">第一页</button>
+                <button type="button" id="prevPage">上一页</button>
+                <span id="pageInfo"></span>
+                <button type="button" id="nextPage">下一页</button>
+                <button type="button" id="lastPage">最后一页</button>
+            </div>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/stock_csb_trace.js"></script>
+</body>
+</html>

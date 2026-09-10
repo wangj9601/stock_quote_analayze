@@ -115,6 +115,11 @@ const routes = [
         component: () => import('@/views/UrtManagementView.vue')
       },
       {
+        path: 'csb-management',
+        name: 'CSBManagement',
+        component: () => import('@/views/CsbManagementView.vue')
+      },
+      {
         path: 'triple-volume-observe',
         redirect: { path: '/selection-results', query: { tab: 'triple-volume' } }
       },

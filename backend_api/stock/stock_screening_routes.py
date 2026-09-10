@@ -4537,3 +4537,220 @@ async def get_rpe_strategy(
             **extra_meta,
         }
     )
+
+
+@router.get("/csb-strategy")
+async def get_csb_strategy(
+    scope: str = Query(
+        "market",
+        description="market|watchlist|single|industry_board|concept_board",
+    ),
+    date: Optional[str] = Query(None, description="筛选基准日 YYYY-MM-DD"),
+    config_id: Optional[int] = Query(None, ge=1, description="CSB 参数版本 ID"),
+    trace_only: bool = Query(False, description="仅读 csb_signal_trace（建议 scope=market）"),
+    signal_type: Optional[str] = Query(None, description="CSB_PROBE|CSB_BREAKOUT 等"),
+    entry_only: bool = Query(True, description="仅返回入场信号"),
+    cn_board_segment: Optional[str] = Query(
+        None,
+        description="可选 A 股板型: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
+    ),
+    industry_board_code: Optional[List[str]] = Query(
+        None, description="scope=industry_board 时：行业板块 BK 编码，可多选"
+    ),
+    concept_board_code: Optional[List[str]] = Query(
+        None, description="scope=concept_board 时：概念板块代码，可多选"
+    ),
+    stock_code: Optional[str] = Query(None, description="scope=single 时：股票代码或名称"),
+    max_results: Optional[int] = Query(200, ge=1, le=2000),
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+):
+    """CSB 通道粘合突破选股。"""
+    try:
+        from backend_core.strategies.csb.config import CSBConfigManager
+        from backend_core.strategies.csb.frontend_interface import CSBFrontendInterface
+        from backend_core.strategies.csb.signal_storage import load_traces
+        from backend_api.models import User, Watchlist
+        from backend_api.utils.cn_listed_board_filter import (
+            filter_stock_codes_by_board_segment,
+            normalize_list_board_segment,
+        )
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"success": False, "message": f"CSB 模块不可用: {e}", "data": []},
+        )
+
+    scope_raw = (scope or "market").strip().lower()
+    if scope_raw in ("cn", "all"):
+        scope_raw = "market"
+    allowed = ("market", "watchlist", "single", "industry_board", "concept_board")
+    if scope_raw not in allowed:
+        raise HTTPException(status_code=400, detail=f"scope 仅支持 {'|'.join(allowed)}")
+
+    seg_raw = (cn_board_segment or "").strip().upper()
+    if seg_raw and seg_raw != "ALL":
+        if not normalize_list_board_segment(cn_board_segment):
+            raise HTTPException(
+                status_code=400,
+                detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
+            )
+    else:
+        seg_raw = ""
+
+    def _apply_seg(codes: List[str]) -> List[str]:
+        if not seg_raw:
+            return codes
+        return filter_stock_codes_by_board_segment(codes, seg_raw)
+
+    def _norm_codes(raw_codes: List[str]) -> List[str]:
+        out: List[str] = []
+        for c in raw_codes:
+            n = _normalize_stock_code_for_gms_pool(str(c or "").strip())
+            if n and n.isdigit() and len(n) == 6 and n not in out:
+                out.append(n)
+        return out
+
+    stock_codes: Optional[List[str]] = None
+    extra_meta: Dict[str, Any] = {}
+
+    if scope_raw == "single":
+        if not stock_code or not str(stock_code).strip():
+            raise HTTPException(status_code=400, detail="单股范围需要填写股票代码或名称")
+        resolved = _resolve_gms_stock_code_from_input(db, stock_code)
+        if not resolved:
+            raise HTTPException(status_code=400, detail="未找到匹配的股票，请检查代码或名称")
+        stock_codes = _apply_seg([str(resolved).zfill(6)])
+        extra_meta["stock_code"] = stock_codes[0]
+    elif scope_raw == "watchlist":
+        if not token:
+            raise HTTPException(status_code=401, detail="watchlist 需要登录")
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            username = payload.get("sub")
+            user = db.query(User).filter(User.username == username).first()
+            if not user:
+                raise HTTPException(status_code=401, detail="用户不存在")
+        except JWTError:
+            raise HTTPException(status_code=401, detail="无效的认证凭据")
+        stock_codes = _apply_seg(
+            _norm_codes([str(i.stock_code) for i in db.query(Watchlist).filter(Watchlist.user_id == user.id).all()])
+        )
+        if not stock_codes:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "strategy_name": "CSB通道突破",
+                    "scope": scope_raw,
+                    "message": "自选股为空" + ("（板型过滤后无匹配）" if seg_raw else ""),
+                }
+            )
+    elif scope_raw == "industry_board":
+        from backend_api.models import IndustryBoardConstituent
+        from backend_api.utils.bk_board_code import resolve_industry_board_codes
+
+        bcodes = resolve_industry_board_codes(db, _normalize_gms_board_codes(industry_board_code))
+        if not bcodes:
+            raise HTTPException(status_code=400, detail="请选择有效的行业板块")
+        rows_ib = (
+            db.query(IndustryBoardConstituent)
+            .filter(IndustryBoardConstituent.board_code.in_(bcodes))
+            .distinct()
+            .all()
+        )
+        stock_codes = _apply_seg(_norm_codes([str(r.stock_code) for r in rows_ib if r.stock_code]))
+        extra_meta["industry_board_codes"] = bcodes
+    elif scope_raw == "concept_board":
+        from backend_api.models import ConceptBoardConstituent
+
+        bcodes = _normalize_gms_board_codes(concept_board_code, upper=True)
+        if not bcodes:
+            raise HTTPException(status_code=400, detail="请选择有效的概念板块")
+        rows_cb = (
+            db.query(ConceptBoardConstituent)
+            .filter(ConceptBoardConstituent.board_code.in_(bcodes))
+            .distinct()
+            .all()
+        )
+        stock_codes = _apply_seg(_norm_codes([str(r.stock_code) for r in rows_cb if r.stock_code]))
+        extra_meta["concept_board_codes"] = bcodes
+
+    cm = CSBConfigManager()
+    cm.ensure_default_row(db)
+    cid = int(config_id) if config_id is not None else None
+    if cid is None:
+        from backend_api.models import CSBStrategyConfig
+
+        row = (
+            db.query(CSBStrategyConfig)
+            .filter(CSBStrategyConfig.is_default.is_(True))
+            .order_by(CSBStrategyConfig.id.asc())
+            .first()
+        )
+        cid = int(row.id) if row else None
+
+    trade_date = (str(date).strip()[:10] if date else None) or None
+
+    if trace_only and scope_raw == "market" and cid is not None:
+        from backend_core.strategies.csb.data_loader import CSBDataLoader
+
+        loader = CSBDataLoader(db)
+        effective = loader.resolve_effective_trade_date(trade_date)
+        rows = load_traces(
+            db,
+            trade_date=effective,
+            config_id=int(cid),
+            entry_only=entry_only,
+            signal_type=signal_type,
+            limit=max_results or 200,
+        )
+        return JSONResponse(
+            {
+                "success": True,
+                "data": rows,
+                "total": len(rows),
+                "search_date": effective,
+                "strategy_name": "CSB通道突破",
+                "scope": scope_raw,
+                "config_id": cid,
+                "source": "csb_signal_trace",
+                "trace_only": True,
+                "cn_board_segment": seg_raw or None,
+                **extra_meta,
+            }
+        )
+
+    result = CSBFrontendInterface.screen(
+        db,
+        scope="all",
+        limit=max_results,
+        stock_codes=stock_codes,
+        screening_date=trade_date,
+        config_id=cid,
+        prefer_cache=not trace_only,
+        force_realtime=bool(trace_only and scope_raw != "market"),
+        require_entry=entry_only,
+    )
+    data_rows = result.get("data") or []
+    if signal_type:
+        data_rows = [r for r in data_rows if str(r.get("signal_type") or "") == signal_type]
+
+    return JSONResponse(
+        {
+            "success": bool(result.get("success", True)),
+            "data": data_rows,
+            "total": len(data_rows),
+            "search_date": result.get("search_date"),
+            "strategy_name": result.get("strategy_name") or "CSB通道突破",
+            "scope": scope_raw,
+            "config_id": cid,
+            "source": result.get("source"),
+            "message": result.get("message"),
+            "need_precompute": result.get("need_precompute"),
+            "trace_only": trace_only,
+            "cn_board_segment": seg_raw or None,
+            **extra_meta,
+        }
+    )

@@ -158,6 +158,7 @@ const menuItems: MenuItem[] = [
     ],
   },
   { path: '/urt-management', name: 'URT上升趋势策略', icon: TrendCharts },
+  { path: '/csb-management', name: 'CSB低位通道突破', icon: TrendCharts },
   { path: '/datasource', name: '数据源配置', icon: Setting },
   { path: '/env-sync', name: '环境数据同步', icon: Setting },
   { path: '/datacollect', name: '数据采集', icon: DataAnalysis },

@@ -98,6 +98,9 @@ def analyze_fund_flow_series(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
     对按日期升序的流入/流出序列做简单变化分析。
     rows 元素需含 trade_date / inflow_amount / outflow_amount / net_amount。
+
+    - *_sum：区间内逐日数值的代数和（含正负）
+    - *_change：末日相对首日的差额（末日 − 首日），不是逐日变化之和
     """
     n = len(rows)
     if n == 0:

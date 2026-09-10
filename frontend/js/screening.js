@@ -65,12 +65,15 @@ const ScreeningPage = {
     /** SBBR 已选行业/概念板块 */
     sbbrSelectedIndustryBoardCodes: [],
     sbbrSelectedConceptBoardCodes: [],
+    /** CSB 已选行业/概念板块 */
+    csbSelectedIndustryBoardCodes: [],
+    csbSelectedConceptBoardCodes: [],
     /** 板块选择弹窗：industry | concept */
     _gmsBoardPickerKind: null,
     _gmsBoardPickerDraft: new Set(),
     /** 板块选择弹窗代码来源筛选：all | eastmoney | tonghuashun */
     _gmsBoardPickerSourceFilter: 'all',
-    /** 板块选择弹窗归属：gms | urt | rpe | sbbr */
+    /** 板块选择弹窗归属：gms | urt | rpe | sbbr | csb */
     _gmsBoardPickerOwner: 'gms',
     /** 板块选择弹窗正在刷新选项 */
     _gmsBoardPickerRefreshing: false,
@@ -1178,6 +1181,14 @@ const ScreeningPage = {
         const sbbrConceptBtn = document.getElementById('sbbrConceptBoardPickBtn');
         if (sbbrConceptBtn) {
             sbbrConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'sbbr'));
+        }
+        const csbIndustryBtn = document.getElementById('csbIndustryBoardPickBtn');
+        if (csbIndustryBtn) {
+            csbIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'csb'));
+        }
+        const csbConceptBtn = document.getElementById('csbConceptBoardPickBtn');
+        if (csbConceptBtn) {
+            csbConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'csb'));
         }
 
         const confirmBtn = document.getElementById('gmsBoardPickerConfirm');
@@ -3301,6 +3312,7 @@ const ScreeningPage = {
         if (owner === 'urt') this._gmsBoardPickerOwner = 'urt';
         else if (owner === 'rpe') this._gmsBoardPickerOwner = 'rpe';
         else if (owner === 'sbbr') this._gmsBoardPickerOwner = 'sbbr';
+        else if (owner === 'csb') this._gmsBoardPickerOwner = 'csb';
         else this._gmsBoardPickerOwner = 'gms';
 
         let selected;
@@ -3318,6 +3330,11 @@ const ScreeningPage = {
             selected = kind === 'industry'
                 ? this.getSbbrSelectedIndustryBoardCodes()
                 : this.getSbbrSelectedConceptBoardCodes();
+            this._gmsBoardPickerDraft = new Set(selected);
+        } else if (this._gmsBoardPickerOwner === 'csb') {
+            selected = kind === 'industry'
+                ? this.getCsbSelectedIndustryBoardCodes()
+                : this.getCsbSelectedConceptBoardCodes();
             this._gmsBoardPickerDraft = new Set(selected);
         } else {
             selected = kind === 'industry'
@@ -3497,6 +3514,14 @@ const ScreeningPage = {
                 this.sbbrSelectedConceptBoardCodes = codes;
                 this.updateSbbrConceptBoardSummary();
             }
+        } else if (owner === 'csb') {
+            if (kind === 'industry') {
+                this.csbSelectedIndustryBoardCodes = codes;
+                this.updateCsbIndustryBoardSummary();
+            } else if (kind === 'concept') {
+                this.csbSelectedConceptBoardCodes = codes;
+                this.updateCsbConceptBoardSummary();
+            }
         } else if (kind === 'industry') {
             this.gmsSelectedIndustryBoardCodes = codes;
             this.updateGmsIndustryBoardSummary();
@@ -3510,7 +3535,7 @@ const ScreeningPage = {
 
     /**
      * 按策略 owner 刷新行业/概念板龙头·中军摘要面板；非板 scope 或未选板时隐藏。
-     * @param {'gms'|'urt'|'rpe'|'sbbr'} owner
+     * @param {'gms'|'urt'|'rpe'|'sbbr'|'csb'} owner
      */
     refreshBoardRolesPanelForOwner(owner) {
         const panelApi = (typeof BoardRolesPanel !== 'undefined' && BoardRolesPanel)
@@ -3523,6 +3548,7 @@ const ScreeningPage = {
             urt: 'urtBoardRolesPanel',
             rpe: 'rpeBoardRolesPanel',
             sbbr: 'sbbrBoardRolesPanel',
+            csb: 'csbBoardRolesPanel',
         };
         const key = panelMap[owner] ? owner : 'gms';
         const panelId = panelMap[key];
@@ -3535,6 +3561,8 @@ const ScreeningPage = {
             scope = document.getElementById('rpeScope')?.value || '';
         } else if (key === 'sbbr') {
             scope = document.getElementById('sbbrScope')?.value || '';
+        } else if (key === 'csb') {
+            scope = document.getElementById('csbScope')?.value || '';
         } else {
             const el = document.querySelector('input[name="gmsScope"]:checked');
             scope = el ? el.value : '';
@@ -3566,6 +3594,10 @@ const ScreeningPage = {
             codes = isIndustry
                 ? this.getSbbrSelectedIndustryBoardCodes()
                 : this.getSbbrSelectedConceptBoardCodes();
+        } else if (key === 'csb') {
+            codes = isIndustry
+                ? this.getCsbSelectedIndustryBoardCodes()
+                : this.getCsbSelectedConceptBoardCodes();
         } else {
             codes = isIndustry
                 ? this.getGmsSelectedIndustryBoardCodes()
@@ -3660,6 +3692,52 @@ const ScreeningPage = {
         const el = document.getElementById('sbbrConceptBoardSummary');
         if (!el) return;
         const codes = this.getSbbrSelectedConceptBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
+            return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    getCsbSelectedIndustryBoardCodes() {
+        return Array.isArray(this.csbSelectedIndustryBoardCodes)
+            ? this.csbSelectedIndustryBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    getCsbSelectedConceptBoardCodes() {
+        return Array.isArray(this.csbSelectedConceptBoardCodes)
+            ? this.csbSelectedConceptBoardCodes.filter(Boolean)
+            : [];
+    },
+
+    updateCsbIndustryBoardSummary() {
+        const el = document.getElementById('csbIndustryBoardSummary');
+        if (!el) return;
+        const codes = this.getCsbSelectedIndustryBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsIndustryBoardCatalog.find((x) => String(x.board_code) === code);
+            return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    updateCsbConceptBoardSummary() {
+        const el = document.getElementById('csbConceptBoardSummary');
+        if (!el) return;
+        const codes = this.getCsbSelectedConceptBoardCodes();
         if (!codes.length) {
             el.textContent = '未选择板块，点击「选择板块」';
             return;
@@ -4001,8 +4079,8 @@ const ScreeningPage = {
     // 绑定事件
     bindEvents() {
         // 绑定所有刷新按钮（仅带 data-strategy 的真正「刷新筛选」）
-        // rpe / sbbr 由独立脚本（rpe_screening.js / sbbr_screening.js）自行处理，勿走通用 loadScreeningResults
-        const externalRefreshStrategies = new Set(['rpe', 'sbbr']);
+        // rpe / sbbr / csb 由独立脚本自行处理，勿走通用 loadScreeningResults
+        const externalRefreshStrategies = new Set(['rpe', 'sbbr', 'csb']);
         document.querySelectorAll('.refresh-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const strategy = btn.dataset.strategy;
@@ -4873,8 +4951,8 @@ const ScreeningPage = {
         if (!strategy) {
             strategy = this.currentStrategy;
         }
-        // 比价效应 / 做小做底由独立模块刷新，避免落入「未知的策略类型」
-        if (strategy === 'rpe' || strategy === 'sbbr') {
+        // 比价效应 / 做小做底 / CSB 由独立模块刷新，避免落入「未知的策略类型」
+        if (strategy === 'rpe' || strategy === 'sbbr' || strategy === 'csb') {
             return;
         }
         if (strategy === 'gms' && resetGmsPage) {

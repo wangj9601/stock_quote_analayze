@@ -2705,6 +2705,80 @@ class CupbSignalTrace(Base):
     )
 
 
+# ========== CSB 通道粘合突破策略 ==========
+
+class CSBStrategyConfig(Base):
+    """CSB 策略参数版本。"""
+
+    __tablename__ = "csb_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    precompute_enabled = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class CSBSignalTrace(Base):
+    """CSB 日终信号追溯。"""
+
+    __tablename__ = "csb_signal_trace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    config_id = Column(
+        Integer,
+        ForeignKey("csb_strategy_configs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    signal_type = Column(String(32), nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    setup_ok = Column(Boolean, nullable=True)
+    entry_signal = Column(Boolean, nullable=True)
+    score = Column(Float, nullable=True)
+    close_price = Column(Float, nullable=True)
+    channel_lower = Column(Float, nullable=True)
+    channel_upper = Column(Float, nullable=True)
+    squeeze_days = Column(Integer, nullable=True)
+    entry_low = Column(Float, nullable=True)
+    detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("code", "trade_date", "config_id", "signal_type", name="uq_csb_signal_trace_code_date_cfg_type"),
+    )
+
+
+class CSBBacktestTask(Base):
+    """CSB 回测任务与报告摘要。"""
+
+    __tablename__ = "csb_backtest_tasks"
+
+    task_id = Column(String(64), primary_key=True)
+    name = Column(String(500), nullable=True)
+    status = Column(String(20), nullable=False, index=True)
+    progress = Column(Integer, default=0, nullable=False)
+    message = Column(Text, nullable=True)
+    config = Column(JSON, nullable=False)
+    logs = Column(JSON, nullable=True)
+    summary = Column(JSON, nullable=True)
+    error = Column(Text, nullable=True)
+    details_path = Column(String(512), nullable=True)
+    details_csv_bytes = Column(LargeBinary, nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (Index("idx_csb_bt_status_created", "status", "created_at"),)
+
+
 # ========== 统一交易观察 / 正式交易 ==========
 
 class TradeObserveStock(Base):

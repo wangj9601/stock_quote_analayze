@@ -1020,6 +1020,34 @@ if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
 else:
     logging.info('跳过 _register_rpe_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
 
+
+def _register_csb_signal_precompute_jobs():
+    """定时将 CSB（低位通道突破）信号写入 csb_signal_trace。"""
+    if not _env_bool("ENABLE_CSB_PRECOMPUTE", True):
+        logging.info("CSB 信号预计算已禁用（ENABLE_CSB_PRECOMPUTE=false）")
+        return
+    try:
+        from backend_core.strategies.csb.scheduled_precompute import scheduled_csb_signals_cn
+    except Exception as e:
+        logging.error("导入 CSB 预计算任务失败，跳过注册: %s", e)
+        return
+
+    scheduler.add_job(
+        scheduled_csb_signals_cn,
+        "cron",
+        day_of_week=_cron("SCHED_CSB_SIGNALS_CN_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_CSB_SIGNALS_CN_HOUR", 19),
+        minute=_cron_int("SCHED_CSB_SIGNALS_CN_MINUTE", 50),
+        id="csb_signals_cn",
+    )
+    logging.info("已注册 CSB 信号预计算任务（ENABLE_CSB_PRECOMPUTE=true）19:50")
+
+
+if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+    _register_csb_signal_precompute_jobs()
+else:
+    logging.info('跳过 _register_csb_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
+
 if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
     scheduler.add_job(collect_akshare_realtime, 'cron',
         day_of_week=_cron('SCHED_AKSHARE_REALTIME_DOW', 'mon-fri'),

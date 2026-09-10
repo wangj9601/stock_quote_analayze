@@ -59,6 +59,30 @@ def test_analyze_fund_flow_series():
     assert out["net_sum"] == pytest.approx(50.0)
 
 
+def test_analyze_fund_flow_series_signed_net():
+    """正负净流入：合计为代数和，变化为末日相对首日。"""
+    rows = [
+        {
+            "trade_date": "2026-09-07",
+            "inflow_amount": 100.0,
+            "outflow_amount": 286.0,
+            "net_amount": -186_000_000.0,
+        },
+        {
+            "trade_date": "2026-09-08",
+            "inflow_amount": 50.0,
+            "outflow_amount": 31.0,
+            "net_amount": 19_000_000.0,
+        },
+    ]
+    out = analyze_fund_flow_series(rows)
+    # 合计：+0.19亿 + (-1.86亿) = -1.67亿
+    assert out["net_sum"] == pytest.approx(-167_000_000.0)
+    # 变化：末日 − 首日 = 0.19 − (-1.86) = +2.05亿
+    assert out["net_change"] == pytest.approx(205_000_000.0)
+    assert out["latest_net"] == pytest.approx(19_000_000.0)
+
+
 def test_sync_to_quote_tables_updates_both(monkeypatch):
     from backend_core.data_collectors.akshare import ths_fund_flow_daily as mod
 

@@ -34,6 +34,7 @@
             <button class="strategy-tab" data-strategy="urt" id="urtTab" data-perm="channel.screening.tab.urt">上升趋势</button>
             <button class="strategy-tab" data-strategy="sbbr" id="sbbrTab" data-perm="channel.screening.tab.sbbr">做小做底</button>
             <button class="strategy-tab" data-strategy="rpe" id="rpeTab" data-perm="channel.screening.tab.rpe">比价效应</button>
+            <button class="strategy-tab" data-strategy="csb" id="csbTab" data-perm="channel.screening.tab.csb">通道突破</button>
             <button class="strategy-tab" data-strategy="canslim" id="canslimTab" data-perm="channel.screening.tab.canslim">CAN SLIM</button>
         </div>
 
@@ -1978,6 +1979,102 @@
             </div>
         </div>
 
+        <div id="csb-content" class="strategy-content" data-perm="channel.screening.tab.csb">
+            <div class="gms-integrated-head">
+                <p class="gms-integrated-hint">CSB 通道粘合突破：MA 粘合 SETUP → 试探 PROBE / 突破 BREAKOUT 入场；全市场建议勾选「优先读预计算」或缩小至自选/板块/个股。</p>
+            </div>
+            <div class="params-section">
+                <div class="param-group">
+                    <label for="csbScope">范围</label>
+                    <select id="csbScope" class="param-input">
+                        <option value="market">全市场</option>
+                        <option value="watchlist">自选股</option>
+                        <option value="industry_board">行业板块</option>
+                        <option value="concept_board">概念板块</option>
+                        <option value="single">个股</option>
+                    </select>
+                </div>
+                <div class="param-group">
+                    <label for="csbDate" title="选股用 K 线窗口的「止日」">基准日（回溯）</label>
+                    <input type="date" id="csbDate" class="param-input" title="留空=最新交易日">
+                </div>
+                <div class="param-group">
+                    <label for="csbSignalType">信号类型</label>
+                    <select id="csbSignalType" class="param-input">
+                        <option value="">全部</option>
+                        <option value="CSB_SETUP">SETUP</option>
+                        <option value="CSB_PROBE">PROBE</option>
+                        <option value="CSB_BREAKOUT">BREAKOUT</option>
+                    </select>
+                </div>
+                <div class="param-group">
+                    <label for="csbConfigId" title="留空使用默认参数版本">参数版本 ID</label>
+                    <input type="number" id="csbConfigId" class="param-input" min="1" placeholder="可选，默认版本">
+                </div>
+                <div class="param-group param-group-stock" id="csbStockCodeGroup" style="display:none;">
+                    <label for="csbStockCode">股票代码或名称</label>
+                    <input type="text" id="csbStockCode" class="param-input" placeholder="如 000001 或 平安银行">
+                </div>
+                <div class="param-group param-group-check">
+                    <label><input type="checkbox" id="csbEntryOnly" checked> 仅入场信号</label>
+                </div>
+                <div class="param-group param-group-check" id="csbTraceOnlyWrap">
+                    <label title="仅全市场：读取 csb_signal_trace 预计算；无数据时自动回退现算。"><input type="checkbox" id="csbTraceOnly" checked> 优先读预计算</label>
+                </div>
+                <div class="param-actions">
+                    <button type="button" id="csbRefreshBtn" class="refresh-btn" data-strategy="csb" data-perm="channel.screening.tab.csb.btn.refresh">刷新筛选</button>
+                </div>
+                <div id="csbSingleSkipFilterHint" class="params-section-hint" style="display:none;">
+                    <span class="param-field-hint">输入后按 Enter 或点「刷新筛选」</span>
+                </div>
+                <span id="csbSearchMeta" class="gms-meta-text"></span>
+                <span id="csbDataDateHint" class="gms-meta-text" style="margin-left:8px;color:#64748b;"></span>
+            </div>
+            <div id="csbIndustryBoardWrap" class="rpe-board-wrap" style="display:none;">
+                <span class="rpe-board-wrap-label">行业板块：</span>
+                <div class="gms-board-picker-row">
+                    <button type="button" id="csbIndustryBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                    <span id="csbIndustryBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                </div>
+            </div>
+            <div id="csbConceptBoardWrap" class="rpe-board-wrap" style="display:none;">
+                <span class="rpe-board-wrap-label">概念板块：</span>
+                <div class="gms-board-picker-row">
+                    <button type="button" id="csbConceptBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                    <span id="csbConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                </div>
+            </div>
+            <div id="csbBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
+            <div id="csbCnBoardWrap" style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:8px 0 4px 0;">
+                <span style="color:#666; font-size:13px;">A股板型：</span>
+                <label style="cursor:pointer;"><input type="radio" name="csbCnBoardSegment" value="ALL" checked style="margin-right:5px;">全部</label>
+                <label style="cursor:pointer;"><input type="radio" name="csbCnBoardSegment" value="MAIN" style="margin-right:5px;">主板</label>
+                <label style="cursor:pointer;"><input type="radio" name="csbCnBoardSegment" value="CYB" style="margin-right:5px;">创业板</label>
+                <label style="cursor:pointer;"><input type="radio" name="csbCnBoardSegment" value="SZ_SME" style="margin-right:5px;">中小板</label>
+                <label style="cursor:pointer;"><input type="radio" name="csbCnBoardSegment" value="KCB" style="margin-right:5px;">科创板</label>
+                <label style="cursor:pointer;"><input type="radio" name="csbCnBoardSegment" value="BJ" style="margin-right:5px;">北证</label>
+            </div>
+            <div id="csbLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
+            <div id="csbError" class="error-message" style="display:none;"></div>
+            <div class="results-container">
+                <div class="results-header"><span id="csbResultsCount">共 0 只</span></div>
+                <div class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>代码</th><th>名称</th><th>信号类型</th><th>得分</th><th>收盘</th>
+                                <th class="gms-col-price">通道下轨</th><th class="gms-col-price">通道上轨</th>
+                                <th>粘合天数</th><th class="gms-col-actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="csbResultsBody">
+                            <tr><td colspan="9" class="empty-state">点击「刷新筛选」开始</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
         <!-- CAN SLIM 第一期 -->
         <div id="canslim-content" class="strategy-content" data-perm="channel.screening.tab.canslim">
             <div class="strategy-info-card">
@@ -2255,6 +2352,7 @@
     <script src="js/screening.js?v=urt50220260907a"></script>
     <script src="js/sbbr_screening.js"></script>
     <script src="js/rpe_screening.js"></script>
+    <script src="js/csb_screening.js"></script>
 </body>
 
 </html>
