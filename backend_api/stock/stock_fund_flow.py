@@ -121,6 +121,69 @@ async def get_today(code: str = Query(None, description="股票代码")):
         )
 
 
+def _trade_date_key(val) -> Optional[str]:
+    if val is None:
+        return None
+    if hasattr(val, "isoformat"):
+        try:
+            return val.isoformat()[:10]
+        except Exception:
+            pass
+    s = str(val).strip()
+    return s[:10] if s else None
+
+
+def _merge_fund_flow_series(
+    primary: list,
+    secondary: list,
+    *,
+    days: int,
+    primary_label: str,
+    secondary_label: str,
+) -> tuple:
+    """
+    按交易日合并两路资金流：同日优先 primary（专用日表），缺失日用 secondary 补齐。
+    返回 (升序 series, series_source 描述)。
+    """
+    by_date = {}
+    sources_used = set()
+
+    for r in secondary or []:
+        d = _trade_date_key(r.get("trade_date"))
+        if not d:
+            continue
+        item = dict(r)
+        item["trade_date"] = d
+        by_date[d] = item
+        sources_used.add(secondary_label)
+
+    for r in primary or []:
+        d = _trade_date_key(r.get("trade_date"))
+        if not d:
+            continue
+        item = dict(r)
+        item["trade_date"] = d
+        by_date[d] = item
+        sources_used.add(primary_label)
+
+    if not by_date:
+        return [], ""
+
+    dates_desc = sorted(by_date.keys(), reverse=True)[: max(1, int(days))]
+    series_desc = [by_date[d] for d in dates_desc]
+    for item in series_desc:
+        if item.get("updated_at") is not None:
+            item["updated_at"] = str(item["updated_at"])
+
+    if primary_label in sources_used and secondary_label in sources_used:
+        source = f"{primary_label}+{secondary_label}"
+    elif primary_label in sources_used:
+        source = primary_label
+    else:
+        source = secondary_label
+    return list(reversed(series_desc)), source
+
+
 @router.get("/daily")
 async def get_daily_inflow_outflow(
     code: str = Query(..., description="股票代码（A股6位或港股5位）"),
@@ -129,8 +192,8 @@ async def get_daily_inflow_outflow(
 ):
     """
     近 N 日流入/流出/净额 + 简单变化分析。
-    A股：优先 historical_quotes，不足回退 stock_fund_flow_daily。
-    港股：优先 historical_quotes_hk，不足回退 stock_fund_flow_daily_hk。
+    A股：合并 stock_fund_flow_daily 与 historical_quotes（同日优先日表，避免行情表滞后丢最新日）。
+    港股：合并 stock_fund_flow_daily_hk 与 historical_quotes_hk（同上）。
     """
     code_n = normalize_equity_code(code) or normalize_ths_code(code)
     if not code_n:
@@ -138,12 +201,11 @@ async def get_daily_inflow_outflow(
             {"success": False, "message": "无效股票代码"}, status_code=400
         )
     market = "HK" if is_hk_equity_code(code_n) else "CN"
+    # 多取一些再截断，合并后仍保证近 N 日
+    fetch_n = max(int(days) * 2, int(days) + 5)
     try:
-        series = []
-        source = ""
         if market == "HK":
-            source = "historical_quotes_hk"
-            rows = db.execute(
+            hist_rows = db.execute(
                 text(
                     """
                     SELECT code,
@@ -163,33 +225,31 @@ async def get_daily_inflow_outflow(
                     LIMIT :days
                     """
                 ),
-                {"code": code_n, "days": days},
+                {"code": code_n, "days": fetch_n},
             ).mappings().all()
-            series = [dict(r) for r in rows]
-
-            if len(series) < min(days, 1):
-                source = "stock_fund_flow_daily_hk"
-                rows = db.execute(
-                    text(
-                        """
-                        SELECT code, trade_date, name, inflow_amount, outflow_amount,
-                               net_amount, turnover_amount, change_percent, turnover_rate,
-                               current_price, source, updated_at
-                        FROM stock_fund_flow_daily_hk
-                        WHERE code = :code
-                        ORDER BY trade_date DESC
-                        LIMIT :days
-                        """
-                    ),
-                    {"code": code_n, "days": days},
-                ).mappings().all()
-                series = [dict(r) for r in rows]
-                for item in series:
-                    if item.get("updated_at") is not None:
-                        item["updated_at"] = str(item["updated_at"])
+            daily_rows = db.execute(
+                text(
+                    """
+                    SELECT code, trade_date, name, inflow_amount, outflow_amount,
+                           net_amount, turnover_amount, change_percent, turnover_rate,
+                           current_price, source, updated_at
+                    FROM stock_fund_flow_daily_hk
+                    WHERE code = :code
+                    ORDER BY trade_date DESC
+                    LIMIT :days
+                    """
+                ),
+                {"code": code_n, "days": fetch_n},
+            ).mappings().all()
+            series_asc, source = _merge_fund_flow_series(
+                [dict(r) for r in daily_rows],
+                [dict(r) for r in hist_rows],
+                days=days,
+                primary_label="stock_fund_flow_daily_hk",
+                secondary_label="historical_quotes_hk",
+            )
         else:
-            source = "historical_quotes"
-            rows = db.execute(
+            hist_rows = db.execute(
                 text(
                     """
                     SELECT code,
@@ -209,32 +269,30 @@ async def get_daily_inflow_outflow(
                     LIMIT :days
                     """
                 ),
-                {"code": code_n, "days": days},
+                {"code": code_n, "days": fetch_n},
             ).mappings().all()
-            series = [dict(r) for r in rows]
+            daily_rows = db.execute(
+                text(
+                    """
+                    SELECT code, trade_date, name, inflow_amount, outflow_amount,
+                           net_amount, turnover_amount, change_percent, turnover_rate,
+                           current_price, source, updated_at
+                    FROM stock_fund_flow_daily
+                    WHERE code = :code
+                    ORDER BY trade_date DESC
+                    LIMIT :days
+                    """
+                ),
+                {"code": code_n, "days": fetch_n},
+            ).mappings().all()
+            series_asc, source = _merge_fund_flow_series(
+                [dict(r) for r in daily_rows],
+                [dict(r) for r in hist_rows],
+                days=days,
+                primary_label="stock_fund_flow_daily",
+                secondary_label="historical_quotes",
+            )
 
-            if len(series) < min(days, 1):
-                source = "stock_fund_flow_daily"
-                rows = db.execute(
-                    text(
-                        """
-                        SELECT code, trade_date, name, inflow_amount, outflow_amount,
-                               net_amount, turnover_amount, change_percent, turnover_rate,
-                               current_price, source, updated_at
-                        FROM stock_fund_flow_daily
-                        WHERE code = :code
-                        ORDER BY trade_date DESC
-                        LIMIT :days
-                        """
-                    ),
-                    {"code": code_n, "days": days},
-                ).mappings().all()
-                series = [dict(r) for r in rows]
-                for item in series:
-                    if item.get("updated_at") is not None:
-                        item["updated_at"] = str(item["updated_at"])
-
-        series_asc = list(reversed(series))
         analysis = analyze_fund_flow_series(series_asc)
         return {
             "success": True,

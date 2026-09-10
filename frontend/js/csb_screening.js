@@ -2,6 +2,8 @@
  * CSB 通道粘合突破 — 选股页（精简 Tab：策略选股）
  */
 (function () {
+  let lastSignalRows = [];
+
   function apiBase() {
     if (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) {
       return window.API_BASE_URL.replace(/\/+$/, '');
@@ -152,22 +154,28 @@
     const body = document.getElementById('csbResultsBody');
     if (!body) return;
     const list = rows || [];
+    lastSignalRows = list;
     document.getElementById('csbResultsCount').textContent = `共 ${list.length} 只`;
     if (!list.length) {
       body.innerHTML = '<tr><td colspan="9" class="empty-state">无符合条件的结果</td></tr>';
       return;
     }
     body.innerHTML = list
-      .map((r) => {
+      .map((r, index) => {
         const histHref = `stock_csb_trace.html?code=${encodeURIComponent(r.code || '')}&name=${encodeURIComponent(r.name || '')}`;
         const analysisHref = stockAnalysisHref(r.code, r.name);
         const codeCell = r.code
           ? `<a class="stock-code gms-stock-code-link" href="${esc(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${esc(r.code)}</a>`
           : '';
         const ops = [
+          `<button type="button" class="gms-op-btn csb-score-detail-toggle" data-row="${index}" title="展开/收起信号计算明细">明细</button>`,
           `<a href="${histHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer" title="该股历史信号">历史</a>`,
         ];
-        return `<tr>
+        let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
+        if (window.CsbScoreDetail && typeof window.CsbScoreDetail.buildHtml === 'function') {
+          detailHtml = window.CsbScoreDetail.buildHtml(r);
+        }
+        return `<tr data-csb-row="${index}">
           <td class="gms-col-code">${codeCell}</td>
           <td>${esc(r.name || '')}</td>
           <td>${esc(signalTypeLabel(r.signal_type))}</td>
@@ -177,6 +185,9 @@
           <td>${fmt(r.channel_upper)}</td>
           <td>${r.squeeze_days != null ? String(r.squeeze_days) : '-'}</td>
           <td class="gms-col-actions"><div class="action-links">${ops.join('')}</div></td>
+        </tr>
+        <tr class="gms-score-detail-row csb-score-detail-row" data-detail-for="${index}" style="display:none;">
+          <td colspan="9" class="gms-score-detail-cell">${detailHtml}</td>
         </tr>`;
       })
       .join('');
@@ -292,6 +303,18 @@
       if (scope !== 'single') return;
       e.preventDefault();
       refreshSignals();
+    });
+    document.getElementById('csbResultsBody')?.addEventListener('click', (e) => {
+      const detailBtn = e.target.closest('.csb-score-detail-toggle');
+      if (!detailBtn) return;
+      e.preventDefault();
+      const rowIndex = detailBtn.getAttribute('data-row');
+      const tbody = document.getElementById('csbResultsBody');
+      const detailRow = tbody?.querySelector(`tr.csb-score-detail-row[data-detail-for="${rowIndex}"]`);
+      if (!detailRow) return;
+      const show = detailRow.style.display === 'none' || !detailRow.style.display;
+      detailRow.style.display = show ? 'table-row' : 'none';
+      detailBtn.classList.toggle('active', show);
     });
   }
 

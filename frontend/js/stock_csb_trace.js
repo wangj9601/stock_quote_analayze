@@ -83,6 +83,21 @@
       document.getElementById('nextPage').addEventListener('click', () => this.goToPage(this.currentPage + 1));
       document.getElementById('lastPage').addEventListener('click', () => this.goToPage(this.totalPages));
 
+      const tbody = document.querySelector('#traceTable tbody');
+      if (tbody) {
+        tbody.addEventListener('click', (e) => {
+          const detailBtn = e.target.closest('.csb-score-detail-toggle');
+          if (!detailBtn) return;
+          e.preventDefault();
+          const rowIndex = detailBtn.getAttribute('data-row');
+          const detailRow = tbody.querySelector(`tr.csb-score-detail-row[data-detail-for="${rowIndex}"]`);
+          if (!detailRow) return;
+          const show = detailRow.style.display === 'none' || !detailRow.style.display;
+          detailRow.style.display = show ? 'table-row' : 'none';
+          detailBtn.classList.toggle('active', show);
+        });
+      }
+
       this.updatePagination();
       if (this.code) this.fetchData();
     }
@@ -295,9 +310,13 @@
         tbody.innerHTML = '';
         return;
       }
-      tbody.innerHTML = pageData.map((r) => {
+      tbody.innerHTML = pageData.map((r, index) => {
         const rowClass = r.entry_signal ? 'urt-row-score-high' : (r.setup_ok ? 'urt-row-score-mid' : '');
-        return `<tr class="${rowClass}">
+        let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
+        if (window.CsbScoreDetail && typeof window.CsbScoreDetail.buildHtml === 'function') {
+          detailHtml = window.CsbScoreDetail.buildHtml(r);
+        }
+        return `<tr class="${rowClass}" data-csb-row="${index}">
           <td>${escapeHtml(r.date || r.trade_date || r.signal_date || '--')}</td>
           <td>${escapeHtml(signalTypeLabel(r.signal_type))}</td>
           <td>${yn(r.setup_ok)}</td>
@@ -308,6 +327,10 @@
           <td>${fmt(r.channel_upper)}</td>
           <td>${r.squeeze_days != null ? String(r.squeeze_days) : '--'}</td>
           <td>${fmt(r.entry_low)}</td>
+          <td><button type="button" class="action-link csb-score-detail-toggle" data-row="${index}" title="展开/收起信号计算明细">明细</button></td>
+        </tr>
+        <tr class="gms-score-detail-row csb-score-detail-row" data-detail-for="${index}" style="display:none;">
+          <td colspan="11" class="gms-score-detail-cell">${detailHtml}</td>
         </tr>`;
       }).join('');
     }

@@ -17,6 +17,13 @@ logger = logging.getLogger(__name__)
 
 
 def _row_to_dict(r) -> Dict[str, Any]:
+    detail = r.detail or {}
+    if not isinstance(detail, dict):
+        detail = {}
+    score_detail = detail.get("score") if isinstance(detail.get("score"), dict) else None
+    setup = detail.get("setup") if isinstance(detail.get("setup"), dict) else {}
+    channel = setup.get("channel") if isinstance(setup.get("channel"), dict) else {}
+    entry = detail.get("entry") if isinstance(detail.get("entry"), dict) else {}
     return {
         "code": r.code,
         "name": r.name,
@@ -29,12 +36,20 @@ def _row_to_dict(r) -> Dict[str, Any]:
         "entry_signal": r.entry_signal,
         "buy_signal": bool(r.entry_signal),
         "score": r.score,
+        "score_detail": score_detail,
         "close": r.close_price,
         "channel_lower": r.channel_lower,
         "channel_upper": r.channel_upper,
         "squeeze_days": r.squeeze_days,
+        "squeeze_pct": channel.get("squeeze_pct"),
+        "hh20": channel.get("hh20"),
+        "resistance": channel.get("resistance") or entry.get("resistance"),
+        "touch_count": setup.get("touch_count"),
         "entry_low": r.entry_low,
-        "detail": r.detail or {},
+        "vol_expand_mult": entry.get("vol_expand_mult"),
+        "vol_ratio_5_20": entry.get("vol_ratio_5_20"),
+        "entry_kind": entry.get("entry_kind"),
+        "detail": detail,
         "from_cache": True,
     }
 

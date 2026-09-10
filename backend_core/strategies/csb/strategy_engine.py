@@ -19,29 +19,105 @@ from .entry_detector import detect_entry
 logger = logging.getLogger(__name__)
 
 
-def compute_score(result: Dict[str, Any], config: Dict[str, Any]) -> float:
-    """SETUP/入场质量综合分（0～100）。"""
+def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    SETUP/入场质量综合分（0～100）及分项明细。
+    分项：粘合天数≤25、粘合带宽≤15、回踩≤15、地量10、换手10、PROBE+12 / BREAKOUT+20(+量能≤10)。
+    """
+    _ = config  # 预留：分项权重将来可配置
     ch = result.get("channel") or {}
-    score = 0.0
     sq_days = float(ch.get("squeeze_days") or 0)
-    score += min(25.0, sq_days * 1.2)
+    squeeze_days_score = min(25.0, sq_days * 1.2)
+
     sq_pct = ch.get("squeeze_pct")
     if sq_pct is not None:
-        score += max(0.0, 15.0 * (1.0 - float(sq_pct) / 0.06))
+        squeeze_pct_score = max(0.0, 15.0 * (1.0 - float(sq_pct) / 0.06))
+    else:
+        squeeze_pct_score = 0.0
+
     touches = float(result.get("touch_count") or 0)
-    score += min(15.0, touches * 4.0)
-    if result.get("dry_vol", {}).get("dry_ok"):
-        score += 10.0
-    if result.get("turnover_ok"):
-        score += 10.0
-    if result.get("signal_type") == CSB_PROBE:
-        score += 12.0
-    elif result.get("signal_type") == CSB_BREAKOUT:
-        score += 20.0
-        vm = result.get("vol_expand_mult")
+    touch_score = min(15.0, touches * 4.0)
+
+    dry_ok = bool((result.get("dry_vol") or {}).get("dry_ok"))
+    dry_score = 10.0 if dry_ok else 0.0
+
+    turnover_ok = bool(result.get("turnover_ok"))
+    turnover_score = 10.0 if turnover_ok else 0.0
+
+    signal_type = result.get("signal_type")
+    entry_bonus = 0.0
+    vol_bonus = 0.0
+    vm = result.get("vol_expand_mult")
+    if signal_type == CSB_PROBE:
+        entry_bonus = 12.0
+    elif signal_type == CSB_BREAKOUT:
+        entry_bonus = 20.0
         if vm is not None:
-            score += min(10.0, float(vm))
-    return round(min(100.0, score), 2)
+            vol_bonus = min(10.0, float(vm))
+
+    raw = (
+        squeeze_days_score
+        + squeeze_pct_score
+        + touch_score
+        + dry_score
+        + turnover_score
+        + entry_bonus
+        + vol_bonus
+    )
+    total = round(min(100.0, raw), 2)
+
+    return {
+        "total": total,
+        "parts": {
+            "squeeze_days": {
+                "score": round(squeeze_days_score, 2),
+                "max": 25.0,
+                "value": sq_days,
+                "formula": "min(25, squeeze_days × 1.2)",
+            },
+            "squeeze_pct": {
+                "score": round(squeeze_pct_score, 2),
+                "max": 15.0,
+                "value": float(sq_pct) if sq_pct is not None else None,
+                "formula": "max(0, 15 × (1 − squeeze_pct / 0.06))",
+            },
+            "touches": {
+                "score": round(touch_score, 2),
+                "max": 15.0,
+                "value": touches,
+                "formula": "min(15, touch_count × 4)",
+            },
+            "dry_vol": {
+                "score": round(dry_score, 2),
+                "max": 10.0,
+                "ok": dry_ok,
+                "formula": "地量成立 +10",
+            },
+            "turnover": {
+                "score": round(turnover_score, 2),
+                "max": 10.0,
+                "ok": turnover_ok,
+                "formula": "20日均换手达标 +10",
+            },
+            "entry_type": {
+                "score": round(entry_bonus, 2),
+                "max": 20.0,
+                "signal_type": signal_type,
+                "formula": "PROBE +12 / BREAKOUT +20",
+            },
+            "vol_expand": {
+                "score": round(vol_bonus, 2),
+                "max": 10.0,
+                "value": float(vm) if vm is not None else None,
+                "formula": "仅 BREAKOUT：min(10, vol_expand_mult)",
+            },
+        },
+    }
+
+
+def compute_score(result: Dict[str, Any], config: Dict[str, Any]) -> float:
+    """SETUP/入场质量综合分（0～100）。"""
+    return float(compute_score_detail(result, config).get("total") or 0.0)
 
 
 def evaluate_one(
@@ -66,6 +142,21 @@ def evaluate_one(
     if not signal_type and entry.get("setup_ok"):
         signal_type = CSB_SETUP
 
+    # 入场评估时 entry.signal_type 可能尚未落到 SETUP；评分按最终展示类型一致
+    score_entry = dict(entry)
+    score_entry["signal_type"] = signal_type
+    score_detail = compute_score_detail(score_entry, cfg)
+
+    setup_keys = (
+        "reason", "turnover_avg_20", "turnover_ok", "touch_count",
+        "touch_ok", "ma250", "dry_vol", "channel", "setup_ok",
+    )
+    entry_keys = (
+        "entry_kind", "vol_expand_mult", "vol_ratio_5_20", "break_line",
+        "body_pct", "upper_shadow_ratio", "expand_ok", "shrink_ok",
+        "pattern_ok", "body_ok", "shadow_ok", "resistance",
+        "probe_price", "breakout_price",
+    )
     row: Dict[str, Any] = {
         "code": _norm_code(code),
         "name": name,
@@ -82,22 +173,19 @@ def evaluate_one(
         "squeeze_days": entry.get("channel", {}).get("squeeze_days"),
         "squeeze_pct": entry.get("channel", {}).get("squeeze_pct"),
         "hh20": entry.get("channel", {}).get("hh20"),
+        "resistance": entry.get("channel", {}).get("resistance") or entry.get("resistance"),
         "touch_count": entry.get("touch_count"),
         "entry_low": entry.get("entry_low"),
         "vol_expand_mult": entry.get("vol_expand_mult"),
         "vol_ratio_5_20": entry.get("vol_ratio_5_20"),
+        "score_detail": score_detail,
         "detail": {
-            "setup": {k: entry.get(k) for k in (
-                "reason", "turnover_avg_20", "turnover_ok", "touch_count",
-                "touch_ok", "ma250", "dry_vol", "channel",
-            )},
-            "entry": {k: entry.get(k) for k in (
-                "entry_kind", "vol_expand_mult", "vol_ratio_5_20", "break_line",
-                "body_pct", "upper_shadow_ratio", "expand_ok", "shrink_ok",
-            ) if entry.get(k) is not None},
+            "setup": {k: entry.get(k) for k in setup_keys if entry.get(k) is not None},
+            "entry": {k: entry.get(k) for k in entry_keys if entry.get(k) is not None},
+            "score": score_detail,
         },
     }
-    row["score"] = compute_score(entry, cfg)
+    row["score"] = float(score_detail.get("total") or 0.0)
     row["buy_signal"] = signal_type in BUY_SIGNAL_TYPES
     return row
 

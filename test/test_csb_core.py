@@ -6,7 +6,7 @@ from backend_core.strategies.csb.config import CSB_BREAKOUT, CSB_PROBE, CSB_SETU
 from backend_core.strategies.csb.defense_exit import check_false_break
 from backend_core.strategies.csb.entry_detector import detect_entry
 from backend_core.strategies.csb.setup_detector import detect_setup
-from backend_core.strategies.csb.strategy_engine import evaluate_one
+from backend_core.strategies.csb.strategy_engine import compute_score_detail, evaluate_one
 
 
 def _make_bars(n: int = 280, base: float = 10.0) -> list:
@@ -57,3 +57,22 @@ def test_evaluate_one_returns_structure():
     assert "score" in row
     assert "setup_ok" in row
     assert "detail" in row
+    assert "score_detail" in row
+    assert row["score_detail"].get("parts")
+    assert row["detail"].get("score") == row["score_detail"]
+    assert abs(float(row["score"]) - float(row["score_detail"]["total"])) < 1e-9
+
+
+def test_compute_score_detail_probe_parts():
+    result = {
+        "channel": {"squeeze_days": 19, "squeeze_pct": 0.022},
+        "touch_count": 4,
+        "dry_vol": {"dry_ok": True},
+        "turnover_ok": True,
+        "signal_type": CSB_PROBE,
+    }
+    sd = compute_score_detail(result, get_default_csb_config())
+    # min(25, 19*1.2)=22.8 + max(0,15*(1-0.022/0.06))=9.5 + min(15,16)=15 +10 +10 +12 = 79.3
+    assert sd["parts"]["squeeze_days"]["score"] == 22.8
+    assert sd["parts"]["entry_type"]["score"] == 12.0
+    assert abs(sd["total"] - 79.3) < 1e-9

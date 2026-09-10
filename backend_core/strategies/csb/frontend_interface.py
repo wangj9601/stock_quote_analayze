@@ -127,4 +127,5 @@ class CSBFrontendInterface:
             },
             "search_date": effective,
             "data_source": data_source,
+            "source": data_source,
         }
