@@ -327,6 +327,7 @@ class GMSConfigManager:
                 "board_panel_member_limit": None,
                 "board_prefer_db_slope": True,
                 "enable_board_fund_flow": False,
+                "fund_flow_weak_threshold": 0.0,
                 # ln(I_t) 斜率：≥ 该值展示「走强」（不加分）
                 "board_slope_strong_threshold": 0.001,
             },
@@ -420,6 +421,7 @@ class GMSConfigManager:
             br.setdefault("board_panel_member_limit", None)
             br.setdefault("board_prefer_db_slope", True)
             br.setdefault("enable_board_fund_flow", False)
+            br.setdefault("fund_flow_weak_threshold", 0.0)
             self.update_config(
                 penalty_id,
                 {"scoring": scoring, "board_resonance": br},

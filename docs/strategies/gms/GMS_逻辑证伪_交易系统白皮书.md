@@ -280,12 +280,12 @@ TradeExecutionLog（复盘：是否严格执行、是否情绪化）
 | 大盘极端阴跌 | 指数 N=20 内 F/Z > 2.5 且 Δ < 0 | 所有 GMS 新仓减半；已有仓位 L1 降级 | 未实现 |
 | 板块走弱 | 同花顺**主行业板**成分量权基准近 N 日对 \(\ln I_t\) 回归斜率 &lt; 0（斜率不可用时回退当日板块涨跌幅 &lt; 0） | 选股 **软减分** `board_weak`（默认 10 分）并打标签；**不**做硬过滤 | **已实现（选股）** |
 | 板块走强 | \(\ln I_t\) 斜率 ≥ `board_slope_strong_threshold`（默认 0.001） | **仅展示**「走强」（行情列表/详情、GMS 板环境）；**不加分、不硬过滤** | **已实现（展示）** |
-| 板块资金流走弱 | 板级主力净流入等 | 拟与斜率组合软降权 | **未采集**（字段预留，二期） |
+| 板块资金流走弱 | `board_fund_flow_daily.main_net_inflow`（同花顺优先日采）；配置 `enable_board_fund_flow` + `fund_flow_weak_threshold`（默认 0 元） | 与斜率 **OR** 组合软降权（仍非硬过滤） | **已采集可启用**（默认开关关，灰度后开） |
 | 个股相对强度消失 | 个股 5 日涨幅 &lt; 板块指数 5 日涨幅 | L1 减仓观察 | 未实现 |
 
 > 注：上表「个股相对强度」指相对**板块短期涨幅**的规则草案，**不是**系统已落地的 IBD 风格 **RS Rating（1–99，前复权全市场截面）**。后者见 [`docs/indicators/股价相对强度_RS_Rating.md`](../../indicators/股价相对强度_RS_Rating.md)。
 
-选股结果字段：`primary_board_code/name`、`sector_slope`、`board_change_percent`、`board_weak`、`board_strong`/`board_env`、`board_main_net_inflow`（预留）。
+选股结果字段：`primary_board_code/name`、`sector_slope`、`board_change_percent`、`board_weak`、`board_strong`/`board_env`、`board_main_net_inflow`（读库）。
 
 **斜率口径与数据路径（§6.3 补充）：**
 

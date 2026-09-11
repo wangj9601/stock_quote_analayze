@@ -17,6 +17,7 @@ from backend_api.utils.bk_board_code import (
     normalize_industry_board_code,
 )
 from backend_api.utils.board_code_source import (
+    DEFAULT_BOARD_CODE_SOURCE,
     SYNC_BOARD_CODE_SOURCE,
     sql_board_code_source_preserve_on_conflict,
 )
@@ -32,6 +33,8 @@ class RealtimeStockIndustryBoardCollector:
         self.db_file = DATA_COLLECTORS['akshare']['db_file']
         self.table_name = 'industry_board_realtime_quotes'
         self.log_table = 'realtime_collect_operation_logs'
+        # ths | em：影响 basic_info 写入来源与码匹配策略
+        self._last_fetch_source = "em"
         self._init_db()
 
     def _init_db(self):
@@ -116,18 +119,21 @@ class RealtimeStockIndustryBoardCollector:
             session.close()
 
     def fetch_data(self):
-        # 调用akshare接口
+        """同花顺行业一览优先，失败再东财行业板块列表。"""
         try:
-            df = ak.stock_board_industry_name_em()
-            return df
+            print("[采集] 优先调用 ak.stock_board_industry_summary_ths()...")
+            df = ak.stock_board_industry_summary_ths()
+            self._last_fetch_source = "ths"
+            return normalize_ths_industry_df(df)
         except Exception as e:
-            print(f"[采集] 东方财富接口调用失败: {e}，尝试调用同花顺接口...")
+            print(f"[采集] 同花顺接口调用失败: {e}，尝试东方财富接口...")
             try:
-                df = ak.stock_board_industry_summary_ths()
-                return normalize_ths_industry_df(df)
+                df = ak.stock_board_industry_name_em()
+                self._last_fetch_source = "em"
+                return df
             except Exception as e2:
-                print(f"[采集] 同花顺接口调用也失败: {e2}")
-                raise e # 抛出原始异常或新异常
+                print(f"[采集] 东方财富接口调用也失败: {e2}")
+                raise e
 
     def _load_stock_name_code_map(self, session) -> dict:
         try:
@@ -208,7 +214,11 @@ class RealtimeStockIndustryBoardCollector:
 
             basic_info_count = 0
             em_to_stored: dict[str, str] = {}
-            # 新建板标东财；已有板保留原 board_code_source（禁止把同花顺改成东财）
+            fetch_src = getattr(self, "_last_fetch_source", "em")
+            incoming_source = (
+                DEFAULT_BOARD_CODE_SOURCE if fetch_src == "ths" else SYNC_BOARD_CODE_SOURCE
+            )
+            # 已有板保留原 board_code_source（禁止静默覆盖）
             _src_preserve = sql_board_code_source_preserve_on_conflict("industry_board_basic_info")
             for _, row in df.iterrows():
                 if pd.isna(row.get('board_code')) or row.get('board_code') == '':
@@ -220,7 +230,35 @@ class RealtimeStockIndustryBoardCollector:
                 name_key = str(board_name).strip() if board_name is not None and not pd.isna(board_name) else ""
                 try:
                     existing = None
-                    if name_key:
+                    if name_key and fetch_src == "ths":
+                        # 同花顺一览：优先匹配同花顺来源同名板（881 等）
+                        existing = session.execute(
+                            text(
+                                """
+                                SELECT board_code FROM industry_board_basic_info
+                                WHERE TRIM(board_name) = :name
+                                  AND COALESCE(NULLIF(TRIM(board_code_source), ''), '')
+                                      = 'tonghuashun'
+                                LIMIT 1
+                                """
+                            ),
+                            {"name": name_key},
+                        ).scalar()
+                        if not existing:
+                            # 名称本身即同花顺码（如已入库）
+                            existing = session.execute(
+                                text(
+                                    """
+                                    SELECT board_code FROM industry_board_basic_info
+                                    WHERE board_code = :code
+                                      AND COALESCE(NULLIF(TRIM(board_code_source), ''), '')
+                                          = 'tonghuashun'
+                                    LIMIT 1
+                                    """
+                                ),
+                                {"code": em_code},
+                            ).scalar()
+                    elif name_key:
                         # 仅复用东财/空来源同名板；同花顺等同名板不参与匹配，避免被东财同步改写
                         existing = session.execute(
                             text(
@@ -238,6 +276,10 @@ class RealtimeStockIndustryBoardCollector:
                         stored_code = normalize_industry_board_code(existing) or str(existing).strip()
                     elif em_code in em_to_stored:
                         stored_code = em_to_stored[em_code]
+                    elif fetch_src == "ths" and name_key:
+                        # 无同花顺板则跳过新建（避免把名称写成东财 BK）
+                        print(f"[采集] 同花顺行业无匹配 basic_info，跳过: {name_key}")
+                        continue
                     elif name_key and normalize_industry_board_code(name_key):
                         stored_code = normalize_industry_board_code(name_key)
                     else:
@@ -254,7 +296,7 @@ class RealtimeStockIndustryBoardCollector:
                         'board_code': stored_code,
                         'board_name': board_name,
                         'create_date': now,
-                        'board_code_source': SYNC_BOARD_CODE_SOURCE,
+                        'board_code_source': incoming_source,
                     })
                     basic_info_count += 1
                 except Exception as e:

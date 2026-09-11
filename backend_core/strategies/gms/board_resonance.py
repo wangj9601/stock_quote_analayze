@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """GMS 主行业板共振：归属解析、板块斜率、软减分后处理。
 
-资金流字段本轮仅预留（板级尚未采集）；强弱主用 sector_slope，旁证用实时涨跌。
+板级资金流读 board_fund_flow_daily（同花顺优先日采）；强弱主用 sector_slope，
+可选叠加净流入阈值；旁证用实时涨跌。
 斜率优先读 industry_board_daily_metrics（采集时入库），缺失再现算全成分。
 
 斜率仅服务同花顺（tonghuashun）主行业板：读库/现算回退均不处理东财/华泰等来源
@@ -37,7 +38,7 @@ def empty_board_resonance() -> Dict[str, Any]:
         "board_env": "unknown",
         "board_env_label": "--",
         "board_weak_reason": None,
-        "board_main_net_inflow": None,  # 二期：板级资金流
+        "board_main_net_inflow": None,
         "enable_board_fund_flow": False,
     }
 
@@ -81,6 +82,7 @@ def resolve_board_resonance_config(config: Optional[Dict[str, Any]]) -> Dict[str
         "panel_member_limit": normalize_member_limit(raw_limit),
         "lookback_days": int(_get("board_slope_lookback_days", DEFAULT_LOOKBACK)),
         "enable_board_fund_flow": bool(_get("enable_board_fund_flow", False)),
+        "fund_flow_weak_threshold": float(_get("fund_flow_weak_threshold", 0.0)),
         "use_realtime_change_fallback": bool(_get("board_use_realtime_change_fallback", True)),
         "prefer_db_slope": bool(_get("board_prefer_db_slope", True)),
     }
@@ -288,6 +290,7 @@ BOARD_WEAK_REASON_SUMMARY = {
     "realtime_change_ok": "无斜率时按实时涨跌回退：涨跌幅 ≥ 0，未走弱（不作走强）",
     "insufficient_board_data": "斜率与实时涨跌均不足，暂无法判定强弱",
     "no_primary_board": "无同花顺主行业板，暂无法判定强弱",
+    "board_fund_flow_negative": "板级主力净流入低于阈值，判定走弱（软降权）",
 }
 
 BOARD_ENV_LABELS = {
@@ -305,10 +308,14 @@ def evaluate_board_environment(
     slope_weak_threshold: float = 0.0,
     slope_strong_threshold: float = DEFAULT_SLOPE_STRONG_THRESHOLD,
     use_realtime_fallback: bool = True,
+    main_net_inflow: Optional[float] = None,
+    enable_board_fund_flow: bool = False,
+    fund_flow_weak_threshold: float = 0.0,
 ) -> Dict[str, Any]:
     """板环境：走弱 / 正常 / 走强（走强仅展示，不加分）。
 
     斜率口径为入库的 ln(I_t) 近窗回归斜率。
+    可选：启用板级资金流时，净流入 < 阈值亦判走弱（OR，仍软降权）。
     """
     strong_th = float(slope_strong_threshold)
     weak_th = float(slope_weak_threshold)
@@ -334,6 +341,15 @@ def evaluate_board_environment(
     else:
         env, reason = "unknown", "insufficient_board_data"
 
+    if (
+        enable_board_fund_flow
+        and main_net_inflow is not None
+        and float(main_net_inflow) < float(fund_flow_weak_threshold)
+    ):
+        if env != "weak":
+            env, reason = "weak", "board_fund_flow_negative"
+            board_strong = False
+
     weak = env == "weak"
     return {
         "board_weak": weak,
@@ -358,6 +374,9 @@ def evaluate_board_weak_judgment(
     slope_threshold: float = 0.0,
     slope_strong_threshold: float = DEFAULT_SLOPE_STRONG_THRESHOLD,
     use_realtime_fallback: bool = True,
+    main_net_inflow: Optional[float] = None,
+    enable_board_fund_flow: bool = False,
+    fund_flow_weak_threshold: float = 0.0,
 ) -> Dict[str, Any]:
     """兼容旧名：返回环境判断（含走强展示字段）。"""
     return evaluate_board_environment(
@@ -366,7 +385,82 @@ def evaluate_board_weak_judgment(
         slope_weak_threshold=slope_threshold,
         slope_strong_threshold=slope_strong_threshold,
         use_realtime_fallback=use_realtime_fallback,
+        main_net_inflow=main_net_inflow,
+        enable_board_fund_flow=enable_board_fund_flow,
+        fund_flow_weak_threshold=fund_flow_weak_threshold,
     )
+
+
+def _load_board_main_net_inflows(
+    db: Any,
+    board_codes: Sequence[str],
+    *,
+    trade_date: Optional[str] = None,
+    board_kind: str = "industry",
+    board_code_source: str = "tonghuashun",
+) -> Dict[str, Optional[float]]:
+    """批量读取板级主力净流入（元）。trade_date 空则取各板最新有值日。"""
+    from sqlalchemy import bindparam, text
+
+    codes = [str(c).strip() for c in board_codes if c]
+    if not codes:
+        return {}
+    out: Dict[str, Optional[float]] = {c: None for c in codes}
+    try:
+        if trade_date:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT board_code, main_net_inflow
+                    FROM board_fund_flow_daily
+                    WHERE board_kind = :kind
+                      AND board_code_source = :src
+                      AND trade_date = CAST(:td AS date)
+                      AND board_code IN :codes
+                    """
+                ).bindparams(bindparam("codes", expanding=True)),
+                {
+                    "kind": board_kind,
+                    "src": board_code_source,
+                    "td": str(trade_date)[:10],
+                    "codes": codes,
+                },
+            ).fetchall()
+        else:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT DISTINCT ON (board_code)
+                           board_code, main_net_inflow
+                    FROM board_fund_flow_daily
+                    WHERE board_kind = :kind
+                      AND board_code_source = :src
+                      AND board_code IN :codes
+                      AND main_net_inflow IS NOT NULL
+                    ORDER BY board_code, trade_date DESC
+                    """
+                ).bindparams(bindparam("codes", expanding=True)),
+                {
+                    "kind": board_kind,
+                    "src": board_code_source,
+                    "codes": codes,
+                },
+            ).fetchall()
+        for code, net in rows:
+            c = str(code or "").strip()
+            if not c:
+                continue
+            try:
+                out[c] = float(net) if net is not None else None
+            except (TypeError, ValueError):
+                out[c] = None
+    except Exception as e:
+        logger.warning("读取 board_fund_flow_daily 失败: %s", e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    return out
 
 
 def apply_board_weak_penalty_to_item(
@@ -599,6 +693,7 @@ def enrich_results_with_board_resonance(
     strong_th = float(br_cfg["slope_strong_threshold"])
     use_rt = bool(br_cfg["use_realtime_change_fallback"])
     enable_ff = bool(br_cfg["enable_board_fund_flow"])
+    ff_th = float(br_cfg.get("fund_flow_weak_threshold", 0.0))
     prefer_db = bool(br_cfg.get("prefer_db_slope", True))
 
     slope_cache = _resolve_slopes_for_boards(
@@ -611,20 +706,28 @@ def enrich_results_with_board_resonance(
         prefer_db=prefer_db,
         board_code_source=board_code_source,
     )
+    ff_map = _load_board_main_net_inflows(
+        db,
+        list(allowed_slope_boards),
+        trade_date=end_date,
+        board_kind="industry",
+        board_code_source=board_code_source or "tonghuashun",
+    )
 
     for item in results:
         code = _norm_code(item.get("symbol") or item.get("code"))
         info = primary_map.get(code) if code else None
         payload = empty_board_resonance()
         payload["enable_board_fund_flow"] = enable_ff
-        # 二期启用前恒为 None
-        payload["board_main_net_inflow"] = None
 
         if info:
             bc = info["board_code"]
             payload["primary_board_code"] = bc
             payload["primary_board_name"] = info.get("board_name")
             payload["primary_board_kind"] = info.get("board_kind") or "industry"
+            net_ff = ff_map.get(bc)
+            if net_ff is not None:
+                payload["board_main_net_inflow"] = round(float(net_ff), 2)
             if bc not in allowed_slope_boards:
                 # 非同花顺：不处理斜率/弱判定（与入库口径一致）
                 payload["sector_slope"] = None
@@ -648,6 +751,9 @@ def enrich_results_with_board_resonance(
                     slope_weak_threshold=slope_th,
                     slope_strong_threshold=strong_th,
                     use_realtime_fallback=use_rt,
+                    main_net_inflow=net_ff,
+                    enable_board_fund_flow=enable_ff,
+                    fund_flow_weak_threshold=ff_th,
                 )
                 payload.update(env)
         else:

@@ -40,6 +40,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_rs_rating_cn,
     exec_rs_rating_hk,
     exec_ths_fund_flow_daily,
+    exec_board_fund_flow_daily,
     exec_hk_fund_flow_daily,
     exec_macd_cn,
     exec_macd_hk,
@@ -196,6 +197,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
         "cn",
         exec_ths_fund_flow_daily,
         description="stock_fund_flow_individual(即时) → stock_fund_flow_daily",
+    ),
+    _n(
+        "board_fund_flow_daily",
+        "板块资金流向日采",
+        "cn",
+        exec_board_fund_flow_daily,
+        description="同花顺行业/概念资金流 → board_fund_flow_daily（需在个股资金流之后）",
     ),
     _n(
         "hk_fund_flow_daily",

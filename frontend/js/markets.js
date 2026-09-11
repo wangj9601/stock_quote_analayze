@@ -1581,6 +1581,12 @@ const MarketsPage = {
                 </div>
                 <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（窗口：120/60/20/10/5 日；均为 ln 量权基准回归）</div>
             </div>
+            <div class="sector-detail-section sector-fund-flow-section">
+                <h3>资金流向</h3>
+                <div id="sectorFundFlowHost" class="sector-fund-flow-host">
+                    <div class="sector-detail-loading">资金流向加载中…</div>
+                </div>
+            </div>
             <div class="sector-detail-section">
                 <h3>龙头 / 中军</h3>
                 ${rolesHtml}
@@ -1609,6 +1615,116 @@ const MarketsPage = {
             });
         }
 
+        const src = String(d.board_code_source || (this._sectorDetailCtx && this._sectorDetailCtx.boardSource) || 'tonghuashun').trim();
+        this.loadSectorFundFlow(kind, code, src);
+    },
+
+    formatFundFlowYi(yuan) {
+        if (yuan == null || yuan === '' || Number.isNaN(Number(yuan))) return '--';
+        const yi = Number(yuan) / 1e8;
+        const abs = Math.abs(yi);
+        const txt = abs >= 100 ? yi.toFixed(1) : yi.toFixed(2);
+        return `${yi > 0 ? '+' : ''}${txt}亿`;
+    },
+
+    async loadSectorFundFlow(kind, boardCode, boardSource) {
+        const host = document.getElementById('sectorFundFlowHost');
+        if (!host) return;
+        const code = String(boardCode || '').trim();
+        if (!code) {
+            host.innerHTML = '<div class="sector-detail-meta">缺少板块代码</div>';
+            return;
+        }
+        const token = `${kind}|${code}|${Date.now()}`;
+        this._sectorFundFlowToken = token;
+        host.innerHTML = '<div class="sector-detail-loading">资金流向加载中…</div>';
+        try {
+            const base = (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) ? API_BASE_URL : '';
+            const src = encodeURIComponent(boardSource || 'tonghuashun');
+            const url = `${base}/api/board_fund_flow/daily?board_kind=${encodeURIComponent(kind)}&board_code=${encodeURIComponent(code)}&board_code_source=${src}&days=20`;
+            const resp = await fetch(url);
+            const result = await resp.json().catch(() => ({}));
+            if (this._sectorFundFlowToken !== token) return;
+            if (!resp.ok || !result.success) {
+                host.innerHTML = `<div class="sector-detail-meta">${this.escapeHtml((result && result.message) || '暂无板块资金流数据（需日采入库）')}</div>`;
+                return;
+            }
+            this.renderSectorFundFlow(host, result.data || {});
+        } catch (err) {
+            if (this._sectorFundFlowToken !== token) return;
+            console.error(err);
+            host.innerHTML = `<div class="sector-detail-error">${this.escapeHtml(err.message || '资金流向加载失败')}</div>`;
+        }
+    },
+
+    renderSectorFundFlow(host, data) {
+        if (!host) return;
+        const series = Array.isArray(data.series) ? data.series : [];
+        const latest = data.latest || (series.length ? series[series.length - 1] : null);
+        if (!latest && !series.length) {
+            host.innerHTML = '<div class="sector-detail-meta">暂无板块资金流数据（需日采入库）</div>';
+            return;
+        }
+        const item = (label, value, cls) => `
+            <div class="sector-detail-item">
+                <span class="label">${label}</span>
+                <span class="value ${cls || ''}">${value}</span>
+            </div>
+        `;
+        const net = latest ? latest.main_net_inflow : null;
+        const inflow = latest ? latest.inflow_amount : null;
+        const outflow = latest ? latest.outflow_amount : null;
+        const asof = latest && latest.trade_date ? latest.trade_date : '--';
+        const src = latest && latest.source ? latest.source : (data.series_source || '');
+
+        let tiersHtml = '';
+        if (latest && (
+            latest.super_large_net_inflow != null
+            || latest.large_net_inflow != null
+            || latest.mid_net_inflow != null
+            || latest.small_net_inflow != null
+        )) {
+            tiersHtml = `
+                <details class="sector-fund-flow-tiers">
+                    <summary>分档净流入</summary>
+                    <div class="sector-detail-grid">
+                        ${item('超大单', this.formatFundFlowYi(latest.super_large_net_inflow), this.getChangeClass(latest.super_large_net_inflow))}
+                        ${item('大单', this.formatFundFlowYi(latest.large_net_inflow), this.getChangeClass(latest.large_net_inflow))}
+                        ${item('中单', this.formatFundFlowYi(latest.mid_net_inflow), this.getChangeClass(latest.mid_net_inflow))}
+                        ${item('小单', this.formatFundFlowYi(latest.small_net_inflow), this.getChangeClass(latest.small_net_inflow))}
+                    </div>
+                </details>
+            `;
+        }
+
+        const maxAbs = series.reduce((m, r) => {
+            const v = Math.abs(Number(r.main_net_inflow) || 0);
+            return v > m ? v : m;
+        }, 0) || 1;
+        const bars = series.map((r) => {
+            const v = Number(r.main_net_inflow) || 0;
+            const pct = Math.min(100, (Math.abs(v) / maxAbs) * 100);
+            const cls = v >= 0 ? 'up' : 'down';
+            const day = String(r.trade_date || '').slice(5);
+            return `<div class="sector-ff-bar-col" title="${this.escapeHtml(String(r.trade_date || ''))}: ${this.formatFundFlowYi(v)}">
+                <div class="sector-ff-bar-track"><div class="sector-ff-bar ${cls}" style="height:${pct}%"></div></div>
+                <div class="sector-ff-bar-label">${this.escapeHtml(day)}</div>
+            </div>`;
+        }).join('');
+
+        host.innerHTML = `
+            <div class="sector-detail-grid">
+                ${item('净流入', this.formatFundFlowYi(net), this.getChangeClass(net))}
+                ${item('流入', this.formatFundFlowYi(inflow), 'positive')}
+                ${item('流出', this.formatFundFlowYi(outflow), 'negative')}
+                ${item('数据日', this.escapeHtml(asof))}
+                ${item('来源', this.escapeHtml(src || '--'))}
+            </div>
+            ${tiersHtml}
+            <div class="sector-ff-chart" aria-label="近20日净流入">
+                ${bars || '<div class="sector-detail-meta">暂无序列</div>'}
+            </div>
+        `;
     },
 
     /**

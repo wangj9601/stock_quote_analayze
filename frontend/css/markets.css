@@ -1101,6 +1101,71 @@
     font-size: 15px;
 }
 
+.sector-fund-flow-host {
+    min-height: 48px;
+}
+
+.sector-fund-flow-tiers {
+    margin: 8px 0;
+    font-size: 13px;
+}
+
+.sector-fund-flow-tiers summary {
+    cursor: pointer;
+    color: var(--color-text-secondary, #64748b);
+    margin-bottom: 6px;
+}
+
+.sector-ff-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 120px;
+    margin-top: 12px;
+    padding: 8px 4px 0;
+    border-top: 1px solid #e2e8f0;
+    overflow-x: auto;
+}
+
+.sector-ff-bar-col {
+    flex: 1 0 14px;
+    max-width: 28px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+}
+
+.sector-ff-bar-track {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    min-height: 80px;
+}
+
+.sector-ff-bar {
+    width: 100%;
+    min-height: 2px;
+    border-radius: 2px 2px 0 0;
+}
+
+.sector-ff-bar.up {
+    background: #dc2626;
+}
+
+.sector-ff-bar.down {
+    background: #16a34a;
+}
+
+.sector-ff-bar-label {
+    font-size: 10px;
+    color: #94a3b8;
+    margin-top: 4px;
+    white-space: nowrap;
+}
+
 .sector-detail-summary {
     font-size: 13px;
     line-height: 1.6;

@@ -526,6 +526,14 @@ def _ths_fund_flow_daily() -> Any:
     return collect_ths_fund_flow_daily()
 
 
+def _board_fund_flow_daily() -> Any:
+    from backend_core.data_collectors.akshare.board_fund_flow_daily import (
+        collect_board_fund_flow_daily,
+    )
+
+    return collect_board_fund_flow_daily()
+
+
 def _hk_fund_flow_daily() -> Any:
     from backend_core.data_collectors.akshare.hk_fund_flow_from_file import (
         collect_hk_fund_flow_from_file,
@@ -645,6 +653,7 @@ exec_csb_cn = _wrap_plain(_csb_cn, "CSB信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
 exec_ths_fund_flow_daily = _wrap_cn(_ths_fund_flow_daily, "同花顺资金流入流出日采")
+exec_board_fund_flow_daily = _wrap_cn(_board_fund_flow_daily, "板块资金流向日采")
 exec_hk_fund_flow_daily = _wrap_hk(_hk_fund_flow_daily, "港股资金流向文件日采")
 exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")
 exec_index_daily_cn = _wrap_plain(_index_daily_cn, "A股指数日线采集")

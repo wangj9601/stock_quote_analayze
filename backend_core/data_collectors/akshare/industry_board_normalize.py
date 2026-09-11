@@ -53,6 +53,9 @@ def normalize_ths_industry_df(df: pd.DataFrame) -> pd.DataFrame:
     注意：同花顺一览的「均价」是成分股均价，不是板块指数点位；
     东财 ``最新价`` 才是行业板指数。故不把「均价」映射为「最新价」，
     避免入库/展示成错误的「最新价」。
+
+    「净流入」保留为中文列（亿元），供资金流采集补缺；不进入
+    ``industry_board_to_english_df``，以免写入实时行情表。
     """
     rename_map = {
         "板块": "板块名称",
@@ -69,6 +72,12 @@ def normalize_ths_industry_df(df: pd.DataFrame) -> pd.DataFrame:
     for col in ("涨跌额", "总市值", "换手率", "领涨股代码"):
         if col not in out.columns:
             out[col] = None
+    # 保留净流入（若源列存在）；单位：亿元
+    if "净流入" not in out.columns:
+        for alt in ("净流入额", "主力净流入"):
+            if alt in out.columns:
+                out["净流入"] = out[alt]
+                break
     return out
 
 

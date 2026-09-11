@@ -537,6 +537,30 @@ class StockFundFlowDaily(Base):
     updated_at = Column(DateTime)
 
 
+class BoardFundFlowDaily(Base):
+    """行业/概念板块资金流日快照（单位：元；同花顺优先）。"""
+
+    __tablename__ = "board_fund_flow_daily"
+    board_kind = Column(String(16), primary_key=True)
+    board_code_source = Column(String(32), primary_key=True, default="tonghuashun")
+    board_code = Column(String(32), primary_key=True)
+    trade_date = Column(Date, primary_key=True)
+    board_name = Column(String(100))
+    change_percent = Column(Float)
+    inflow_amount = Column(Float)
+    outflow_amount = Column(Float)
+    main_net_inflow = Column(Float)
+    main_net_inflow_pct = Column(Float)
+    super_large_net_inflow = Column(Float)
+    large_net_inflow = Column(Float)
+    mid_net_inflow = Column(Float)
+    small_net_inflow = Column(Float)
+    source = Column(String(32), default="ths_fund_flow")
+    em_board_code = Column(String(32))
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+
 class StockFundFlowDailyHK(Base):
     """港股资金流日快照（文件采集）：流入/流出/净额/成交额（单位：元）。"""
 
