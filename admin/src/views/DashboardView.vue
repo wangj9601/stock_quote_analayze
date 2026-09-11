@@ -65,26 +65,54 @@
       </el-row>
     </div>
 
-    <!-- 快速操作 -->
-    <div class="quick-actions">
-      <el-card>
-        <template #header>
-          <span>快速操作</span>
-        </template>
-        
-        <div class="actions-grid">
-          <el-button
-            v-for="action in quickActions"
-            :key="action.path"
-            :type="action.type"
-            :icon="action.icon"
-            class="action-button"
-            @click="navigateTo(action.path)"
-          >
-            {{ action.name }}
-          </el-button>
-        </div>
-      </el-card>
+    <!-- 行业 / 概念板块资金流向 -->
+    <div class="fund-flow-charts">
+      <el-row :gutter="16">
+        <el-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
+          <el-card class="fund-flow-card" v-loading="industryLoading">
+            <template #header>
+              <div class="fund-flow-card-header">
+                <span>行业板块资金流向</span>
+                <span class="fund-flow-date">
+                  {{ industryTradeDate || '--' }}
+                  <template v-if="industryCount"> · {{ industryCount }} 个</template>
+                </span>
+              </div>
+            </template>
+            <div
+              v-show="!industryEmpty && !industryError"
+              ref="industryChartRef"
+              class="fund-flow-chart"
+            />
+            <div v-if="industryEmpty" class="fund-flow-empty">暂无板块资金流（请先日采）</div>
+            <div v-else-if="industryError" class="fund-flow-empty fund-flow-error">
+              {{ industryError }}
+            </div>
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
+          <el-card class="fund-flow-card" v-loading="conceptLoading">
+            <template #header>
+              <div class="fund-flow-card-header">
+                <span>概念板块资金流向</span>
+                <span class="fund-flow-date">
+                  {{ conceptTradeDate || '--' }}
+                  <template v-if="conceptCount"> · {{ conceptCount }} 个</template>
+                </span>
+              </div>
+            </template>
+            <div
+              v-show="!conceptEmpty && !conceptError"
+              ref="conceptChartRef"
+              class="fund-flow-chart"
+            />
+            <div v-if="conceptEmpty" class="fund-flow-empty">暂无板块资金流（请先日采）</div>
+            <div v-else-if="conceptError" class="fund-flow-empty fund-flow-error">
+              {{ conceptError }}
+            </div>
+          </el-card>
+        </el-col>
+      </el-row>
     </div>
 
     <!-- 最近活动 -->
@@ -110,20 +138,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import * as echarts from 'echarts'
 import {
   User,
   Document,
   TrendCharts,
   Monitor,
-  Setting,
-  DataAnalysis
 } from '@element-plus/icons-vue'
+import boardFundFlowService, {
+  type BoardFundFlowTodayItem
+} from '@/services/boardFundFlow.service'
 
-const router = useRouter()
-
-// 统计数据
 const stats = ref({
   users: 0,
   logs: 0,
@@ -131,17 +157,6 @@ const stats = ref({
   system: '正常'
 })
 
-// 快速操作
-const quickActions: { name: string; path: string; type: '' | 'text' | 'default' | 'success' | 'primary' | 'warning' | 'info' | 'danger'; icon: any }[] = [
-  { name: '查看日志', path: '/logs', type: 'primary', icon: Document },
-  { name: '用户与权限', path: '/access-management', type: 'success', icon: User },
-  { name: '行情数据', path: '/quotes', type: 'warning', icon: TrendCharts },
-  { name: '系统监控', path: '/monitoring', type: 'info', icon: Monitor },
-  { name: '数据采集', path: '/datacollect', type: 'primary', icon: DataAnalysis },
-  { name: '系统设置', path: '/datasource', type: 'success', icon: Setting }
-]
-
-// 最近活动
 const recentActivities = ref<{
   id: number
   content: string
@@ -174,14 +189,23 @@ const recentActivities = ref<{
   }
 ])
 
-// 导航到指定页面
-const navigateTo = (path: string) => {
-  router.push(path)
-}
+const industryChartRef = ref<HTMLDivElement | null>(null)
+const conceptChartRef = ref<HTMLDivElement | null>(null)
+let industryChart: echarts.ECharts | null = null
+let conceptChart: echarts.ECharts | null = null
 
-// 加载统计数据
-const loadStats = () => {
-  // 这里可以调用API获取真实的统计数据
+const industryLoading = ref(false)
+const conceptLoading = ref(false)
+const industryEmpty = ref(false)
+const conceptEmpty = ref(false)
+const industryError = ref('')
+const conceptError = ref('')
+const industryTradeDate = ref('')
+const conceptTradeDate = ref('')
+const industryCount = ref(0)
+const conceptCount = ref(0)
+
+function loadStats() {
   stats.value = {
     users: 1250,
     logs: 45678,
@@ -190,8 +214,181 @@ const loadStats = () => {
   }
 }
 
+function sortAllByNetInflow(items: BoardFundFlowTodayItem[]) {
+  return [...items]
+    .filter((x) => x.main_net_inflow != null)
+    .sort((a, b) => Number(a.main_net_inflow) - Number(b.main_net_inflow))
+}
+
+function buildChartOption(rows: BoardFundFlowTodayItem[], titleHint: string) {
+  const names = rows.map((r) => String(r.board_name || r.board_code || '--'))
+  const values = rows.map((r) => {
+    const yuan = Number(r.main_net_inflow) || 0
+    return Math.round((yuan / 1e8) * 100) / 100
+  })
+  const useZoom = rows.length > 20
+  // dataZoom 初始窗口：优先露出净流入最强的一段（数组末尾 = 图顶部）
+  const windowSize = 20
+  const startPct = useZoom
+    ? Math.max(0, ((rows.length - windowSize) / rows.length) * 100)
+    : 0
+  return {
+    title: {
+      show: false,
+      text: titleHint
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params: unknown) => {
+        const list = Array.isArray(params) ? params : [params]
+        const p = list[0] as { name?: string; value?: number }
+        const v = Number(p?.value)
+        const sign = v > 0 ? '+' : ''
+        return `${p?.name || ''}<br/>净流入：${sign}${v.toFixed(2)} 亿`
+      }
+    },
+    grid: {
+      left: 96,
+      right: useZoom ? 36 : 28,
+      top: 12,
+      bottom: 28
+    },
+    dataZoom: useZoom
+      ? [
+          {
+            type: 'slider',
+            yAxisIndex: 0,
+            width: 14,
+            right: 4,
+            start: startPct,
+            end: 100,
+            brushSelect: false
+          },
+          {
+            type: 'inside',
+            yAxisIndex: 0,
+            start: startPct,
+            end: 100
+          }
+        ]
+      : [],
+    xAxis: {
+      type: 'value',
+      name: '净流入(亿)',
+      nameLocation: 'middle',
+      nameGap: 22,
+      axisLabel: { fontSize: 11 },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } }
+    },
+    yAxis: {
+      type: 'category',
+      data: names,
+      axisLabel: {
+        fontSize: 11,
+        width: 88,
+        overflow: 'truncate'
+      }
+    },
+    series: [
+      {
+        type: 'bar',
+        data: values.map((v) => ({
+          value: v,
+          itemStyle: {
+            color: v >= 0 ? '#dc2626' : '#16a34a',
+            borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
+          }
+        })),
+        barMaxWidth: 14
+      }
+    ]
+  }
+}
+
+function ensureChart(el: HTMLDivElement | null, existing: echarts.ECharts | null) {
+  if (!el) return existing
+  if (existing) return existing
+  return echarts.init(el)
+}
+
+function renderFundFlowChart(
+  kind: 'industry' | 'concept',
+  items: BoardFundFlowTodayItem[]
+) {
+  const rows = sortAllByNetInflow(items)
+  if (kind === 'industry') {
+    industryChart = ensureChart(industryChartRef.value, industryChart)
+    industryChart?.setOption(buildChartOption(rows, '行业'), true)
+    industryChart?.resize()
+  } else {
+    conceptChart = ensureChart(conceptChartRef.value, conceptChart)
+    conceptChart?.setOption(buildChartOption(rows, '概念'), true)
+    conceptChart?.resize()
+  }
+}
+
+async function loadKind(kind: 'industry' | 'concept') {
+  const isIndustry = kind === 'industry'
+  if (isIndustry) {
+    industryLoading.value = true
+    industryError.value = ''
+    industryEmpty.value = false
+  } else {
+    conceptLoading.value = true
+    conceptError.value = ''
+    conceptEmpty.value = false
+  }
+  try {
+    const resp = await boardFundFlowService.getToday({ board_kind: kind })
+    if (!resp.success) {
+      throw new Error(resp.message || '加载失败')
+    }
+    const items = resp.data?.items || []
+    const td = resp.data?.trade_date || ''
+    if (isIndustry) {
+      industryTradeDate.value = td
+      industryCount.value = items.length
+    } else {
+      conceptTradeDate.value = td
+      conceptCount.value = items.length
+    }
+
+    if (!items.length) {
+      if (isIndustry) industryEmpty.value = true
+      else conceptEmpty.value = true
+      return
+    }
+    await nextTick()
+    renderFundFlowChart(kind, items)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '加载失败'
+    if (isIndustry) industryError.value = msg
+    else conceptError.value = msg
+  } finally {
+    if (isIndustry) industryLoading.value = false
+    else conceptLoading.value = false
+  }
+}
+
+function handleResize() {
+  industryChart?.resize()
+  conceptChart?.resize()
+}
+
 onMounted(() => {
   loadStats()
+  void loadKind('industry')
+  void loadKind('concept')
+  window.addEventListener('resize', handleResize)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize)
+  industryChart?.dispose()
+  conceptChart?.dispose()
+  industryChart = null
+  conceptChart = null
 })
 </script>
 
@@ -208,6 +405,46 @@ onMounted(() => {
 
 .stats-grid {
   margin-bottom: 1.5rem;
+}
+
+.fund-flow-charts {
+  margin-bottom: 1.5rem;
+}
+
+.fund-flow-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 600;
+}
+
+.fund-flow-date {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: rgb(107 114 128);
+}
+
+.fund-flow-chart {
+  width: 100%;
+  height: 480px;
+}
+
+.fund-flow-empty {
+  height: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(107 114 128);
+  font-size: 0.875rem;
+  background: #f8fafc;
+  border-radius: 4px;
+}
+
+.fund-flow-error {
+  color: #b91c1c;
+  padding: 0 1rem;
+  text-align: center;
 }
 
 .stat-card {
@@ -266,44 +503,6 @@ onMounted(() => {
   margin-top: 0.25rem;
 }
 
-.quick-actions {
-  margin-bottom: 1.5rem;
-}
-
-.actions-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-  align-items: stretch;
-  justify-items: stretch;
-}
-
-.action-button {
-  height: 48px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  white-space: nowrap;
-  min-width: 0;
-  max-width: none;
-  padding-left: 1rem;
-}
-
-@media (min-width: 768px) {
-  .actions-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-@media (min-width: 1200px) {
-  .actions-grid {
-    grid-template-columns: repeat(5, 1fr);
-  }
-}
-
-
-
 .recent-activity {
   margin-bottom: 1.5rem;
 }
@@ -318,10 +517,6 @@ onMounted(() => {
   .stats-grid {
     margin-bottom: 1.25rem;
   }
-  
-  .actions-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
 }
 
 @media (max-width: 768px) {
@@ -332,6 +527,19 @@ onMounted(() => {
   
   .stats-grid {
     margin-bottom: 1rem;
+  }
+
+  .fund-flow-charts {
+    margin-bottom: 1rem;
+  }
+
+  .fund-flow-chart,
+  .fund-flow-empty {
+    height: 300px;
+  }
+
+  .fund-flow-card {
+    margin-bottom: 16px;
   }
   
   .stat-card {
@@ -351,21 +559,6 @@ onMounted(() => {
   
   .stat-label {
     font-size: 0.75rem;
-  }
-  
-  .quick-actions {
-    margin-bottom: 1rem;
-  }
-  
-  .actions-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
-  }
-  
-  .action-button {
-    height: 40px;
-    font-size: 14px;
-    padding-left: 0.75rem;
   }
   
   .recent-activity {
@@ -400,17 +593,6 @@ onMounted(() => {
   .stat-label {
     font-size: 0.7rem;
   }
-  
-  .actions-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.625rem;
-  }
-  
-  .action-button {
-    height: 38px;
-    font-size: 13px;
-    padding-left: 0.625rem;
-  }
 }
 
 @media (max-width: 480px) {
@@ -439,21 +621,6 @@ onMounted(() => {
   
   .stat-label {
     font-size: 0.65rem;
-  }
-  
-  .actions-grid {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
-  }
-  
-  .action-button {
-    height: 36px;
-    font-size: 12px;
-    padding-left: 0.5rem;
-  }
-  
-  .quick-actions .el-card {
-    margin-bottom: 0.75rem;
   }
   
   .recent-activity .el-card {
@@ -487,17 +654,6 @@ onMounted(() => {
   
   .stat-label {
     font-size: 0.6rem;
-  }
-  
-  .actions-grid {
-    grid-template-columns: 1fr;
-    gap: 0.375rem;
-  }
-  
-  .action-button {
-    height: 32px;
-    font-size: 11px;
-    padding-left: 0.375rem;
   }
 }
 </style> 

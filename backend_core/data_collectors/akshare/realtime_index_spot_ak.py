@@ -7,6 +7,7 @@ from backend_core.config.config import DATA_COLLECTORS
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
+
 class RealtimeIndexSpotAkCollector:
     def __init__(self, db_path=None):
         if db_path is None:
@@ -57,61 +58,75 @@ class RealtimeIndexSpotAkCollector:
         session.commit()
         return session
 
+    def _get_index_spot_type(self, name: str) -> int:
+        name = str(name or "")
+        if any(x in name for x in ['上证', '科创', 'ＳＴＡＲ', 'ＳＥＥ', 'ＳＨＥ', 'Ｓ０', '５０', '１８０', '３８０']):
+            return 2  # 上证系列
+        if any(x in name for x in ['深证', '创业', 'ＣＮ', '１００', '新', 'Ａ股', 'Ｂ股']):
+            return 3  # 深证系列
+        if any(x in name for x in ['沪深', '中证', '全指', '基金指数', '综合', '红利']):
+            return 1  # 沪深重要指数
+        return 0  # 其他
+
+    def _fetch_sina_index_spot(self) -> pd.DataFrame:
+        """新浪指数实时（优先路径）。"""
+        df = ak.stock_zh_index_spot_sina()
+        if df is None:
+            raise ValueError("新浪接口返回None")
+        if df.empty:
+            raise ValueError("新浪接口返回空数据")
+        required_columns = [
+            '代码', '名称', '最新价', '涨跌额', '涨跌幅',
+            '今开', '昨收', '最高', '最低', '成交量', '成交额',
+        ]
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        if missing_columns:
+            raise ValueError(f"新浪接口返回数据缺少必要列: {missing_columns}")
+        df = df.copy()
+        df['index_spot_type'] = df['名称'].map(self._get_index_spot_type)
+        df = df.drop_duplicates(subset=['代码'], keep='first')
+        return df
+
+    def _fetch_em_index_spot(self) -> pd.DataFrame:
+        """东方财富指数实时（兜底路径）。"""
+        df1 = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
+        df1['index_spot_type'] = 1
+        df2 = ak.stock_zh_index_spot_em(symbol="上证系列指数")
+        df2['index_spot_type'] = 2
+        df3 = ak.stock_zh_index_spot_em(symbol="深证系列指数")
+        df3['index_spot_type'] = 3
+        df = pd.concat([df1, df2, df3], ignore_index=True)
+        df = df.drop_duplicates(subset=['代码'], keep='first')
+        return df
+
     def collect_quotes(self):
         session = None
         try:
             session = self._init_db()
-            # 优先尝试用原来的接口
+            # 优先新浪；失败再东财官网接口
+            df = None
             try:
-                # 1: 沪深重要指数
-                df1 = ak.stock_zh_index_spot_em(symbol="沪深重要指数")
-                df1['index_spot_type'] = 1
-                # 2: 上证系列指数
-                df2 = ak.stock_zh_index_spot_em(symbol="上证系列指数")
-                df2['index_spot_type'] = 2
-                # 3: 深证系列指数
-                df3 = ak.stock_zh_index_spot_em(symbol="深证系列指数")
-                df3['index_spot_type'] = 3
-                df = pd.concat([df1, df2, df3], ignore_index=True)
-                # 去重
-                df = df.drop_duplicates(subset=['代码'], keep='first')
-            except Exception as e:
-                self.logger.warning(f"akshare官网指数数据接口失败，原因：{e}，尝试调用新浪接口。")
-                df = None  # 初始化df，防止未定义
+                df = self._fetch_sina_index_spot()
+                self.logger.info("成功使用新浪接口获取指数数据")
+            except Exception as sina_e:
+                self.logger.warning(
+                    "新浪指数数据接口失败，原因：%s，尝试调用东方财富接口。",
+                    sina_e,
+                )
                 try:
-                    # 使用新浪指数接口
-                    df = ak.stock_zh_index_spot_sina()
-                    # 验证返回的数据是否有效
-                    if df is None:
-                        raise ValueError("新浪接口返回None")
-                    if df.empty:
-                        raise ValueError("新浪接口返回空数据")
-                    # 检查必要的列是否存在
-                    required_columns = ['代码', '名称', '最新价', '涨跌额', '涨跌幅', '今开', '昨收', '最高', '最低', '成交量', '成交额']
-                    missing_columns = [col for col in required_columns if col not in df.columns]
-                    if missing_columns:
-                        raise ValueError(f"新浪接口返回数据缺少必要列: {missing_columns}")
-                    # Sina接口没有index_spot_type，需标注类型（比如全部为0），或者根据"名称"映射
-                    def get_index_spot_type(name):
-                        if any(x in name for x in ['上证', '科创', 'ＳＴＡＲ', 'ＳＥＥ', 'ＳＨＥ', 'Ｓ０', '５０', '１８０', '３８０']): 
-                            return 2  # 上证系列
-                        if any(x in name for x in ['深证', '创业', 'ＣＮ', '１００', '新', 'Ａ股', 'Ｂ股']): 
-                            return 3  # 深证系列
-                        if any(x in name for x in ['沪深', '中证', '全指', '基金指数', '综合', '红利']): 
-                            return 1  # 沪深重要指数
-                        return 0   # 其他
-                    df['index_spot_type'] = df['名称'].map(get_index_spot_type)
-                    df = df.drop_duplicates(subset=['代码'], keep='first')
-                    self.logger.info("成功使用新浪接口获取指数数据")
-                except Exception as sina_e:
-                    self.logger.error(f"新浪指数接口也失败，原因：{sina_e}")
-                    df = None  # 确保df为None
-                    raise Exception(f"所有指数数据接口均失败。官网接口错误：{e}，新浪接口错误：{sina_e}")
-            
+                    df = self._fetch_em_index_spot()
+                    self.logger.info("成功使用东方财富接口获取指数数据")
+                except Exception as em_e:
+                    self.logger.error("东方财富指数接口也失败，原因：%s", em_e)
+                    raise Exception(
+                        f"所有指数数据接口均失败。新浪接口错误：{sina_e}，"
+                        f"东方财富接口错误：{em_e}"
+                    )
+
             # 验证 df 是否有效，防止后续处理 None 或空数据
             if df is None or df.empty:
                 raise ValueError("未能获取有效的指数数据")
-                
+
             df['collect_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             df['update_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             affected_rows = 0
@@ -130,17 +145,17 @@ class RealtimeIndexSpotAkCollector:
                         change = EXCLUDED.change,
                         pct_chg = EXCLUDED.pct_chg,
                         open = EXCLUDED.open,
-                        pre_close = EXCLUDED.pre_close, 
+                        pre_close = EXCLUDED.pre_close,
                         high = EXCLUDED.high,
                         low = EXCLUDED.low,
                         volume = EXCLUDED.volume,
                         amount = EXCLUDED.amount,
                         amplitude = EXCLUDED.amplitude,
-                        volume_ratio = EXCLUDED.volume_ratio,   
+                        volume_ratio = EXCLUDED.volume_ratio,
                         update_time = EXCLUDED.update_time,
                         collect_time = EXCLUDED.collect_time,
                         index_spot_type = EXCLUDED.index_spot_type
-                '''), 
+                '''),
                 {'code': row['代码'], 'name': row['名称'], 'price': row['最新价'], 'change': row['涨跌额'], 'pct_chg': row['涨跌幅'], 'open': row['今开'], 'pre_close': row['昨收'],
                     'high': row['最高'],
                     'low': row['最低'],
@@ -159,12 +174,12 @@ class RealtimeIndexSpotAkCollector:
             # 安全获取df的长度，防止df为None
             df_len = len(df) if df is not None and not df.empty else 0
             session.execute(text('''
-                INSERT INTO realtime_collect_operation_logs 
+                INSERT INTO realtime_collect_operation_logs
                 (operation_type, operation_desc, affected_rows, status, error_message, created_at)
                 VALUES (
                     :operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at
                 )
-            '''), 
+            '''),
             {
                 'operation_type': 'index_realtime_quote_collect',
                 'operation_desc': f'采集并更新{df_len}条指数实时行情数据',
@@ -177,7 +192,7 @@ class RealtimeIndexSpotAkCollector:
             session.close()
             self.logger.info("全部指数实时行情数据采集并入库完成")
             return df
-        
+
         except Exception as e:
             error_msg = str(e)
             self.logger.error("采集或入库时出错: %s", error_msg, exc_info=True)
@@ -185,12 +200,12 @@ class RealtimeIndexSpotAkCollector:
             try:
                 if 'session' in locals() and session is not None:
                     session.execute(text('''
-                        INSERT INTO realtime_collect_operation_logs 
+                        INSERT INTO realtime_collect_operation_logs
                         (operation_type, operation_desc, affected_rows, status, error_message, created_at)
                         VALUES (
                             :operation_type, :operation_desc, :affected_rows, :status, :error_message, :created_at
                         )
-                    '''), 
+                    '''),
                     {
                         'operation_type': 'index_realtime_quote_collect',
                         'operation_desc': '采集指数实时行情数据失败',
@@ -205,4 +220,4 @@ class RealtimeIndexSpotAkCollector:
             finally:
                 if 'session' in locals() and session is not None:
                     session.close()
-            return None 
+            return None
