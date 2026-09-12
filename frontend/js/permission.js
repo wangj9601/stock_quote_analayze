@@ -78,6 +78,23 @@ const PermissionEngine = {
   },
 
   activateFirstAllowedTab() {
+    // URL 深链（含批量分析）优先，避免权限初始化把目标 Tab 抢走
+    try {
+      const params = new URLSearchParams(window.location.search || '');
+      const batch = (params.get('batch') || '').trim();
+      if (batch === 'selected' || batch === 'watchlist') return;
+      const deepTab = (params.get('tab') || '').trim();
+      if (deepTab) {
+        const deepBtn = document.querySelector(
+          `.analysis-tab[data-tab="${deepTab}"], .strategy-tab[data-tab="${deepTab}"], .profile-tab[data-tab="${deepTab}"], .category-tab[data-tab="${deepTab}"]`
+        );
+        if (deepBtn) {
+          const perm = deepBtn.getAttribute('data-perm');
+          if (!perm || this.has(perm)) return;
+        }
+      }
+    } catch (_) { /* ignore */ }
+
     const tabSelectors = [
       '.strategy-tab[data-perm]',
       '.analysis-tab[data-perm]',

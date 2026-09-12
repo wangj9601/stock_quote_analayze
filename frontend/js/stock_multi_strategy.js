@@ -252,9 +252,20 @@ const StockMultiStrategy = {
         if (!stocks.length) {
             const codesRaw = (params.get('codes') || '').trim();
             const codes = codesRaw
-                ? codesRaw.split(/[,，\s]+/).map((c) => c.trim()).filter(Boolean)
+                ? codesRaw.split(/[,，\s]+/).map((c) => {
+                    const t = c.trim();
+                    if (!t) return '';
+                    try {
+                        return decodeURIComponent(t).trim();
+                    } catch (e) {
+                        return t;
+                    }
+                }).filter(Boolean)
                 : [];
-            await this.loadWatchlistOptions();
+            // 仅尝试补名称；失败不影响按 codes 启动
+            try {
+                await this.loadWatchlistOptions();
+            } catch (e) { /* ignore */ }
             const byCode = new Map(
                 (this.watchlistStocks || []).map((s) => [String(s.code), s])
             );
@@ -266,7 +277,7 @@ const StockMultiStrategy = {
         if (!stocks.length) {
             if (window.CommonUtils) {
                 CommonUtils.showToast(
-                    batchKind === 'selected' ? '未找到待分析的龙头/中军' : '未找到待分析的自选股',
+                    batchKind === 'selected' ? '未找到待分析的股票列表' : '未找到待分析的自选股',
                     'warning'
                 );
             }
@@ -532,7 +543,15 @@ const StockMultiStrategy = {
 
     async loadWatchlistOptions() {
         if (this._watchlistLoaded) return;
-        if (!CommonUtils.checkLoginAndHandleExpiry()) return;
+        // 软检查：未登录时静默跳过（批量分析可用 URL codes / localStorage，不应被踢去登录页）
+        try {
+            const userInfo = CommonUtils.auth && typeof CommonUtils.auth.getUserInfo === 'function'
+                ? CommonUtils.auth.getUserInfo()
+                : null;
+            if (!userInfo || !userInfo.id) return;
+        } catch (e) {
+            return;
+        }
         try {
             const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
             if (!resp.ok) return;

@@ -367,6 +367,14 @@
         if (window.StockTradeLink && typeof StockTradeLink.applyPopupDocumentClass === 'function') {
             StockTradeLink.applyPopupDocumentClass();
         }
+        // 批量分析深链误入个股详情时，转回分析频道多 Tab 工作台
+        try {
+            const p = new URLSearchParams(window.location.search || '');
+            const batch = (p.get('batch') || '').trim();
+            if (batch === 'selected' || batch === 'watchlist') {
+                window.location.replace(`analysis.html?${p.toString()}`);
+            }
+        } catch (e) { /* ignore */ }
     </script>
     <script>
         // 确保API_BASE_URL已定义（备用方案）

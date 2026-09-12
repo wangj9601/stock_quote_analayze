@@ -1105,6 +1105,125 @@
     min-height: 48px;
 }
 
+.sector-limit-up-host {
+    min-height: 48px;
+}
+
+.sector-limit-up-summary {
+    font-size: 13px;
+    color: #475569;
+    margin-bottom: 8px;
+    line-height: 1.45;
+}
+
+.sector-limit-up-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    color: #475569;
+}
+
+.sector-limit-up-controls label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.sector-limit-up-mode {
+    min-width: 120px;
+    padding: 2px 6px;
+}
+
+.sector-limit-up-min {
+    width: 52px;
+    padding: 2px 4px;
+}
+
+.sector-limit-up-wave {
+    font-size: 13px;
+    color: #334155;
+    margin-bottom: 8px;
+    line-height: 1.5;
+    padding: 8px 10px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.sector-limit-up-wave-meta {
+    margin-top: 4px;
+    color: #64748b;
+    font-size: 12px;
+}
+
+.sector-limit-up-hint {
+    color: #94a3b8;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.sector-limit-up-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.sector-limit-up-table-wrap {
+    max-height: 320px;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+}
+
+.sector-limit-up-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.sector-limit-up-table th,
+.sector-limit-up-table td {
+    padding: 6px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.sector-limit-up-table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    color: #64748b;
+    font-weight: 600;
+    z-index: 1;
+}
+
+.sector-limit-up-table td.num,
+.sector-limit-up-table th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.sector-limit-up-table .sector-limit-up-check {
+    width: 28px;
+    text-align: center;
+    padding-left: 8px;
+    padding-right: 4px;
+}
+
+.sector-limit-up-link {
+    color: #1d4ed8;
+    text-decoration: none;
+}
+
+.sector-limit-up-link:hover {
+    text-decoration: underline;
+}
+
 .sector-fund-flow-tiers {
     margin: 8px 0;
     font-size: 13px;

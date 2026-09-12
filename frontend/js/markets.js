@@ -1433,13 +1433,17 @@ const MarketsPage = {
         return [];
     },
 
-    /** 对齐分析频道板块分析短线角色 pill（ba-role-pill），新标签页打开个股详情 */
+    /** 对齐分析频道板块分析短线角色 pill；优先 StockTradeLink 打开交易分析 Tab */
     _stockDetailHref(code, name) {
         const c = String(code || '').trim();
         if (!c) return '';
+        if (window.StockTradeLink && typeof StockTradeLink.buildHref === 'function') {
+            return StockTradeLink.buildHref(c, name, { tab: 'analysis' });
+        }
         const q = new URLSearchParams({ code: c });
         const nm = String(name || '').trim();
         if (nm) q.set('name', nm);
+        q.set('tab', 'analysis');
         return `stock.html?${q.toString()}`;
     },
 
@@ -1595,6 +1599,12 @@ const MarketsPage = {
                 <h3>龙头 / 中军</h3>
                 ${rolesHtml}
             </div>
+            <div class="sector-detail-section sector-limit-up-section">
+                <h3>本轮涨停分析</h3>
+                <div id="sectorLimitUpHost" class="sector-limit-up-host">
+                    <div class="sector-detail-loading">涨停分析加载中…</div>
+                </div>
+            </div>
             <div class="sector-detail-section">
                 <h3>更新时间</h3>
                 <div class="sector-detail-meta">${this.escapeHtml(d.update_time || '--')}</div>
@@ -1621,6 +1631,227 @@ const MarketsPage = {
 
         const src = String(d.board_code_source || (this._sectorDetailCtx && this._sectorDetailCtx.boardSource) || 'tonghuashun').trim();
         this.loadSectorFundFlow(kind, code, src);
+        this.loadSectorLimitUpStocks(kind, code, src, d.board_name || '', {
+            waveStartMode: (this._sectorLimitUpPrefs && this._sectorLimitUpPrefs.waveStartMode) || 'board_start',
+            startMinCount: (this._sectorLimitUpPrefs && this._sectorLimitUpPrefs.startMinCount) || 2,
+        });
+    },
+
+    async loadSectorLimitUpStocks(kind, boardCode, boardSource, boardName, prefs) {
+        const host = document.getElementById('sectorLimitUpHost');
+        if (!host) return;
+        const code = String(boardCode || '').trim();
+        if (!code) {
+            host.innerHTML = '<div class="sector-detail-meta">缺少板块代码</div>';
+            return;
+        }
+        const options = prefs || {};
+        const waveStartMode = String(options.waveStartMode || 'board_start').trim() || 'board_start';
+        const startMinCount = Math.max(1, Math.min(50, Number(options.startMinCount) || 2));
+        this._sectorLimitUpPrefs = {
+            kind,
+            boardCode: code,
+            boardSource: boardSource || 'tonghuashun',
+            boardName: boardName || '',
+            waveStartMode,
+            startMinCount,
+        };
+        const token = `${kind}|${code}|limitup|${waveStartMode}|${startMinCount}|${Date.now()}`;
+        this._sectorLimitUpToken = token;
+        host.innerHTML = '<div class="sector-detail-loading">涨停分析加载中…</div>';
+        try {
+            const ui = this._boardKindUi(kind);
+            const params = new URLSearchParams({
+                board_code_source: boardSource || 'tonghuashun',
+                days: '60',
+                wave_start_mode: waveStartMode,
+                start_min_count: String(startMinCount),
+            });
+            if (boardName) params.set('board_name', boardName);
+            const url = `${this.API_BASE_URL}${ui.detailApiPrefix}${encodeURIComponent(code)}/limit_up_stocks?${params}`;
+            const resp = await fetch(url);
+            const result = await resp.json().catch(() => ({}));
+            if (this._sectorLimitUpToken !== token) return;
+            if (!resp.ok || !result.success) {
+                host.innerHTML = `<div class="sector-detail-meta">${this.escapeHtml((result && result.message) || '暂无涨停分析数据')}</div>`;
+                return;
+            }
+            this.renderSectorLimitUpStocks(host, result.data || {});
+        } catch (err) {
+            if (this._sectorLimitUpToken !== token) return;
+            console.error(err);
+            host.innerHTML = `<div class="sector-detail-error">${this.escapeHtml(err.message || '涨停分析加载失败')}</div>`;
+        }
+    },
+
+    renderSectorLimitUpStocks(host, data) {
+        if (!host) return;
+        const stocks = Array.isArray(data.stocks) ? data.stocks : [];
+        const days = data.days != null ? data.days : 60;
+        const scanStart = data.scan_start_date || data.start_date || '';
+        const waveStart = data.wave_start_date || '';
+        const waveReason = data.wave_start_reason || '';
+        const waveDayN = data.wave_start_day_limit_up_count;
+        const peakN = data.peak_limit_up_count;
+        const peakDate = data.peak_limit_up_date || '';
+        const mode = data.wave_start_mode || 'board_start';
+        const minCnt = data.wave_start_min_count != null ? data.wave_start_min_count : 2;
+        const total = data.total != null ? data.total : stocks.length;
+        const cons = data.constituent_count != null ? data.constituent_count : '--';
+        const leaderCode = data.leader_code || '';
+        const leaderName = data.leader_name || '';
+
+        const modeOpts = [
+            { v: 'board_start', t: '板块启动日' },
+            { v: 'leader_first', t: '龙头首板日' },
+            { v: 'scan_window', t: '全扫描窗' },
+        ].map((o) => `<option value="${o.v}"${o.v === mode ? ' selected' : ''}>${o.t}</option>`).join('');
+
+        const controls = `<div class="sector-limit-up-controls">
+            <label>起涨点
+                <select class="sector-limit-up-mode">${modeOpts}</select>
+            </label>
+            <label class="sector-limit-up-min-wrap" title="当日涨停家数达到该阈值视为板块启动">
+                启动阈值≥
+                <input type="number" class="sector-limit-up-min" min="1" max="50" value="${this.escapeHtml(String(minCnt))}">
+            </label>
+            <button type="button" class="btn btn-secondary btn-sm sector-limit-up-reload">重算</button>
+        </div>`;
+
+        const waveHtml = `<div class="sector-limit-up-wave">
+            <div><strong>本轮起涨点</strong>：${waveStart ? this.escapeHtml(waveStart) : '—'}${waveReason ? ` · ${this.escapeHtml(waveReason)}` : ''}</div>
+            <div class="sector-limit-up-wave-meta">
+                扫描窗近 ${this.escapeHtml(String(days))} 日${scanStart ? `（自 ${this.escapeHtml(scanStart)}）` : ''} ·
+                成分 ${this.escapeHtml(String(cons))} 只 ·
+                自起涨曾涨停 ${this.escapeHtml(String(total))} 只
+                ${waveDayN != null ? ` · 起涨日涨停 ${this.escapeHtml(String(waveDayN))} 家` : ''}
+                ${peakN != null ? ` · 峰值 ${this.escapeHtml(String(peakN))} 家${peakDate ? `（${this.escapeHtml(peakDate)}）` : ''}` : ''}
+                ${leaderCode ? ` · 参考龙头 ${this.escapeHtml(leaderCode)}${leaderName ? ' ' + this.escapeHtml(leaderName) : ''}` : ''}
+            </div>
+            <div class="sector-limit-up-hint">涨停口径：主板≥9.8%，创业/科创≥19.8%；连板按相邻涨停间隔≤3自然日近似</div>
+        </div>`;
+
+        if (!stocks.length) {
+            host.innerHTML = `${controls}${waveHtml}<div class="sector-detail-meta">自起涨点起暂无涨停成分股</div>`;
+            this._bindSectorLimitUpControls(host);
+            return;
+        }
+
+        const rows = stocks.map((s) => {
+            const code = String(s.code || '').trim();
+            const name = String(s.name || '').trim();
+            const href = this._stockDetailHref(code, name);
+            const nameCell = href
+                ? `<a class="sector-limit-up-link" href="${this.escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${this.escapeHtml(code)} ${this.escapeHtml(name || '')}</a>`
+                : this.escapeHtml(`${code} ${name}`);
+            const cnt = s.limit_up_count != null ? s.limit_up_count : '--';
+            const consec = s.max_consecutive != null ? s.max_consecutive : '--';
+            const last = s.last_limit_up_date || '--';
+            const first = s.first_limit_up_date || '--';
+            return `<tr>
+                <td class="sector-limit-up-check">
+                    <input type="checkbox" class="sector-limit-up-cb" data-code="${this.escapeHtml(code)}" data-name="${this.escapeHtml(name)}" value="${this.escapeHtml(code)}">
+                </td>
+                <td>${nameCell}</td>
+                <td class="num">${this.escapeHtml(String(cnt))}</td>
+                <td class="num">${this.escapeHtml(String(consec))}</td>
+                <td>${this.escapeHtml(String(last))}</td>
+                <td>${this.escapeHtml(String(first))}</td>
+            </tr>`;
+        }).join('');
+
+        host.innerHTML = `
+            ${controls}
+            ${waveHtml}
+            <div class="sector-limit-up-actions">
+                <button type="button" class="btn btn-secondary btn-sm sector-limit-up-select-all" title="全选本列表">全选</button>
+                <button type="button" class="btn btn-secondary btn-sm sector-limit-up-clear" title="取消勾选">清空</button>
+                <button type="button" class="btn btn-primary btn-sm sector-limit-up-batch" title="将勾选股票批量打开交易分析">批量分析</button>
+            </div>
+            <div class="sector-limit-up-table-wrap">
+                <table class="sector-limit-up-table">
+                    <thead>
+                        <tr>
+                            <th class="sector-limit-up-check"></th>
+                            <th>股票</th>
+                            <th class="num">自起涨板数</th>
+                            <th class="num">最高连板</th>
+                            <th>最近涨停</th>
+                            <th>起涨后首次</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+
+        this._bindSectorLimitUpControls(host);
+        const selectAllBtn = host.querySelector('.sector-limit-up-select-all');
+        const clearBtn = host.querySelector('.sector-limit-up-clear');
+        const batchBtn = host.querySelector('.sector-limit-up-batch');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                host.querySelectorAll('.sector-limit-up-cb').forEach((el) => { el.checked = true; });
+            });
+        }
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                host.querySelectorAll('.sector-limit-up-cb').forEach((el) => { el.checked = false; });
+            });
+        }
+        if (batchBtn) {
+            batchBtn.addEventListener('click', () => {
+                this.openSectorLimitUpBatchAnalysis(host);
+            });
+        }
+    },
+
+    _bindSectorLimitUpControls(host) {
+        if (!host) return;
+        const reload = () => {
+            const prefs = this._sectorLimitUpPrefs || {};
+            const modeEl = host.querySelector('.sector-limit-up-mode');
+            const minEl = host.querySelector('.sector-limit-up-min');
+            const waveStartMode = modeEl ? modeEl.value : (prefs.waveStartMode || 'board_start');
+            const startMinCount = minEl ? Number(minEl.value) || 2 : (prefs.startMinCount || 2);
+            this.loadSectorLimitUpStocks(
+                prefs.kind || 'industry',
+                prefs.boardCode || '',
+                prefs.boardSource || 'tonghuashun',
+                prefs.boardName || '',
+                { waveStartMode, startMinCount }
+            );
+        };
+        const btn = host.querySelector('.sector-limit-up-reload');
+        if (btn) btn.addEventListener('click', reload);
+        const modeEl = host.querySelector('.sector-limit-up-mode');
+        if (modeEl) modeEl.addEventListener('change', reload);
+    },
+
+    openSectorLimitUpBatchAnalysis(host) {
+        const stocks = [];
+        const root = host || document.getElementById('sectorLimitUpHost');
+        if (!root) return;
+        root.querySelectorAll('.sector-limit-up-cb:checked').forEach((el) => {
+            const code = String(el.getAttribute('data-code') || el.value || '').trim();
+            if (!code) return;
+            stocks.push({
+                code,
+                name: String(el.getAttribute('data-name') || '').trim(),
+            });
+        });
+        if (!stocks.length) {
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+                CommonUtils.showToast('请先勾选至少一只股票', 'warning');
+            }
+            return;
+        }
+        if (window.StockTradeLink && typeof StockTradeLink.openBatchAnalysis === 'function') {
+            StockTradeLink.openBatchAnalysis(stocks, { toastPrefix: '已打开交易分析' });
+            return;
+        }
+        const codesQs = stocks.map((s) => encodeURIComponent(s.code)).join(',');
+        window.open(`analysis.html?tab=stock-ai&batch=selected&popup=1&codes=${codesQs}`, '_blank');
     },
 
     formatFundFlowYi(yuan) {

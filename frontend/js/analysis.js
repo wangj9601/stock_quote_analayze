@@ -21,7 +21,8 @@ const AnalysisPage = {
                 this.switchTab(initialTab);
                 this.updateActiveTab(tabBtn);
             } else {
-                this.loadTabData(this.currentTab);
+                // 权限可能隐藏了 Tab 按钮，仍按 URL / 批量深链切换面板
+                this.switchTab(initialTab);
             }
         } else {
             this.loadTabData(this.currentTab);
@@ -49,6 +50,9 @@ const AnalysisPage = {
     resolveInitialTab() {
         try {
             const params = new URLSearchParams(window.location.search || '');
+            const batch = (params.get('batch') || '').trim();
+            // 批量交易分析必须落在个股分析工作台
+            if (batch === 'selected' || batch === 'watchlist') return 'stock-ai';
             const tab = (params.get('tab') || '').trim();
             if (tab && document.getElementById(tab)) return tab;
             const hash = (window.location.hash || '').replace(/^#/, '').trim();
@@ -133,9 +137,19 @@ const AnalysisPage = {
                 break;
             case 'stock-ai':
                 if (window.StockMultiStrategy) {
-                    // 先拉自选列表（codes 兜底可补名称），再处理 URL 批量/单只启动
-                    void Promise.resolve(StockMultiStrategy.loadWatchlistOptions())
-                        .finally(() => StockMultiStrategy.bootstrapFromUrl());
+                    let isBatch = false;
+                    try {
+                        const batch = (new URLSearchParams(window.location.search || '').get('batch') || '').trim();
+                        isBatch = batch === 'selected' || batch === 'watchlist';
+                    } catch (e) { /* ignore */ }
+                    if (isBatch) {
+                        // 批量深链：立即启动，勿先走自选加载（其中含登录硬跳转，会打断批量）
+                        StockMultiStrategy.bootstrapFromUrl();
+                    } else {
+                        // 先拉自选列表（codes 兜底可补名称），再处理 URL 单只启动
+                        void Promise.resolve(StockMultiStrategy.loadWatchlistOptions())
+                            .finally(() => StockMultiStrategy.bootstrapFromUrl());
+                    }
                 }
                 break;
             case 'trade-observe':

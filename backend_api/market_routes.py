@@ -26,6 +26,7 @@ from backend_api.utils.board_code_source import (
     normalize_board_code_source,
 )
 from backend_api.utils.industry_board_query import (
+    fetch_board_recent_limit_up_stocks,
     fetch_concept_board_detail,
     fetch_concept_board_list_with_metrics,
     fetch_industry_board_catalog,
@@ -1101,6 +1102,132 @@ def get_concept_board_top_stocks(
             {
                 "success": False,
                 "message": "获取概念板块龙头股数据失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+def _board_limit_up_stocks_response(
+    db: Session,
+    *,
+    board_type: str,
+    board_code: str,
+    board_code_source: Optional[str],
+    board_name: Optional[str],
+    days: int,
+    wave_start_mode: str = "board_start",
+    start_min_count: int = 2,
+    leader_code: Optional[str] = None,
+):
+    data = fetch_board_recent_limit_up_stocks(
+        db,
+        board_type,
+        board_code,
+        board_code_source=board_code_source,
+        board_name=board_name,
+        days=days,
+        wave_start_mode=wave_start_mode,
+        start_min_count=start_min_count,
+        leader_code=leader_code,
+    )
+    if not data:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": (
+                    f"未找到来源为 "
+                    f"{board_code_source or DEFAULT_BOARD_CODE_SOURCE} "
+                    f"的板块 {board_code}"
+                ),
+            },
+            status_code=404,
+        )
+    return JSONResponse({"success": True, "data": data})
+
+
+@router.get("/industry_board/{board_code}/limit_up_stocks")
+def get_industry_board_limit_up_stocks(
+    board_code: str,
+    days: int = Query(60, ge=7, le=180, description="回溯自然日，默认60≈近2月"),
+    wave_start_mode: str = Query(
+        "board_start",
+        description="起涨点：board_start|leader_first|scan_window",
+    ),
+    start_min_count: int = Query(
+        2, ge=1, le=50, description="板块启动日阈值：当日涨停家数≥N"
+    ),
+    leader_code: Optional[str] = Query(None, description="龙头首板模式可选指定代码"),
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE, description="板块代码来源，默认 tonghuashun"
+    ),
+    board_name: Optional[str] = Query(None, description="可选：用于同名映射到同花顺板"),
+    db: Session = Depends(get_db),
+):
+    """行业板近窗涨停分析：本轮起涨点 + 自起涨日起涨停股列表。"""
+    try:
+        return _board_limit_up_stocks_response(
+            db,
+            board_type="industry",
+            board_code=board_code,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            days=days,
+            wave_start_mode=wave_start_mode,
+            start_min_count=start_min_count,
+            leader_code=leader_code,
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取行业板块近2月涨停股失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.get("/concept_board/{board_code}/limit_up_stocks")
+def get_concept_board_limit_up_stocks(
+    board_code: str,
+    days: int = Query(60, ge=7, le=180, description="回溯自然日，默认60≈近2月"),
+    wave_start_mode: str = Query(
+        "board_start",
+        description="起涨点：board_start|leader_first|scan_window",
+    ),
+    start_min_count: int = Query(
+        2, ge=1, le=50, description="板块启动日阈值：当日涨停家数≥N"
+    ),
+    leader_code: Optional[str] = Query(None, description="龙头首板模式可选指定代码"),
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE, description="板块代码来源，默认 tonghuashun"
+    ),
+    board_name: Optional[str] = Query(None, description="可选：板名称"),
+    db: Session = Depends(get_db),
+):
+    """概念板近窗涨停分析：本轮起涨点 + 自起涨日起涨停股列表。"""
+    try:
+        return _board_limit_up_stocks_response(
+            db,
+            board_type="concept",
+            board_code=board_code,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            days=days,
+            wave_start_mode=wave_start_mode,
+            start_min_count=start_min_count,
+            leader_code=leader_code,
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取概念板块近2月涨停股失败",
                 "error": str(e),
                 "traceback": tb,
             },

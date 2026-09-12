@@ -217,6 +217,300 @@ def list_board_constituent_codes(
     ]
 
 
+def fetch_board_recent_limit_up_stocks(
+    db: Session,
+    board_type: str,
+    board_code: str,
+    *,
+    board_code_source: Optional[str] = None,
+    board_name: Optional[str] = None,
+    days: int = 60,
+    wave_start_mode: str = "board_start",
+    start_min_count: int = 2,
+    leader_code: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """板块成分股近 N 日涨停分析：识别本轮起涨点，并自起涨日起统计。
+
+    涨停判定与 board_roles.classify.is_limit_up 一致：
+    主板/北交所等 ≥9.8%，创业板/科创板（300/301/688）≥19.8%。
+
+    wave_start_mode:
+      - board_start: 扫描窗内「当日涨停家数 ≥ start_min_count」的首个交易日（默认）
+      - leader_first: 指定/自动龙头的窗口内首次涨停日
+      - scan_window: 不做起涨点，整窗统计（兼容旧行为）
+    """
+    from datetime import datetime as _dt
+    from datetime import timedelta
+
+    from backend_core.board_roles.classify import (
+        LIMIT_UP_GEM_STAR_MIN,
+        LIMIT_UP_MAIN_MIN,
+    )
+
+    btype = str(board_type or "").strip().lower()
+    if btype not in ("industry", "concept"):
+        return None
+
+    meta = resolve_board_for_roles(
+        db,
+        btype,
+        board_code,
+        board_code_source=board_code_source or DEFAULT_BOARD_CODE_SOURCE,
+        board_name=board_name,
+    )
+    if not meta:
+        return None
+
+    resolved_code = str(meta["board_code"]).strip()
+    window_days = max(7, min(int(days or 60), 180))
+    scan_start = date.today() - timedelta(days=window_days)
+    mode = str(wave_start_mode or "board_start").strip().lower()
+    if mode not in ("board_start", "leader_first", "scan_window"):
+        mode = "board_start"
+    min_cnt = max(1, min(int(start_min_count or 2), 50))
+
+    constituents = list_board_constituent_codes(db, btype, resolved_code)
+    name_by_code: Dict[str, str] = {}
+    codes: List[str] = []
+    for c in constituents:
+        sc = str(c.get("code") or "").strip()
+        if not sc:
+            continue
+        codes.append(sc)
+        nm = str(c.get("name") or "").strip()
+        if nm and sc not in name_by_code:
+            name_by_code[sc] = nm
+
+    def _empty(
+        *,
+        wave_start: Optional[str] = None,
+        wave_reason: str = "",
+        wave_day_n: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        return {
+            "board_code": resolved_code,
+            "board_name": meta.get("board_name") or resolved_code,
+            "board_kind": btype,
+            "board_code_source": meta.get("board_code_source"),
+            "board_code_source_label": meta.get("board_code_source_label"),
+            "days": window_days,
+            "scan_start_date": scan_start.isoformat(),
+            "start_date": scan_start.isoformat(),  # 兼容旧字段：扫描窗起点
+            "wave_start_mode": mode,
+            "wave_start_min_count": min_cnt,
+            "wave_start_date": wave_start,
+            "wave_start_reason": wave_reason,
+            "wave_start_day_limit_up_count": wave_day_n,
+            "peak_limit_up_count": 0,
+            "peak_limit_up_date": None,
+            "leader_code": None,
+            "leader_name": None,
+            "constituent_count": len(codes) if codes else 0,
+            "stocks": [],
+            "total": 0,
+        }
+
+    if not codes:
+        return _empty(wave_reason="无成分股")
+
+    codes = list(dict.fromkeys(codes))
+
+    # 拉取扫描窗内全部涨停日事件（code, date）
+    event_stmt = text(
+        """
+        SELECT hq.code AS code, hq.date AS trade_date
+        FROM historical_quotes hq
+        WHERE hq.code IN :codes
+          AND hq.date >= :start_date
+          AND hq.change_percent IS NOT NULL
+          AND hq.change_percent >= CASE
+                WHEN hq.code LIKE '300%'
+                  OR hq.code LIKE '301%'
+                  OR hq.code LIKE '688%'
+                THEN :gem_thr
+                ELSE :main_thr
+              END
+        ORDER BY hq.date ASC, hq.code ASC
+        """
+    ).bindparams(bindparam("codes", expanding=True))
+
+    event_rows = db.execute(
+        event_stmt,
+        {
+            "codes": codes,
+            "start_date": scan_start.isoformat(),
+            "gem_thr": float(LIMIT_UP_GEM_STAR_MIN),
+            "main_thr": float(LIMIT_UP_MAIN_MIN),
+        },
+    ).fetchall()
+
+    def _as_ymd(v: Any) -> str:
+        if v is None:
+            return ""
+        if hasattr(v, "isoformat"):
+            return str(v.isoformat())[:10]
+        s = str(v).strip()
+        return s[:10] if s else ""
+
+    # code -> sorted unique ymd list
+    by_code_dates: Dict[str, List[str]] = {}
+    # ymd -> set of codes
+    by_date_codes: Dict[str, Set[str]] = {}
+    for row in event_rows:
+        sc = _normalize_code(str(row[0] or ""))
+        ymd = _as_ymd(row[1])
+        if not sc or not ymd:
+            continue
+        bucket = by_code_dates.setdefault(sc, [])
+        if not bucket or bucket[-1] != ymd:
+            if ymd not in bucket:
+                bucket.append(ymd)
+        by_date_codes.setdefault(ymd, set()).add(sc)
+
+    for sc in by_code_dates:
+        by_code_dates[sc] = sorted(set(by_code_dates[sc]))
+
+    if not by_date_codes:
+        return _empty(wave_reason="扫描窗内无涨停日")
+
+    # 峰值单日涨停家数
+    peak_date = max(by_date_codes.keys(), key=lambda d: (len(by_date_codes[d]), d))
+    peak_n = len(by_date_codes[peak_date])
+
+    # 自动龙头：窗内涨停次数最多，并列取最近涨停更晚、代码更小
+    def _auto_leader() -> Optional[str]:
+        best: Optional[Tuple[int, str, str]] = None  # (count, last_date, code)
+        for sc, dates in by_code_dates.items():
+            if not dates:
+                continue
+            key = (len(dates), dates[-1], sc)
+            if best is None:
+                best = key
+                continue
+            # 次数多优先；次数同则最近涨停更晚优先；再比代码
+            if key[0] > best[0] or (
+                key[0] == best[0] and (key[1] > best[1] or (key[1] == best[1] and key[2] < best[2]))
+            ):
+                best = key
+        return best[2] if best else None
+
+    resolved_leader = _normalize_code(str(leader_code or "").strip()) if leader_code else ""
+    if not resolved_leader:
+        resolved_leader = _auto_leader() or ""
+
+    wave_start: Optional[str] = None
+    wave_reason = ""
+    wave_day_n: Optional[int] = None
+
+    if mode == "scan_window":
+        wave_start = scan_start.isoformat()
+        wave_reason = f"全扫描窗（近{window_days}自然日）"
+        wave_day_n = None
+    elif mode == "leader_first":
+        if resolved_leader and resolved_leader in by_code_dates and by_code_dates[resolved_leader]:
+            wave_start = by_code_dates[resolved_leader][0]
+            nm = name_by_code.get(resolved_leader) or resolved_leader
+            wave_reason = f"龙头首板日（{resolved_leader} {nm}）"
+            wave_day_n = len(by_date_codes.get(wave_start, set()))
+        else:
+            # 回退板块启动
+            wave_start = None
+            for ymd in sorted(by_date_codes.keys()):
+                n = len(by_date_codes[ymd])
+                if n >= min_cnt:
+                    wave_start = ymd
+                    wave_day_n = n
+                    wave_reason = (
+                        f"未找到龙头首板，回退板块启动日（当日涨停≥{min_cnt}）"
+                    )
+                    break
+            if wave_start is None:
+                # 再回退：窗内最早有涨停的一天
+                wave_start = min(by_date_codes.keys())
+                wave_day_n = len(by_date_codes[wave_start])
+                wave_reason = "未找到龙头首板且无达标启动日，回退窗内首个涨停日"
+    else:
+        # board_start
+        for ymd in sorted(by_date_codes.keys()):
+            n = len(by_date_codes[ymd])
+            if n >= min_cnt:
+                wave_start = ymd
+                wave_day_n = n
+                wave_reason = f"板块启动日（当日涨停家数 {n} ≥ {min_cnt}）"
+                break
+        if wave_start is None:
+            wave_start = min(by_date_codes.keys())
+            wave_day_n = len(by_date_codes[wave_start])
+            wave_reason = (
+                f"窗内无达标启动日（阈值≥{min_cnt}），回退首个涨停日"
+            )
+
+    assert wave_start is not None
+
+    def _max_consec(dates: List[str]) -> int:
+        """近似连板：相邻涨停日间隔 ≤3 自然日视为连续（跨周末）。"""
+        if not dates:
+            return 0
+        best = cur = 1
+        prev = _dt.strptime(dates[0], "%Y-%m-%d").date()
+        for ymd in dates[1:]:
+            cur_d = _dt.strptime(ymd, "%Y-%m-%d").date()
+            gap = (cur_d - prev).days
+            if 1 <= gap <= 3:
+                cur += 1
+                best = max(best, cur)
+            else:
+                cur = 1
+            prev = cur_d
+        return best
+
+    stocks: List[Dict[str, Any]] = []
+    for sc, dates_all in by_code_dates.items():
+        # scan_window：事件已在扫描窗内，不再按起涨日裁剪
+        if mode == "scan_window":
+            dates = list(dates_all)
+        else:
+            dates = [d for d in dates_all if d >= wave_start]
+        if not dates:
+            continue
+        stocks.append(
+            {
+                "code": sc,
+                "name": name_by_code.get(sc) or "",
+                "limit_up_count": len(dates),
+                "max_consecutive": _max_consec(dates),
+                "last_limit_up_date": dates[-1],
+                "first_limit_up_date": dates[0],
+                "max_change_percent": None,
+            }
+        )
+
+    stocks.sort(
+        key=lambda s: (
+            -int(s.get("limit_up_count") or 0),
+            -int(s.get("max_consecutive") or 0),
+            str(s.get("last_limit_up_date") or ""),
+            str(s.get("code") or ""),
+        )
+    )
+
+    payload = _empty(
+        wave_start=wave_start,
+        wave_reason=wave_reason,
+        wave_day_n=wave_day_n,
+    )
+    payload["peak_limit_up_count"] = peak_n
+    payload["peak_limit_up_date"] = peak_date
+    payload["leader_code"] = resolved_leader or None
+    payload["leader_name"] = (
+        name_by_code.get(resolved_leader) if resolved_leader else None
+    ) or None
+    payload["constituent_count"] = len(codes)
+    payload["stocks"] = stocks
+    payload["total"] = len(stocks)
+    return payload
+
+
 def _catalog_stock_count(raw: Any) -> int:
     if not isinstance(raw, dict):
         return 0

@@ -45,7 +45,7 @@
         const list = normalizeBatchStocks(stocks);
         if (!list.length) {
             if (global.CommonUtils && CommonUtils.showToast) {
-                CommonUtils.showToast('请先勾选至少一只龙头或中军', 'warning');
+                CommonUtils.showToast('请先勾选至少一只股票', 'warning');
             }
             return false;
         }
@@ -79,10 +79,13 @@
         return true;
     }
 
-    /** 分析频道旧深链 → 详情页交易分析（保留 legacy=1 时不跳转） */
+    /** 分析频道旧深链 → 详情页交易分析（保留 legacy=1 时不跳转；批量深链绝不跳转） */
     function redirectFromAnalysisDeepLink() {
         try {
             const params = new URLSearchParams(global.location.search || '');
+            const batch = (params.get('batch') || '').trim();
+            // 批量分析必须留在 analysis.html 多 Tab 工作台
+            if (batch === 'selected' || batch === 'watchlist') return false;
             const tab = (params.get('tab') || '').trim();
             const code = (params.get('code') || '').trim();
             if (tab !== 'stock-ai' || !code) return false;
