@@ -13,7 +13,7 @@ from .kde_levels import (
     extract_kde_levels_expand_support,
     nearest_levels,
 )
-from .sector_benchmark import compute_vwap_benchmark, sector_slope
+from .sector_benchmark import compute_vwap_benchmark
 from .signal_detector import detect_signal
 from .trade_structure_plan import build_structure_plan
 from .zscore import latest_zscore
@@ -286,6 +286,61 @@ class RPEStrategyEngine:
             "structure_break": breached,
         }
 
+    def _resolve_board_trend_slope(
+        self,
+        board_code: str,
+        *,
+        board_kind: str = "industry",
+        end_date: Optional[str] = None,
+        window: int = 60,
+    ) -> Optional[float]:
+        """趋势否决用板斜率：优先读库，缺失则现算入库（与行情/GMS 同口径）。"""
+        from backend_core.board_metrics.sector_slope_store import (
+            ensure_board_sector_slope,
+            load_board_sector_slopes,
+        )
+
+        db = getattr(self.loader, "_db", None)
+        if db is None:
+            return None
+        kind = "concept" if board_kind == "concept" else "industry"
+        win = int(window or 60)
+        try:
+            stored = load_board_sector_slopes(
+                db,
+                [board_code],
+                board_kind=kind,
+                asof_date=end_date,
+                window=win,
+            )
+            row = (stored or {}).get(board_code) or {}
+            if row.get("sector_slope") is not None:
+                return float(row["sector_slope"])
+        except Exception as e:
+            logger.debug("RPE load board slope failed %s: %s", board_code, e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        try:
+            filled = ensure_board_sector_slope(
+                db,
+                board_code,
+                board_kind=kind,
+                end_date=end_date,
+                window=win,
+                commit=True,
+            )
+            if filled and filled.get("sector_slope") is not None:
+                return float(filled["sector_slope"])
+        except Exception as e:
+            logger.warning("RPE ensure board slope failed %s: %s", board_code, e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+        return None
+
     def screen_board(
         self,
         board_code: str,
@@ -343,10 +398,13 @@ class RPEStrategyEngine:
         benchmark = compute_vwap_benchmark(date_members)
         if len(benchmark) < int(cfg.get("z_window", 40)) + 5:
             return []
-        slope = sector_slope(
-            benchmark,
-            int(cfg.get("sector_slope_window", 60)),
-            transform=str(cfg.get("sector_slope_transform") or "log"),
+        # 比价仍用 VWAP；趋势否决读板斜率（官方指数/等权收益入库口径）
+        slope_window = int(cfg.get("sector_slope_window", 60))
+        slope = self._resolve_board_trend_slope(
+            board_code,
+            board_kind=board_kind,
+            end_date=date,
+            window=slope_window,
         )
         trade_date = date or (benchmark[-1]["date"] if benchmark else self.loader.resolve_trade_date())
 

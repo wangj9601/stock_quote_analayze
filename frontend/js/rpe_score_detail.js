@@ -154,7 +154,7 @@ const RpeScoreDetail = {
       [
         '板块斜率(ln)',
         this._fmt(src.sector_slope, 4),
-        `近 ${th.sector_slope_window != null ? th.sector_slope_window : 60} 日 ln(I_t) 回归斜率（与行情板块详情一致）；&lt;0 可趋势否决`,
+        `近 ${th.sector_slope_window != null ? th.sector_slope_window : 60} 日 ln 回归斜率（官方指数优先/等权收益回退，与行情一致）；&lt;0 可趋势否决`,
       ],
       [
         '最近支撑 S',

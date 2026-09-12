@@ -721,13 +721,16 @@ class IndustryBoardRealtimeQuotes(Base):
 
 
 class IndustryBoardDailyMetrics(Base):
-    """行业板日度指标（成分量权基准斜率等；无官方板日线指数时由成分日线合成）。"""
+    """行业板日度指标（官方指数/等权收益斜率等）。"""
     __tablename__ = "industry_board_daily_metrics"
     board_code = Column(String(20), primary_key=True)
     slope_asof_date = Column(Date, primary_key=True)
     sector_slope_window = Column(Integer, primary_key=True, default=60)
     sector_slope = Column(Float)
     member_count_used = Column(Integer)
+    slope_source = Column(String(32))
+    slope_r2 = Column(Float)
+    slope_n = Column(Integer)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
@@ -739,6 +742,9 @@ class ConceptBoardDailyMetrics(Base):
     sector_slope_window = Column(Integer, primary_key=True, default=60)
     sector_slope = Column(Float)
     member_count_used = Column(Integer)
+    slope_source = Column(String(32))
+    slope_r2 = Column(Float)
+    slope_n = Column(Integer)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 

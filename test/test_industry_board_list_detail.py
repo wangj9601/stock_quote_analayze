@@ -19,12 +19,18 @@ def test_evaluate_board_weak_judgment_summary():
     assert "斜率" in weak["board_weak_summary"]
 
     strong = evaluate_board_environment(
-        sector_slope_v=0.0015, board_change_percent=-1.0
+        sector_slope_v=0.0015, board_change_percent=-1.0, slope_r2=0.95, sector_slope_window=60
     )
     assert strong["board_strong"] is True
     assert strong["board_weak"] is False
     assert strong["board_env"] == "strong"
     assert strong["board_env_label"] == "走强"
+
+    low_r2 = evaluate_board_environment(
+        sector_slope_v=0.0015, board_change_percent=-1.0, slope_r2=0.1, sector_slope_window=60
+    )
+    assert low_r2["board_strong"] is False
+    assert low_r2["board_env"] == "neutral"
 
     neutral = evaluate_board_environment(
         sector_slope_v=0.0003, board_change_percent=1.0
@@ -138,29 +144,42 @@ def test_fetch_industry_board_list_with_metrics_merges_quote_and_slope(monkeypat
 
     class _FakeSlopeStore:
         @staticmethod
-        def load_board_sector_slopes(db, codes, board_kind="industry", window=None, **kwargs):
+        def load_board_sector_slopes_multi(db, codes, board_kind="industry", windows=None, **kwargs):
             assert "881101" in codes
-            if window is not None and int(window) == 10:
-                return {
-                    "881101": {
-                        "sector_slope": 0.002,
-                        "sector_slope_window": 10,
-                        "slope_asof_date": date(2026, 8, 7),
-                        "member_count_used": 100,
-                    }
-                }
-            return {
+            mid = {
                 "881101": {
                     "sector_slope": -0.012345,
                     "sector_slope_window": 60,
                     "slope_asof_date": date(2026, 8, 7),
                     "member_count_used": 100,
+                    "slope_r2": 0.9,
+                    "slope_source": "ths_index",
                 }
             }
+            short = {
+                "881101": {
+                    "sector_slope": 0.002,
+                    "sector_slope_window": 10,
+                    "slope_asof_date": date(2026, 8, 7),
+                    "member_count_used": 100,
+                    "slope_r2": 0.9,
+                    "slope_source": "ths_index",
+                }
+            }
+            out = {}
+            for w in windows or (120, 60, 20, 10, 5):
+                wi = int(w)
+                if wi == 60:
+                    out[wi] = mid
+                elif wi == 10:
+                    out[wi] = short
+                else:
+                    out[wi] = {}
+            return out
 
     monkeypatch.setattr(
-        "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-        _FakeSlopeStore.load_board_sector_slopes,
+        "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes_multi",
+        _FakeSlopeStore.load_board_sector_slopes_multi,
     )
 
     out = q.fetch_industry_board_list_with_metrics(SimpleNamespace(), board_code_source="tonghuashun")
@@ -227,18 +246,33 @@ def test_industry_board_list_sorts_strong_before_weak(monkeypatch):
         ),
     )
 
-    def _slopes(db, codes, board_kind="industry", window=None, **kwargs):
-        if window is not None and int(window) == 10:
-            return {}
-        return {
-            "881A": {"sector_slope": -0.0049, "sector_slope_window": 60},
-            "881B": {"sector_slope": 0.0080, "sector_slope_window": 60},
-            "881C": {"sector_slope": 0.0100, "sector_slope_window": 60},
+    def _slopes_multi(db, codes, board_kind="industry", windows=None, **kwargs):
+        mid = {
+            "881A": {
+                "sector_slope": -0.0049,
+                "sector_slope_window": 60,
+                "slope_r2": 0.9,
+            },
+            "881B": {
+                "sector_slope": 0.0080,
+                "sector_slope_window": 60,
+                "slope_r2": 0.9,
+            },
+            "881C": {
+                "sector_slope": 0.0100,
+                "sector_slope_window": 60,
+                "slope_r2": 0.9,
+            },
         }
+        out = {}
+        for w in windows or (120, 60, 20, 10, 5):
+            wi = int(w)
+            out[wi] = mid if wi == 60 else {}
+        return out
 
     monkeypatch.setattr(
-        "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-        _slopes,
+        "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes_multi",
+        _slopes_multi,
     )
 
     out = q.fetch_industry_board_list_with_metrics(SimpleNamespace(), board_code_source="tonghuashun")
@@ -464,6 +498,9 @@ def test_fetch_industry_board_detail_computes_and_stores_missing_slope(monkeypat
             "sector_slope_window": 60,
             "slope_asof_date": date(2026, 8, 7),
             "member_count_used": 48,
+            "slope_r2": 0.95,
+            "slope_source": "ths_index",
+            "slope_n": 60,
         }
 
     monkeypatch.setattr(

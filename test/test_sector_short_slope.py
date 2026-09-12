@@ -12,6 +12,8 @@ def test_attach_short_slope_fields():
             "sector_slope": 0.002,
             "sector_slope_window": 10,
             "slope_asof_date": "2026-09-02",
+            "slope_r2": 0.95,
+            "slope_source": "equal_weight_return",
         },
     )
     assert item["sector_slope_short"] == 0.002
@@ -37,6 +39,7 @@ def test_attach_extra_window_slope_fields():
                     "sector_slope": 0.0009,
                     "sector_slope_window": 120,
                     "slope_asof_date": "2026-09-02",
+                    "slope_r2": 0.8,
                 }
             },
             20: {
@@ -44,6 +47,7 @@ def test_attach_extra_window_slope_fields():
                     "sector_slope": 0.0015,
                     "sector_slope_window": 20,
                     "slope_asof_date": "2026-09-02",
+                    "slope_r2": 0.8,
                 }
             },
             5: {
@@ -51,6 +55,7 @@ def test_attach_extra_window_slope_fields():
                     "sector_slope": -0.01,
                     "sector_slope_window": 5,
                     "slope_asof_date": "2026-09-02",
+                    "slope_r2": 0.8,
                 }
             },
         },

@@ -53,7 +53,7 @@ flowchart TD
 | **Z-Score \(Z\)** | 对 \(R\) 序列做滚动标准化后的偏离 | 「Z-Score」+ 窗口（默认 40） |
 | **补涨 catch_up** | \(Z\) 过低：相对板块落后 | 信号类型 |
 | **领涨 lead** | \(Z\) 过高：相对板块强势 | 默认仅观察 |
-| **板块斜率** | 近 N 日 \(\ln(I_t)\) 线性回归斜率 \(b\)（与行情板块详情一致） | 「板块斜率(ln)」 |
+| **板块斜率** | 近 N 日对**斜率专用基准** \(\ln\) 线性回归斜率 \(b\)（与行情板块详情一致；**非**比价用的 VWAP \(I_t\)） | 「板块斜率(ln)」 |
 | **趋势否决** | 斜率 &lt; 0 且开启否决 → 禁止入场 | meta「趋势否决」 |
 | **最近支撑 \(S\)** | 现价下方最近 KDE 密度峰 | 「最近支撑」 |
 | **最近阻力 \(R_{res}\)** | 现价上方最近 KDE 密度峰（无则显示 `-`） | 「最近阻力」 |
@@ -82,6 +82,8 @@ I_t = \frac{\sum_i P_{i,t}\, V_{i,t}}{\sum_i V_{i,t}}
 | **结果** | \(I_t\) | 写入明细 `detail.i_t` | 例：半导体板 92.1304 |
 
 实现：`sector_benchmark.compute_vwap_benchmark`；输出 `[{date, i_t, volume_sum}, ...]`。
+
+> **与板块斜率拆开**：比价 / Z-Score 继续用本量权价位 \(I_t\)。趋势否决用的「板块斜率」读 `industry_board_daily_metrics` / `concept_board_daily_metrics`（官方指数优先，否则前复权等权收益链），**不再**用 VWAP 顺手回归。
 
 ### 3.2 比价 \(R_t\)（个股相对基准）
 
@@ -203,8 +205,8 @@ D = P - S,\quad U = R_{res} - P,\quad
 | `z_window` | 40 | Z 窗口 |
 | `z_catch_up` | -1.5 | 补涨阈值 |
 | `z_lead` | 2.0 | 领涨阈值 |
-| `sector_slope_window` | 60 | 斜率窗口（对 ln(I_t)） |
-| `sector_slope_transform` | log | 斜率变换：log=与行情一致；none=原始 I_t |
+| `sector_slope_window` | 60 | 趋势否决斜率窗口（读板日度指标，对 ln 基准回归） |
+| `sector_slope_transform` | log | 历史兼容字段；入库斜率固定为 log |
 | `enable_trend_veto` | true | 弱势板块否决 |
 | `enable_lead_trade` | false | 领涨可否交易 |
 | `kde_base_factor` | 1.0 | KDE 带宽系数 |

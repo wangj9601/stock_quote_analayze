@@ -17,7 +17,12 @@ def test_sector_slope_log_transform_positive_trend():
     assert slope is not None
     assert abs(slope - math.log(1.002)) < 1e-6
     assert slope >= DEFAULT_SLOPE_STRONG_THRESHOLD
-    env = evaluate_board_environment(sector_slope_v=slope, board_change_percent=None)
+    env = evaluate_board_environment(
+        sector_slope_v=slope,
+        board_change_percent=None,
+        slope_r2=0.99,
+        sector_slope_window=60,
+    )
     assert env["board_env"] == "strong"
     assert env["board_strong"] is True
 

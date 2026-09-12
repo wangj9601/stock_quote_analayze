@@ -199,10 +199,16 @@ I_t = \frac{\sum_i P_{i,t}\, V_{i,t}}{\sum_i V_{i,t}}
 
 ### 4.2 板块趋势斜率
 
-对最近 `sector_slope_window` 日的 \(\ln(I_t)\) 做普通最小二乘：\(y \sim a + b x\)，\(x=0..n-1\)，取斜率 \(b\)（默认 `sector_slope_transform=log`，与行情板块详情/GMS 入库一致；`none` 时对原始 \(I_t\) 回归）。
+**与比价基准拆开。** 比价仍用 VWAP \(I_t\)；趋势否决读板日度斜率（与行情/GMS 一致）：
 
-- \(b < 0\) 且 `enable_trend_veto=true` → `trend_veto=true`，禁止入场（仍可标出 catch_up/lead 类型为观察）
-- 样本 &lt; 5 → 斜率 `None`，否决不触发
+1. **官方指数优先**：同花顺 `industry_board_historical_quotes`（概念有指数时同理）近窗收盘 \(\ln(C_t)\) OLS。
+2. **不足则回退**：成分股**前复权**日收益等权平均，累加成链后再对 \(\ln\) 回归。
+3. 取斜率 \(b\)；同时存 \(R^2\)（走强展示用，RPE 否决只看 \(b&lt;0\)）。
+
+- \(b &lt; 0\) 且 `enable_trend_veto=true` → `trend_veto=true`，禁止入场（仍可标出 catch_up/lead 类型为观察）
+- 样本不足 / 库与现算均无 → 斜率 `None`，否决不触发
+
+实现：`sector_slope_store` + `RPEStrategyEngine._resolve_board_trend_slope`。
 
 ### 4.3 比价与滚动 Z-Score
 

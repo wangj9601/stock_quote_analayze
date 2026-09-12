@@ -67,7 +67,11 @@ def test_compute_detail_uses_all_members_when_limit_none():
     members = [{"code": f"{i:06d}", "name": f"s{i}"} for i in range(50)]
     loader.load_board_members.return_value = members
     codes_all = [m["code"] for m in members]
-    loader.load_sector_panel.return_value = _make_rising_panel(codes_all)
+
+    def _panel(codes, **kwargs):
+        return _make_rising_panel(list(codes))
+
+    loader.load_sector_panel.side_effect = _panel
     real = RPEDataLoader.__new__(RPEDataLoader)
     loader.build_date_members.side_effect = real.build_date_members
 
@@ -78,6 +82,8 @@ def test_compute_detail_uses_all_members_when_limit_none():
     assert detail["sector_slope"] is not None
     assert detail["sector_slope"] > 0
     assert detail["slope_asof_date"] is not None
+    assert detail["slope_source"] == "equal_weight_return"
+    assert detail["slope_r2"] is not None
 
     detail2 = compute_board_sector_slope_detail(
         loader, "BK0001", member_limit=10, window=20, lookback=80
@@ -112,6 +118,9 @@ def test_upsert_and_gms_prefer_db_slope():
                 "sector_slope": -0.05,
                 "sector_slope_window": 60,
                 "member_count_used": 80,
+                "slope_source": "equal_weight_return",
+                "slope_r2": 0.8,
+                "slope_n": 60,
             }
         ],
         board_kind="industry",
@@ -125,10 +134,22 @@ def test_upsert_and_gms_prefer_db_slope():
     ):
         with patch(
             "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-            return_value={"BK0001": {"sector_slope": -0.05, "sector_slope_window": 60}},
+            return_value={
+                "BK0001": {
+                    "sector_slope": -0.05,
+                    "sector_slope_window": 60,
+                    "slope_r2": 0.8,
+                    "slope_source": "equal_weight_return",
+                }
+            },
         ) as mock_load:
             with patch(
-                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope"
+                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope_meta",
+                return_value={
+                    "sector_slope": 0.01,
+                    "slope_r2": 0.9,
+                    "slope_source": "equal_weight_return",
+                },
             ) as mock_compute:
                 cache = _resolve_slopes_for_boards(
                     db,
@@ -140,7 +161,7 @@ def test_upsert_and_gms_prefer_db_slope():
                     prefer_db=True,
                 )
                 mock_load.assert_called_once()
-                assert cache["BK0001"] == -0.05
+                assert cache["BK0001"]["sector_slope"] == -0.05
                 assert mock_compute.call_count == 1
                 assert mock_compute.call_args.args[1] == "BK0002"
 
@@ -155,8 +176,12 @@ def test_prefer_db_false_always_compute():
             "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes"
         ) as mock_load:
             with patch(
-                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope",
-                return_value=0.01,
+                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope_meta",
+                return_value={
+                    "sector_slope": 0.01,
+                    "slope_r2": 0.9,
+                    "slope_source": "ths_index",
+                },
             ) as mock_compute:
                 cache = _resolve_slopes_for_boards(
                     db,
@@ -169,7 +194,7 @@ def test_prefer_db_false_always_compute():
                 )
                 mock_load.assert_not_called()
                 assert mock_compute.call_count == 1
-                assert cache["BK0001"] == 0.01
+                assert cache["BK0001"]["sector_slope"] == 0.01
 
 
 def test_filter_board_codes_by_source_keeps_tonghuashun_only():
@@ -271,10 +296,10 @@ def test_gms_resolve_skips_non_tonghuashun_no_compute():
     ):
         with patch(
             "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-            return_value={"881101": {"sector_slope": 0.02}},
+            return_value={"881101": {"sector_slope": 0.02, "slope_r2": 0.9}},
         ) as mock_load:
             with patch(
-                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope"
+                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope_meta"
             ) as mock_compute:
                 cache = _resolve_slopes_for_boards(
                     db,
@@ -286,7 +311,7 @@ def test_gms_resolve_skips_non_tonghuashun_no_compute():
                     prefer_db=True,
                     board_code_source="tonghuashun",
                 )
-    assert cache["881101"] == 0.02
+    assert cache["881101"]["sector_slope"] == 0.02
     assert cache["BK0477"] is None
     mock_load.assert_called_once()
     assert mock_load.call_args.args[1] == ["881101"]
@@ -429,8 +454,12 @@ def test_resolve_slopes_computes_after_db_load_failure():
             side_effect=RuntimeError("InFailedSqlTransaction"),
         ):
             with patch(
-                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope",
-                return_value=-0.0123,
+                "backend_core.strategies.gms.board_resonance.compute_board_sector_slope_meta",
+                return_value={
+                    "sector_slope": -0.0123,
+                    "slope_r2": 0.85,
+                    "slope_source": "equal_weight_return",
+                },
             ) as mock_compute:
                 cache = _resolve_slopes_for_boards(
                     db,
@@ -442,7 +471,7 @@ def test_resolve_slopes_computes_after_db_load_failure():
                     prefer_db=True,
                     board_code_source="tonghuashun",
                 )
-    assert cache["881101"] == -0.0123
+    assert cache["881101"]["sector_slope"] == -0.0123
     mock_compute.assert_called_once()
     db.rollback.assert_called()
 

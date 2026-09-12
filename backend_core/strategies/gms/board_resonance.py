@@ -32,6 +32,8 @@ def empty_board_resonance() -> Dict[str, Any]:
         "primary_board_kind": None,
         "sector_slope": None,
         "slope_transform": "log",
+        "slope_source": None,
+        "slope_r2": None,
         "board_change_percent": None,
         "board_weak": False,
         "board_strong": False,
@@ -248,8 +250,9 @@ def compute_board_sector_slope(
     window: int = DEFAULT_SECTOR_SLOPE_WINDOW,
     lookback: int = DEFAULT_LOOKBACK,
     member_limit: Optional[int] = None,
+    db=None,
 ) -> Optional[float]:
-    """合成板块量权基准并算斜率；默认全成分（member_limit=None/0 不截断）。失败返回 None。"""
+    """按官方指数/等权收益算斜率；默认全成分。失败返回 None。"""
     from backend_core.board_metrics.sector_slope_store import compute_board_sector_slope_detail
 
     detail = compute_board_sector_slope_detail(
@@ -260,8 +263,38 @@ def compute_board_sector_slope(
         window=window,
         lookback=lookback,
         member_limit=member_limit,
+        db=db if db is not None else getattr(loader, "_db", None),
     )
     return detail.get("sector_slope")
+
+
+def compute_board_sector_slope_meta(
+    loader,
+    board_code: str,
+    *,
+    board_kind: str = "industry",
+    end_date: Optional[str] = None,
+    window: int = DEFAULT_SECTOR_SLOPE_WINDOW,
+    lookback: int = DEFAULT_LOOKBACK,
+    member_limit: Optional[int] = None,
+    db=None,
+) -> Optional[Dict[str, Any]]:
+    """返回含 sector_slope / slope_r2 / slope_source 的详情；失败或无斜率返回 None。"""
+    from backend_core.board_metrics.sector_slope_store import compute_board_sector_slope_detail
+
+    detail = compute_board_sector_slope_detail(
+        loader,
+        board_code,
+        board_kind=board_kind,
+        end_date=end_date,
+        window=window,
+        lookback=lookback,
+        member_limit=member_limit,
+        db=db if db is not None else getattr(loader, "_db", None),
+    )
+    if detail.get("sector_slope") is None:
+        return None
+    return detail
 
 
 def _is_board_weak(
@@ -285,7 +318,8 @@ def _is_board_weak(
 BOARD_WEAK_REASON_SUMMARY = {
     "sector_slope_negative": "板块斜率 < 0，判定走弱（ln(I_t) 近窗回归）",
     "sector_slope_ok": "板块斜率 ≥ 0 且未达走强阈值，环境正常",
-    "sector_slope_strong": "板块斜率 ≥ 走强阈值，判定走强（仅展示）",
+    "sector_slope_strong": "板块斜率 ≥ 走强阈值且 R² 达标，判定走强（仅展示）",
+    "sector_slope_strong_low_r2": "板块斜率达走强阈值但 R² 不足，视为正常（挡假走强）",
     "realtime_change_negative": "无斜率时按实时涨跌回退：涨跌幅 < 0，判定走弱",
     "realtime_change_ok": "无斜率时按实时涨跌回退：涨跌幅 ≥ 0，未走弱（不作走强）",
     "insufficient_board_data": "斜率与实时涨跌均不足，暂无法判定强弱",
@@ -311,25 +345,54 @@ def evaluate_board_environment(
     main_net_inflow: Optional[float] = None,
     enable_board_fund_flow: bool = False,
     fund_flow_weak_threshold: float = 0.0,
+    slope_r2: Optional[float] = None,
+    slope_r2_min: Optional[float] = None,
+    sector_slope_window: Optional[int] = None,
+    r2_gate_weak: bool = False,
 ) -> Dict[str, Any]:
     """板环境：走弱 / 正常 / 走强（走强仅展示，不加分）。
 
     斜率口径为入库的 ln(I_t) 近窗回归斜率。
+    走强需 b≥阈值且 R²≥下限（挡震荡假走强）；走弱默认只看 b<0。
     可选：启用板级资金流时，净流入 < 阈值亦判走弱（OR，仍软降权）。
     """
+    from backend_core.board_metrics.sector_slope_store import slope_r2_min_for_window
+
     strong_th = float(slope_strong_threshold)
     weak_th = float(slope_weak_threshold)
     if strong_th < weak_th:
         strong_th = weak_th
 
+    r2_min = slope_r2_min
+    if r2_min is None:
+        r2_min = slope_r2_min_for_window(
+            int(sector_slope_window) if sector_slope_window else DEFAULT_SECTOR_SLOPE_WINDOW
+        )
+    else:
+        r2_min = float(r2_min)
+
+    r2_v: Optional[float] = None
+    if slope_r2 is not None:
+        try:
+            r2_v = float(slope_r2)
+        except (TypeError, ValueError):
+            r2_v = None
+
     board_strong = False
     if sector_slope_v is not None:
         sv = float(sector_slope_v)
         if sv < weak_th:
-            env, reason = "weak", "sector_slope_negative"
+            if r2_gate_weak and r2_v is not None and r2_v < r2_min:
+                env, reason = "neutral", "sector_slope_ok"
+            else:
+                env, reason = "weak", "sector_slope_negative"
         elif sv >= strong_th:
-            env, reason = "strong", "sector_slope_strong"
-            board_strong = True
+            # 无 R² 时保守：不标走强（避免旧 VWAP 行误标）；有 R² 且达标才走强
+            if r2_v is None or r2_v < r2_min:
+                env, reason = "neutral", "sector_slope_strong_low_r2"
+            else:
+                env, reason = "strong", "sector_slope_strong"
+                board_strong = True
         else:
             env, reason = "neutral", "sector_slope_ok"
     elif use_realtime_fallback and board_change_percent is not None:
@@ -362,6 +425,8 @@ def evaluate_board_environment(
         ),
         "slope_weak_threshold": weak_th,
         "slope_strong_threshold": strong_th,
+        "slope_r2": r2_v,
+        "slope_r2_min": float(r2_min),
         "slope_transform": "log",
         "use_realtime_change_fallback": bool(use_realtime_fallback),
     }
@@ -377,6 +442,10 @@ def evaluate_board_weak_judgment(
     main_net_inflow: Optional[float] = None,
     enable_board_fund_flow: bool = False,
     fund_flow_weak_threshold: float = 0.0,
+    slope_r2: Optional[float] = None,
+    slope_r2_min: Optional[float] = None,
+    sector_slope_window: Optional[int] = None,
+    r2_gate_weak: bool = False,
 ) -> Dict[str, Any]:
     """兼容旧名：返回环境判断（含走强展示字段）。"""
     return evaluate_board_environment(
@@ -388,6 +457,10 @@ def evaluate_board_weak_judgment(
         main_net_inflow=main_net_inflow,
         enable_board_fund_flow=enable_board_fund_flow,
         fund_flow_weak_threshold=fund_flow_weak_threshold,
+        slope_r2=slope_r2,
+        slope_r2_min=slope_r2_min,
+        sector_slope_window=sector_slope_window,
+        r2_gate_weak=r2_gate_weak,
     )
 
 
@@ -564,10 +637,11 @@ def _resolve_slopes_for_boards(
     member_limit: Optional[int],
     prefer_db: bool,
     board_code_source: str = "tonghuashun",
-) -> Dict[str, Optional[float]]:
+) -> Dict[str, Optional[Dict[str, Any]]]:
     """优先读库；缺失板再现算（默认全成分）。
 
-    非同花顺来源板：不读库、不现算，斜率置 None（与「其它来源一律不处理」一致）。
+    返回 {board_code: {sector_slope, slope_r2, slope_source, ...} | None}
+    非同花顺来源板：不读库、不现算，斜率置 None。
     """
     from backend_core.board_metrics.sector_slope_store import (
         ALLOWED_SLOPE_BOARD_CODE_SOURCE,
@@ -577,7 +651,7 @@ def _resolve_slopes_for_boards(
     )
     from backend_core.strategies.rpe.data_loader import RPEDataLoader
 
-    slope_cache: Dict[str, Optional[float]] = {}
+    slope_cache: Dict[str, Optional[Dict[str, Any]]] = {}
     src = resolve_slope_board_code_source(board_code_source)
     all_codes = [str(c).strip() for c in board_codes if c]
     if src != ALLOWED_SLOPE_BOARD_CODE_SOURCE:
@@ -595,7 +669,6 @@ def _resolve_slopes_for_boards(
     )
     for bc in all_codes:
         if bc not in allowed:
-            # 东财/华泰/空来源等：跳过，后续 _is_board_weak → insufficient_board_data
             slope_cache[bc] = None
 
     processable = [bc for bc in all_codes if bc in allowed]
@@ -620,14 +693,14 @@ def _resolve_slopes_for_boards(
         for bc in processable:
             row = stored.get(bc)
             if row and row.get("sector_slope") is not None:
-                slope_cache[bc] = float(row["sector_slope"])
+                slope_cache[bc] = dict(row)
         missing = [bc for bc in processable if bc not in slope_cache]
 
     if missing:
         loader = RPEDataLoader(db)
         for bc in missing:
             try:
-                slope_cache[bc] = compute_board_sector_slope(
+                meta = compute_board_sector_slope_meta(
                     loader,
                     bc,
                     board_kind="industry",
@@ -635,7 +708,9 @@ def _resolve_slopes_for_boards(
                     window=window,
                     lookback=lookback,
                     member_limit=member_limit,
+                    db=db,
                 )
+                slope_cache[bc] = meta
             except Exception as e:
                 logger.warning("compute_board_sector_slope %s failed: %s", bc, e)
                 try:
@@ -736,14 +811,19 @@ def enrich_results_with_board_resonance(
                     sector_slope_v=None,
                     board_change_percent=None,
                     use_realtime_fallback=False,
+                    sector_slope_window=window,
                 )
                 payload.update(env)
             else:
-                slope_v = slope_cache.get(bc)
+                meta = slope_cache.get(bc) or {}
+                slope_v = meta.get("sector_slope") if isinstance(meta, dict) else None
+                r2_v = meta.get("slope_r2") if isinstance(meta, dict) else None
+                src_v = meta.get("slope_source") if isinstance(meta, dict) else None
                 chg = change_map.get(bc)
                 payload["sector_slope"] = (
                     round(float(slope_v), 6) if slope_v is not None else None
                 )
+                payload["slope_source"] = src_v
                 payload["board_change_percent"] = chg
                 env = evaluate_board_environment(
                     sector_slope_v=slope_v,
@@ -754,6 +834,8 @@ def enrich_results_with_board_resonance(
                     main_net_inflow=net_ff,
                     enable_board_fund_flow=enable_ff,
                     fund_flow_weak_threshold=ff_th,
+                    slope_r2=r2_v,
+                    sector_slope_window=window,
                 )
                 payload.update(env)
         else:
@@ -765,6 +847,8 @@ def enrich_results_with_board_resonance(
         item["primary_board_name"] = payload["primary_board_name"]
         item["primary_board_kind"] = payload["primary_board_kind"]
         item["sector_slope"] = payload["sector_slope"]
+        item["slope_source"] = payload.get("slope_source")
+        item["slope_r2"] = payload.get("slope_r2")
         item["board_change_percent"] = payload["board_change_percent"]
         item["board_weak"] = payload["board_weak"]
         item["board_strong"] = payload.get("board_strong", False)

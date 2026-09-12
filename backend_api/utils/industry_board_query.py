@@ -626,10 +626,16 @@ def _attach_slope_fields(item: Dict[str, Any], slope: Optional[Dict[str, Any]]) 
         item["slope_asof_date"] = None
         item["member_count_used"] = None
         item["slope_transform"] = "log"
+        item["slope_source"] = None
+        item["slope_r2"] = None
+        item["slope_n"] = None
         return
     item["sector_slope"] = slope.get("sector_slope")
     item["sector_slope_window"] = slope.get("sector_slope_window")
     item["slope_transform"] = slope.get("slope_transform") or "log"
+    item["slope_source"] = slope.get("slope_source")
+    item["slope_r2"] = slope.get("slope_r2")
+    item["slope_n"] = slope.get("slope_n")
     asof = slope.get("slope_asof_date")
     if hasattr(asof, "isoformat"):
         item["slope_asof_date"] = asof.isoformat()
@@ -661,6 +667,8 @@ def _attach_window_slope_fields(
     strong_key = f"board_strong_{field_suffix}"
     weak_key = f"board_weak_{field_suffix}"
     th_key = f"slope_{field_suffix}_strong_threshold"
+    r2_key = f"slope_{field_suffix}_r2"
+    src_key = f"slope_{field_suffix}_source"
     strong_th = slope_strong_threshold_for_window(window)
 
     if not slope:
@@ -672,10 +680,14 @@ def _attach_window_slope_fields(
         item[strong_key] = False
         item[weak_key] = False
         item[th_key] = strong_th
+        item[r2_key] = None
+        item[src_key] = None
         return
 
     item[slope_key] = slope.get("sector_slope")
     item[window_key] = slope.get("sector_slope_window") or int(window)
+    item[r2_key] = slope.get("slope_r2")
+    item[src_key] = slope.get("slope_source")
     asof = slope.get("slope_asof_date")
     if hasattr(asof, "isoformat"):
         item[asof_key] = asof.isoformat()
@@ -686,6 +698,10 @@ def _attach_window_slope_fields(
         slope_f = float(item[slope_key]) if item.get(slope_key) is not None else None
     except (TypeError, ValueError):
         slope_f = None
+    try:
+        r2_f = float(item[r2_key]) if item.get(r2_key) is not None else None
+    except (TypeError, ValueError):
+        r2_f = None
     cp = None
     if use_realtime_fallback:
         cp = change_percent if change_percent is not None else item.get("change_percent")
@@ -698,6 +714,8 @@ def _attach_window_slope_fields(
         board_change_percent=cp,
         slope_strong_threshold=strong_th,
         use_realtime_fallback=bool(use_realtime_fallback),
+        slope_r2=r2_f,
+        sector_slope_window=int(window),
     )
     item[weak_key] = env["board_weak"]
     item[strong_key] = env["board_strong"]
@@ -797,6 +815,15 @@ def _attach_board_env_fields(item: Dict[str, Any], change_percent: Any = None) -
         slope_f = float(item["sector_slope"]) if item.get("sector_slope") is not None else None
     except (TypeError, ValueError):
         slope_f = None
+    try:
+        r2_f = float(item["slope_r2"]) if item.get("slope_r2") is not None else None
+    except (TypeError, ValueError):
+        r2_f = None
+    win = item.get("sector_slope_window")
+    try:
+        win_i = int(win) if win is not None else None
+    except (TypeError, ValueError):
+        win_i = None
     cp = change_percent if change_percent is not None else item.get("change_percent")
     try:
         cp_f = float(cp) if cp is not None else None
@@ -805,6 +832,8 @@ def _attach_board_env_fields(item: Dict[str, Any], change_percent: Any = None) -
     env = evaluate_board_environment(
         sector_slope_v=slope_f,
         board_change_percent=cp_f,
+        slope_r2=r2_f,
+        sector_slope_window=win_i,
     )
     item["board_weak"] = env["board_weak"]
     item["board_strong"] = env["board_strong"]
@@ -814,6 +843,7 @@ def _attach_board_env_fields(item: Dict[str, Any], change_percent: Any = None) -
     item["board_weak_summary"] = env["board_weak_summary"]
     item["slope_weak_threshold"] = env["slope_weak_threshold"]
     item["slope_strong_threshold"] = env["slope_strong_threshold"]
+    item["slope_r2_min"] = env.get("slope_r2_min")
     item["slope_transform"] = env.get("slope_transform") or item.get("slope_transform") or "log"
 
 
@@ -1186,6 +1216,8 @@ def fetch_board_detail(
     judgment = evaluate_board_environment(
         sector_slope_v=sector_slope_f,
         board_change_percent=change_percent_f,
+        slope_r2=slope.get("slope_r2"),
+        sector_slope_window=slope.get("sector_slope_window") or DEFAULT_SECTOR_SLOPE_WINDOW,
     )
 
     detail: Dict[str, Any] = {
@@ -1206,6 +1238,7 @@ def fetch_board_detail(
         "board_weak_summary": judgment["board_weak_summary"],
         "slope_weak_threshold": judgment["slope_weak_threshold"],
         "slope_strong_threshold": judgment["slope_strong_threshold"],
+        "slope_r2_min": judgment.get("slope_r2_min"),
         "slope_transform": judgment.get("slope_transform") or "log",
         "use_realtime_change_fallback": judgment["use_realtime_change_fallback"],
         "slope_filled_on_demand": slope_filled_on_demand,
@@ -1258,6 +1291,9 @@ def fetch_board_detail(
                         env2 = evaluate_board_environment(
                             sector_slope_v=sector_slope_f,
                             board_change_percent=est,
+                            slope_r2=slope.get("slope_r2"),
+                            sector_slope_window=slope.get("sector_slope_window")
+                            or DEFAULT_SECTOR_SLOPE_WINDOW,
                         )
                         detail["board_weak"] = env2["board_weak"]
                         detail["board_strong"] = env2["board_strong"]

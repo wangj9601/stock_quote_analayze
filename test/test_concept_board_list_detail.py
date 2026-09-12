@@ -24,14 +24,23 @@ def test_fetch_concept_board_list_merges_slope(monkeypatch):
         lambda db, **kwargs: catalog,
     )
     monkeypatch.setattr(
-        "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes",
-        lambda db, codes, board_kind="concept", window=None, **kwargs: {
-            "885311": {
-                "sector_slope": 0.0012,
-                "sector_slope_window": 60,
-                "slope_asof_date": "2026-08-08",
-                "member_count_used": 40,
-            }
+        "backend_core.board_metrics.sector_slope_store.load_board_sector_slopes_multi",
+        lambda db, codes, board_kind="concept", windows=None, **kwargs: {
+            int(w): (
+                {
+                    "885311": {
+                        "sector_slope": 0.0012,
+                        "sector_slope_window": 60,
+                        "slope_asof_date": "2026-08-08",
+                        "member_count_used": 40,
+                        "slope_r2": 0.9,
+                        "slope_source": "equal_weight_return",
+                    }
+                }
+                if int(w) == 60
+                else {}
+            )
+            for w in (windows or (120, 60, 20, 10, 5))
         },
     )
     out = q.fetch_concept_board_list_with_metrics(SimpleNamespace(), board_code_source="tonghuashun")

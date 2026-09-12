@@ -1198,6 +1198,18 @@ const MarketsPage = {
         return Number(val).toFixed(4);
     },
 
+    formatR2(val) {
+        if (val == null || val === '' || isNaN(Number(val))) return '--';
+        return Number(val).toFixed(3);
+    },
+
+    formatSlopeSource(src) {
+        const s = String(src || '').trim();
+        if (s === 'ths_index') return '同花顺指数';
+        if (s === 'equal_weight_return') return '等权收益';
+        return s || '--';
+    },
+
     boardEnvChipHtml(d, mode = 'mid') {
         let env = '';
         let label = '';
@@ -1575,11 +1587,13 @@ const MarketsPage = {
                     ${item('短线环境', this.boardEnvChipHtml(d, 'short'))}
                     ${item('5日斜率(ln)', this.formatSlope(d.sector_slope_5), this.getChangeClass(d.sector_slope_5))}
                     ${item('5日环境', this.boardEnvChipHtml(d, '5'))}
+                    ${item('斜率来源', this.formatSlopeSource(d.slope_source))}
+                    ${item('60日 R²', this.formatR2(d.slope_r2))}
                     ${item('60日asof', d.slope_asof_date || '--')}
                     ${item('10日asof', d.slope_short_asof_date || '--')}
                     ${item('member_count_used', d.member_count_used != null ? d.member_count_used : '--')}
                 </div>
-                <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（窗口：120/60/20/10/5 日；均为 ln 量权基准回归）</div>
+                <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（窗口：120/60/20/10/5 日；官方指数优先，不足则前复权等权收益；走强需 R² 达标）</div>
             </div>
             <div class="sector-detail-section sector-fund-flow-section">
                 <h3>资金流向</h3>
