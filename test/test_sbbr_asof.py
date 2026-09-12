@@ -77,6 +77,9 @@ class _AsofFakeLoader:
         # 故意返回「未截断」全量，模拟脏数据；引擎应再 truncate
         return list(self._bars[-int(limit) :])
 
+    def load_index_bars(self, index_code="000001.SH", *, end_date=None, limit=120):
+        return list(self._bars[-int(limit) :])
+
     def load_share_map(self, codes=None, as_of_date=None):
         return {
             "000001": {
@@ -87,7 +90,7 @@ class _AsofFakeLoader:
             }
         }
 
-    def load_market_returns(self, *, end_date=None, lookback=80, index_code="000001"):
+    def load_market_returns(self, *, end_date=None, lookback=80, index_code="000001.SH"):
         return [0.0] * 40
 
     def build_size_universe(self, config, trade_date=None, limit=None):

@@ -111,10 +111,15 @@ class SBBRStrategyEngine:
         structure = compute_structure_levels(bars_desc, cfg, price=close) or empty_structure()
         box_support = bottom.get("support")
         box_resistance = bottom.get("resistance")
+        bottom_detail = dict(bottom.get("detail") or {})
+        if bottom.get("window_high") is not None:
+            bottom_detail.setdefault("window_high", bottom.get("window_high"))
+        if bottom.get("window_low") is not None:
+            bottom_detail.setdefault("window_low", bottom.get("window_low"))
 
         trade_date = asof or bars_win[-1]["date"]
         detail = {
-            "bottom": bottom.get("detail"),
+            "bottom": bottom_detail,
             "entry": {
                 k: entry.get(k)
                 for k in (
@@ -123,11 +128,17 @@ class SBBRStrategyEngine:
                     "shrink_ok",
                     "expand_ok",
                     "market_ok",
+                    "market_cum_ret",
+                    "market_required",
                     "volume_ratio",
                 )
             },
             "support": box_support,
             "resistance": box_resistance,
+            "window_high": bottom.get("window_high") or bottom_detail.get("window_high"),
+            "window_low": bottom.get("window_low") or bottom_detail.get("window_low"),
+            "box_frozen": bottom_detail.get("box_frozen"),
+            "box_lock_date": bottom_detail.get("box_lock_date"),
             "circ_shares_yi": size.get("circ_shares_yi"),
             "structure": {
                 "nearest_support": structure.get("nearest_support"),
@@ -162,6 +173,10 @@ class SBBRStrategyEngine:
             "volume_ratio": entry.get("volume_ratio"),
             "box_support": box_support,
             "box_resistance": box_resistance,
+            "window_high": detail.get("window_high"),
+            "window_low": detail.get("window_low"),
+            "box_frozen": detail.get("box_frozen"),
+            "box_lock_date": detail.get("box_lock_date"),
             "nearest_support": structure.get("nearest_support"),
             "nearest_resistance": structure.get("nearest_resistance"),
             "kde_ok": structure.get("kde_ok"),
@@ -218,10 +233,10 @@ class SBBRStrategyEngine:
         if len(trade_dates) > int(max_trade_days):
             trade_dates = trade_dates[-int(max_trade_days) :]
 
-        # 大盘收益：带日期，按 asof 切片，避免按日重复查库
+        # 大盘收益：上证指数 index_historical_quotes，带日期按 asof 切片，避免按日重复查库
         mkt_lookback = max(80, int(((cfg.get("entry") or {}).get("market_lookback_days") or 5)) + 20)
-        idx_bars = self.loader.load_bars(
-            "000001",
+        idx_bars = self.loader.load_index_bars(
+            "000001.SH",
             end_date=end_eff,
             limit=load_n + mkt_lookback,
         )

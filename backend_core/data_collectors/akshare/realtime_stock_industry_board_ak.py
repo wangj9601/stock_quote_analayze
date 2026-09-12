@@ -622,6 +622,20 @@ class RealtimeStockIndustryBoardCollector:
                     status="success",
                     error_message=None
                 )
+                # 用历史指数日 K 补实时 latest_price；有指数点位时再反补当日历史缺 close
+                try:
+                    from backend_core.data_collectors.akshare.industry_board_quote_sync import (
+                        supplement_industry_board_quotes,
+                    )
+
+                    sync_out = supplement_industry_board_quotes()
+                    print(
+                        "[采集] 实时↔历史指数互补: "
+                        f"hist+={sync_out.get('hist_from_realtime', {}).get('upserted')} "
+                        f"rt+={sync_out.get('realtime_from_hist', {}).get('updated')}"
+                    )
+                except Exception as sync_err:
+                    print(f"[采集] 实时↔历史指数互补跳过: {sync_err}")
                 # 斜率依赖成分日线，与实时涨跌分离；失败不拖垮整次采集
                 self._refresh_sector_slopes_after_quotes()
             else:

@@ -16,10 +16,12 @@ def get_default_sbbr_config() -> Dict[str, Any]:
         "size": {
             # 总市值（亿元）
             "total_mv_min_yi": 20.0,
-            "total_mv_max_yi": 200.0,
-            # 流通股本（亿股，不是流通市值亿元）
+            "total_mv_max_yi": 300.0,
+            # 流通股本（亿股，不是流通市值亿元）；大于 min，无上限
             "circ_shares_min_yi": 5.0,
-            "circ_shares_max_yi": 10.0,
+            "circ_shares_max_yi": None,
+            # any=总市值或流通股本任一达标；all=两侧都要达标
+            "match_mode": "any",
             "require_shares": True,
             "exclude_unknown_size": True,
         },
@@ -50,13 +52,19 @@ def get_default_sbbr_config() -> Dict[str, Any]:
             "panic_market_drop_pct": -0.02,
             "panic_stock_drop_pct": -0.05,
             "panic_reclaim_ma20": True,
+            # 横盘箱体：首次命中冻结支撑/阻力，失效后再识别（避免滚动窗阻力天天变）
+            "freeze_box": True,
+            "box_break_support_pct": 0.03,
+            "box_break_resist_pct": 0.05,
+            "box_max_unmatched_bars": 8,
+            "box_max_lock_bars": 60,
         },
         "entry": {
             "ma_period": 20,
             "shrink_volume_ratio_max": 0.7,
             "expand_volume_ratio_min": 1.05,
             "expand_volume_ratio_max": 1.8,
-            "require_market_sync_down": True,
+            "require_market_sync_down": False,  # 暂时仅计算展示，不作为入场硬筛
             "market_lookback_days": 5,
             "market_drop_pct": -0.01,
         },
@@ -133,12 +141,12 @@ class SBBRConfigManager:
         return result
 
     def _migrate_legacy_size_circ_defaults(self, params: Dict) -> Tuple[Dict, bool]:
-        """纠正误用「流通市值」过滤的库内配置 → 总市值 20~200 亿 + 流通股 5~10 亿股。
+        """纠正误用「流通市值」过滤，并迁移旧默认做小区间。
 
-        识别两类历史错误默认并改写：
-        - circ_mv 5~10（把「流通股 5~10 亿股」误写成流通市值）
-        - circ_mv 20~200（曾错误地把流通市值与总市值对齐）
-        自定义非上述区间的 circ_mv_* 不自动改写。
+        - circ_mv 5~10 / 20~200 → 改为流通股本口径并移除 circ_mv_*
+        - 旧默认总市值上限 200 → 300
+        - 旧默认流通股上限 10 → 取消上限（None）
+        - 缺省 match_mode → any（总市值或流通股本任一达标）
         """
         out = copy.deepcopy(params or {})
         size = dict(out.get("size") or {})
@@ -149,9 +157,15 @@ class SBBRConfigManager:
             t_max = float(size["total_mv_max_yi"]) if "total_mv_max_yi" in size else None
         except (TypeError, ValueError):
             t_min, t_max = None, None
-        if t_min is None or t_max is None:
+        if t_min is None:
             size["total_mv_min_yi"] = 20.0
-            size["total_mv_max_yi"] = 200.0
+            changed = True
+        if t_max is None:
+            size["total_mv_max_yi"] = 300.0
+            changed = True
+        elif abs(float(t_max) - 200.0) < 1e-9:
+            # 精确匹配旧默认上限才改写，保留用户自定义上限
+            size["total_mv_max_yi"] = 300.0
             changed = True
 
         has_legacy_circ_mv = "circ_mv_min_yi" in size or "circ_mv_max_yi" in size
@@ -177,9 +191,7 @@ class SBBRConfigManager:
                 if "circ_shares_min_yi" not in size:
                     size["circ_shares_min_yi"] = 5.0
                     changed = True
-                if "circ_shares_max_yi" not in size:
-                    size["circ_shares_max_yi"] = 10.0
-                    changed = True
+                size["circ_shares_max_yi"] = None
                 size.pop("circ_mv_min_yi", None)
                 size.pop("circ_mv_max_yi", None)
                 changed = True
@@ -188,7 +200,20 @@ class SBBRConfigManager:
             size["circ_shares_min_yi"] = 5.0
             changed = True
         if "circ_shares_max_yi" not in size:
-            size["circ_shares_max_yi"] = 10.0
+            size["circ_shares_max_yi"] = None
+            changed = True
+        else:
+            try:
+                old_s_max = size.get("circ_shares_max_yi")
+                if old_s_max is not None and abs(float(old_s_max) - 10.0) < 1e-9:
+                    size["circ_shares_max_yi"] = None
+                    changed = True
+            except (TypeError, ValueError):
+                size["circ_shares_max_yi"] = None
+                changed = True
+
+        if "match_mode" not in size:
+            size["match_mode"] = "any"
             changed = True
 
         if changed:
@@ -211,6 +236,22 @@ class SBBRConfigManager:
                 changed = True
         if changed:
             out["bottom"] = bottom
+            return out, True
+        return out, False
+
+    def _migrate_legacy_entry_market_soft(self, params: Dict) -> Tuple[Dict, bool]:
+        """暂时：大盘共振仅计算展示，关闭入场硬筛（旧默认 require=true → false）。"""
+        out = copy.deepcopy(params or {})
+        entry = dict(out.get("entry") or {})
+        changed = False
+        if "require_market_sync_down" not in entry:
+            entry["require_market_sync_down"] = False
+            changed = True
+        elif entry.get("require_market_sync_down") is True:
+            entry["require_market_sync_down"] = False
+            changed = True
+        if changed:
+            out["entry"] = entry
             return out, True
         return out, False
 
@@ -270,14 +311,15 @@ class SBBRConfigManager:
                 return self.get_default_config()
             stored, changed = self._migrate_legacy_size_circ_defaults(dict(row.config_params or {}))
             stored2, changed2 = self._migrate_legacy_bottom_range_defaults(stored)
-            stored = stored2
-            changed = changed or changed2
+            stored3, changed3 = self._migrate_legacy_entry_market_soft(stored2)
+            stored = stored3
+            changed = changed or changed2 or changed3
             if changed:
                 row.config_params = stored
                 try:
                     db.commit()
                     logger.info(
-                        "SBBR config_id=%s 配置已迁移（做小口径/箱体振幅）",
+                        "SBBR config_id=%s 配置已迁移（做小口径/箱体振幅/大盘软筛）",
                         row.id,
                     )
                 except Exception as e:

@@ -3820,9 +3820,9 @@ async def get_sbbr_strategy(
     require_bottom: bool = Query(True),
     require_size: bool = Query(True),
     trace_only: bool = Query(False, description="仅读 sbbr_signal_trace（仅 scope=market）"),
-    cn_board_segment: Optional[str] = Query(
+    cn_board_segment: Optional[List[str]] = Query(
         None,
-        description="可选 A 股板型: ALL/MAIN/CYB/SZ_SME/KCB/BJ；与范围组合收窄股票池",
+        description="可选 A 股板型（可多选）: MAIN/CYB/SZ_SME/KCB/BJ；不传或不选=不限；与范围组合收窄股票池",
     ),
     industry_board_code: Optional[List[str]] = Query(
         None, description="scope=industry_board 时：行业板块 BK 编码，可多选"
@@ -3841,7 +3841,7 @@ async def get_sbbr_strategy(
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
-    """做小做底（SBBR）全市场/自选/储备箱/行业·概念板块/个股选股；板型为额外过滤，不改变做小市值口径。
+    """做小做底（SBBR）全市场/自选/储备箱/行业·概念板块/个股选股；板型为额外过滤（可多选并集），不改变做小市值口径。
 
     scope=single 时绕过做小宇宙与筑底硬筛，直接对该股现算策略明细（结果含 size_ok/bottom_matched 标注），
     对齐 URT/RPE 单股「跳过硬筛、仍展示明细」交互；仍尊重 entry_only。
@@ -3852,8 +3852,7 @@ async def get_sbbr_strategy(
         from backend_core.strategies.sbbr.strategy_engine import SBBRStrategyEngine
         from backend_api.models import SBBRReserveBox, User, Watchlist
         from backend_api.utils.cn_listed_board_filter import (
-            filter_stock_codes_by_board_segment,
-            normalize_list_board_segment,
+            filter_stock_codes_by_board_segments,
         )
     except Exception as e:
         return JSONResponse(
@@ -3880,20 +3879,14 @@ async def get_sbbr_strategy(
             detail="scope 仅支持 market|watchlist|reserve|industry_board|concept_board|single",
         )
 
-    seg_raw = (cn_board_segment or "").strip().upper()
-    if seg_raw and seg_raw != "ALL":
-        if not normalize_list_board_segment(cn_board_segment):
-            raise HTTPException(
-                status_code=400,
-                detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
-            )
-    else:
-        seg_raw = ""
+    seg_list = _gms_normalize_cn_board_segment_query(cn_board_segment)
+    seg_joined = ",".join(seg_list) if seg_list else ""
+    seg_label = _gms_cn_board_seg_label(seg_list) if seg_list else ""
 
     def _apply_board_segment(codes: List[str]) -> List[str]:
-        if not seg_raw:
+        if not seg_list:
             return codes
-        return filter_stock_codes_by_board_segment(codes, seg_raw)
+        return filter_stock_codes_by_board_segments(codes, seg_list)
 
     def _norm_pool_codes(raw_codes: List[str]) -> List[str]:
         out: List[str] = []
@@ -3921,7 +3914,9 @@ async def get_sbbr_strategy(
             "strategy_name": "做小做底",
             "scope": scope_raw,
             "config_id": cid,
-            "cn_board_segment": seg_raw or None,
+            "cn_board_segment": seg_joined or None,
+            "cn_board_segments": list(seg_list) if seg_list else [],
+            "cn_board_segment_label": seg_label or None,
             "source": source,
             "source_label": "预计算" if source == "trace" else "实时计算",
         }
@@ -3965,7 +3960,7 @@ async def get_sbbr_strategy(
                 {
                     **_sbbr_meta(
                         "live",
-                        "列表为空" + ("（板型过滤后无匹配）" if seg_raw else ""),
+                        "列表为空" + ("（板型过滤后无匹配）" if seg_list else ""),
                     ),
                     "data": [],
                     "total": 0,
@@ -4054,7 +4049,7 @@ async def get_sbbr_strategy(
         # 个股模式：只算这一只，不按板型再过滤
         if effective_max < 10:
             effective_max = 10
-    elif scope_raw == "market" and seg_raw:
+    elif scope_raw == "market" and seg_list:
         # 全市场 + 板型：先做小宇宙再按代码段收窄，再跑策略（仍走 require_size）
         universe = engine.loader.build_size_universe(cfg, trade_date=trade_date)
         stock_codes = _apply_board_segment([str(u.get("code") or "") for u in universe])
@@ -4074,7 +4069,7 @@ async def get_sbbr_strategy(
     if trace_only and scope_raw == "market":
         # 板型过滤时多取一些再截断，避免 limit 截在过滤前导致结果偏少
         trace_limit = effective_max
-        if seg_raw:
+        if seg_list:
             trace_limit = min(2000, max(effective_max * 5, effective_max))
         rows = load_traces(
             db,
@@ -4083,7 +4078,7 @@ async def get_sbbr_strategy(
             entry_only=entry_only,
             limit=trace_limit,
         )
-        if seg_raw:
+        if seg_list:
             allow = {
                 _normalize_stock_code_for_gms_pool(c)
                 for c in (stock_codes or [])
@@ -4099,7 +4094,7 @@ async def get_sbbr_strategy(
                 row_codes = [
                     _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) for r in rows
                 ]
-                keep = set(filter_stock_codes_by_board_segment(row_codes, seg_raw))
+                keep = set(filter_stock_codes_by_board_segments(row_codes, seg_list))
                 rows = [
                     r
                     for r in rows
@@ -4118,6 +4113,7 @@ async def get_sbbr_strategy(
             industry_codes=extra_meta.get("industry_board_codes") or [],
             concept_codes=extra_meta.get("concept_board_codes") or [],
         )
+        _sbbr_attach_industry_names(db, rows, board_code_source=board_code_source)
         return JSONResponse(
             {
                 **_sbbr_meta("trace"),
@@ -4149,6 +4145,7 @@ async def get_sbbr_strategy(
         industry_codes=extra_meta.get("industry_board_codes") or [],
         concept_codes=extra_meta.get("concept_board_codes") or [],
     )
+    _sbbr_attach_industry_names(db, rows, board_code_source=board_code_source)
     live_msg: Optional[str] = None
     if scope_raw == "single":
         if not rows:
@@ -4204,6 +4201,63 @@ def _sbbr_attach_role_tags(
             )
     except Exception as _role_ex:
         logger.warning("SBBR 挂载板块 role_tags 失败: %s", _role_ex)
+
+
+def _sbbr_attach_industry_names(
+    db: Session,
+    rows: List[Dict[str, Any]],
+    *,
+    board_code_source: Optional[str] = None,
+) -> None:
+    """为 SBBR 列表补全同花顺口径「所属行业板块」名称。"""
+    if not rows:
+        return
+    try:
+        from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
+        from backend_api.utils.industry_board_query import (
+            batch_industry_board_names_by_stock_codes,
+        )
+    except Exception:
+        return
+
+    # 策略信号列表固定同花顺行业口径
+    src = DEFAULT_BOARD_CODE_SOURCE
+    codes: List[str] = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        code = _normalize_stock_code_for_gms_pool(
+            str(r.get("code") or r.get("symbol") or "").strip()
+        )
+        if code and code.isdigit() and len(code) == 6:
+            codes.append(code)
+    codes = list(dict.fromkeys(codes))
+    if not codes:
+        return
+
+    try:
+        name_map = batch_industry_board_names_by_stock_codes(
+            db, codes, board_code_source=src
+        ) or {}
+    except Exception as ex:
+        logger.warning("SBBR 批量取同花顺行业名失败: %s", ex)
+        name_map = {}
+
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        code = _normalize_stock_code_for_gms_pool(
+            str(r.get("code") or r.get("symbol") or "").strip()
+        )
+        display = str(name_map.get(code) or "").strip() if code else ""
+        if display:
+            r["industry_board_name"] = display
+            r["sector_name"] = display
+            r["sector_name_source"] = "tonghuashun"
+        else:
+            r.setdefault("industry_board_name", None)
+            r.setdefault("sector_name", None)
+            r.setdefault("sector_name_source", "none")
 
 
 @router.get("/rpe-strategy")

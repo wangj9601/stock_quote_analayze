@@ -820,7 +820,7 @@ const MarketsPage = {
             console.error(`${ui.label}数据加载失败:`, error);
             this[ui.dataKey] = [];
             if (tbody) {
-                tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#c00;">${ui.label}加载失败</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#c00;">${ui.label}加载失败</td></tr>`;
             }
             const grid = document.getElementById(ui.gridId);
             if (grid) {
@@ -1254,7 +1254,7 @@ const MarketsPage = {
         if (!tbody) return;
         const rows = this._sortedSectors(sectors, ui.kind);
         if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="13" style="text-align:center;color:#888;">暂无同花顺${ui.label}数据</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#888;">暂无同花顺${ui.label}数据</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(sector => {
@@ -1277,10 +1277,8 @@ const MarketsPage = {
                     <td>${memberCount}</td>
                     <td class="${this.getChangeClass(sector.sector_slope_120)}">${this.formatSlope(sector.sector_slope_120)}</td>
                     <td class="${this.getChangeClass(sector.sector_slope)}">${this.formatSlope(sector.sector_slope)}</td>
-                    <td>${this.boardEnvChipHtml(sector)}</td>
                     <td class="${this.getChangeClass(sector.sector_slope_20)}">${this.formatSlope(sector.sector_slope_20)}</td>
                     <td class="${this.getChangeClass(sector.sector_slope_short)}">${this.formatSlope(sector.sector_slope_short)}</td>
-                    <td>${this.boardEnvChipHtml(sector, 'short')}</td>
                     <td class="${this.getChangeClass(sector.sector_slope_5)}">${this.formatSlope(sector.sector_slope_5)}</td>
                     <td class="sector-row-actions">
                         <div class="sector-row-actions-inner">
@@ -1371,20 +1369,12 @@ const MarketsPage = {
                             <span class="stock-change ${this.getChangeClass(sector.sector_slope)}">${this.formatSlope(sector.sector_slope)}</span>
                         </div>
                         <div class="leader-stock">
-                            <span class="stock-name">中线环境</span>
-                            <span class="stock-change">${this.boardEnvChipHtml(sector)}</span>
-                        </div>
-                        <div class="leader-stock">
                             <span class="stock-name">20日斜率</span>
                             <span class="stock-change ${this.getChangeClass(sector.sector_slope_20)}">${this.formatSlope(sector.sector_slope_20)}</span>
                         </div>
                         <div class="leader-stock">
                             <span class="stock-name">10日斜率</span>
                             <span class="stock-change ${this.getChangeClass(sector.sector_slope_short)}">${this.formatSlope(sector.sector_slope_short)}</span>
-                        </div>
-                        <div class="leader-stock">
-                            <span class="stock-name">短线环境</span>
-                            <span class="stock-change">${this.boardEnvChipHtml(sector, 'short')}</span>
                         </div>
                         <div class="leader-stock">
                             <span class="stock-name">5日斜率</span>

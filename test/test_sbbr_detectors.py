@@ -24,7 +24,7 @@ def _bar(date, o, h, l, c, v, tr=None, amount=None):
 
 def test_size_filter_ok():
     cfg = get_default_sbbr_config()
-    # 总股本 1e9 股 * 10 元 = 100 亿市值；流通股本 6e8 股 = 6 亿股
+    # 总股本 1e9 股 * 10 元 = 100 亿市值；流通股本 6e8 股 = 6 亿股（两侧都达标）
     r = evaluate_size(
         total_shares=1e9,
         free_float_shares=6e8,
@@ -32,31 +32,47 @@ def test_size_filter_ok():
         config=cfg,
     )
     assert r["size_ok"] is True
-    assert 20 <= r["total_mv"] <= 200
-    assert 5 <= r["circ_shares_yi"] <= 10
+    assert 20 <= r["total_mv"] <= 300
+    assert r["circ_shares_yi"] > 5
 
 
 def test_size_filter_out_of_range():
     cfg = get_default_sbbr_config()
-    # 总市值过大
-    r = evaluate_size(total_shares=1e10, free_float_shares=6e8, close=100, config=cfg)
+    # 总市值过大且流通股本过小 → 双侧都不达标
+    r = evaluate_size(total_shares=1e10, free_float_shares=0.8e8, close=100, config=cfg)
     assert r["size_ok"] is False
 
 
-def test_size_filter_circ_shares_out_of_range():
+def test_size_filter_or_total_ok_shares_fail():
     cfg = get_default_sbbr_config()
-    # 总市值合格，流通股本 20 亿股超上限
-    r = evaluate_size(total_shares=1e9, free_float_shares=20e8, close=10, config=cfg)
-    assert r["size_ok"] is False
+    # 总市值 100 亿合格，流通股本 2.54 亿股不达标 → OR 仍通过
+    r = evaluate_size(total_shares=1e9, free_float_shares=2.54e8, close=10, config=cfg)
+    assert r["size_ok"] is True
+    assert r["size_reason"] == "total_ok"
+
+
+def test_size_filter_or_shares_ok_total_fail():
+    cfg = get_default_sbbr_config()
+    # 总市值过大，流通股本 20 亿股 > 5 → OR 通过
+    r = evaluate_size(total_shares=1e10, free_float_shares=20e8, close=100, config=cfg)
+    assert r["size_ok"] is True
     assert r["circ_shares_yi"] == 20.0
+    assert r["size_reason"] == "circ_shares_ok"
 
 
-def test_size_filter_circ_shares_too_small():
+def test_size_filter_circ_shares_too_small_and_tiny_mv():
     cfg = get_default_sbbr_config()
-    # 流通股本 0.8 亿股低于下限
-    r = evaluate_size(total_shares=1e9, free_float_shares=0.8e8, close=10, config=cfg)
+    # 总市值过小 + 流通股本过小 → 不通过
+    r = evaluate_size(total_shares=1e8, free_float_shares=0.8e8, close=10, config=cfg)
     assert r["size_ok"] is False
     assert r["circ_shares_yi"] == 0.8
+
+
+def test_size_filter_match_mode_all_requires_both():
+    cfg = get_default_sbbr_config()
+    cfg["size"]["match_mode"] = "all"
+    r = evaluate_size(total_shares=1e9, free_float_shares=2.54e8, close=10, config=cfg)
+    assert r["size_ok"] is False
 
 
 def test_range_bottom_touches():
@@ -148,6 +164,56 @@ def test_range_bottom_true_sideways_passes():
     assert 3 <= int(res.get("touches") or 0) <= 4
 
 
+def test_frozen_box_resistance_stable_after_new_high():
+    """首次命中后锁定箱阻；后续窗内新高只反映在 window_high，不抬升 box_resistance。"""
+    from backend_core.strategies.sbbr.bottom_detector import detect_range_bottom_with_freeze
+
+    bars = []
+    touch_days = {5, 20, 35, 50}
+    for i in range(60):
+        if i in touch_days:
+            c, low, high, vol = 9.95, 9.90, 10.05, 55
+        else:
+            c = 10.22 + (i % 5) * 0.02
+            low, high = 10.12, c + 0.05
+            vol = 120 if (i % 2 == 0) else 100
+        month = 1 + i // 28
+        day = (i % 28) + 1
+        bars.append(_bar(f"2024-{month:02d}-{day:02d}", c, high, low, c, vol))
+
+    cfg = get_default_sbbr_config()
+    first = detect_range_bottom_with_freeze(bars, cfg)
+    assert first.get("matched") is True
+    assert first.get("detail", {}).get("box_frozen") is True
+    locked_res = float(first["resistance"])
+    locked_sup = float(first["support"])
+
+    # 再追加若干日：抬高新高，但仍在箱体内（未上破 5%）
+    for j in range(5):
+        c = 10.35 + j * 0.02
+        # 新高略高于原窗口，但低于 locked_res * 1.05
+        high = min(locked_res * 1.04, c + 0.15)
+        bars.append(
+            _bar(
+                f"2024-03-{j+1:02d}",
+                c,
+                high,
+                max(locked_sup * 1.05, c - 0.1),
+                c,
+                110,
+            )
+        )
+
+    later = detect_range_bottom_with_freeze(bars, cfg)
+    assert later.get("matched") is True
+    assert abs(float(later["resistance"]) - locked_res) < 1e-9
+    assert abs(float(later["support"]) - locked_sup) < 1e-9
+    win_hi = later.get("window_high")
+    assert win_hi is not None
+    # 滚动窗最高可以高于冻结阻力
+    assert float(win_hi) >= locked_res - 1e-9
+
+
 def test_detect_bottom_wrapper_uses_tight_range_default():
     cfg = get_default_sbbr_config()
     assert abs(float(cfg["bottom"]["max_range_pct"]) - 0.35) < 1e-9
@@ -161,6 +227,35 @@ def test_entry_requires_bottom():
     bars = [_bar(f"2024-03-{i+1:02d}", 10, 11, 9, 10 + i * 0.01, 100) for i in range(30)]
     r = detect_entry(bars, [-0.01] * 10, bottom_matched=False, config=cfg)
     assert r["entry_signal"] is False
+
+
+def test_entry_market_soft_filter_still_computed():
+    """大盘共振默认仅计算：未达标也不挡入场；开启 require 后才硬筛。"""
+    cfg = get_default_sbbr_config()
+    assert cfg["entry"]["require_market_sync_down"] is False
+
+    # 构造：底部已匹配前提下，尽量满足上穿/缩量/微放量
+    bars = []
+    for i in range(30):
+        # 前段缩量，末两日穿越 MA 并微放量
+        vol = 50 if i < 25 else (40 if i < 29 else 55)
+        c = 9.5 if i < 28 else (9.8 if i == 28 else 10.5)
+        bars.append(_bar(f"2024-03-{i+1:02d}", c, c + 0.2, c - 0.2, c, vol))
+
+    # 大盘近5日上涨 → market_ok=False
+    mrets = [0.01] * 20
+    soft = detect_entry(bars, mrets, bottom_matched=True, config=cfg)
+    assert soft["market_ok"] is False
+    assert soft.get("market_required") is False
+    # 其它条件若过，入场可不受大盘影响
+    if soft.get("cross_up") and soft.get("shrink_ok") and soft.get("expand_ok"):
+        assert soft["entry_signal"] is True
+
+    cfg_hard = get_default_sbbr_config()
+    cfg_hard["entry"]["require_market_sync_down"] = True
+    hard = detect_entry(bars, mrets, bottom_matched=True, config=cfg_hard)
+    assert hard["market_ok"] is False
+    assert hard["entry_signal"] is False
 
 
 def test_defense_band_and_exit():

@@ -1,4 +1,4 @@
-"""做小：总市值 + 流通股本过滤。"""
+"""做小：总市值 / 流通股本过滤（默认任一满足即通过）。"""
 
 from __future__ import annotations
 
@@ -32,6 +32,17 @@ def calc_shares_yi(shares: Optional[float]) -> Optional[float]:
     return s / 1e8
 
 
+def _parse_optional_float(val: Any) -> Optional[float]:
+    if val is None:
+        return None
+    if isinstance(val, str) and not val.strip():
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
 def evaluate_size(
     *,
     total_shares: Optional[float],
@@ -39,10 +50,11 @@ def evaluate_size(
     close: Optional[float],
     config: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """做小过滤：默认要求总市值 AND 流通股本均落在区间内。
+    """做小过滤：默认总市值 OR 流通股本任一达标即通过。
 
-    - 总市值：`total_mv`（亿元），默认 20~200
-    - 流通股本：`circ_shares_yi`（亿股），默认 5~10
+    - 总市值：`total_mv`（亿元），默认 20~300
+    - 流通股本：`circ_shares_yi`（亿股），默认 **大于** 5（无上限）
+    - `match_mode`：`any`（默认，OR）/ `all`（AND）
     - `circ_mv`（流通市值亿元）仅作展示，不参与默认过滤
     """
     size_cfg = (config or {}).get("size") or {}
@@ -64,22 +76,42 @@ def evaluate_size(
         }
 
     t_min = float(size_cfg.get("total_mv_min_yi", 20))
-    t_max = float(size_cfg.get("total_mv_max_yi", 200))
+    t_max = float(size_cfg.get("total_mv_max_yi", 300))
     s_min = float(size_cfg.get("circ_shares_min_yi", 5))
-    s_max = float(size_cfg.get("circ_shares_max_yi", 10))
+    s_max = _parse_optional_float(size_cfg.get("circ_shares_max_yi"))
+    match_mode = str(size_cfg.get("match_mode") or "any").strip().lower()
+    if match_mode not in ("any", "all"):
+        match_mode = "any"
 
     total_ok = total_mv is not None and t_min <= total_mv <= t_max
-    shares_ok = circ_shares_yi is not None and s_min <= circ_shares_yi <= s_max
-    # 流通股本缺省时仅看总市值；总市值缺省时仅看流通股本（与历史 exclude/require 单侧放行一致）
+    if circ_shares_yi is None:
+        shares_ok = False
+    elif s_max is None:
+        shares_ok = circ_shares_yi > s_min
+    else:
+        shares_ok = s_min < circ_shares_yi <= s_max
+
+    # 单侧缺数时只看有值侧；双侧都有时按 match_mode
     if total_mv is None:
         size_ok = shares_ok
         reason = "circ_shares_only"
     elif circ_shares_yi is None:
         size_ok = total_ok
         reason = "total_only"
-    else:
+    elif match_mode == "all":
         size_ok = total_ok and shares_ok
         reason = "ok" if size_ok else "out_of_range"
+    else:
+        size_ok = total_ok or shares_ok
+        if size_ok:
+            if total_ok and shares_ok:
+                reason = "ok"
+            elif total_ok:
+                reason = "total_ok"
+            else:
+                reason = "circ_shares_ok"
+        else:
+            reason = "out_of_range"
 
     return {
         "size_ok": bool(size_ok),

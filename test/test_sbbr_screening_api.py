@@ -42,18 +42,45 @@ def test_sbbr_strategy_route_accepts_board_params():
 
 
 def test_board_segment_filter_reuse():
-    from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
+    from backend_api.utils.cn_listed_board_filter import (
+        filter_stock_codes_by_board_segment,
+        filter_stock_codes_by_board_segments,
+    )
 
     codes = ["600000", "000001", "300001", "688001", "002001"]
     main = filter_stock_codes_by_board_segment(codes, "MAIN")
     assert "600000" in main and "000001" in main
     assert "300001" not in main and "688001" not in main
+
+    multi = filter_stock_codes_by_board_segments(codes, ["MAIN", "CYB"])
+    assert "600000" in multi and "300001" in multi
+    assert "688001" not in multi
     cyb = filter_stock_codes_by_board_segment(codes, "CYB")
     assert cyb == ["300001"]
     kcb = filter_stock_codes_by_board_segment(codes, "KCB")
     assert kcb == ["688001"]
     sme = filter_stock_codes_by_board_segment(codes, "SZ_SME")
     assert sme == ["002001"]
+
+
+def test_sbbr_attach_industry_names_tonghuashun(monkeypatch):
+    from backend_api.stock import stock_screening_routes as routes
+
+    rows = [{"code": "603609", "name": "禾丰股份"}, {"code": "300674", "name": "宇信科技"}]
+
+    def _fake_batch(db, codes, board_code_source=None):
+        assert board_code_source == "tonghuashun"
+        return {"603609": "饲料", "300674": "软件开发"}
+
+    monkeypatch.setattr(
+        "backend_api.utils.industry_board_query.batch_industry_board_names_by_stock_codes",
+        _fake_batch,
+    )
+    routes._sbbr_attach_industry_names(db=None, rows=rows)
+    assert rows[0]["industry_board_name"] == "饲料"
+    assert rows[0]["sector_name"] == "饲料"
+    assert rows[0]["sector_name_source"] == "tonghuashun"
+    assert rows[1]["industry_board_name"] == "软件开发"
 
 
 def test_sbbr_screen_single_bypasses_size_filter():

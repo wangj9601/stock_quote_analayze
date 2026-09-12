@@ -93,13 +93,30 @@ class BoardDailyArchiveCollector:
 
             for row in rows:
                 try:
+                    close_v = row.latest_price
+                    # 仅指数点位可写入历史 close；同花顺均价/空值跳过
+                    if close_v is None:
+                        failed += 1
+                        continue
+                    try:
+                        close_f = float(close_v)
+                    except (TypeError, ValueError):
+                        failed += 1
+                        continue
+                    chg = row.change_amount
+                    index_like = close_f >= 100 or (
+                        chg is not None and str(chg).strip() not in ("", "None")
+                    )
+                    if not index_like:
+                        failed += 1
+                        continue
                     session.execute(
                         insert_sql,
                         {
                             "board_code": row.board_code,
                             "trade_date": trade_date,
                             "board_name": row.board_name,
-                            "close": row.latest_price,
+                            "close": close_f,
                             "volume": row.volume,
                             "amount": row.amount,
                         },
@@ -132,29 +149,41 @@ class BoardDailyArchiveCollector:
         )
 
         existing = self._existing_boards_for_date(trade_date)
-        ths_ok_codes = {
-            d["board_code"]
-            for d in ths_result.get("details") or []
-            if d.get("ok") and d.get("rows", 0) > 0
-        }
-
-        fallback_result: Dict[str, Any] = {"success": 0, "failed": 0, "skipped": True}
+        # 注意：THS daily 窗口可能只返回到 T-1，boards_ok 不代表「当日」已入库。
+        # 兜底只看当日历史表是否已有该 board_code，与窗口内其它日是否成功无关。
         industry_boards = self.ths_collector.load_boards("industry")
         missing_industry = [
-            code
-            for code, _ in industry_boards
-            if code not in existing and code not in ths_ok_codes
+            code for code, _ in industry_boards if code not in existing
         ]
         if missing_industry:
             fallback_result = self._archive_industry_from_realtime(trade_date)
             fallback_result["skipped"] = False
             fallback_result["missing_count"] = len(missing_industry)
+        else:
+            fallback_result = {"success": 0, "failed": 0, "skipped": True, "missing_count": 0}
+
+        sync_result: Dict[str, Any] = {}
+        try:
+            from backend_core.data_collectors.akshare.industry_board_quote_sync import (
+                supplement_industry_board_quotes,
+            )
+
+            sync_result = supplement_industry_board_quotes(trade_date=trade_date)
+            self.logger.info(
+                "行业板实时↔历史互补 rt+=%s hist+=%s",
+                sync_result.get("realtime_from_hist", {}).get("updated"),
+                sync_result.get("hist_from_realtime", {}).get("upserted"),
+            )
+        except Exception as sync_err:
+            self.logger.warning("行业板实时↔历史互补跳过: %s", sync_err)
+            sync_result = {"error": str(sync_err)}
 
         return {
             "success": ths_result.get("success") or fallback_result.get("success", 0) > 0,
             "trade_date": trade_date,
             "ths": ths_result,
             "realtime_fallback": fallback_result,
+            "quote_sync": sync_result,
         }
 
 

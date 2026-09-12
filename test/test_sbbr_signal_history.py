@@ -52,13 +52,14 @@ class _HistFakeLoader:
         return candidates[-1] if candidates else self.resolve_trade_date()
 
     def load_bars(self, code, *, end_date=None, limit=120):
-        src = self._index if str(code) == "000001" and self._index is not self._bars else self._bars
-        # 对历史股与指数：同序列即可
-        if str(code) != "000001":
-            src = self._bars
-        else:
-            src = self._index
+        src = self._bars
         out = list(src)
+        if end_date:
+            out = [b for b in out if b["date"] <= str(end_date)[:10]]
+        return out[-int(limit) :]
+
+    def load_index_bars(self, index_code="000001.SH", *, end_date=None, limit=120):
+        out = list(self._index)
         if end_date:
             out = [b for b in out if b["date"] <= str(end_date)[:10]]
         return out[-int(limit) :]
@@ -73,7 +74,7 @@ class _HistFakeLoader:
             }
         }
 
-    def load_market_returns(self, *, end_date=None, lookback=80, index_code="000001"):
+    def load_market_returns(self, *, end_date=None, lookback=80, index_code="000001.SH"):
         return [0.0] * 40
 
     def build_size_universe(self, config, trade_date=None, limit=None):

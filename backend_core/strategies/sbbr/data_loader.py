@@ -18,6 +18,32 @@ def _norm_code(code: str) -> str:
     return s
 
 
+def normalize_index_ts_code(index_code: str = "000001.SH") -> str:
+    """将 000001 / sh000001 / 000001.SH 等规范为 index_historical_quotes.ts_code。"""
+    raw = str(index_code or "000001").strip()
+    if not raw:
+        raw = "000001"
+    upper = raw.upper()
+    if upper.endswith(".SH") or upper.endswith(".SZ"):
+        num, suf = upper.rsplit(".", 1)
+        digits = "".join(ch for ch in num if ch.isdigit()) or "000001"
+        return f"{digits.zfill(6)}.{suf}"
+    try:
+        from backend_core.data_collectors.akshare.cn_index_historical_collector import (
+            code_to_ts_code,
+        )
+
+        return code_to_ts_code(raw)
+    except Exception:
+        lower = raw.lower()
+        if lower.startswith("sh") and len(lower) > 2:
+            return f"{lower[2:].zfill(6)}.SH"
+        if lower.startswith("sz") and len(lower) > 2:
+            return f"{lower[2:].zfill(6)}.SZ"
+        digits = "".join(ch for ch in raw if ch.isdigit()) or "000001"
+        return f"{digits.zfill(6)}.SH"
+
+
 class SBBRDataLoader:
     def __init__(self, db_session=None):
         self._db = db_session
@@ -183,7 +209,7 @@ class SBBRDataLoader:
         trade_date: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        """全市场做小粗筛：总市值 + 流通股本区间（见 size_filter.evaluate_size）。"""
+        """全市场做小粗筛：总市值或流通股本任一达标（见 size_filter.evaluate_size）。"""
         from .size_filter import evaluate_size
 
         shares = self.load_share_map(as_of_date=trade_date)
@@ -264,21 +290,83 @@ class SBBRDataLoader:
             if own:
                 db.close()
 
+    def load_index_bars(
+        self,
+        index_code: str = "000001.SH",
+        *,
+        end_date: Optional[str] = None,
+        limit: int = 120,
+    ) -> List[Dict[str, Any]]:
+        """上证等指数日 K（正序），读 ``index_historical_quotes``（非个股 historical_quotes）。"""
+        db = self._session()
+        own = self._db is None
+        try:
+            ts = normalize_index_ts_code(index_code)
+            params: Dict[str, Any] = {"ts": ts, "lim": int(limit)}
+            if end_date:
+                sql = text(
+                    """
+                    SELECT trade_date, open, high, low, close, vol, amount
+                    FROM index_historical_quotes
+                    WHERE ts_code = :ts AND trade_date <= CAST(:d AS date)
+                    ORDER BY trade_date DESC
+                    LIMIT :lim
+                    """
+                )
+                params["d"] = str(end_date).strip()[:10]
+            else:
+                sql = text(
+                    """
+                    SELECT trade_date, open, high, low, close, vol, amount
+                    FROM index_historical_quotes
+                    WHERE ts_code = :ts
+                    ORDER BY trade_date DESC
+                    LIMIT :lim
+                    """
+                )
+            rows = db.execute(sql, params).fetchall()
+            bars: List[Dict[str, Any]] = []
+            for r in reversed(rows):
+                d = r[0]
+                ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+                bars.append(
+                    {
+                        "date": ds,
+                        "open": float(r[1] or 0),
+                        "high": float(r[2] or 0),
+                        "low": float(r[3] or 0),
+                        "close": float(r[4] or 0),
+                        "volume": float(r[5] or 0),
+                        "amount": float(r[6] or 0),
+                        "turnover_rate": None,
+                    }
+                )
+            return bars
+        except Exception as e:
+            logger.warning("load_index_bars %s failed: %s", index_code, e)
+            return []
+        finally:
+            if own:
+                db.close()
+
     def load_market_returns(
         self,
         *,
         end_date: Optional[str] = None,
         lookback: int = 80,
-        index_code: str = "000001",
+        index_code: str = "000001.SH",
     ) -> List[float]:
         """
         大盘日收益序列（正序）。
-        优先用指数历史；若无则用全市场涨跌幅中位数近似（仅取 end_date 近 lookback 较贵，降级用上证成分近似：
-        直接查 historical_quotes 中 code=000001 若存在）。
+
+        默认读上证指数 ``index_historical_quotes.ts_code=000001.SH``
+        （勿用 historical_quotes 的 000001，那是平安银行个股）。
+        无指数数据时返回空列表，入场规则侧默认不阻断。
         """
-        bars = self.load_bars(index_code, end_date=end_date, limit=lookback + 1)
+        bars = self.load_index_bars(
+            index_code, end_date=end_date, limit=lookback + 1
+        )
         if len(bars) < 2:
-            # 降级：用随机样本中位数成本高，返回空让入口规则放行
             return []
         rets: List[float] = []
         for i in range(1, len(bars)):

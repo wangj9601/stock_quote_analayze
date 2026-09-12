@@ -319,8 +319,8 @@ def recompute_trace_for_stock(
         return 0
 
     mkt_lookback = max(80, int(((cfg.get("entry") or {}).get("market_lookback_days") or 5)) + 20)
-    idx_bars = engine.loader.load_bars(
-        "000001",
+    idx_bars = engine.loader.load_index_bars(
+        "000001.SH",
         end_date=end_eff,
         limit=max(load_n, len(bars_all)) + mkt_lookback,
     )

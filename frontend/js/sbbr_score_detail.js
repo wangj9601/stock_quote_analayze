@@ -52,7 +52,7 @@ const SbbrScoreDetail = {
       no_bottom: '筑底未成立，不评估入场',
       insufficient_bars: 'K 线不足',
       no_ma: '无法计算 MA20',
-      rules_not_met: '上穿/缩量/微放量/大盘共振未全部满足',
+      rules_not_met: '上穿/缩量/微放量未全部满足',
     };
     return map[code] || code || '--';
   },
@@ -93,6 +93,8 @@ const SbbrScoreDetail = {
     const shrinkOk = pick(entryD.shrink_ok, src.shrink_ok);
     const expandOk = pick(entryD.expand_ok, src.expand_ok);
     const marketOk = pick(entryD.market_ok, src.market_ok);
+    const marketRequired = pick(entryD.market_required, src.market_required);
+    const marketCumRet = pick(entryD.market_cum_ret, src.market_cum_ret);
     const entryReason = pick(entryD.reason, src.entry_reason, src.reason);
     const volumeRatio = pick(src.volume_ratio, entryD.volume_ratio);
     const ma20 = pick(src.ma20, entryD.ma20);
@@ -121,7 +123,7 @@ const SbbrScoreDetail = {
     // 【做小】
     html += '<div class="gms-score-detail-section"><strong>【做小过滤】</strong>';
     html +=
-      '<p class="urt-buy-logic-detail">默认口径：总市值 20～200 <strong>亿元</strong>，且流通股本 5～10 <strong>亿股</strong>（字段 circ_shares_yi；流通市值不参与默认过滤）。</p>';
+      '<p class="urt-buy-logic-detail">默认口径：总市值 20～300 <strong>亿元</strong>，或流通股本 &gt;5 <strong>亿股</strong>（任一项符合即通过；字段 circ_shares_yi；流通市值不参与默认过滤）。</p>';
     html +=
       '<table class="gms-weight-table"><thead><tr><th>指标</th><th>取值</th><th>说明</th></tr></thead><tbody>';
     html += `<tr><td>总市值</td><td>${this._fmt(src.total_mv, 2)} 亿元</td><td>total_shares × 收盘 / 1e8</td></tr>`;
@@ -144,8 +146,24 @@ const SbbrScoreDetail = {
     )} · 命中 ${src.bottom_matched == null ? '--' : src.bottom_matched ? '是' : '否'}</p>`;
     html +=
       '<table class="gms-weight-table"><thead><tr><th>字段</th><th>取值</th><th>说明</th></tr></thead><tbody>';
-    html += `<tr><td>箱体支撑</td><td>${this._fmt(boxSup, 2)}</td><td>bottom.support / 横盘下沿或恐慌日低点</td></tr>`;
-    html += `<tr><td>箱体阻力</td><td>${this._fmt(boxRes, 2)}</td><td>bottom.resistance（黄金坑常无）</td></tr>`;
+    html += `<tr><td>箱体支撑</td><td>${this._fmt(boxSup, 2)}</td><td>${
+      bottomD.box_frozen
+        ? `冻结箱体下沿（锁定日 ${this._esc(bottomD.box_lock_date || src.box_lock_date || '--')}）`
+        : 'bottom.support / 横盘下沿或恐慌日低点'
+    }</td></tr>`;
+    html += `<tr><td>箱体阻力</td><td>${this._fmt(boxRes, 2)}</td><td>${
+      bottomD.box_frozen
+        ? '冻结箱体上沿（识别命中后锁定，失效前不随滚动窗抬升）'
+        : 'bottom.resistance（黄金坑常无）'
+    }</td></tr>`;
+    const winHi = pick(bottomD.window_high, src.window_high, detail.window_high);
+    const winLo = pick(bottomD.window_low, src.window_low, detail.window_low);
+    if (winHi != null || winLo != null) {
+      html += `<tr><td>滚动窗高低</td><td>${this._fmt(winLo, 2)} ~ ${this._fmt(
+        winHi,
+        2
+      )}</td><td>近 lookback 日最高/最低（仅参考，不进箱体硬逻辑）</td></tr>`;
+    }
 
     if (bottomD.range || bottomD.panic) {
       const rg = bottomD.range && typeof bottomD.range === 'object' ? bottomD.range : {};
@@ -198,9 +216,9 @@ const SbbrScoreDetail = {
     // 【入场】
     html += '<div class="gms-score-detail-section"><strong>【入场判断逻辑】</strong>';
     html +=
-      '<p class="urt-buy-logic-formula">入场 = 筑底成立 AND 收盘上穿 MA20 AND 底部缩量 AND 当日微放量 AND 大盘共振</p>';
-    html +=
-      '<p class="urt-buy-logic-detail">上穿：昨收≤昨MA20 且 今收&gt;今MA20；缩量：近5日均量/更早5日均量≤0.7；微放量：当日量/近5日均量 ∈ [1.05, 1.8]；大盘：近5日累计收益≤-1%（无大盘数据时默认不阻断）。</p>';
+      '<p class="urt-buy-logic-formula">入场 = 筑底成立 AND 收盘上穿 MA20 AND 底部缩量 AND 当日微放量（大盘共振仅展示，暂不硬筛）</p>';
+      html +=
+      '<p class="urt-buy-logic-detail">上穿：昨收≤昨MA20 且 今收&gt;今MA20；缩量：近5日均量/更早5日均量≤0.7；微放量：当日量/近5日均量 ∈ [1.05, 1.8]；大盘：上证指数（000001.SH）近5日累计收益≤-1%（始终计算；当前不作为入场硬条件）。</p>';
     html +=
       '<table class="gms-weight-table"><thead><tr><th>条件</th><th>规则</th><th>实际值</th><th>结果</th></tr></thead><tbody>';
     html += `<tr><td>筑底前置</td><td>bottom_matched</td><td>${
@@ -217,9 +235,16 @@ const SbbrScoreDetail = {
       volumeRatio,
       2
     )}</td><td>${this._passLabel(expandOk)}</td></tr>`;
-    html += `<tr><td>大盘共振</td><td>近5日累计 ≤ -1%</td><td>${
-      marketOk == null ? '--' : marketOk ? '满足/放行' : '未满足'
-    }</td><td>${this._passLabel(marketOk)}</td></tr>`;
+    const mktCumTxt =
+      marketCumRet == null || marketCumRet === ''
+        ? '--'
+        : `${(Number(marketCumRet) * 100).toFixed(2)}%`;
+    const mktGate = marketRequired ? '硬筛' : '仅展示';
+    html += `<tr><td>大盘共振</td><td>上证近5日累计 ≤ -1%（${mktGate}）</td><td>${
+      marketOk == null ? '--' : marketOk ? `满足（${mktCumTxt}）` : `未满足（${mktCumTxt}）`
+    }</td><td>${
+      marketRequired ? this._passLabel(marketOk) : marketOk == null ? '--' : marketOk ? '参考·达标' : '参考·未达标'
+    }</td></tr>`;
     html += `<tr><td>入场低点</td><td>信号日最低价（防守锚点）</td><td>${this._fmt(
       entryLow,
       2

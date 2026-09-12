@@ -377,32 +377,215 @@ def detect_panic_bottom(
     }
 
 
+def _range_detect_kwargs(bcfg: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "lookback": int(bcfg.get("lookback_days", 60)),
+        "max_range_pct": float(bcfg.get("max_range_pct", 0.35)),
+        "touch_tol_pct": float(bcfg.get("touch_tol_pct", 0.02)),
+        "min_touches": int(bcfg.get("min_touches", 3)),
+        "max_touches": int(bcfg.get("max_touches", 4)),
+        "require_up_vol_gt_down": bool(bcfg.get("up_volume_gt_down", True)),
+        "max_close_drop_pct": float(bcfg.get("max_close_drop_pct", -0.12)),
+        "min_close_slope_norm": float(bcfg.get("min_close_slope_norm", -0.002)),
+        "reject_new_low_seq": bool(bcfg.get("reject_new_low_seq", True)),
+        "half_low_drop_pct": float(bcfg.get("half_low_drop_pct", 0.05)),
+        "reject_high_before_low": bool(bcfg.get("reject_high_before_low", True)),
+        "high_early_frac": float(bcfg.get("high_early_frac", 0.40)),
+        "low_late_frac": float(bcfg.get("low_late_frac", 0.60)),
+        "require_ma_env": bool(bcfg.get("require_ma_env", True)),
+        "ma_env_period": int(bcfg.get("ma_env_period", 60)),
+        "ma_env_max_discount_pct": float(bcfg.get("ma_env_max_discount_pct", -0.12)),
+        "ma_env_min_slope_norm": float(bcfg.get("ma_env_min_slope_norm", -0.0015)),
+    }
+
+
+def rolling_window_extremes(
+    bars: List[Dict[str, Any]], lookback: int
+) -> Tuple[Optional[float], Optional[float]]:
+    """当前回看窗最高/最低（展示用，非冻结箱体）。"""
+    if not bars:
+        return None, None
+    window = bars[-lookback:] if len(bars) >= lookback else bars
+    highs = [_f(b.get("high")) for b in window]
+    lows = [_f(b.get("low")) for b in window]
+    hi_vals = [x for x in highs if x is not None and x > 0]
+    lo_vals = [x for x in lows if x is not None and x > 0]
+    if not hi_vals or not lo_vals:
+        return None, None
+    return max(hi_vals), min(lo_vals)
+
+
+def _box_price_invalidated(
+    close: float,
+    support: Optional[float],
+    resistance: Optional[float],
+    *,
+    break_support_pct: float,
+    break_resist_pct: float,
+) -> Optional[str]:
+    if close <= 0:
+        return None
+    if support is not None and support > 0 and close < support * (1.0 - abs(break_support_pct)):
+        return "break_support"
+    if (
+        resistance is not None
+        and resistance > 0
+        and close > resistance * (1.0 + abs(break_resist_pct))
+    ):
+        return "break_resistance"
+    return None
+
+
+def detect_range_bottom_with_freeze(
+    bars: List[Dict[str, Any]],
+    config: Dict[str, Any],
+) -> Dict[str, Any]:
+    """横盘筑底 + 箱体冻结：首次命中锁定支撑/阻力，失效后再识别。"""
+    bcfg = (config or {}).get("bottom") or {}
+    kwargs = _range_detect_kwargs(bcfg)
+    lookback = int(kwargs["lookback"])
+    raw_today = detect_range_bottom(bars, **kwargs)
+    win_hi, win_lo = rolling_window_extremes(bars, lookback)
+
+    def _attach_window(
+        res: Dict[str, Any],
+        *,
+        frozen: bool,
+        lock_meta: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        out = dict(res)
+        detail = dict(out.get("detail") or {})
+        detail["window_high"] = win_hi
+        detail["window_low"] = win_lo
+        detail["box_frozen"] = bool(frozen)
+        if lock_meta:
+            if lock_meta.get("lock_date") is not None:
+                detail["box_lock_date"] = lock_meta.get("lock_date")
+            if lock_meta.get("age") is not None:
+                detail["box_lock_bars"] = lock_meta.get("age")
+            if lock_meta.get("invalidate_reason"):
+                detail["box_invalidate_reason"] = lock_meta.get("invalidate_reason")
+        out["detail"] = detail
+        out["window_high"] = win_hi
+        out["window_low"] = win_lo
+        return out
+
+    if not bool(bcfg.get("freeze_box", True)):
+        return _attach_window(raw_today, frozen=False)
+
+    break_sup = float(bcfg.get("box_break_support_pct", 0.03))
+    break_res = float(bcfg.get("box_break_resist_pct", 0.05))
+    max_unmatched = int(bcfg.get("box_max_unmatched_bars", 8))
+    max_lock_bars = int(bcfg.get("box_max_lock_bars", 60))
+
+    lock: Optional[Dict[str, Any]] = None
+    start_i = lookback - 1
+    if start_i < 0 or len(bars) <= start_i:
+        return _attach_window(raw_today, frozen=False)
+
+    scan_from = max(start_i, len(bars) - max_lock_bars - lookback - 5)
+
+    for i in range(scan_from, len(bars)):
+        prefix = bars[: i + 1]
+        if len(prefix) < lookback:
+            continue
+        res = detect_range_bottom(prefix, **kwargs)
+        close = _f(prefix[-1].get("close")) or 0.0
+
+        if lock is not None:
+            age = i - int(lock["lock_idx"])
+            inv = _box_price_invalidated(
+                close,
+                lock.get("support"),
+                lock.get("resistance"),
+                break_support_pct=break_sup,
+                break_resist_pct=break_res,
+            )
+            if age > max_lock_bars:
+                lock = None
+            elif inv:
+                lock = None
+            elif not res.get("matched"):
+                lock["unmatched"] = int(lock.get("unmatched") or 0) + 1
+                if int(lock["unmatched"]) > max_unmatched:
+                    lock = None
+            else:
+                lock["unmatched"] = 0
+
+        if lock is None and res.get("matched"):
+            lock = {
+                "support": res.get("support"),
+                "resistance": res.get("resistance"),
+                "lock_idx": i,
+                "lock_date": str(prefix[-1].get("date") or "")[:10],
+                "unmatched": 0,
+            }
+
+    if lock is None:
+        return _attach_window(raw_today, frozen=False)
+
+    close_now = _f(bars[-1].get("close")) or 0.0
+    inv_now = _box_price_invalidated(
+        close_now,
+        lock.get("support"),
+        lock.get("resistance"),
+        break_support_pct=break_sup,
+        break_resist_pct=break_res,
+    )
+    age_now = (len(bars) - 1) - int(lock["lock_idx"])
+    if inv_now or age_now > max_lock_bars:
+        if raw_today.get("matched"):
+            lock = {
+                "support": raw_today.get("support"),
+                "resistance": raw_today.get("resistance"),
+                "lock_idx": len(bars) - 1,
+                "lock_date": str(bars[-1].get("date") or "")[:10],
+                "unmatched": 0,
+            }
+        else:
+            return _attach_window(
+                raw_today,
+                frozen=False,
+                lock_meta={
+                    "invalidate_reason": inv_now or "lock_expired",
+                    "age": age_now,
+                },
+            )
+
+    out: Dict[str, Any]
+    if raw_today.get("matched"):
+        out = dict(raw_today)
+    else:
+        out = {
+            "matched": True,
+            "mode": "range_accumulation",
+            "support": lock.get("support"),
+            "resistance": lock.get("resistance"),
+            "range_pct": raw_today.get("range_pct"),
+            "touches": raw_today.get("touches"),
+            "detail": dict(raw_today.get("detail") or {}),
+        }
+    out["matched"] = True
+    out["mode"] = "range_accumulation"
+    out["support"] = lock.get("support")
+    out["resistance"] = lock.get("resistance")
+    return _attach_window(
+        out,
+        frozen=True,
+        lock_meta={
+            "lock_date": lock.get("lock_date"),
+            "age": (len(bars) - 1) - int(lock["lock_idx"]),
+        },
+    )
+
+
 def detect_bottom(
     bars: List[Dict[str, Any]],
     market_returns: List[float],
     config: Dict[str, Any],
 ) -> Dict[str, Any]:
     bcfg = (config or {}).get("bottom") or {}
-    range_res = detect_range_bottom(
-        bars,
-        lookback=int(bcfg.get("lookback_days", 60)),
-        max_range_pct=float(bcfg.get("max_range_pct", 0.35)),
-        touch_tol_pct=float(bcfg.get("touch_tol_pct", 0.02)),
-        min_touches=int(bcfg.get("min_touches", 3)),
-        max_touches=int(bcfg.get("max_touches", 4)),
-        require_up_vol_gt_down=bool(bcfg.get("up_volume_gt_down", True)),
-        max_close_drop_pct=float(bcfg.get("max_close_drop_pct", -0.12)),
-        min_close_slope_norm=float(bcfg.get("min_close_slope_norm", -0.002)),
-        reject_new_low_seq=bool(bcfg.get("reject_new_low_seq", True)),
-        half_low_drop_pct=float(bcfg.get("half_low_drop_pct", 0.05)),
-        reject_high_before_low=bool(bcfg.get("reject_high_before_low", True)),
-        high_early_frac=float(bcfg.get("high_early_frac", 0.40)),
-        low_late_frac=float(bcfg.get("low_late_frac", 0.60)),
-        require_ma_env=bool(bcfg.get("require_ma_env", True)),
-        ma_env_period=int(bcfg.get("ma_env_period", 60)),
-        ma_env_max_discount_pct=float(bcfg.get("ma_env_max_discount_pct", -0.12)),
-        ma_env_min_slope_norm=float(bcfg.get("ma_env_min_slope_norm", -0.0015)),
-    )
+    range_res = detect_range_bottom_with_freeze(bars, config)
     if range_res.get("matched"):
         return range_res
 
@@ -421,4 +604,6 @@ def detect_bottom(
         "matched": False,
         "mode": None,
         "detail": {"range": range_res.get("detail"), "panic": panic_res.get("detail")},
+        "window_high": range_res.get("window_high"),
+        "window_low": range_res.get("window_low"),
     }

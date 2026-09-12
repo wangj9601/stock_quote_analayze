@@ -207,6 +207,180 @@ async def get_board_fund_flow_today(
         )
 
 
+# 日/周/月：交易日窗口（近 N 个有资金流数据的交易日）
+_BOARD_FUND_FLOW_RANK_PERIODS = {
+    "day": {"days": 1, "label": "日"},
+    "week": {"days": 5, "label": "周"},
+    "month": {"days": 20, "label": "月"},
+}
+
+
+@router.get("/rank")
+async def get_board_fund_flow_rank(
+    period: str = Query("day", description="day|week|month（近1/5/20 个交易日净流入合计）"),
+    board_kind: str = Query(..., description="industry | concept"),
+    board_code_source: str = Query(DEFAULT_BOARD_CODE_SOURCE),
+    trade_date: Optional[str] = Query(
+        None, description="锚定交易日 YYYY-MM-DD；默认取库内最新日"
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    板块资金流向趋势跟踪：按日/周/月汇总主力净流入，全板升序返回（弱→强）。
+    数据源：board_fund_flow_daily。
+    """
+    key = (period or "day").strip().lower()
+    meta = _BOARD_FUND_FLOW_RANK_PERIODS.get(key)
+    if not meta:
+        return JSONResponse(
+            {"success": False, "message": "period 应为 day / week / month"},
+            status_code=400,
+        )
+    kind = (board_kind or "").strip().lower()
+    if kind not in ("industry", "concept"):
+        return JSONResponse(
+            {"success": False, "message": "board_kind 应为 industry 或 concept"},
+            status_code=400,
+        )
+    src = str(board_code_source or DEFAULT_BOARD_CODE_SOURCE).strip() or DEFAULT_BOARD_CODE_SOURCE
+    n_days = int(meta["days"])
+    anchor = None
+    if trade_date:
+        try:
+            datetime.strptime(trade_date, "%Y-%m-%d")
+            anchor = trade_date
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+                status_code=400,
+            )
+
+    def _empty(end: Optional[str] = None) -> Dict[str, Any]:
+        return {
+            "success": True,
+            "data": {
+                "period": key,
+                "period_label": meta["label"],
+                "board_kind": kind,
+                "board_code_source": src,
+                "trade_days": n_days,
+                "start_date": None,
+                "end_date": end,
+                "items": [],
+                "count": 0,
+            },
+        }
+
+    try:
+        if not anchor:
+            latest = db.execute(
+                text(
+                    """
+                    SELECT MAX(trade_date) FROM board_fund_flow_daily
+                    WHERE board_code_source = :src
+                      AND board_kind = :kind
+                    """
+                ),
+                {"src": src, "kind": kind},
+            ).scalar()
+            if latest is None:
+                return _empty()
+            anchor = (
+                latest.isoformat()[:10]
+                if hasattr(latest, "isoformat")
+                else str(latest)[:10]
+            )
+
+        date_rows = db.execute(
+            text(
+                """
+                SELECT DISTINCT trade_date
+                FROM board_fund_flow_daily
+                WHERE board_code_source = :src
+                  AND board_kind = :kind
+                  AND trade_date <= CAST(:anchor AS date)
+                ORDER BY trade_date DESC
+                LIMIT :n_days
+                """
+            ),
+            {"src": src, "kind": kind, "anchor": anchor, "n_days": n_days},
+        ).fetchall()
+        trade_dates = [
+            (r[0].isoformat()[:10] if hasattr(r[0], "isoformat") else str(r[0])[:10])
+            for r in date_rows
+            if r and r[0] is not None
+        ]
+        if not trade_dates:
+            return _empty(anchor)
+
+        start_date = min(trade_dates)
+        end_date = max(trade_dates)
+        rows = db.execute(
+            text(
+                """
+                SELECT
+                    board_kind,
+                    board_code,
+                    (array_agg(board_name ORDER BY trade_date DESC))[1] AS board_name,
+                    SUM(main_net_inflow) AS main_net_inflow,
+                    SUM(inflow_amount) AS inflow_amount,
+                    SUM(outflow_amount) AS outflow_amount,
+                    COUNT(*)::int AS days_count
+                FROM board_fund_flow_daily
+                WHERE board_code_source = :src
+                  AND board_kind = :kind
+                  AND trade_date >= CAST(:start_d AS date)
+                  AND trade_date <= CAST(:end_d AS date)
+                GROUP BY board_kind, board_code
+                HAVING SUM(main_net_inflow) IS NOT NULL
+                ORDER BY SUM(main_net_inflow) ASC NULLS LAST
+                """
+            ),
+            {
+                "src": src,
+                "kind": kind,
+                "start_d": start_date,
+                "end_d": end_date,
+            },
+        ).mappings().all()
+
+        items: List[Dict[str, Any]] = []
+        for r in rows:
+            items.append(
+                {
+                    "board_kind": r["board_kind"],
+                    "board_code": r["board_code"],
+                    "board_name": r["board_name"],
+                    "trade_date": end_date,
+                    "change_percent": None,
+                    "inflow_amount": _safe_float(r["inflow_amount"]),
+                    "outflow_amount": _safe_float(r["outflow_amount"]),
+                    "main_net_inflow": _safe_float(r["main_net_inflow"]),
+                    "days_count": int(r["days_count"] or 0),
+                    "source": None,
+                }
+            )
+        return {
+            "success": True,
+            "data": {
+                "period": key,
+                "period_label": meta["label"],
+                "board_kind": kind,
+                "board_code_source": src,
+                "trade_days": n_days,
+                "start_date": start_date,
+                "end_date": end_date,
+                "items": items,
+                "count": len(items),
+            },
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"查询板块资金流排名失败: {e}"},
+            status_code=500,
+        )
+
+
 @router.post("/daily/collect")
 async def trigger_board_fund_flow_collect(
     background_tasks: BackgroundTasks,

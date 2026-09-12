@@ -95,7 +95,7 @@
     lastSignalRows = rows || [];
     document.getElementById('sbbrResultsCount').textContent = `共 ${lastSignalRows.length} 只`;
     if (!lastSignalRows.length) {
-      body.innerHTML = '<tr><td colspan="14" class="empty-state">无符合条件的结果</td></tr>';
+      body.innerHTML = '<tr><td colspan="15" class="empty-state">无符合条件的结果</td></tr>';
       return;
     }
     body.innerHTML = lastSignalRows
@@ -132,9 +132,11 @@
         const codeCell = r.code
           ? `<a class="stock-code gms-stock-code-link" href="${esc(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${esc(r.code)}</a>`
           : '';
+        const industryName = r.industry_board_name || r.sector_name || '-';
         return `<tr data-sbbr-row="${index}">
             <td class="gms-col-code">${codeCell}</td>
             <td>${r.name || ''}${roleHtml ? ` ${roleHtml}` : ''}${sizeTag ? ` ${sizeTag}` : ''}</td>
+            <td class="gms-col-industry" title="同花顺行业板块">${esc(industryName)}</td>
             <td>${fmt(r.total_mv)}</td>
             <td>${fmt(r.circ_shares_yi)}</td>
             <td>${r.bottom_mode || '-'}</td>
@@ -149,7 +151,7 @@
             <td class="gms-col-actions"><div class="action-links">${ops.join('')}</div></td>
           </tr>
           <tr class="gms-score-detail-row sbbr-score-detail-row" data-detail-for="${index}" style="display:none;">
-            <td colspan="14" class="gms-score-detail-cell">${detailHtml}</td>
+            <td colspan="15" class="gms-score-detail-cell">${detailHtml}</td>
           </tr>`;
       })
       .join('');
@@ -225,9 +227,21 @@
       : [];
   }
 
-  function selectedBoardSegment() {
-    const el = document.querySelector('input[name="sbbrCnBoardSegment"]:checked');
-    return el ? String(el.value || 'ALL').trim().toUpperCase() : 'ALL';
+  const SBBR_CN_BOARD_SEG_LABELS = {
+    MAIN: '主板',
+    CYB: '创业板',
+    SZ_SME: '中小板',
+    KCB: '科创板',
+    BJ: '北证',
+  };
+
+  function selectedBoardSegments() {
+    const segs = [];
+    document.querySelectorAll('input[name="sbbrCnBoardSegment"]:checked').forEach((el) => {
+      const v = String(el.value || '').trim().toUpperCase();
+      if (v && v !== 'ALL' && !segs.includes(v)) segs.push(v);
+    });
+    return segs;
   }
 
   async function refreshSignals() {
@@ -243,7 +257,7 @@
       const stockCode = (document.getElementById('sbbrStockCode')?.value || '').trim();
       const industryCodes = selectedIndustryCodes();
       const conceptCodes = selectedConceptCodes();
-      const boardSeg = selectedBoardSegment();
+      const boardSegs = selectedBoardSegments();
 
       if (scope === 'industry_board' && !industryCodes.length) {
         throw new Error('请先选择行业板块（与 GMS/RPE 相同的选择面板）');
@@ -272,7 +286,9 @@
       if (date) q.set('date', date);
       if (stockCode) q.set('stock_code', stockCode);
       if (traceOnly && scope === 'market') q.set('trace_only', 'true');
-      if (boardSeg && boardSeg !== 'ALL' && !isSingle) q.set('cn_board_segment', boardSeg);
+      if (!isSingle) {
+        boardSegs.forEach((seg) => q.append('cn_board_segment', seg));
+      }
       industryCodes.forEach((c) => q.append('industry_board_code', c));
       conceptCodes.forEach((c) => q.append('concept_board_code', c));
       if (scope === 'industry_board' && industryCodes.length) {
@@ -303,7 +319,13 @@
         metaParts.push(`行情最新日 ${data.data_max_date}`);
       }
       if (data.stock_code) metaParts.push(`个股 ${data.stock_code}`);
-      if (data.cn_board_segment) metaParts.push(`板型 ${data.cn_board_segment}`);
+      const segMeta =
+        data.cn_board_segment_label ||
+        data.cn_board_segment ||
+        (Array.isArray(data.cn_board_segments) && data.cn_board_segments.length
+          ? data.cn_board_segments.map((s) => SBBR_CN_BOARD_SEG_LABELS[s] || s).join('、')
+          : '');
+      if (segMeta) metaParts.push(`板型 ${segMeta}`);
       if (data.industry_board_codes && data.industry_board_codes.length) {
         metaParts.push(`行业 ${data.industry_board_codes.join(',')}`);
       }
@@ -330,7 +352,7 @@
     } catch (e) {
       showErr(e.message || String(e));
       lastSignalRows = [];
-      body.innerHTML = '<tr><td colspan="14" class="empty-state">加载失败</td></tr>';
+      body.innerHTML = '<tr><td colspan="15" class="empty-state">加载失败</td></tr>';
     } finally {
       if (loading) loading.style.display = 'none';
     }

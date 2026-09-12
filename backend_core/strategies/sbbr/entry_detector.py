@@ -69,20 +69,22 @@ def detect_entry(
     vol_ratio = (volumes[-1] / avg_recent) if avg_recent > 0 else 0.0
     expand_ok = exp_min <= vol_ratio <= exp_max
 
-    market_ok = True
-    if bool(ecfg.get("require_market_sync_down", True)):
-        lookback = int(ecfg.get("market_lookback_days", 5))
-        drop = float(ecfg.get("market_drop_pct", -0.01))
-        recent_m = market_returns[-lookback:] if market_returns else []
-        if not recent_m:
-            market_ok = True  # 无大盘数据时不阻断
-        else:
-            cum = 1.0
-            for r in recent_m:
-                cum *= 1.0 + float(r)
-            market_ok = (cum - 1.0) <= drop
+    # 大盘共振：始终计算供明细展示；默认不作为入场硬筛（require_market_sync_down=false）
+    lookback = int(ecfg.get("market_lookback_days", 5))
+    drop = float(ecfg.get("market_drop_pct", -0.01))
+    recent_m = market_returns[-lookback:] if market_returns else []
+    if not recent_m:
+        market_ok = True  # 无大盘数据时视为放行（展示用）
+        market_cum_ret = None
+    else:
+        cum = 1.0
+        for r in recent_m:
+            cum *= 1.0 + float(r)
+        market_cum_ret = cum - 1.0
+        market_ok = market_cum_ret <= drop
 
-    entry = bool(cross_up and shrink_ok and expand_ok and market_ok)
+    require_mkt = bool(ecfg.get("require_market_sync_down", False))
+    entry = bool(cross_up and shrink_ok and expand_ok and (market_ok if require_mkt else True))
     return {
         "entry_signal": entry,
         "reason": "ok" if entry else "rules_not_met",
@@ -93,6 +95,8 @@ def detect_entry(
         "shrink_ok": shrink_ok,
         "expand_ok": expand_ok,
         "market_ok": market_ok,
+        "market_cum_ret": market_cum_ret,
+        "market_required": require_mkt,
         "entry_low": lows[-1],
         "signal_date": str(bars[-1].get("date") or "")[:10],
     }

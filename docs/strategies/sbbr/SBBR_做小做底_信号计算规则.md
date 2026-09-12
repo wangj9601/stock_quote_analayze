@@ -25,12 +25,14 @@ SBBR 按以下顺序计算信号：
 
 ### 2.2 默认阈值
 
-- 总市值区间：20 ~ 200 亿（元口径的市值）
-- 流通股本区间：5 ~ 10 亿股
+- 总市值区间：20 ~ 300 亿（元口径的市值）
+- 流通股本：大于 5 亿股（`circ_shares_yi > 5`，无上限）
+- 组合规则：默认 `match_mode=any`，总市值与流通股本**任一达标即通过**；设为 `all` 时需两侧都达标
 - 缺省行为：
   - 若总市值与流通股本都缺失，默认判为不通过（`exclude_unknown_size=true` 且 `require_shares=true`）
   - 若仅一侧缺失，则按有值那一侧判断（`total_only` 或 `circ_shares_only`）
-- 库内若仍残留错误的 `circ_mv_min/max_yi` 默认（5~10 或 20~200），读取配置时会迁移为：`total_mv` 20~200 + `circ_shares` 5~10 亿股，并移除上述 `circ_mv_*` 默认约束
+- 库内若仍残留错误的 `circ_mv_min/max_yi` 默认（5~10 或 20~200），读取配置时会迁移为：`total_mv` 20~300 + `circ_shares` >5 亿股（无上限）+ `match_mode=any`，并移除上述 `circ_mv_*` 默认约束
+- 旧默认 `total_mv_max_yi=200`、`circ_shares_max_yi=10` 在读取时也会迁移为 300 / 无上限
 ## 3. 筑底识别规则（bottom_detector）
 
 SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
@@ -65,8 +67,10 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 命中后输出：
 
 - `bottom_mode = range_accumulation`
-- 支撑位 `support`（窗口最低点）
-- 阻力位 `resistance`（窗口最高点）
+- 支撑位 `support` / 阻力位 `resistance`：**默认冻结**——首次命中当日锁定窗口高低点；失效前不随滚动窗漂移
+- 失效条件（默认）：收盘跌破支撑 3%、或上破阻力 5%、或连续未命中超过 8 日、或锁定超过 60 根 K
+- 展示旁证：`window_high` / `window_low` 为当日滚动窗极值（不进箱体硬逻辑）
+- `detail.box_frozen` / `box_lock_date` 标明是否冻结及锁定日
 
 ### 3.2 打压恐慌（panic_accumulation）
 
@@ -97,9 +101,11 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
    - 近 5 日均量 / 更早 5 日均量 <= 0.7
 4. 当日微放量（转强日）：
    - 当日量 / 近 5 日均量在 [1.05, 1.8]
-5. 大盘共振（默认开启）：
-   - 最近 5 日大盘累计收益 <= -1%
-   - 若无大盘序列，当前实现默认不阻断
+5. 大盘共振（**暂时仅计算展示，不作为入场硬筛**）：
+   - 大盘序列来自 ``index_historical_quotes`` 上证指数（`ts_code=000001.SH`），不是个股 `historical_quotes` 的 000001
+   - 最近 5 日大盘累计收益 <= -1% → `market_ok`
+   - 默认 `entry.require_market_sync_down=false`：入场不依赖 `market_ok`；设为 `true` 时恢复硬筛
+   - 若无大盘序列，`market_ok` 视为放行（展示用）
 
 入场信号附带：
 
@@ -194,8 +200,9 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 
 来自 `sbbr_strategy_configs` 默认版本：
 
-- `size.total_mv_min_yi=20`, `size.total_mv_max_yi=200`（总市值，亿元）
-- `size.circ_shares_min_yi=5`, `size.circ_shares_max_yi=10`（流通股本，亿股）
+- `size.total_mv_min_yi=20`, `size.total_mv_max_yi=300`（总市值，亿元）
+- `size.circ_shares_min_yi=5`, `size.circ_shares_max_yi=null`（流通股本亿股，需 `> min`，无上限）
+- `size.match_mode=any`（总市值或流通股本任一达标）
 - `bottom.lookback_days=60`, `bottom.max_range_pct=0.35`, `bottom.min_touches=3`, `bottom.max_touches=4`
 - `bottom.max_close_drop_pct=-0.12`, `bottom.min_close_slope_norm=-0.002`
 - `bottom.reject_new_low_seq=true`, `bottom.half_low_drop_pct=0.05`
@@ -217,7 +224,7 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 - 筑底成立
 - 上穿 MA20
 - 缩量后微放量
-- 大盘共振下跌（默认）
+- 大盘共振下跌（暂时仅计算展示，默认不硬筛；`require_market_sync_down=true` 可恢复）
 
 该组合较严格，某些交易日出现 0 条是正常现象。可先查看“筑底池”（关闭仅入场）再等待弱转强触发。
 

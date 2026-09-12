@@ -311,6 +311,186 @@ async def get_daily_inflow_outflow(
         )
 
 
+# 日/周/月：交易日窗口（近 N 个有资金流数据的交易日）
+_STOCK_FUND_FLOW_RANK_PERIODS = {
+    "day": {"days": 1, "label": "日"},
+    "week": {"days": 5, "label": "周"},
+    "month": {"days": 20, "label": "月"},
+}
+
+
+def _pick_rank_sides(rows: list, sides: int) -> list:
+    """按净流入升序，取最弱 sides + 最强 sides（去重后仍升序，供横条图展示）。"""
+    lim = max(1, int(sides))
+    cleaned = [r for r in rows if r.get("net_amount") is not None]
+    cleaned.sort(key=lambda x: float(x["net_amount"]))
+    if len(cleaned) <= lim * 2:
+        return cleaned
+    weak = cleaned[:lim]
+    strong = cleaned[-lim:]
+    seen = set()
+    out = []
+    for r in weak + strong:
+        code = r.get("code")
+        if code in seen:
+            continue
+        seen.add(code)
+        out.append(r)
+    out.sort(key=lambda x: float(x["net_amount"]))
+    return out
+
+
+@router.get("/rank")
+async def get_stock_fund_flow_rank(
+    period: str = Query("day", description="day|week|month（近1/5/20 个交易日净流入合计）"),
+    sides: int = Query(
+        40,
+        ge=5,
+        le=100,
+        description="净流入最强与最弱各取 N 只（合并去重后升序返回）",
+    ),
+    trade_date: Optional[str] = Query(
+        None, description="锚定交易日 YYYY-MM-DD；默认取库内最新日"
+    ),
+    db: Session = Depends(get_db),
+):
+    """
+    个股资金流向趋势跟踪：按日/周/月汇总净流入，返回两端排名（弱→强）。
+    数据源：stock_fund_flow_daily（A股同花顺日采）。
+    """
+    key = (period or "day").strip().lower()
+    meta = _STOCK_FUND_FLOW_RANK_PERIODS.get(key)
+    if not meta:
+        return JSONResponse(
+            {"success": False, "message": "period 应为 day / week / month"},
+            status_code=400,
+        )
+    n_days = int(meta["days"])
+    anchor = None
+    if trade_date:
+        try:
+            datetime.strptime(trade_date, "%Y-%m-%d")
+            anchor = trade_date
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+                status_code=400,
+            )
+    try:
+        if not anchor:
+            latest = db.execute(
+                text("SELECT MAX(trade_date) FROM stock_fund_flow_daily")
+            ).scalar()
+            if latest is None:
+                return {
+                    "success": True,
+                    "data": {
+                        "period": key,
+                        "period_label": meta["label"],
+                        "trade_days": n_days,
+                        "start_date": None,
+                        "end_date": None,
+                        "items": [],
+                        "count": 0,
+                        "sides": sides,
+                    },
+                }
+            anchor = (
+                latest.isoformat()[:10]
+                if hasattr(latest, "isoformat")
+                else str(latest)[:10]
+            )
+
+        date_rows = db.execute(
+            text(
+                """
+                SELECT DISTINCT trade_date
+                FROM stock_fund_flow_daily
+                WHERE trade_date <= :anchor
+                ORDER BY trade_date DESC
+                LIMIT :n_days
+                """
+            ),
+            {"anchor": anchor, "n_days": n_days},
+        ).fetchall()
+        trade_dates = [
+            (r[0].isoformat()[:10] if hasattr(r[0], "isoformat") else str(r[0])[:10])
+            for r in date_rows
+            if r and r[0] is not None
+        ]
+        if not trade_dates:
+            return {
+                "success": True,
+                "data": {
+                    "period": key,
+                    "period_label": meta["label"],
+                    "trade_days": n_days,
+                    "start_date": None,
+                    "end_date": anchor,
+                    "items": [],
+                    "count": 0,
+                    "sides": sides,
+                },
+            }
+
+        start_date = min(trade_dates)
+        end_date = max(trade_dates)
+        rows = db.execute(
+            text(
+                """
+                SELECT
+                    code,
+                    (array_agg(name ORDER BY trade_date DESC))[1] AS name,
+                    SUM(net_amount) AS net_amount,
+                    SUM(inflow_amount) AS inflow_amount,
+                    SUM(outflow_amount) AS outflow_amount,
+                    SUM(turnover_amount) AS turnover_amount,
+                    COUNT(*)::int AS days_count
+                FROM stock_fund_flow_daily
+                WHERE trade_date >= :start_d
+                  AND trade_date <= :end_d
+                GROUP BY code
+                HAVING SUM(net_amount) IS NOT NULL
+                """
+            ),
+            {"start_d": start_date, "end_d": end_date},
+        ).mappings().all()
+
+        all_items = []
+        for r in rows:
+            all_items.append(
+                {
+                    "code": r["code"],
+                    "name": r["name"],
+                    "net_amount": safe_float(r["net_amount"]),
+                    "inflow_amount": safe_float(r["inflow_amount"]),
+                    "outflow_amount": safe_float(r["outflow_amount"]),
+                    "turnover_amount": safe_float(r["turnover_amount"]),
+                    "days_count": int(r["days_count"] or 0),
+                }
+            )
+        items = _pick_rank_sides(all_items, sides)
+        return {
+            "success": True,
+            "data": {
+                "period": key,
+                "period_label": meta["label"],
+                "trade_days": n_days,
+                "start_date": start_date,
+                "end_date": end_date,
+                "items": items,
+                "count": len(items),
+                "total_universe": len(all_items),
+                "sides": sides,
+            },
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"查询个股资金流排名失败: {e}"},
+            status_code=500,
+        )
+
+
 @router.post("/daily/sync-quotes")
 async def sync_fund_flow_to_quotes(
     trade_date: Optional[str] = Query(

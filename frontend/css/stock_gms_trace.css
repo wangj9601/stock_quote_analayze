@@ -161,22 +161,31 @@
     border-radius: 4px;
 }
 
-/* URT：得分≥70 整行着色（≥85 绿底，70–84 橙底） */
-.trace-table.urt-trace-table tr.urt-row-score-high {
+/* 高亮行：URT 高分 / SBBR·CSB 入场(绿) / 筑底或 SETUP(橙) */
+.trace-table tr.urt-row-score-high {
     background-color: #e8f5e9;
 }
-.trace-table.urt-trace-table tr.urt-row-score-high td {
+.trace-table tr.urt-row-score-high td {
     color: #2e7d32;
 }
-.trace-table.urt-trace-table tr.urt-row-score-mid {
+.trace-table tr.urt-row-score-mid {
     background-color: #fff3e0;
 }
-.trace-table.urt-trace-table tr.urt-row-score-mid td {
+.trace-table tr.urt-row-score-mid td {
     color: #ef6c00;
 }
-.trace-table.urt-trace-table tr.urt-row-score-high .gms-op-btn,
-.trace-table.urt-trace-table tr.urt-row-score-mid .gms-op-btn {
+.trace-table tr.urt-row-score-high .gms-op-btn,
+.trace-table tr.urt-row-score-mid .gms-op-btn {
     color: #1565c0;
+}
+
+/* 入场「是」单元格强调（SBBR / CSB 等） */
+.trace-table .buy-yes {
+    color: #1b5e20;
+    font-weight: 700;
+    background: #c8e6c9;
+    padding: 2px 8px;
+    border-radius: 4px;
 }
 
 /* 信号强度≥60% 时整行与信号强度列同色 */

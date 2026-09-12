@@ -303,7 +303,8 @@
         if (window.SbbrScoreDetail && typeof window.SbbrScoreDetail.buildHtml === 'function') {
           detailHtml = window.SbbrScoreDetail.buildHtml(r);
         }
-        const rowClass = r.entry_signal ? 'urt-row-score-high' : (r.bottom_matched ? 'urt-row-score-mid' : '');
+        // 仅「入场=是」整行高亮；筑底但不入场不高亮
+        const rowClass = r.entry_signal ? 'urt-row-score-high' : '';
         return `<tr class="${rowClass}">
           <td>${escapeHtml(r.date || '--')}</td>
           <td>${yn(r.size_ok)}</td>
