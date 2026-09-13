@@ -15,9 +15,21 @@
   };
 
   function fetchFn(url, options) {
-    if (typeof authFetch === "function") return authFetch(url, options);
-    if (typeof smartFetch === "function") return smartFetch(url, options);
-    return fetch(url, options);
+    const opts = Object.assign({ skipRedirect: true }, options || {});
+    if (typeof authFetch === "function") return authFetch(url, opts);
+    if (typeof smartFetch === "function") return smartFetch(url, opts);
+    return fetch(url, opts);
+  }
+
+  function showTableMessage(msg) {
+    const tbody = document.getElementById("recommendTbody");
+    if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="empty">${msg}</td></tr>`;
+  }
+
+  function authErrorMessage(status) {
+    if (status === 401) return "未登录或登录已过期，请重新登录后再打开策略推荐";
+    if (status === 403) return "无策略推荐权限，请联系管理员开通 channel.analyze.tab.recommend";
+    return "加载失败（HTTP " + status + "）";
   }
 
   function scoreDetailLines(it) {
@@ -97,54 +109,74 @@
   }
 
   async function loadAsofDates() {
-    const res = await fetchFn(
-      `${API_BASE}/api/recommend/asof-dates?horizon=${encodeURIComponent(state.horizon)}`
-    );
-    const json = await res.json().catch(() => ({}));
-    const dates = (json && json.data) || [];
-    const sel = document.getElementById("asofSelect");
-    if (!sel) return;
-    sel.innerHTML = "";
-    if (!dates.length) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "暂无历史";
-      sel.appendChild(opt);
-      state.asof = null;
-      return;
+    try {
+      const res = await fetchFn(
+        `${API_BASE}/api/recommend/asof-dates?horizon=${encodeURIComponent(state.horizon)}`
+      );
+      if (res.status === 401 || res.status === 403) {
+        showTableMessage(authErrorMessage(res.status));
+        return;
+      }
+      const json = await res.json().catch(() => ({}));
+      const dates = (json && json.data) || [];
+      const sel = document.getElementById("asofSelect");
+      if (!sel) return;
+      sel.innerHTML = "";
+      if (!dates.length) {
+        const opt = document.createElement("option");
+        opt.value = "";
+        opt.textContent = "暂无历史";
+        sel.appendChild(opt);
+        state.asof = null;
+        return;
+      }
+      dates.forEach((d, i) => {
+        const opt = document.createElement("option");
+        opt.value = d;
+        opt.textContent = d;
+        if (i === 0) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      state.asof = dates[0];
+    } catch (err) {
+      console.error("[recommend] loadAsofDates", err);
+      showTableMessage("加载日期列表失败，请检查后端是否已启动");
     }
-    dates.forEach((d, i) => {
-      const opt = document.createElement("option");
-      opt.value = d;
-      opt.textContent = d;
-      if (i === 0) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    state.asof = dates[0];
   }
 
   async function loadBrief() {
-    const tbody = document.getElementById("recommendTbody");
-    if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="empty">加载中…</td></tr>`;
+    showTableMessage("加载中…");
     let url = `${API_BASE}/api/recommend/brief?horizon=${encodeURIComponent(state.horizon)}`;
     if (state.asof) url += `&asof_date=${encodeURIComponent(state.asof)}`;
-    const res = await fetchFn(url);
-    if (res.status === 404) {
-      state.brief = null;
-      state.items = [];
+    try {
+      const res = await fetchFn(url);
+      if (res.status === 401 || res.status === 403) {
+        state.brief = null;
+        state.items = [];
+        renderSummary();
+        showTableMessage(authErrorMessage(res.status));
+        return;
+      }
+      if (res.status === 404) {
+        state.brief = null;
+        state.items = [];
+        render();
+        showTableMessage("暂无该日期简报，请等待日终生成或联系管理员重跑");
+        return;
+      }
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.success) {
+        showTableMessage((json && json.detail) || authErrorMessage(res.status));
+        return;
+      }
+      state.brief = json.data;
+      state.asof = state.brief.asof_date || state.asof;
+      state.items = Array.isArray(state.brief.items) ? state.brief.items : [];
       render();
-      if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="empty">暂无该日期简报，请等待日终生成或联系管理员重跑</td></tr>`;
-      return;
+    } catch (err) {
+      console.error("[recommend] loadBrief", err);
+      showTableMessage("加载简报失败，请检查网络或后端服务");
     }
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.success) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="empty">加载失败</td></tr>`;
-      return;
-    }
-    state.brief = json.data;
-    state.asof = state.brief.asof_date || state.asof;
-    state.items = Array.isArray(state.brief.items) ? state.brief.items : [];
-    render();
   }
 
   function filteredItems() {

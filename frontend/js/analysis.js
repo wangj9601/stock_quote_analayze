@@ -63,10 +63,33 @@ const AnalysisPage = {
 
     // 绑定事件
     bindEvents() {
-        // 分析标签切换
+        // 分析标签切换（事件委托，避免节点被权限脚本改写后失效）
+        const tabNav = document.querySelector('.analysis-tabs .tab-nav') || document.querySelector('.analysis-tabs');
+        if (tabNav && !tabNav.dataset.analysisTabBound) {
+            tabNav.dataset.analysisTabBound = '1';
+            tabNav.addEventListener('click', (e) => {
+                const tab = e.target && e.target.closest ? e.target.closest('.analysis-tab') : null;
+                if (!tab || !tabNav.contains(tab)) return;
+                if (tab.hasAttribute('hidden') || tab.getAttribute('aria-hidden') === 'true') return;
+                if (tab.style && tab.style.display === 'none') return;
+                const tabId = tab.dataset.tab;
+                if (!tabId || tabId === 'strategy') return;
+                e.preventDefault();
+                this.switchTab(tabId);
+                this.updateActiveTab(tab);
+            });
+        }
+
+        // 兼容：仍给按钮挂一份（老逻辑）
         document.querySelectorAll('.analysis-tab').forEach(tab => {
-            tab.addEventListener('click', () => {
-                this.switchTab(tab.dataset.tab);
+            if (tab.dataset.analysisTabDirectBound) return;
+            tab.dataset.analysisTabDirectBound = '1';
+            tab.addEventListener('click', (e) => {
+                if (tabNav && tabNav.dataset.analysisTabBound) return; // 已由委托处理
+                const tabId = tab.dataset.tab;
+                if (!tabId || tabId === 'strategy') return;
+                e.preventDefault();
+                this.switchTab(tabId);
                 this.updateActiveTab(tab);
             });
         });
@@ -113,7 +136,25 @@ const AnalysisPage = {
         const targetPanel = document.getElementById(tabId);
         if (targetPanel) {
             targetPanel.classList.add('active');
+            // 若权限脚本误藏了工作区，但 Tab 可点，则强制露出内容
+            if (tabId === 'recommend') {
+                const wb = targetPanel.querySelector('.recommend-workbench');
+                if (wb && wb.style.display === 'none') {
+                    wb.style.removeProperty('display');
+                    wb.removeAttribute('aria-hidden');
+                }
+            }
         }
+
+        try {
+            const url = new URL(window.location.href);
+            if (tabId && tabId !== 'board-analysis') {
+                url.searchParams.set('tab', tabId);
+            } else {
+                url.searchParams.delete('tab');
+            }
+            window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+        } catch (e) { /* ignore */ }
 
         // 根据标签加载相应数据
         this.loadTabData(tabId);
@@ -159,10 +200,33 @@ const AnalysisPage = {
                 break;
             case 'recommend':
                 if (window.RecommendPage) {
-                    if (!RecommendPage._inited) {
-                        RecommendPage.init();
-                    } else {
-                        RecommendPage.reload();
+                    const run = () => {
+                        try {
+                            if (!RecommendPage._inited) {
+                                return Promise.resolve(RecommendPage.init());
+                            }
+                            return Promise.resolve(RecommendPage.reload());
+                        } catch (err) {
+                            console.error('[recommend] init/reload failed', err);
+                            const tbody = document.getElementById('recommendTbody');
+                            if (tbody) {
+                                tbody.innerHTML = `<tr><td colspan="12" class="empty">策略推荐初始化失败，请刷新页面重试</td></tr>`;
+                            }
+                            return Promise.resolve();
+                        }
+                    };
+                    Promise.resolve(run()).catch((err) => {
+                        console.error('[recommend] async failed', err);
+                        const tbody = document.getElementById('recommendTbody');
+                        if (tbody) {
+                            tbody.innerHTML = `<tr><td colspan="12" class="empty">策略推荐加载异常</td></tr>`;
+                        }
+                    });
+                } else {
+                    console.warn('[recommend] RecommendPage 未加载');
+                    const tbody = document.getElementById('recommendTbody');
+                    if (tbody) {
+                        tbody.innerHTML = `<tr><td colspan="12" class="empty">推荐模块脚本未加载，请强制刷新（Ctrl+F5）</td></tr>`;
                     }
                 }
                 break;

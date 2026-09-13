@@ -95,6 +95,22 @@ const PermissionEngine = {
       }
     } catch (_) { /* ignore */ }
 
+    // 用户已手动切到某分析 Tab 时，不要抢回第一个 Tab
+    try {
+      if (window.AnalysisPage && AnalysisPage.currentTab) {
+        const curBtn = document.querySelector(`.analysis-tab[data-tab="${AnalysisPage.currentTab}"]`);
+        const curPanel = document.getElementById(AnalysisPage.currentTab);
+        if (
+          curBtn &&
+          curPanel &&
+          curPanel.classList.contains('active') &&
+          (!curBtn.getAttribute('data-perm') || this.has(curBtn.getAttribute('data-perm')))
+        ) {
+          return;
+        }
+      }
+    } catch (_) { /* ignore */ }
+
     const tabSelectors = [
       '.strategy-tab[data-perm]',
       '.analysis-tab[data-perm]',
