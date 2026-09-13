@@ -157,6 +157,15 @@ const AnalysisPage = {
                     UnifiedTradeObserve.refresh();
                 }
                 break;
+            case 'recommend':
+                if (window.RecommendPage) {
+                    if (!RecommendPage._inited) {
+                        RecommendPage.init();
+                    } else {
+                        RecommendPage.reload();
+                    }
+                }
+                break;
             case 'market-analysis':
                 this.loadMarketAnalysis();
                 break;

@@ -120,6 +120,11 @@ const routes = [
         component: () => import('@/views/CsbManagementView.vue')
       },
       {
+        path: 'recommend-brief',
+        name: 'RecommendBrief',
+        component: () => import('@/views/RecommendBriefView.vue')
+      },
+      {
         path: 'triple-volume-observe',
         redirect: { path: '/selection-results', query: { tab: 'triple-volume' } }
       },

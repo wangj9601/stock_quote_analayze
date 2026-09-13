@@ -662,6 +662,18 @@ exec_watchlist_history = _wrap_plain(_watchlist_history, "自选股历史")
 exec_triple_volume_scan = _wrap_plain(_triple_volume_scan, "3倍量扫描")
 
 
+def _stock_recommend_brief() -> Any:
+    from backend_core.recommend.scheduled import run_recommend_brief_job
+
+    result = run_recommend_brief_job()
+    if isinstance(result, dict) and result.get("ok") is False:
+        raise RuntimeError(result.get("error") or "推荐简报生成失败")
+    return result
+
+
+exec_stock_recommend_brief = _wrap_plain(_stock_recommend_brief, "个股推荐简报")
+
+
 def _resolve_macd_trade_date(ctx: WorkflowContext) -> Optional[str]:
     for src in (ctx.node_params, ctx.params):
         raw = src.get("trade_date") or src.get("end_date")

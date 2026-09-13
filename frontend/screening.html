@@ -2350,10 +2350,25 @@
     <script src="js/sbbr_score_detail.js"></script>
     <script src="js/csb_score_detail.js"></script>
     <script src="js/board_roles_panel.js"></script>
+    <script src="js/page_scroll_fab.js"></script>
     <script src="js/screening.js?v=urt50220260907a"></script>
     <script src="js/sbbr_screening.js"></script>
     <script src="js/rpe_screening.js"></script>
     <script src="js/csb_screening.js"></script>
+
+    <!-- 比价效应：顶/底滚动（双圆形 FAB，仅 RPE Tab） -->
+    <div class="rpe-scroll-fab" id="rpeScrollFab" data-scroll-fab hidden aria-hidden="true" aria-label="页面快速滚动">
+        <button type="button" class="rpe-scroll-fab__btn rpe-scroll-fab__btn--top" id="rpeScrollTopBtn" title="回到顶部" aria-label="回到顶部">
+            <svg class="rpe-scroll-fab__svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+            </svg>
+        </button>
+        <button type="button" class="rpe-scroll-fab__btn rpe-scroll-fab__btn--bottom" id="rpeScrollBottomBtn" title="直达底部" aria-label="直达底部">
+            <svg class="rpe-scroll-fab__svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+            </svg>
+        </button>
+    </div>
 </body>
 
 </html>

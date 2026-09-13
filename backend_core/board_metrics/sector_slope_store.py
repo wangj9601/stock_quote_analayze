@@ -1012,3 +1012,123 @@ def ensure_board_sector_slope(
         except Exception:
             pass
         return None
+
+def load_board_sector_slope_series(
+    db,
+    board_code: str,
+    *,
+    board_kind: str = "industry",
+    windows: Optional[Sequence[int]] = None,
+    days: int = 60,
+    asof_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """读取单板多窗口斜率历史序列（按 slope_asof_date 升序）。
+
+    返回::
+        {
+          board_code, board_kind, days, windows,
+          series: { "5": [{date, sector_slope, slope_r2, ...}, ...], ... }
+        }
+    """
+    bc = str(board_code or "").strip()
+    wins = [int(w) for w in (windows or DEFAULT_SLOPE_WINDOWS) if int(w) > 0]
+    seen_w: set = set()
+    wins_u: List[int] = []
+    for w in wins:
+        if w not in seen_w:
+            seen_w.add(w)
+            wins_u.append(w)
+    wins = wins_u
+    limit_days = max(5, min(int(days or 60), 500))
+    empty: Dict[str, Any] = {
+        "board_code": bc,
+        "board_kind": (board_kind or "industry").strip().lower() or "industry",
+        "days": limit_days,
+        "windows": wins,
+        "series": {str(w): [] for w in wins},
+    }
+    if not bc or not wins:
+        return empty
+
+    kind = empty["board_kind"]
+    if kind not in TABLE_BY_KIND:
+        kind = "industry"
+        empty["board_kind"] = kind
+    table = _table_for_kind(kind)
+    asof = _parse_asof(asof_date)
+    try:
+        ensure_board_daily_metrics_table(db, kind)
+        params: Dict[str, Any] = {"code": bc, "windows": wins}
+        date_clause = ""
+        if asof is not None:
+            params["asof"] = asof
+            date_clause = "AND slope_asof_date <= :asof"
+        sql = text(
+            f"""
+            SELECT slope_asof_date, sector_slope_window, sector_slope,
+                   slope_r2, slope_source, slope_n, member_count_used
+            FROM {table}
+            WHERE board_code = :code
+              AND sector_slope_window IN :windows
+              {date_clause}
+            ORDER BY slope_asof_date ASC, sector_slope_window ASC
+            """
+        ).bindparams(bindparam("windows", expanding=True))
+        rows = db.execute(sql, params).fetchall()
+    except Exception as e:
+        logger.debug("load_board_sector_slope_series failed: %s", e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return empty
+
+    buckets: Dict[int, List[Dict[str, Any]]] = {w: [] for w in wins}
+    for r in rows:
+        td = r[0]
+        try:
+            win = int(r[1]) if r[1] is not None else None
+        except (TypeError, ValueError):
+            win = None
+        if win is None or win not in buckets:
+            continue
+        if hasattr(td, "isoformat"):
+            td_s = td.isoformat()
+        else:
+            td_s = str(td)[:10]
+        try:
+            slope_v = float(r[2]) if r[2] is not None else None
+        except (TypeError, ValueError):
+            slope_v = None
+        try:
+            r2_v = float(r[3]) if r[3] is not None else None
+        except (TypeError, ValueError):
+            r2_v = None
+        try:
+            n_v = int(r[5]) if r[5] is not None else None
+        except (TypeError, ValueError):
+            n_v = None
+        try:
+            mem_v = int(r[6]) if r[6] is not None else None
+        except (TypeError, ValueError):
+            mem_v = None
+        buckets[win].append(
+            {
+                "date": td_s,
+                "sector_slope": slope_v,
+                "slope_r2": r2_v,
+                "slope_source": str(r[4]) if r[4] is not None else None,
+                "slope_n": n_v,
+                "member_count_used": mem_v,
+            }
+        )
+
+    series: Dict[str, List[Dict[str, Any]]] = {}
+    for w in wins:
+        pts = buckets.get(w) or []
+        if len(pts) > limit_days:
+            pts = pts[-limit_days:]
+        series[str(w)] = pts
+    empty["series"] = series
+    return empty
+

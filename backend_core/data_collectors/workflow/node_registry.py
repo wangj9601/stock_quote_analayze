@@ -50,6 +50,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_urt_cn,
     exec_urt_hk,
     exec_watchlist_history,
+    exec_stock_recommend_brief,
 )
 from backend_core.data_collectors.workflow.adapters.api_nodes import (
     exec_cn_historical_akshare,
@@ -189,6 +190,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
     _n("sbbr_signals_cn", "SBBR信号预计算(A股)", "strategy", exec_sbbr_cn),
     _n("rpe_signals_cn", "RPE信号预计算(A股)", "strategy", exec_rpe_cn),
     _n("csb_signals_cn", "CSB信号预计算(A股)", "strategy", exec_csb_cn),
+    _n(
+        "stock_recommend_brief",
+        "个股推荐简报(日/周/月)",
+        "strategy",
+        exec_stock_recommend_brief,
+        description="策略预计算之后：Daily Brief；周/月在日历触发日生成",
+    ),
     _n("rs_rating_cn", "A股相对强度RS预计算", "strategy", exec_rs_rating_cn),
     _n("rs_rating_hk", "港股相对强度RS预计算", "strategy", exec_rs_rating_hk),
     _n(

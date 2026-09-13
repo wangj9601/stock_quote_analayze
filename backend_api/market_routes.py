@@ -528,6 +528,86 @@ def get_industry_board_detail(
         )
 
 
+def _parse_slope_windows_query(raw: Optional[str]) -> list:
+    from backend_core.board_metrics.sector_slope_store import DEFAULT_SLOPE_WINDOWS
+
+    if not raw or not str(raw).strip():
+        return list(DEFAULT_SLOPE_WINDOWS)
+    out = []
+    seen = set()
+    for part in str(raw).replace("，", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            w = int(part)
+        except ValueError:
+            continue
+        if w <= 0 or w in seen:
+            continue
+        seen.add(w)
+        out.append(w)
+    return out or list(DEFAULT_SLOPE_WINDOWS)
+
+
+def _board_sector_slope_series_response(
+    db: Session,
+    *,
+    board_code: str,
+    board_kind: str,
+    days: int,
+    windows: Optional[str],
+    asof_date: Optional[str],
+):
+    from backend_core.board_metrics.sector_slope_store import (
+        load_board_sector_slope_series,
+    )
+
+    data = load_board_sector_slope_series(
+        db,
+        board_code,
+        board_kind=board_kind,
+        windows=_parse_slope_windows_query(windows),
+        days=days,
+        asof_date=asof_date,
+    )
+    return JSONResponse({"success": True, "data": data})
+
+
+@router.get("/industry_board/{board_code}/sector_slope_series")
+def get_industry_board_sector_slope_series(
+    board_code: str,
+    days: int = Query(60, ge=5, le=500, description="每个窗口最多返回最近 N 个交易日点"),
+    windows: Optional[str] = Query(
+        "5,10,20,60,120",
+        description="逗号分隔窗口，默认 5,10,20,60,120",
+    ),
+    asof_date: Optional[str] = Query(None, description="可选截止日期 YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """行业板斜率趋势序列：多窗口历史点，供详情页趋势图。"""
+    try:
+        return _board_sector_slope_series_response(
+            db,
+            board_code=board_code,
+            board_kind="industry",
+            days=days,
+            windows=windows,
+            asof_date=asof_date,
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取行业板块斜率趋势失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
 @router.get("/concept_board/list")
 def get_concept_board_list(
     board_code_source: str = Query(
@@ -604,6 +684,40 @@ def get_concept_board_detail(
             {
                 "success": False,
                 "message": "获取概念板块详情失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.get("/concept_board/{board_code}/sector_slope_series")
+def get_concept_board_sector_slope_series(
+    board_code: str,
+    days: int = Query(60, ge=5, le=500, description="每个窗口最多返回最近 N 个交易日点"),
+    windows: Optional[str] = Query(
+        "5,10,20,60,120",
+        description="逗号分隔窗口，默认 5,10,20,60,120",
+    ),
+    asof_date: Optional[str] = Query(None, description="可选截止日期 YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    """概念板斜率趋势序列：多窗口历史点，供详情页趋势图。"""
+    try:
+        return _board_sector_slope_series_response(
+            db,
+            board_code=board_code,
+            board_kind="concept",
+            days=days,
+            windows=windows,
+            asof_date=asof_date,
+        )
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取概念板块斜率趋势失败",
                 "error": str(e),
                 "traceback": tb,
             },

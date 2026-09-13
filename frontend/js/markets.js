@@ -1503,6 +1503,8 @@ const MarketsPage = {
             boardName: boardName || '',
             boardSource: boardSource || 'tonghuashun',
         };
+        this._sectorSlopeTrendActiveWins = null;
+        this._sectorSlopeTrendData = null;
         if (title) title.textContent = boardName || boardCode || '板块详情';
         if (sub) {
             sub.textContent = `${ui.label} · ${boardCode || '--'} · ${boardSource || 'tonghuashun'}`;
@@ -1588,6 +1590,15 @@ const MarketsPage = {
                     ${item('member_count_used', d.member_count_used != null ? d.member_count_used : '--')}
                 </div>
                 <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（窗口：120/60/20/10/5 日；官方指数优先，不足则前复权等权收益；走强需 R² 达标）</div>
+                <div class="sector-slope-trend-wrap">
+                    <div class="sector-slope-trend-head">
+                        <span class="sector-slope-trend-title">斜率趋势</span>
+                        <span class="sector-slope-trend-hint">5 / 10 / 20 / 60 / 120 日 · 近60个交易日</span>
+                    </div>
+                    <div id="sectorSlopeTrendHost" class="sector-slope-trend-host">
+                        <div class="sector-detail-loading">斜率趋势加载中…</div>
+                    </div>
+                </div>
             </div>
             <div class="sector-detail-section sector-fund-flow-section">
                 <h3>资金流向</h3>
@@ -1630,11 +1641,265 @@ const MarketsPage = {
         }
 
         const src = String(d.board_code_source || (this._sectorDetailCtx && this._sectorDetailCtx.boardSource) || 'tonghuashun').trim();
+        this.loadSectorSlopeTrend(kind, code);
         this.loadSectorFundFlow(kind, code, src);
         this.loadSectorLimitUpStocks(kind, code, src, d.board_name || '', {
             waveStartMode: (this._sectorLimitUpPrefs && this._sectorLimitUpPrefs.waveStartMode) || 'board_start',
             startMinCount: (this._sectorLimitUpPrefs && this._sectorLimitUpPrefs.startMinCount) || 2,
         });
+    },
+
+    async loadSectorSlopeTrend(kind, boardCode, days = 60) {
+        const host = document.getElementById('sectorSlopeTrendHost');
+        if (!host) return;
+        const code = String(boardCode || '').trim();
+        if (!code) {
+            host.innerHTML = '<div class="sector-detail-meta">缺少板块代码</div>';
+            return;
+        }
+        const token = `${kind}|${code}|slopeTrend|${days}|${Date.now()}`;
+        this._sectorSlopeTrendToken = token;
+        host.innerHTML = '<div class="sector-detail-loading">斜率趋势加载中…</div>';
+        try {
+            const ui = this._boardKindUi(kind);
+            const params = new URLSearchParams({
+                days: String(days || 60),
+                windows: '5,10,20,60,120',
+            });
+            const url = `${this.API_BASE_URL}${ui.detailApiPrefix}${encodeURIComponent(code)}/sector_slope_series?${params}`;
+            const resp = await fetch(url);
+            const result = await resp.json().catch(() => ({}));
+            if (this._sectorSlopeTrendToken !== token) return;
+            if (!resp.ok || !result.success) {
+                host.innerHTML = `<div class="sector-detail-meta">${this.escapeHtml((result && result.message) || '暂无斜率趋势数据')}</div>`;
+                return;
+            }
+            this.renderSectorSlopeTrend(host, result.data || {});
+        } catch (err) {
+            if (this._sectorSlopeTrendToken !== token) return;
+            console.error(err);
+            host.innerHTML = `<div class="sector-detail-error">${this.escapeHtml(err.message || '斜率趋势加载失败')}</div>`;
+        }
+    },
+
+    _slopeTrendWindowMeta() {
+        return [
+            { w: 5, label: '5日', color: '#f59e0b' },
+            { w: 10, label: '10日', color: '#8b5cf6' },
+            { w: 20, label: '20日', color: '#06b6d4' },
+            { w: 60, label: '60日', color: '#2563eb' },
+            { w: 120, label: '120日', color: '#dc2626' },
+        ];
+    },
+
+    renderSectorSlopeTrend(host, data) {
+        if (!host) return;
+        const seriesMap = (data && data.series) || {};
+        const meta = this._slopeTrendWindowMeta();
+        const hasAny = meta.some((m) => Array.isArray(seriesMap[String(m.w)]) && seriesMap[String(m.w)].length > 0);
+        if (!hasAny) {
+            host.innerHTML = '<div class="sector-detail-meta">暂无斜率历史（需日度入库；可点「重算斜率」）</div>';
+            return;
+        }
+
+        const active = new Set(
+            (this._sectorSlopeTrendActiveWins && this._sectorSlopeTrendActiveWins.size)
+                ? [...this._sectorSlopeTrendActiveWins]
+                : meta.map((m) => m.w)
+        );
+        this._sectorSlopeTrendActiveWins = active;
+        this._sectorSlopeTrendData = data;
+
+        const legend = meta.map((m) => {
+            const n = (seriesMap[String(m.w)] || []).length;
+            const on = active.has(m.w);
+            return `<button type="button" class="sector-slope-legend-btn${on ? ' is-on' : ''}" data-win="${m.w}" style="--leg:${m.color}" ${n ? '' : 'disabled'}>
+                <span class="sector-slope-legend-swatch"></span>${m.label}<span class="sector-slope-legend-n">${n || 0}</span>
+            </button>`;
+        }).join('');
+
+        const latestBits = meta.map((m) => {
+            const pts = seriesMap[String(m.w)] || [];
+            const last = pts.length ? pts[pts.length - 1] : null;
+            const v = last && last.sector_slope != null ? Number(last.sector_slope) : null;
+            return `<div class="sector-slope-latest-item">
+                <span class="sector-slope-latest-lab" style="color:${m.color}">${m.label}</span>
+                <span class="sector-slope-latest-val ${this.getChangeClass(v)}">${this.formatSlope(v)}</span>
+            </div>`;
+        }).join('');
+
+        host.innerHTML = `
+            <div class="sector-slope-legend">${legend}</div>
+            <div class="sector-slope-latest">${latestBits}</div>
+            <div class="sector-slope-chart-box">
+                <canvas id="sectorSlopeTrendCanvas" width="640" height="220" aria-label="板块斜率趋势图"></canvas>
+            </div>
+            <div class="sector-slope-chart-foot" id="sectorSlopeTrendFoot"></div>
+        `;
+
+        host.querySelectorAll('.sector-slope-legend-btn').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const w = Number(btn.getAttribute('data-win'));
+                if (!Number.isFinite(w)) return;
+                if (active.has(w)) {
+                    if (active.size <= 1) return;
+                    active.delete(w);
+                } else {
+                    active.add(w);
+                }
+                this.renderSectorSlopeTrend(host, this._sectorSlopeTrendData || data);
+            });
+        });
+
+        this.drawSectorSlopeTrendChart(
+            document.getElementById('sectorSlopeTrendCanvas'),
+            data,
+            active,
+            document.getElementById('sectorSlopeTrendFoot')
+        );
+    },
+
+    drawSectorSlopeTrendChart(canvas, data, activeWins, footEl) {
+        if (!canvas) return;
+        const seriesMap = (data && data.series) || {};
+        const meta = this._slopeTrendWindowMeta().filter((m) => activeWins.has(m.w));
+        const box = canvas.parentElement;
+        const cssW = Math.max(280, (box && box.clientWidth) || 640);
+        const cssH = 220;
+        const dpr = Math.min(2, window.devicePixelRatio || 1);
+        canvas.width = Math.floor(cssW * dpr);
+        canvas.height = Math.floor(cssH * dpr);
+        canvas.style.width = `${cssW}px`;
+        canvas.style.height = `${cssH}px`;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect(0, 0, cssW, cssH);
+
+        const pad = { t: 14, r: 12, b: 28, l: 52 };
+        const plotW = cssW - pad.l - pad.r;
+        const plotH = cssH - pad.t - pad.b;
+
+        const dateSet = new Set();
+        meta.forEach((m) => {
+            (seriesMap[String(m.w)] || []).forEach((p) => {
+                if (p && p.date) dateSet.add(String(p.date).slice(0, 10));
+            });
+        });
+        const dates = [...dateSet].sort();
+        if (!dates.length) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '13px sans-serif';
+            ctx.fillText('无有效点', pad.l, pad.t + 20);
+            if (footEl) footEl.textContent = '';
+            return;
+        }
+        const dateIndex = new Map(dates.map((d, i) => [d, i]));
+
+        let ymin = 0;
+        let ymax = 0;
+        let hasVal = false;
+        meta.forEach((m) => {
+            (seriesMap[String(m.w)] || []).forEach((p) => {
+                const v = p && p.sector_slope != null ? Number(p.sector_slope) : NaN;
+                if (!Number.isFinite(v)) return;
+                if (!hasVal) {
+                    ymin = ymax = v;
+                    hasVal = true;
+                } else {
+                    ymin = Math.min(ymin, v);
+                    ymax = Math.max(ymax, v);
+                }
+            });
+        });
+        if (!hasVal) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '13px sans-serif';
+            ctx.fillText('无有效斜率', pad.l, pad.t + 20);
+            return;
+        }
+        if (ymin === ymax) {
+            ymin -= 0.001;
+            ymax += 0.001;
+        }
+        const padY = (ymax - ymin) * 0.12;
+        ymin -= padY;
+        ymax += padY;
+        if (ymin > 0) ymin = 0;
+        if (ymax < 0) ymax = 0;
+
+        const xAt = (i) => pad.l + (dates.length === 1 ? plotW / 2 : (plotW * i) / (dates.length - 1));
+        const yAt = (v) => pad.t + plotH * (1 - (v - ymin) / (ymax - ymin));
+
+        ctx.strokeStyle = '#e2e8f0';
+        ctx.lineWidth = 1;
+        for (let g = 0; g <= 4; g++) {
+            const y = pad.t + (plotH * g) / 4;
+            ctx.beginPath();
+            ctx.moveTo(pad.l, y);
+            ctx.lineTo(pad.l + plotW, y);
+            ctx.stroke();
+            const val = ymax - ((ymax - ymin) * g) / 4;
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '10px ui-monospace, Consolas, monospace';
+            ctx.textAlign = 'right';
+            ctx.fillText(val.toFixed(4), pad.l - 6, y + 3);
+        }
+        if (ymin < 0 && ymax > 0) {
+            const y0 = yAt(0);
+            ctx.strokeStyle = '#94a3b8';
+            ctx.setLineDash([4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(pad.l, y0);
+            ctx.lineTo(pad.l + plotW, y0);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
+        meta.forEach((m) => {
+            const pts = (seriesMap[String(m.w)] || [])
+                .map((p) => {
+                    const d = String(p.date || '').slice(0, 10);
+                    const v = p.sector_slope != null ? Number(p.sector_slope) : NaN;
+                    const i = dateIndex.get(d);
+                    if (i == null || !Number.isFinite(v)) return null;
+                    return { i, v, d };
+                })
+                .filter(Boolean);
+            if (pts.length < 1) return;
+            ctx.strokeStyle = m.color;
+            ctx.lineWidth = m.w === 60 ? 2.4 : 1.7;
+            ctx.lineJoin = 'round';
+            ctx.lineCap = 'round';
+            ctx.beginPath();
+            pts.forEach((p, idx) => {
+                const x = xAt(p.i);
+                const y = yAt(p.v);
+                if (idx === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+            const last = pts[pts.length - 1];
+            ctx.fillStyle = m.color;
+            ctx.beginPath();
+            ctx.arc(xAt(last.i), yAt(last.v), 3.2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        const tickIdx = dates.length === 1
+            ? [0]
+            : [0, Math.floor((dates.length - 1) / 2), dates.length - 1];
+        [...new Set(tickIdx)].forEach((i) => {
+            const label = String(dates[i] || '').slice(5);
+            ctx.fillText(label, xAt(i), cssH - 8);
+        });
+
+        if (footEl) {
+            footEl.textContent = `样本 ${dates[0]} ~ ${dates[dates.length - 1]}（${dates.length} 日）· 虚线为零轴 · 点击图例可显隐窗口`;
+        }
     },
 
     async loadSectorLimitUpStocks(kind, boardCode, boardSource, boardName, prefs) {

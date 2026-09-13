@@ -423,45 +423,20 @@ class BoardFundFlowDailyCollector:
         board_kind: str,
         existing_codes: set,
     ) -> List[Dict[str, Any]]:
-        cons_table = (
-            "concept_board_constituents"
-            if board_kind == "concept"
-            else "industry_board_constituents"
+        """成分股 × 个股资金流上卷；复用历史回填同一套 SQL（含流入/流出）。"""
+        from backend_core.data_collectors.akshare.board_fund_flow_aggregate_backfill import (
+            fetch_aggregate_rows,
         )
-        basic_table = (
-            "concept_board_basic_info"
-            if board_kind == "concept"
-            else "industry_board_basic_info"
-        )
-        td = self.trade_date.isoformat()
-        sql = text(
-            f"""
-            SELECT b.board_code, b.board_name, SUM(f.net_amount) AS net_sum
-            FROM {basic_table} b
-            JOIN {cons_table} c ON c.board_code = b.board_code
-            JOIN stock_fund_flow_daily f
-              ON f.code = c.stock_code AND f.trade_date = :td
-            WHERE COALESCE(NULLIF(TRIM(b.board_code_source), ''), '') = :src
-              AND NOT EXISTS (
-                SELECT 1 FROM board_fund_flow_daily d
-                WHERE d.board_kind = :kind
-                  AND d.board_code_source = :src
-                  AND d.board_code = b.board_code
-                  AND d.trade_date = CAST(:td AS date)
-                  AND d.main_net_inflow IS NOT NULL
-              )
-            GROUP BY b.board_code, b.board_name
-            """
-        )
+
         try:
-            rows_db = session.execute(
-                sql,
-                {
-                    "td": td,
-                    "src": DEFAULT_BOARD_CODE_SOURCE,
-                    "kind": board_kind,
-                },
-            ).fetchall()
+            rows, _stats = fetch_aggregate_rows(
+                session,
+                board_kind=board_kind,
+                start=self.trade_date,
+                end=self.trade_date,
+                force=False,
+                force_all=False,
+            )
         except Exception as e:
             self.logger.warning("成分上卷失败 kind=%s: %s", board_kind, e)
             try:
@@ -471,20 +446,12 @@ class BoardFundFlowDailyCollector:
             return []
 
         out: List[Dict[str, Any]] = []
-        for code, name, net_sum in rows_db:
-            c = str(code or "").strip()
+        for row in rows:
+            c = str(row.get("board_code") or "").strip()
             if not c or c in existing_codes:
                 continue
-            if net_sum is None:
+            if row.get("main_net_inflow") is None and row.get("inflow_amount") is None:
                 continue
-            row = _empty_row(
-                board_kind=board_kind,
-                board_code=c,
-                board_name=str(name or "").strip() or c,
-                trade_date=self.trade_date,
-                source=SOURCE_AGGREGATE,
-            )
-            row["main_net_inflow"] = float(net_sum)
             out.append(row)
             existing_codes.add(c)
         return out

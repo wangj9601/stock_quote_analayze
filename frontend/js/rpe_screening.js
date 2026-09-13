@@ -70,6 +70,48 @@
     return `<a class="stock-code gms-stock-code-link" href="stock.html?${q.toString()}" target="_blank" rel="noopener noreferrer" title="打开股票详情">${escAttr(c)}</a>`;
   }
 
+  function setScrollFabVisible(visible) {
+    if (window.PageScrollFab && typeof window.PageScrollFab.setVisible === 'function') {
+      window.PageScrollFab.setVisible('rpeScrollFab', !!visible);
+    } else {
+      const fab = document.getElementById('rpeScrollFab');
+      if (fab) {
+        fab.classList.toggle('is-visible', !!visible);
+        fab.setAttribute('aria-hidden', visible ? 'false' : 'true');
+      }
+    }
+    if (visible) {
+      const fab = document.getElementById('rpeScrollFab');
+      const opts = fab && fab._scrollFabDualOpts;
+      if (opts && window.PageScrollFab && typeof window.PageScrollFab.syncDual === 'function') {
+        window.setTimeout(() => window.PageScrollFab.syncDual(opts), 80);
+      }
+    }
+  }
+
+  function initScrollFab() {
+    if (!window.PageScrollFab || typeof window.PageScrollFab.bindDual !== 'function') return;
+    window.PageScrollFab.bindDual({
+      fabId: 'rpeScrollFab',
+      topBtnId: 'rpeScrollTopBtn',
+      bottomBtnId: 'rpeScrollBottomBtn',
+      showTopAfterPx: 240,
+      nearBottomPx: 120,
+      onlyWhenScrollable: true,
+    });
+    const rpeActive = document.getElementById('rpe-content')?.classList.contains('active');
+    const hashRpe = (window.location.hash || '').replace(/^#/, '') === 'rpe';
+    setScrollFabVisible(!!(rpeActive || hashRpe));
+  }
+
+  function syncScrollFabSoon() {
+    const fab = document.getElementById('rpeScrollFab');
+    const opts = fab && fab._scrollFabDualOpts;
+    if (opts && window.PageScrollFab && typeof window.PageScrollFab.syncDual === 'function') {
+      window.setTimeout(() => window.PageScrollFab.syncDual(opts), 60);
+    }
+  }
+
   function switchSub(name) {
     document.querySelectorAll('#rpe-content [data-rpe-sub]').forEach((b) => {
       b.classList.toggle('active', b.getAttribute('data-rpe-sub') === name);
@@ -78,6 +120,7 @@
       const panel = document.getElementById(`rpe-sub-${k}`);
       if (panel) panel.style.display = k === name ? 'block' : 'none';
     });
+    syncScrollFabSoon();
   }
 
   function fmt(v, n) {
@@ -374,6 +417,7 @@
       body.innerHTML = '<tr><td colspan="12" class="empty-state">加载失败</td></tr>';
     } finally {
       if (loading) loading.style.display = 'none';
+      syncScrollFabSoon();
     }
   }
 
@@ -570,6 +614,7 @@
     if (!root) return;
 
     syncScopeUI();
+    initScrollFab();
     document.getElementById('rpeScope')?.addEventListener('change', () => syncScopeUI());
 
     root.querySelectorAll('[data-rpe-sub]').forEach((btn) => {
@@ -716,6 +761,7 @@
       syncScopeUI,
       refreshSignals,
       switchSub,
+      setScrollFabVisible,
     };
   }
 

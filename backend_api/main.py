@@ -300,6 +300,20 @@ except ImportError as e:
     print(f"screening_router 导入失败: {e}")
     screening_router = None
 
+try:
+    from .stock.recommend_brief_routes import router as recommend_brief_router
+    print("recommend_brief_router 导入成功")
+except ImportError as e:
+    print(f"recommend_brief_router 导入失败: {e}")
+    recommend_brief_router = None
+
+try:
+    from .admin.recommend_brief_admin_routes import router as recommend_brief_admin_router
+    print("recommend_brief_admin_router 导入成功")
+except ImportError as e:
+    print(f"recommend_brief_admin_router 导入失败: {e}")
+    recommend_brief_admin_router = None
+
 # 尝试导入 GMS 信号追溯路由
 try:
     from .stock.gms_trace_routes import router as gms_trace_router
@@ -715,6 +729,8 @@ _include_router(app, rpe_frontend_router, "rpe_frontend")
 _include_router(app, gms_user_preferences_router, "gms_user_preferences")
 _include_router(app, triple_volume_trade_observe_router, "triple_volume_trade_observe")
 _include_router(app, screening_router, "screening")
+_include_router(app, recommend_brief_router, "recommend_brief")
+_include_router(app, recommend_brief_admin_router, "recommend_brief_admin")
 _include_router(app, gms_trace_router, "gms_trace")
 _include_router(app, vsb_signal_router, "vsb_signal")
 _include_router(app, history_router, "history")

@@ -2888,3 +2888,27 @@ class FormalTrade(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
     user = relationship("User", backref="formal_trades")
+
+class StockRecommendBrief(Base):
+    """日/周/月个股推荐简报快照（asof 冻结）。"""
+
+    __tablename__ = "stock_recommend_brief"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    horizon = Column(String(16), nullable=False, index=True)
+    asof_date = Column(Date, nullable=False, index=True)
+    plan_for = Column(String(64), nullable=True)
+    late_run = Column(Boolean, nullable=False, default=False)
+    market_stance = Column(String(16), nullable=True)
+    summary_json = Column(JSON, nullable=True)
+    items_json = Column(JSON, nullable=False, default=list)
+    risk_observe_json = Column(JSON, nullable=True)
+    kpi_json = Column(JSON, nullable=True)
+    generated_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("horizon", "asof_date", name="uq_stock_recommend_brief_horizon_asof"),
+        Index("idx_stock_recommend_brief_horizon_asof", "horizon", "asof_date"),
+    )
+

@@ -8,6 +8,7 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/analysis.css">
+    <link rel="stylesheet" href="css/recommend.css?v=20260913c">
     <script>
         (function () {
             try {
@@ -35,9 +36,10 @@
                     <button class="analysis-tab" data-tab="leader-mid" data-perm="channel.analyze.tab.leader_mid">龙头中军</button>
                     <button class="analysis-tab" data-tab="stock-ai" data-perm="channel.analyze.tab.stock_ai">个股分析</button>
                     <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
+                    <button class="analysis-tab" data-tab="recommend" data-perm="channel.analyze.tab.recommend">策略推荐</button>
                     <button class="analysis-tab" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
                     <button class="analysis-tab" data-tab="technical-tools" data-perm="channel.analyze.tab.technical">技术工具</button>
-                    <button class="analysis-tab" data-tab="strategy" data-perm="channel.analyze.tab.strategy">投资策略</button>
+                    <button type="button" class="analysis-tab" data-tab="strategy" hidden aria-hidden="true" data-perm-hidden-by-other="1" style="display:none!important">投资策略</button>
                     <button class="analysis-tab" data-tab="reports" data-perm="channel.analyze.tab.report">分析报告</button>
                 </div>
 
@@ -299,6 +301,7 @@
                                         <option value="triple_volume">3倍量</option>
                                         <option value="stock_analysis">个股分析</option>
                                         <option value="gann_trend">江恩趋势</option>
+                                        <option value="recommend">策略推荐</option>
                                     </select>
                                 </label>
                                 <button type="button" class="btn btn-primary uto-refresh-btn" id="utoRefreshBtn">刷新</button>
@@ -377,6 +380,88 @@
                                 </table>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+
+                <!-- 策略推荐（日/周/月简报） -->
+                <div class="tab-panel" id="recommend">
+                    <div class="recommend-workbench" data-perm="channel.analyze.tab.recommend">
+                        <p class="recommend-desc">环境 → 板块 → 角色 → 策略买点；规则合成参考，非投资建议</p>
+                        <p class="recommend-score-formula" title="推荐分 = 共振 + 质量 + 立场 + 角色">
+                            推荐分 = 策略共振(命中数×10) + 主策略质量(min(分,100)×0.3) + 立场(买+15/观+5/避+0) + 角色(龙头+3/中军+2，板弱不加)
+                        </p>
+                        <div class="page-actions recommend-toolbar">
+                            <label class="asof-label">
+                                asof
+                                <select id="asofSelect"></select>
+                            </label>
+                            <button type="button" class="btn" id="btnRefresh" data-perm="channel.analyze.tab.recommend">刷新</button>
+                            <button type="button" class="btn btn-primary" id="btnExportXlsx" data-perm="channel.analyze.tab.recommend.btn.export">导出 Excel</button>
+                            <button type="button" class="btn" id="btnExportPdf" data-perm="channel.analyze.tab.recommend.btn.export">导出 PDF</button>
+                        </div>
+
+                        <div class="horizon-tabs" role="tablist">
+                            <button type="button" class="horizon-tab active" data-horizon="daily" data-perm="channel.analyze.tab.recommend.daily">每日推荐</button>
+                            <button type="button" class="horizon-tab" data-horizon="weekly" data-perm="channel.analyze.tab.recommend.weekly">每周推荐</button>
+                            <button type="button" class="horizon-tab" data-horizon="monthly" data-perm="channel.analyze.tab.recommend.monthly">每月推荐</button>
+                        </div>
+
+                        <section class="summary-bar" id="summaryBar">
+                            <div class="summary-item"><span class="k">环境</span><span class="v" id="sumMarket">-</span></div>
+                            <div class="summary-item"><span class="k">可执行</span><span class="v" id="sumExec">-</span></div>
+                            <div class="summary-item"><span class="k">观察</span><span class="v" id="sumWatch">-</span></div>
+                            <div class="summary-item"><span class="k">plan_for</span><span class="v" id="sumPlan">-</span></div>
+                            <div class="summary-item wide"><span class="k">说明</span><span class="v" id="sumNote">-</span></div>
+                        </section>
+
+                        <section class="filters">
+                            <label>立场
+                                <select id="filterAction">
+                                    <option value="">全部</option>
+                                    <option value="buy">买入/可执行</option>
+                                    <option value="watch">观察</option>
+                                    <option value="avoid">回避</option>
+                                </select>
+                            </label>
+                            <label>角色
+                                <select id="filterRole">
+                                    <option value="">全部</option>
+                                    <option value="leader">龙头</option>
+                                    <option value="mid">中军</option>
+                                    <option value="normal">普通</option>
+                                </select>
+                            </label>
+                        </section>
+
+                        <section class="table-wrap">
+                            <table class="recommend-table" id="recommendTable">
+                                <thead>
+                                    <tr>
+                                        <th>代码</th>
+                                        <th>名称</th>
+                                        <th>立场</th>
+                                        <th>角色</th>
+                                        <th>主策略</th>
+                                        <th>共振</th>
+                                        <th>行业</th>
+                                        <th>推荐分</th>
+                                        <th>买区</th>
+                                        <th>止损</th>
+                                        <th>摘要</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recommendTbody">
+                                    <tr><td colspan="12" class="empty">加载中…</td></tr>
+                                </tbody>
+                            </table>
+                        </section>
+
+                        <section class="risk-section" id="riskSection" hidden>
+                            <h2>结构风险观察</h2>
+                            <ul id="riskList"></ul>
+                        </section>
                     </div>
                 </div>
 
@@ -1167,6 +1252,7 @@
     <script src="js/stock_trade_plan.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/trade_observe.js"></script>
+    <script src="js/recommend.js?v=20260913c"></script>
     <script src="js/analysis.js"></script>
 </body>
 

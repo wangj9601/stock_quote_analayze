@@ -120,6 +120,12 @@
     color: #374151;
 }
 
+/* 产品下线：投资策略 Tab 强制隐藏（勿被权限脚本重新显示） */
+.analysis-tab[data-tab="strategy"],
+#strategy.tab-panel {
+    display: none !important;
+}
+
 .tab-panel {
     display: none;
 }

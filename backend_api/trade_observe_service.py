@@ -25,6 +25,7 @@ SOURCE_RPE = "rpe"
 SOURCE_TRIPLE_VOLUME = "triple_volume"
 SOURCE_STOCK_ANALYSIS = "stock_analysis"
 SOURCE_GANN_TREND = "gann_trend"
+SOURCE_RECOMMEND = "recommend"
 
 VALID_SOURCES = frozenset(
     {
@@ -35,6 +36,7 @@ VALID_SOURCES = frozenset(
         SOURCE_TRIPLE_VOLUME,
         SOURCE_STOCK_ANALYSIS,
         SOURCE_GANN_TREND,
+        SOURCE_RECOMMEND,
     }
 )
 

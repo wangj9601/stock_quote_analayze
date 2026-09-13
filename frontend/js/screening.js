@@ -257,6 +257,11 @@ const ScreeningPage = {
             if (window.RpeScreening && typeof window.RpeScreening.switchSub === 'function') {
                 window.RpeScreening.switchSub('signals');
             }
+            if (window.RpeScreening && typeof window.RpeScreening.setScrollFabVisible === 'function') {
+                window.RpeScreening.setScrollFabVisible(true);
+            }
+        } else if (window.RpeScreening && typeof window.RpeScreening.setScrollFabVisible === 'function') {
+            window.RpeScreening.setScrollFabVisible(false);
         }
         if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
             this.switchVsbSubPanel('pick');

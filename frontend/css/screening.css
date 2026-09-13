@@ -2312,3 +2312,98 @@ a.gms-stock-code-link:hover {
     cursor: pointer;
 }
 
+/* —— 比价效应：顶/底滚动 FAB（双圆形，业界 BackTop 风格） —— */
+.rpe-scroll-fab {
+    position: fixed;
+    right: 20px;
+    bottom: 28px;
+    z-index: 920;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.rpe-scroll-fab.is-visible.is-scrollable {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: none; /* 子按钮自行接管 */
+}
+.rpe-scroll-fab__btn {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 50%;
+    background: #fff;
+    color: #475569;
+    box-shadow:
+        0 1px 2px rgba(15, 23, 42, 0.06),
+        0 6px 16px rgba(15, 23, 42, 0.1);
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(6px) scale(0.92);
+    transition:
+        opacity 0.2s ease,
+        visibility 0.2s ease,
+        transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+        background 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
+}
+.rpe-scroll-fab__btn.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+.rpe-scroll-fab__btn:hover:not(:disabled) {
+    color: #1d4ed8;
+    border-color: rgba(37, 99, 235, 0.28);
+    background: #f8fafc;
+    box-shadow:
+        0 2px 4px rgba(37, 99, 235, 0.08),
+        0 8px 20px rgba(15, 23, 42, 0.12);
+    transform: translateY(-1px) scale(1);
+}
+.rpe-scroll-fab__btn:active:not(:disabled) {
+    transform: translateY(0) scale(0.96);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+.rpe-scroll-fab__btn:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+}
+.rpe-scroll-fab__btn:disabled {
+    cursor: default;
+}
+.rpe-scroll-fab__svg {
+    display: block;
+    flex-shrink: 0;
+}
+@media (max-width: 640px) {
+    .rpe-scroll-fab {
+        right: 12px;
+        bottom: 18px;
+        gap: 8px;
+    }
+    .rpe-scroll-fab__btn {
+        width: 36px;
+        height: 36px;
+    }
+    .rpe-scroll-fab__svg {
+        width: 18px;
+        height: 18px;
+    }
+}
+

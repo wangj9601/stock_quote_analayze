@@ -104,7 +104,13 @@ const PermissionEngine = {
     for (const selector of tabSelectors) {
       const tabs = Array.from(document.querySelectorAll(selector));
       if (!tabs.length) continue;
-      const visible = tabs.filter(t => this.has(t.getAttribute('data-perm')));
+      const visible = tabs.filter(t => {
+        if (t.hasAttribute('hidden') || t.getAttribute('aria-hidden') === 'true') return false;
+        if (t.dataset.permHiddenByOther) return false;
+        if (t.style && t.style.display === 'none') return false;
+        const perm = t.getAttribute('data-perm');
+        return !perm || this.has(perm);
+      });
       if (!visible.length) continue;
       const active = tabs.find(t => t.classList.contains('active'));
       if (active && this.has(active.getAttribute('data-perm'))) continue;
