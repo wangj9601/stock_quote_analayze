@@ -23,7 +23,7 @@
 
   function showTableMessage(msg) {
     const tbody = document.getElementById("recommendTbody");
-    if (tbody) tbody.innerHTML = `<tr><td colspan="12" class="empty">${msg}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="13" class="empty">${msg}</td></tr>`;
   }
 
   function authErrorMessage(status) {
@@ -45,7 +45,7 @@
     lines.push({
       k: "质量",
       v: d.quality != null ? d.quality : "-",
-      tip: d.quality_note || "主策略得分 min(分,100)×0.3",
+      tip: d.quality_note || "归一化质量 min(分,100)×0.3",
     });
     lines.push({
       k: "立场",
@@ -55,8 +55,36 @@
     lines.push({
       k: "角色",
       v: d.role_bonus != null ? d.role_bonus : "-",
-      tip: d.role_note || "龙头/中军小加分；板弱不加分",
+      tip: d.role_note || "龙头/中军小加分；板弱/E地板不加分",
     });
+    if (d.theme_bonus != null && Number(d.theme_bonus) !== 0) {
+      lines.push({
+        k: "主题",
+        v: d.theme_bonus,
+        tip: d.theme_note || "月/周主题对齐加成",
+      });
+    }
+    if (d.s_base != null) {
+      lines.push({
+        k: "S_base",
+        v: d.s_base,
+        tip: "共振+质量+立场+角色(+主题)",
+      });
+    }
+    if (d.s_sr != null) {
+      lines.push({
+        k: "S_sr",
+        v: d.s_sr,
+        tip: d.s_sr_note || "筹码峰价位贴合 0～100",
+      });
+    }
+    if (d.e_slope != null) {
+      lines.push({
+        k: "E斜率",
+        v: d.e_slope,
+        tip: d.e_slope_note || "大盘/板斜率环境乘数",
+      });
+    }
     if (d.note) lines.push({ k: "备注", v: "", tip: d.note });
     return lines;
   }
@@ -194,15 +222,26 @@
     const summary = b.summary || {};
     const counts = summary.counts || {};
     const market = (summary.market && summary.market.stance) || b.market_stance || "-";
+    const regimeObj = summary.regime || {};
+    const regime =
+      (typeof regimeObj === "object" ? regimeObj.regime : regimeObj) ||
+      b.regime ||
+      "-";
     const el = (id, v) => {
       const n = document.getElementById(id);
       if (n) n.textContent = v == null ? "-" : String(v);
     };
     el("sumMarket", market);
+    el("sumRegime", regime);
     el("sumExec", counts.executable != null ? counts.executable : state.items.filter((x) => x.action === "buy").length);
     el("sumWatch", counts.watch != null ? counts.watch : state.items.filter((x) => x.action !== "buy").length);
     el("sumPlan", b.plan_for || "-");
-    el("sumNote", summary.disclaimer || summary.publish_window || "-");
+    const windowBits = [];
+    if (summary.publish_window) windowBits.push(summary.publish_window);
+    if (b.late_run || summary.late_run) windowBits.push("尾盘确认");
+    if (summary.config && summary.config.defense_mode) windowBits.push("弱势压缩Top");
+    el("sumWindow", windowBits.join(" · ") || "-");
+    el("sumNote", summary.disclaimer || "-");
   }
 
   function renderTable() {
@@ -210,7 +249,7 @@
     if (!tbody) return;
     const rows = filteredItems();
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="12" class="empty">无匹配条目</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="13" class="empty">无匹配条目</td></tr>`;
       return;
     }
     tbody.innerHTML = rows
@@ -219,6 +258,7 @@
         const name = it.name || "";
         const strategies = (it.strategies || []).join(",") || "-";
         const industry = it.industry || it.board_name || it.board_code || "-";
+        const regime = it.regime || ((it.evidence || {}).regime) || "-";
         return `<tr>
           <td class="code-cell"><span class="recommend-code">${code}</span></td>
           <td>${name || "-"}</td>
@@ -226,6 +266,7 @@
           <td>${roleTag(it.role, it.role_label)}</td>
           <td>${it.primary_strategy || "-"}</td>
           <td>${strategies}</td>
+          <td title="场景">${regime}</td>
           <td>${industry}</td>
           <td class="score-cell">${renderScoreCell(it)}</td>
           <td>${zoneText(it.buy_zone)}</td>

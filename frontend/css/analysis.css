@@ -134,7 +134,190 @@
     display: block;
 }
 
-/* ÃÂ¥ÃÂ¸ÃÂÃÂ¥ÃÂÃÂºÃÂ¥ÃÂÃÂÃÂ¦ÃÂÃÂÃÂ¦ÃÂ ÃÂ·ÃÂ¥ÃÂ¼ÃÂ */
+/* 市场分析工作台 */
+.ma-workbench {
+    background: #fff;
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.ma-desc {
+    color: #64748b;
+    font-size: 0.9rem;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.ma-section {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem 1.15rem 1.15rem;
+    background: #fff;
+}
+
+.ma-section-header {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 0.85rem;
+}
+
+.ma-section-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+}
+
+.ma-section-title-row h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.ma-meta {
+    color: #64748b;
+    font-size: 0.82rem;
+}
+
+.ma-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem 1rem;
+    align-items: center;
+}
+
+.ma-kind,
+.ma-period,
+.ma-window,
+.ma-view {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.75rem;
+}
+
+.ma-kind label,
+.ma-period label {
+    font-size: 0.88rem;
+    cursor: pointer;
+    color: #374151;
+}
+
+.ma-toolbar-label {
+    font-size: 0.85rem;
+    color: #64748b;
+}
+
+.ma-select {
+    min-width: 120px;
+    padding: 0.35rem 0.55rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 0.88rem;
+    background: #fff;
+}
+
+.ma-view-btn.active {
+    background: #1e40af;
+    border-color: #1e40af;
+    color: #fff;
+}
+
+.ma-body {
+    position: relative;
+}
+
+.ma-chart {
+    width: 100%;
+    height: 480px;
+    background: #f8fafc;
+    border-radius: 6px;
+}
+
+.ma-chart[hidden],
+.ma-table-wrap[hidden] {
+    display: none !important;
+}
+
+.ma-table-wrap {
+    overflow-x: auto;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    max-height: 520px;
+    overflow-y: auto;
+}
+
+.ma-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.ma-table th,
+.ma-table td {
+    padding: 0.5rem 0.65rem;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.ma-table th {
+    position: sticky;
+    top: 0;
+    background: #f8fafc;
+    color: #475569;
+    font-weight: 600;
+    z-index: 1;
+}
+
+.ma-num {
+    font-variant-numeric: tabular-nums;
+}
+
+.ma-pos {
+    color: #dc2626;
+    font-weight: 600;
+}
+
+.ma-neg {
+    color: #16a34a;
+    font-weight: 600;
+}
+
+.ma-empty {
+    color: #94a3b8;
+    text-align: center;
+    padding: 1.5rem !important;
+}
+
+.ma-status {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    min-height: 1.2em;
+}
+
+.ma-status--error {
+    color: #b91c1c;
+}
+
+a.ma-code-link {
+    color: #1d4ed8;
+    text-decoration: none;
+}
+
+a.ma-code-link:hover {
+    text-decoration: underline;
+}
+
+/* 旧市场分析网格（保留兼容） */
 .market-analysis-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -687,6 +870,14 @@
     
     .market-analysis-grid {
         grid-template-columns: 1fr;
+    }
+
+    .ma-chart {
+        height: 360px;
+    }
+
+    .ma-toolbar .btn {
+        font-size: 0.82rem;
     }
     
     .tools-grid {

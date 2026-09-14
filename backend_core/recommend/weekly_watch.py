@@ -155,6 +155,12 @@ def generate_weekly_watch(
 
     monthly = get_brief(db, horizon="monthly", asof_date=None)
     monthly_asof = monthly.get("asof_date") if monthly else None
+    monthly_theme_boards: set = set()
+    if monthly and str(monthly_asof or "") <= asof:
+        for board in (monthly.get("summary") or {}).get("theme_boards") or []:
+            bc0 = str(board.get("board_code") or "").strip()
+            if bc0:
+                monthly_theme_boards.add(bc0)
 
     watch_items: List[Dict[str, Any]] = []
     board_payloads: List[Dict[str, Any]] = []
@@ -205,10 +211,13 @@ def generate_weekly_watch(
                             20.0
                             + (10.0 if code_n in hit_codes else 0.0)
                             + (5.0 if role_name == "mid" else 3.0)
+                            + (4.0 if bc in monthly_theme_boards else 0.0)
                         ),
-                        "summary": "周观察池：主线板角色优先",
+                        "summary": "周观察池：主线板角色优先"
+                        + ("；月主题板加权" if bc in monthly_theme_boards else ""),
                         "trigger_hint": "日线策略买点确认且板环境未否决时可升级执行",
                         "degrade_hint": "周一跳空/板环境翻转则降级，不追高",
+                        "theme_align_monthly": bc in monthly_theme_boards,
                     }
                 )
 
@@ -224,14 +233,27 @@ def generate_weekly_watch(
     ]
 
     plan_for = _next_week_label(asof)
+    monthly_overlap = sorted(
+        {
+            str(b.get("board_code") or "")
+            for b in board_payloads
+            if str(b.get("board_code") or "") in monthly_theme_boards
+        }
+    )
     summary = {
         "main_boards": board_payloads,
         "plan_for": plan_for,
         "monthly_asof_ref": monthly_asof,
+        "monthly_theme_boards": sorted(monthly_theme_boards),
+        "monthly_theme_overlap": monthly_overlap,
         "publish_window": "周五收盘后～周一开盘前（本周最后交易日 EOD）",
         "degrade_clause": "周一开盘若跳空或板环境翻转则降级执行",
         "disclaimer": "规则合成参考，非投资建议",
-        "counts": {"main_boards": len(board_payloads), "watch_pool": len(items)},
+        "counts": {
+            "main_boards": len(board_payloads),
+            "watch_pool": len(items),
+            "monthly_theme_overlap": len(monthly_overlap),
+        },
     }
     if persist:
         return upsert_brief(

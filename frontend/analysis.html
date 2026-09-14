@@ -9,6 +9,8 @@
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/analysis.css">
     <link rel="stylesheet" href="css/recommend.css?v=20260913d">
+    <script src="js/echarts.min.js"
+        onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
     <script>
         (function () {
             try {
@@ -387,9 +389,9 @@
                 <!-- 策略推荐（日/周/月简报） -->
                 <div class="tab-panel" id="recommend">
                     <div class="recommend-workbench">
-                        <p class="recommend-desc">环境 → 板块 → 角色 → 策略买点；规则合成参考，非投资建议</p>
-                        <p class="recommend-score-formula" title="推荐分 = 共振 + 质量 + 立场 + 角色">
-                            推荐分 = 策略共振(命中数×10) + 主策略质量(min(分,100)×0.3) + 立场(买+15/观+5/避+0) + 角色(龙头+3/中军+2，板弱不加)
+                        <p class="recommend-desc">环境 → 场景(regime) → 板块 → 角色 → 五策略买点(+CSB) → 筹码峰价位；规则合成参考，非投资建议</p>
+                        <p class="recommend-score-formula" title="S_total = max(0, (0.7*S_base + 0.3*S_sr) * E_slope)">
+                            S_total = max(0, (0.7·S_base + 0.3·S_sr)·E_slope)；S_base=共振+质量+立场+角色(+主题)
                         </p>
                         <div class="page-actions recommend-toolbar">
                             <label class="asof-label">
@@ -409,9 +411,11 @@
 
                         <section class="summary-bar" id="summaryBar">
                             <div class="summary-item"><span class="k">环境</span><span class="v" id="sumMarket">-</span></div>
+                            <div class="summary-item"><span class="k">场景</span><span class="v" id="sumRegime">-</span></div>
                             <div class="summary-item"><span class="k">可执行</span><span class="v" id="sumExec">-</span></div>
                             <div class="summary-item"><span class="k">观察</span><span class="v" id="sumWatch">-</span></div>
                             <div class="summary-item"><span class="k">plan_for</span><span class="v" id="sumPlan">-</span></div>
+                            <div class="summary-item"><span class="k">发布窗</span><span class="v" id="sumWindow">-</span></div>
                             <div class="summary-item wide"><span class="k">说明</span><span class="v" id="sumNote">-</span></div>
                         </section>
 
@@ -444,6 +448,7 @@
                                         <th>角色</th>
                                         <th>主策略</th>
                                         <th>共振</th>
+                                        <th>场景</th>
                                         <th>行业</th>
                                         <th>推荐分</th>
                                         <th>买区</th>
@@ -453,7 +458,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="recommendTbody">
-                                    <tr><td colspan="12" class="empty">加载中…</td></tr>
+                                    <tr><td colspan="13" class="empty">加载中…</td></tr>
                                 </tbody>
                             </table>
                         </section>
@@ -465,115 +470,161 @@
                     </div>
                 </div>
 
-                <!-- 市场分析 -->
+                <!-- 市场分析：个股/板块资金流向 + 板块斜率趋势 -->
                 <div class="tab-panel" id="market-analysis">
-                    <div class="market-analysis-grid">
-                        <div class="analysis-card">
-                            <h3>🌡️ 市场温度</h3>
-                            <div class="market-temperature">
-                                <div class="temperature-meter">
-                                    <div class="meter-bg">
-                                        <div class="meter-fill" style="width: 72%;"></div>
-                                    </div>
-                                    <div class="temperature-value">72°C 偏热</div>
-                                </div>
-                                <div class="temperature-desc">
-                                    <p>当前市场情绪较为乐观，成交活跃度高，建议控制仓位风险</p>
-                                    <div class="temperature-details"
-                                        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
-                                        <h4
-                                            style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                            市场特征</h4>
-                                        <ul
-                                            style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
-                                            <li>涨停板数量: 45只</li>
-                                            <li>跌停板数量: 12只</li>
-                                            <li>成交量比昨日: +18%</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="ma-workbench" data-perm="channel.analyze.tab.market">
+                        <p class="ma-desc">汇总个股与板块资金净流入排名、板块多窗口斜率趋势；支持图形 / 列表切换，并可导出当前区块数据为 Excel。</p>
 
-                        <div class="analysis-card">
-                            <h3>💰 资金流向</h3>
-                            <div class="fund-flow">
-                                <div class="flow-chart">
-                                    <canvas id="fundFlowChart" width="300" height="200"></canvas>
+                        <!-- 个股资金流向 -->
+                        <section class="ma-section" id="maStockFlowSection" data-ma-block="stock">
+                            <div class="ma-section-header">
+                                <div class="ma-section-title-row">
+                                    <h3>个股资金流向</h3>
+                                    <span class="ma-meta" id="maStockFlowMeta"></span>
                                 </div>
-                                <div class="flow-summary">
-                                    <div class="flow-item">
-                                        <span class="label">主力资金</span>
-                                        <span class="value positive">+156.8亿</span>
+                                <div class="ma-toolbar">
+                                    <div class="ma-period" role="group" aria-label="统计周期">
+                                        <label><input type="radio" name="maStockPeriod" value="day" checked> 日</label>
+                                        <label><input type="radio" name="maStockPeriod" value="week"> 周</label>
+                                        <label><input type="radio" name="maStockPeriod" value="month"> 月</label>
                                     </div>
-                                    <div class="flow-item">
-                                        <span class="label">散户资金</span>
-                                        <span class="value negative">-89.2亿</span>
+                                    <div class="ma-view" role="group" aria-label="展示方式">
+                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="chart" data-ma-block="stock">图形</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="list" data-ma-block="stock">列表</button>
                                     </div>
-                                    <div class="flow-analysis"
-                                        style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
-                                        <h4
-                                            style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                            资金分析</h4>
-                                        <p style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0;">
-                                            主力资金持续净流入，表明机构对后市谨慎乐观，建议关注资金持续流入的优质标的。</p>
-                                    </div>
+                                    <button type="button" class="btn btn-secondary" id="maStockRefreshBtn" title="重新加载">刷新</button>
+                                    <button type="button" class="btn btn-secondary" id="maStockExportBtn" title="导出当前列表为 Excel">导出 Excel</button>
                                 </div>
                             </div>
-                        </div>
+                            <div class="ma-body">
+                                <div class="ma-chart" id="maStockFlowChart"></div>
+                                <div class="ma-table-wrap" id="maStockFlowTableWrap" hidden>
+                                    <table class="ma-table" id="maStockFlowTable">
+                                        <thead>
+                                            <tr>
+                                                <th>排名</th>
+                                                <th>代码</th>
+                                                <th>名称</th>
+                                                <th>净流入(亿)</th>
+                                                <th>流入(亿)</th>
+                                                <th>流出(亿)</th>
+                                                <th>覆盖交易日</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="maStockFlowTbody">
+                                            <tr><td colspan="7" class="ma-empty">加载中…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="ma-status" id="maStockFlowStatus"></div>
+                            </div>
+                        </section>
 
-                        <div class="analysis-card">
-                            <h3>📈 趋势研判</h3>
-                            <div class="trend-analysis">
-                                <div class="trend-indicators">
-                                    <div class="trend-item">
-                                        <span class="trend-label">短期趋势</span>
-                                        <span class="trend-signal bullish">看多</span>
-                                    </div>
-                                    <div class="trend-item">
-                                        <span class="trend-label">中期趋势</span>
-                                        <span class="trend-signal neutral">震荡</span>
-                                    </div>
-                                    <div class="trend-item">
-                                        <span class="trend-label">长期趋势</span>
-                                        <span class="trend-signal bullish">看多</span>
-                                    </div>
+                        <!-- 板块资金流向 -->
+                        <section class="ma-section" id="maBoardFlowSection" data-ma-block="board">
+                            <div class="ma-section-header">
+                                <div class="ma-section-title-row">
+                                    <h3>板块资金流向</h3>
+                                    <span class="ma-meta" id="maBoardFlowMeta"></span>
                                 </div>
-                                <div class="trend-summary">
-                                    <p>整体趋势向好，建议逢低布局优质标的</p>
+                                <div class="ma-toolbar">
+                                    <div class="ma-kind" role="group" aria-label="板块类型">
+                                        <label><input type="radio" name="maBoardKind" value="industry" checked> 行业</label>
+                                        <label><input type="radio" name="maBoardKind" value="concept"> 概念</label>
+                                    </div>
+                                    <div class="ma-period" role="group" aria-label="统计周期">
+                                        <label><input type="radio" name="maBoardPeriod" value="day" checked> 日</label>
+                                        <label><input type="radio" name="maBoardPeriod" value="week"> 周</label>
+                                        <label><input type="radio" name="maBoardPeriod" value="month"> 月</label>
+                                    </div>
+                                    <div class="ma-view" role="group" aria-label="展示方式">
+                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="chart" data-ma-block="board">图形</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="list" data-ma-block="board">列表</button>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary" id="maBoardRefreshBtn" title="重新加载">刷新</button>
+                                    <button type="button" class="btn btn-secondary" id="maBoardExportBtn" title="导出当前列表为 Excel">导出 Excel</button>
                                 </div>
                             </div>
-                        </div>
+                            <div class="ma-body">
+                                <div class="ma-chart" id="maBoardFlowChart"></div>
+                                <div class="ma-table-wrap" id="maBoardFlowTableWrap" hidden>
+                                    <table class="ma-table" id="maBoardFlowTable">
+                                        <thead>
+                                            <tr>
+                                                <th>排名</th>
+                                                <th>代码</th>
+                                                <th>名称</th>
+                                                <th>主力净流入(亿)</th>
+                                                <th>流入(亿)</th>
+                                                <th>流出(亿)</th>
+                                                <th>涨跌幅%</th>
+                                                <th>覆盖交易日</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="maBoardFlowTbody">
+                                            <tr><td colspan="8" class="ma-empty">加载中…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="ma-status" id="maBoardFlowStatus"></div>
+                            </div>
+                        </section>
 
-                        <div class="analysis-card">
-                            <h3>⚠️ 风险提示</h3>
-                            <div class="risk-alerts">
-                                <div class="risk-item high">
-                                    <span class="risk-level">高风险</span>
-                                    <span class="risk-desc">创业板估值偏高，注意回调风险</span>
+                        <!-- 板块斜率趋势 -->
+                        <section class="ma-section" id="maSlopeSection" data-ma-block="slope">
+                            <div class="ma-section-header">
+                                <div class="ma-section-title-row">
+                                    <h3>板块斜率趋势</h3>
+                                    <span class="ma-meta" id="maSlopeMeta"></span>
                                 </div>
-                                <div class="risk-item medium">
-                                    <span class="risk-level">中风险</span>
-                                    <span class="risk-desc">外围市场波动，关注政策面变化</span>
-                                </div>
-                                <div class="risk-item low">
-                                    <span class="risk-level">低风险</span>
-                                    <span class="risk-desc">蓝筹股估值合理，适合配置</span>
-                                </div>
-                                <div class="risk-summary"
-                                    style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
-                                    <h4
-                                        style="font-size: 0.9rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">
-                                        风险控制建议</h4>
-                                    <ul
-                                        style="color: #6b7280; font-size: 0.85rem; line-height: 1.4; margin: 0; padding-left: 1rem;">
-                                        <li>合理控制仓位，避免重仓单一标的</li>
-                                        <li>关注市场流动性变化</li>
-                                        <li>设置止损止盈位置</li>
-                                    </ul>
+                                <div class="ma-toolbar">
+                                    <div class="ma-kind" role="group" aria-label="板块类型">
+                                        <label><input type="radio" name="maSlopeKind" value="industry" checked> 行业</label>
+                                        <label><input type="radio" name="maSlopeKind" value="concept"> 概念</label>
+                                    </div>
+                                    <div class="ma-window" role="group" aria-label="斜率窗口">
+                                        <span class="ma-toolbar-label">窗口</span>
+                                        <select id="maSlopeWindow" class="ma-select" title="斜率回归窗口（交易日）">
+                                            <option value="5">5 日</option>
+                                            <option value="10">10 日</option>
+                                            <option value="20">20 日</option>
+                                            <option value="60" selected>60 日（中线）</option>
+                                            <option value="120">120 日</option>
+                                        </select>
+                                    </div>
+                                    <div class="ma-view" role="group" aria-label="展示方式">
+                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="chart" data-ma-block="slope">图形</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="list" data-ma-block="slope">列表</button>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary" id="maSlopeRefreshBtn" title="重新加载">刷新</button>
+                                    <button type="button" class="btn btn-secondary" id="maSlopeExportBtn" title="导出当前列表为 Excel">导出 Excel</button>
                                 </div>
                             </div>
-                        </div>
+                            <div class="ma-body">
+                                <div class="ma-chart" id="maSlopeChart"></div>
+                                <div class="ma-table-wrap" id="maSlopeTableWrap" hidden>
+                                    <table class="ma-table" id="maSlopeTable">
+                                        <thead>
+                                            <tr>
+                                                <th>排名</th>
+                                                <th>代码</th>
+                                                <th>名称</th>
+                                                <th>斜率</th>
+                                                <th>R²</th>
+                                                <th>环境</th>
+                                                <th>窗口</th>
+                                                <th>截至日</th>
+                                                <th>来源</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="maSlopeTbody">
+                                            <tr><td colspan="9" class="ma-empty">加载中…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="ma-status" id="maSlopeStatus"></div>
+                            </div>
+                        </section>
                     </div>
                 </div>
 
@@ -1252,8 +1303,9 @@
     <script src="js/stock_trade_plan.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/trade_observe.js"></script>
-    <script src="js/recommend.js?v=20260913d"></script>
-    <script src="js/analysis.js?v=20260913d"></script>
+    <script src="js/recommend.js?v=20260914a"></script>
+    <script src="js/market_analysis.js?v=20260914a"></script>
+    <script src="js/analysis.js?v=20260914a"></script>
 </body>
 
 </html>

@@ -32,16 +32,22 @@
     </el-form>
 
     <el-row :gutter="12" class="cards">
-      <el-col :span="6">
+      <el-col :span="4">
         <el-card shadow="never"><div class="metric">{{ brief?.market_stance || '-' }}</div><div class="label">大盘立场</div></el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
+        <el-card shadow="never"><div class="metric">{{ regimeText }}</div><div class="label">场景 regime</div></el-card>
+      </el-col>
+      <el-col :span="4">
+        <el-card shadow="never"><div class="metric">{{ lateRunText }}</div><div class="label">尾盘确认</div></el-card>
+      </el-col>
+      <el-col :span="4">
         <el-card shadow="never"><div class="metric">{{ execCount }}</div><div class="label">可执行</div></el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
         <el-card shadow="never"><div class="metric">{{ watchCount }}</div><div class="label">观察</div></el-card>
       </el-col>
-      <el-col :span="6">
+      <el-col :span="4">
         <el-card shadow="never"><div class="metric">{{ kpiText }}</div><div class="label">板上 HHI / 触达率</div></el-card>
       </el-col>
     </el-row>
@@ -61,6 +67,9 @@
       <el-table-column prop="stance" label="立场" width="90" />
       <el-table-column prop="role_label" label="角色" width="80" />
       <el-table-column prop="primary_strategy" label="主策略" width="90" />
+      <el-table-column label="场景" width="80">
+        <template #default="{ row }">{{ row.regime || row.evidence?.regime || '-' }}</template>
+      </el-table-column>
       <el-table-column label="共振" width="120">
         <template #default="{ row }">{{ (row.strategies || []).join(',') }}</template>
       </el-table-column>
@@ -83,6 +92,7 @@
         </el-form-item>
         <el-form-item label="late_run">
           <el-switch v-model="rerunForm.late_run" />
+          <span class="hint">开启后走尾盘确认（长上影/假突破降级）</span>
         </el-form-item>
         <el-form-item label="强制周报">
           <el-switch v-model="rerunForm.force_weekly" />
@@ -124,6 +134,19 @@ const rerunForm = reactive({
 const items = computed(() => (brief.value?.items as any[]) || [])
 const execCount = computed(() => items.value.filter((x) => x.action === 'buy').length)
 const watchCount = computed(() => items.value.filter((x) => x.action !== 'buy').length)
+const regimeText = computed(() => {
+  const r = brief.value?.summary?.regime
+  if (r && typeof r === 'object') return r.regime || '-'
+  return r || brief.value?.kpi?.regime || '-'
+})
+const lateRunText = computed(() => {
+  const late = brief.value?.late_run ?? brief.value?.summary?.late_run
+  if (late) {
+    const n = brief.value?.summary?.late_degraded ?? brief.value?.kpi?.late_degraded
+    return n != null ? `是(${n}降)` : '是'
+  }
+  return '否'
+})
 const kpiText = computed(() => {
   const hhi = brief.value?.kpi?.board_hhi
   const tr = touchRate.value
@@ -144,6 +167,12 @@ function scoreDetailText(row: any): string {
   if (d.quality != null) parts.push(`质量 ${d.quality}（${d.quality_note || 'min(分,100)×0.3'}）`)
   if (d.action_bonus != null) parts.push(`立场 ${d.action_bonus}（${d.action_note || ''}）`)
   if (d.role_bonus != null) parts.push(`角色 ${d.role_bonus}（${d.role_note || ''}）`)
+  if (d.theme_bonus != null && Number(d.theme_bonus) !== 0) {
+    parts.push(`主题 ${d.theme_bonus}（${d.theme_note || ''}）`)
+  }
+  if (d.s_base != null) parts.push(`S_base ${d.s_base}`)
+  if (d.s_sr != null) parts.push(`S_sr ${d.s_sr}（${d.s_sr_note || ''}）`)
+  if (d.e_slope != null) parts.push(`E斜率 ${d.e_slope}（${d.e_slope_note || ''}）`)
   if (d.note) parts.push(d.note)
   return parts.join('；')
 }
@@ -328,5 +357,10 @@ onMounted(async () => {
   color: #6b7280;
   line-height: 1.35;
   white-space: normal;
+}
+.hint {
+  margin-left: 8px;
+  color: #888;
+  font-size: 12px;
 }
 </style>

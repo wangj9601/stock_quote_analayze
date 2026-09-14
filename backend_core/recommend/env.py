@@ -12,6 +12,10 @@ from sqlalchemy.orm import Session
 from backend_core.recommend.config import (
     BOARD_SLOPE_VETO_5,
     BOARD_SLOPE_VETO_10,
+    E_SLOPE_FLOOR,
+    E_SLOPE_NEG_MAX,
+    E_SLOPE_NEG_MIN,
+    E_SLOPE_POS_CAP,
     MARKET_INDEX_CODE,
 )
 
@@ -123,6 +127,114 @@ def evaluate_market_stance(db: Session, asof_date: str) -> Dict[str, Any]:
         "reason": reason,
         "close": round(last, 4),
         "ma20": round(ma20, 4),
+    }
+
+
+def _linear_slope(closes_asc: List[float]) -> Optional[float]:
+    n = len(closes_asc)
+    if n < 5:
+        return None
+    xs = list(range(n))
+    mean_x = (n - 1) / 2.0
+    mean_y = sum(closes_asc) / n
+    num = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, closes_asc))
+    den = sum((x - mean_x) ** 2 for x in xs)
+    if den <= 0 or mean_y == 0:
+        return None
+    b = num / den
+    return b / abs(mean_y)
+
+
+def slope_to_e_multiplier(slope: Optional[float]) -> float:
+    """负斜率非对称映射到 [NEG_MIN, NEG_MAX]；非负接近 POS_CAP。"""
+    if slope is None:
+        return 1.0
+    try:
+        s = float(slope)
+    except (TypeError, ValueError):
+        return 1.0
+    if s >= 0:
+        e = 0.85 + min(s / 0.002, 1.0) * (float(E_SLOPE_POS_CAP) - 0.85)
+        return round(min(float(E_SLOPE_POS_CAP), max(0.85, e)), 4)
+    t = min(1.0, abs(s) / 0.002)
+    e = float(E_SLOPE_NEG_MAX) - t * (float(E_SLOPE_NEG_MAX) - float(E_SLOPE_NEG_MIN))
+    return round(max(float(E_SLOPE_NEG_MIN), min(float(E_SLOPE_NEG_MAX), e)), 4)
+
+
+def compute_index_slope_20(db: Session, asof_date: str) -> Dict[str, Any]:
+    """大盘近 20 日相对线性回归斜率。"""
+    code = MARKET_INDEX_CODE
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT trade_date::text, close
+                FROM index_historical_quotes
+                WHERE (code = :code OR ts_code LIKE :like_code)
+                  AND trade_date <= CAST(:asof AS date)
+                ORDER BY trade_date DESC
+                LIMIT 25
+                """
+            ),
+            {"code": code, "like_code": f"{code}%", "asof": asof_date},
+        ).fetchall()
+        if not rows:
+            rows = db.execute(
+                text(
+                    """
+                    SELECT date::text, close
+                    FROM historical_quotes
+                    WHERE code = :code AND date <= :asof
+                    ORDER BY date DESC
+                    LIMIT 25
+                    """
+                ),
+                {"code": code, "asof": asof_date},
+            ).fetchall()
+    except Exception as e:
+        logger.debug("compute_index_slope_20 failed: %s", e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return {"slope_20": None, "index_code": code, "e_slope": 1.0, "reason": str(e)}
+
+    closes: List[float] = []
+    for r in rows:
+        try:
+            closes.append(float(r[1]))
+        except (TypeError, ValueError):
+            continue
+    closes_asc = list(reversed(closes))[-20:]
+    slope = _linear_slope(closes_asc)
+    e = slope_to_e_multiplier(slope)
+    return {
+        "slope_20": round(slope, 8) if slope is not None else None,
+        "index_code": code,
+        "e_slope": e,
+        "reason": "ok" if slope is not None else "insufficient",
+    }
+
+
+def combine_e_slope(
+    market_e: float,
+    board_slope_20: Optional[float],
+) -> Dict[str, Any]:
+    """E = min(E_market, E_board)，偏防守。"""
+    board_e = slope_to_e_multiplier(board_slope_20)
+    try:
+        me = float(market_e)
+    except (TypeError, ValueError):
+        me = 1.0
+    e = min(me, board_e)
+    floor_hit = e < float(E_SLOPE_FLOOR)
+    return {
+        "e_slope": round(e, 4),
+        "e_market": round(me, 4),
+        "e_board": round(board_e, 4),
+        "board_slope_20": board_slope_20,
+        "floor_hit": floor_hit,
+        "floor": float(E_SLOPE_FLOOR),
     }
 
 

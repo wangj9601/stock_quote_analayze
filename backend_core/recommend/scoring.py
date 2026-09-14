@@ -7,10 +7,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from backend_core.recommend.config import (
     ANTI_CHASE_ABOVE_ZONE_PCT,
     ANTI_CHASE_N_DAY_GAIN_PCT,
+    FORMULA_VERSION,
     MAX_PER_BOARD_EXECUTABLE,
     MAX_THEME_BOARDS_EXECUTABLE,
     ROLE_BONUS_LEADER,
     ROLE_BONUS_MID,
+    SCORE_W_BASE,
+    SCORE_W_SR,
+    THEME_ALIGN_BONUS,
 )
 
 
@@ -53,22 +57,28 @@ def compute_recommend_score(
     advice_action: str,
     role: Optional[str],
     board_weak: bool,
+    e_slope: float = 1.0,
+    s_sr: float = 0.0,
+    theme_align: bool = False,
+    e_slope_floor_hit: bool = False,
 ) -> Tuple[float, Dict[str, Any]]:
     """返回 (总分, 明细)。
 
-    明细字段便于前台展示得分构成，避免黑箱。
+    S_base = resonance + quality + action + role (+ theme)
+    S_total = max(0, (w_base * S_base + w_sr * S_sr) * E_slope)
     """
     n_strat = len(strategies or [])
     resonance = float(n_strat) * 10.0
     quality = 0.0
     quality_raw = None
+    quality_norm = None
     if best_score is not None:
         try:
-            quality_raw = float(best_score)
-            quality = min(quality_raw, 100.0) * 0.3
+            quality_norm = float(best_score)
+            quality_raw = quality_norm
+            quality = min(quality_norm, 100.0) * 0.3
         except (TypeError, ValueError):
             quality = 0.0
-            quality_raw = None
     if advice_action == "buy":
         action_bonus = 15.0
         action_note = "立场买入 +15"
@@ -85,22 +95,39 @@ def compute_recommend_score(
     }.get(role or "", "普通 +0")
     role_applied = rb
     role_zeroed = False
-    if board_weak:
+    if board_weak or e_slope_floor_hit:
         if rb:
             role_zeroed = True
         role_applied = 0.0
-        role_note = f"{role_note}（板弱不加分）"
+        role_note = f"{role_note}（板弱/E地板不加分）"
 
-    total = round(resonance + quality + action_bonus + role_applied, 2)
+    theme_bonus = float(THEME_ALIGN_BONUS) if theme_align else 0.0
+    theme_note = f"主题对齐 +{THEME_ALIGN_BONUS:g}" if theme_align else "主题对齐 +0"
+
+    s_base = round(resonance + quality + action_bonus + role_applied + theme_bonus, 2)
+    try:
+        e = float(e_slope)
+    except (TypeError, ValueError):
+        e = 1.0
+    try:
+        sr = max(0.0, min(100.0, float(s_sr or 0.0)))
+    except (TypeError, ValueError):
+        sr = 0.0
+    w_base = float(SCORE_W_BASE)
+    w_sr = float(SCORE_W_SR)
+    blended = w_base * s_base + w_sr * sr
+    total = round(max(0.0, blended * e), 2)
+
     detail = {
         "resonance": round(resonance, 2),
         "resonance_note": f"策略共振 {n_strat}×10",
         "strategies": list(strategies or []),
         "quality": round(quality, 2),
         "quality_raw": quality_raw,
+        "quality_norm": quality_norm,
         "quality_note": (
-            f"主策略质量 min({quality_raw:g},100)×0.3"
-            if quality_raw is not None
+            f"主策略质量 min({quality_norm:g},100)×0.3"
+            if quality_norm is not None
             else "主策略质量 无得分×0.3"
         ),
         "action_bonus": round(action_bonus, 2),
@@ -109,6 +136,16 @@ def compute_recommend_score(
         "role_bonus_raw": round(rb, 2),
         "role_note": role_note,
         "role_zeroed_by_board_weak": role_zeroed,
+        "theme_bonus": round(theme_bonus, 2),
+        "theme_note": theme_note,
+        "s_base": s_base,
+        "s_sr": round(sr, 2),
+        "s_sr_note": f"筹码峰贴合 {sr:g}",
+        "e_slope": round(e, 4),
+        "e_slope_note": f"环境乘数 E={e:g}",
+        "w_base": w_base,
+        "w_sr": w_sr,
+        "formula_version": FORMULA_VERSION,
         "total": total,
     }
     return total, detail
@@ -120,7 +157,6 @@ def apply_anti_chase(
     quote: Optional[Dict[str, Any]],
     advice: Optional[Dict[str, Any]],
 ) -> Tuple[str, List[str]]:
-    """涨停或显著远离买区 → 降为观察。返回 (action, reasons)。"""
     reasons: List[str] = []
     if action != "buy":
         return action, reasons
@@ -128,30 +164,31 @@ def apply_anti_chase(
     if q.get("is_limit_up"):
         reasons.append("limit_up")
         return "watch", reasons
-    n_gain = q.get("n_day_gain_pct")
     try:
-        if n_gain is not None and float(n_gain) >= float(ANTI_CHASE_N_DAY_GAIN_PCT):
+        gain = q.get("n_day_gain_pct")
+        if gain is not None and float(gain) >= float(ANTI_CHASE_N_DAY_GAIN_PCT):
             reasons.append(f"n_day_gain>={ANTI_CHASE_N_DAY_GAIN_PCT}")
             return "watch", reasons
     except (TypeError, ValueError):
         pass
-
-    close = q.get("close")
-    buy_zone = (advice or {}).get("buy_zone") if isinstance(advice, dict) else None
-    if close is not None and isinstance(buy_zone, dict):
-        try:
-            c = float(close)
-            high = buy_zone.get("high")
-            price = buy_zone.get("price")
-            anchor = high if high is not None else price
-            if anchor is not None:
-                a = float(anchor)
-                if a > 0 and (c - a) / a >= float(ANTI_CHASE_ABOVE_ZONE_PCT):
-                    reasons.append("far_above_buy_zone")
-                    return "watch", reasons
-        except (TypeError, ValueError):
-            pass
+    zone = (advice or {}).get("buy_zone") or {}
+    try:
+        close = float(q.get("close")) if q.get("close") is not None else None
+        anchor = zone.get("high")
+        if anchor is None:
+            anchor = zone.get("price")
+        if close is not None and anchor is not None:
+            a = float(anchor)
+            if a > 0 and (close - a) / a >= float(ANTI_CHASE_ABOVE_ZONE_PCT):
+                reasons.append("far_above_buy_zone")
+                return "watch", reasons
+    except (TypeError, ValueError):
+        pass
     return action, reasons
+
+
+def action_to_stance(action: str) -> str:
+    return {"buy": "买入", "watch": "观察", "avoid": "回避"}.get(action or "", action or "观察")
 
 
 def apply_diversification(
@@ -160,47 +197,32 @@ def apply_diversification(
     max_per_board: int = MAX_PER_BOARD_EXECUTABLE,
     max_theme_boards: int = MAX_THEME_BOARDS_EXECUTABLE,
 ) -> List[Dict[str, Any]]:
-    """对 action=buy 的可执行候选施加分散上限；超出降为 watch。
-
-    items 需已按分数降序。优先按 board_code；无代码时按 industry 名称分桶。
-    """
+    """items 需已按分数降序。优先按 board_code；无代码时按 industry 名称分桶。"""
     board_counts: Dict[str, int] = {}
     theme_boards: set = set()
     out: List[Dict[str, Any]] = []
     for it in items:
-        action = it.get("action")
-        board = (it.get("board_code") or "").strip()
-        if not board:
-            board = (it.get("industry") or it.get("board_name") or "").strip() or "_none_"
-        if action == "buy":
-            demote = False
-            if board != "_none_":
-                if board_counts.get(board, 0) >= max_per_board:
-                    demote = True
-                    it = dict(it)
-                    it["action"] = "watch"
-                    it["stance"] = "观察"
-                    reasons = list(it.get("constraint_reasons") or [])
-                    reasons.append("per_board_cap")
-                    it["constraint_reasons"] = reasons
-                elif board not in theme_boards and len(theme_boards) >= max_theme_boards:
-                    demote = True
-                    it = dict(it)
-                    it["action"] = "watch"
-                    it["stance"] = "观察"
-                    reasons = list(it.get("constraint_reasons") or [])
-                    reasons.append("theme_board_cap")
-                    it["constraint_reasons"] = reasons
-            if not demote and board != "_none_":
-                board_counts[board] = board_counts.get(board, 0) + 1
-                theme_boards.add(board)
-        out.append(it)
+        row = dict(it)
+        reasons = list(row.get("constraint_reasons") or [])
+        if row.get("action") == "buy":
+            board = (row.get("board_code") or "").strip()
+            if not board:
+                board = (row.get("industry") or row.get("board_name") or "").strip() or "_none_"
+            cnt = board_counts.get(board, 0)
+            if board != "_none_" and cnt >= int(max_per_board):
+                row["action"] = "watch"
+                row["stance"] = action_to_stance("watch")
+                reasons.append("per_board_cap")
+            elif board != "_none_" and board not in theme_boards and len(theme_boards) >= int(
+                max_theme_boards
+            ):
+                row["action"] = "watch"
+                row["stance"] = action_to_stance("watch")
+                reasons.append("theme_board_cap")
+            else:
+                if board != "_none_":
+                    board_counts[board] = cnt + 1
+                    theme_boards.add(board)
+        row["constraint_reasons"] = reasons
+        out.append(row)
     return out
-
-
-def action_to_stance(action: str) -> str:
-    if action == "buy":
-        return "买入"
-    if action == "avoid":
-        return "回避"
-    return "观察"

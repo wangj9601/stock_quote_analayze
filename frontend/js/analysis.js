@@ -10,6 +10,7 @@ const AnalysisPage = {
         }
         this.bindEvents();
         if (window.BoardAnalysis) BoardAnalysis.init();
+        if (window.MarketAnalysis) MarketAnalysis.init();
         if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();
         if (window.KdeLevelsTool) KdeLevelsTool.init();
         if (window.StockMultiStrategy) StockMultiStrategy.init();
@@ -27,7 +28,6 @@ const AnalysisPage = {
         } else {
             this.loadTabData(this.currentTab);
         }
-        this.drawFundFlowChart();
         this.startDataUpdate();
 
         // 确保搜索弹窗隐藏
@@ -231,7 +231,8 @@ const AnalysisPage = {
                 }
                 break;
             case 'market-analysis':
-                this.loadMarketAnalysis();
+                if (window.MarketAnalysis) MarketAnalysis.load();
+                else this.loadMarketAnalysis();
                 break;
             case 'technical-tools':
                 this.loadTechnicalTools();
@@ -391,113 +392,9 @@ const AnalysisPage = {
         }
     },
 
-    // 加载市场分析
+    // 加载市场分析（占位回退；正常走 MarketAnalysis）
     loadMarketAnalysis() {
-        this.updateMarketTemperature();
-        this.updateTrendAnalysis();
-        this.updateRiskAlerts();
-    },
-
-    // 更新市场温度
-    updateMarketTemperature() {
-        const temperature = 50 + Math.random() * 40; // 50-90
-        const meterFill = document.querySelector('.meter-fill');
-        const temperatureValue = document.querySelector('.temperature-value');
-
-        if (meterFill && temperatureValue) {
-            meterFill.style.width = `${temperature}%`;
-
-            let status, color;
-            if (temperature > 80) {
-                status = '过热';
-                color = '#dc2626';
-            } else if (temperature > 65) {
-                status = '偏热';
-                color = '#f59e0b';
-            } else {
-                status = '正常';
-                color = '#16a34a';
-            }
-
-            temperatureValue.textContent = `${Math.round(temperature)}°C ${status}`;
-            temperatureValue.style.color = color;
-        }
-    },
-
-    // 更新趋势分析
-    updateTrendAnalysis() {
-        const trends = ['bullish', 'bearish', 'neutral'];
-        const trendSignals = document.querySelectorAll('.trend-signal');
-
-        trendSignals.forEach(signal => {
-            const randomTrend = trends[Math.floor(Math.random() * trends.length)];
-            signal.className = `trend-signal ${randomTrend}`;
-
-            switch (randomTrend) {
-                case 'bullish':
-                    signal.textContent = '看多';
-                    break;
-                case 'bearish':
-                    signal.textContent = '看空';
-                    break;
-                case 'neutral':
-                    signal.textContent = '震荡';
-                    break;
-            }
-        });
-    },
-
-    // 更新风险提示
-    updateRiskAlerts() {
-        // 风险提示数据已在HTML中静态定义，这里可以添加动态更新逻辑
-        console.log('风险提示已更新');
-    },
-
-    // 绘制资金流向图表
-    drawFundFlowChart() {
-        const canvas = document.getElementById('fundFlowChart');
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
-
-        // 清空画布
-        ctx.clearRect(0, 0, width, height);
-
-        // 绘制柱状图
-        const data = [
-            { label: '主力', value: 156.8, color: '#dc2626' },
-            { label: '散户', value: -89.2, color: '#16a34a' }
-        ];
-
-        const maxValue = Math.max(...data.map(d => Math.abs(d.value)));
-        const barWidth = width / (data.length * 2);
-        const chartHeight = height - 60;
-
-        data.forEach((item, index) => {
-            const barHeight = (Math.abs(item.value) / maxValue) * chartHeight;
-            const x = (index + 0.5) * barWidth + (width - data.length * barWidth) / 2;
-            const y = item.value > 0 ? (height - 30) - barHeight : height - 30;
-
-            // 绘制柱子
-            ctx.fillStyle = item.color;
-            ctx.fillRect(x, y, barWidth * 0.8, barHeight);
-
-            // 绘制标签
-            ctx.fillStyle = '#374151';
-            ctx.font = '12px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(item.label, x + barWidth * 0.4, height - 10);
-
-            // 绘制数值
-            ctx.fillStyle = item.color;
-            ctx.fillText(
-                `${item.value > 0 ? '+' : ''}${item.value.toFixed(1)}亿`,
-                x + barWidth * 0.4,
-                item.value > 0 ? y - 5 : y + barHeight + 15
-            );
-        });
+        console.warn('[market-analysis] MarketAnalysis 未加载');
     },
 
     // 加载技术工具
@@ -728,24 +625,8 @@ const AnalysisPage = {
         // 实际项目中这里会打开报告详情页面
     },
 
-    // 开始数据更新
-    startDataUpdate() {
-        // 定期更新数据已按需求关闭
-        /*
-        // 定期更新市场分析数据
-        setInterval(() => {
-            if (this.currentTab === 'market-analysis') {
-                this.updateMarketTemperature();
-                this.updateTrendAnalysis();
-            }
-        }, 30000); // 每30秒更新一次
-
-        // 更新资金流向图表
-        setInterval(() => {
-            this.drawFundFlowChart();
-        }, 60000); // 每分钟更新一次
-        */
-    }
+    // 开始数据更新（定期刷新已关闭）
+    startDataUpdate() {}
 };
 
 // DOM加载完成后初始化

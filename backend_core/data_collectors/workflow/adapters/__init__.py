@@ -671,7 +671,20 @@ def _stock_recommend_brief() -> Any:
     return result
 
 
+def _stock_recommend_brief_late() -> Any:
+    """尾盘确认：仅刷新日报 late_run。"""
+    from backend_core.recommend.scheduled import run_recommend_brief_job
+
+    result = run_recommend_brief_job(late_run=True, horizons=["daily"])
+    if isinstance(result, dict) and result.get("ok") is False:
+        raise RuntimeError(result.get("error") or "推荐简报尾盘确认失败")
+    return result
+
+
 exec_stock_recommend_brief = _wrap_plain(_stock_recommend_brief, "个股推荐简报")
+exec_stock_recommend_brief_late = _wrap_plain(
+    _stock_recommend_brief_late, "个股推荐简报尾盘确认"
+)
 
 
 def _resolve_macd_trade_date(ctx: WorkflowContext) -> Optional[str]:

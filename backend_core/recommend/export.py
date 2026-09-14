@@ -11,18 +11,24 @@ def _score_detail_text(detail: Any) -> str:
     if not isinstance(detail, dict):
         return ""
     parts = []
-    for key in ("resonance_note", "quality_note", "action_note", "role_note", "note"):
-        v = detail.get(key)
-        if not v:
+    mapping = (
+        ("resonance_note", "resonance"),
+        ("quality_note", "quality"),
+        ("action_note", "action_bonus"),
+        ("role_note", "role_bonus"),
+        ("theme_note", "theme_bonus"),
+        ("e_slope_note", "e_slope"),
+        ("s_sr_note", "s_sr"),
+    )
+    for note_key, val_key in mapping:
+        note = detail.get(note_key)
+        if not note and detail.get(val_key) is None:
             continue
-        if key == "resonance_note":
-            parts.append(f"{v}={detail.get('resonance', '')}")
-        elif key == "quality_note":
-            parts.append(f"{v}={detail.get('quality', '')}")
-        elif key == "role_note":
-            parts.append(f"{v}={detail.get('role_bonus', '')}")
-        else:
-            parts.append(str(v))
+        parts.append(f"{note or val_key}={detail.get(val_key, '')}")
+    if detail.get("s_base") is not None:
+        parts.append(f"S_base={detail.get('s_base')}")
+    if detail.get("note"):
+        parts.append(str(detail.get("note")))
     total = detail.get("total")
     if total is not None:
         parts.append(f"合计={total}")
@@ -63,16 +69,24 @@ def build_recommend_excel(
     exec_rows = []
     watch_rows = []
     for it in items:
+        detail = it.get("score_detail") if isinstance(it.get("score_detail"), dict) else {}
+        evidence = it.get("evidence") if isinstance(it.get("evidence"), dict) else {}
         row = {
             "代码": it.get("code"),
             "名称": it.get("name"),
             "立场": it.get("stance") or it.get("action"),
+            "场景": it.get("regime") or evidence.get("regime") or "",
             "主策略": it.get("primary_strategy"),
             "策略共振": ",".join(it.get("strategies") or []),
             "角色": it.get("role_label") or it.get("role"),
             "行业": it.get("industry") or it.get("board_name") or it.get("board_code"),
             "推荐分": it.get("recommend_score"),
-            "推荐分明细": _score_detail_text(it.get("score_detail")),
+            "E斜率": detail.get("e_slope", it.get("e_slope")),
+            "S_base": detail.get("s_base"),
+            "S_sr": detail.get("s_sr", it.get("s_sr")),
+            "P_sup": evidence.get("p_sup") or detail.get("p_sup"),
+            "P_res": evidence.get("p_res") or detail.get("p_res"),
+            "推荐分明细": _score_detail_text(detail),
             "买区": _zone_text(it.get("buy_zone")),
             "止损": _zone_text(it.get("stop_zone")),
             "止盈": _zone_text(it.get("take_profit")),
@@ -91,6 +105,9 @@ def build_recommend_excel(
         {"项": "asof_date", "值": asof},
         {"项": "plan_for", "值": brief.get("plan_for")},
         {"项": "market_stance", "值": brief.get("market_stance")},
+        {"项": "regime", "值": (summary.get("regime") or {}).get("regime") or summary.get("regime")},
+        {"项": "late_run", "值": brief.get("late_run") if brief.get("late_run") is not None else summary.get("late_run")},
+        {"项": "publish_window", "值": summary.get("publish_window")},
         {"项": "disclaimer", "值": summary.get("disclaimer")},
         {"项": "executable", "值": len(exec_rows)},
         {"项": "watch", "值": len(watch_rows)},

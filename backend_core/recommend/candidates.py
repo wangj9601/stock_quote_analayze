@@ -10,6 +10,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from backend_api.models import (
+    CSBSignalTrace,
+    CSBStrategyConfig,
     GMSSignalTrace,
     GMSStrategyConfig,
     RPESignalTrace,
@@ -137,6 +139,25 @@ def _row_to_dict_rpe(r: RPESignalTrace) -> Dict[str, Any]:
     }
 
 
+def _row_to_dict_csb(r: CSBSignalTrace) -> Dict[str, Any]:
+    return {
+        "code": _norm_code(r.code),
+        "strategy": "csb",
+        "date": _as_date_str(r.trade_date),
+        "name": r.name,
+        "score": float(r.score) if r.score is not None else None,
+        "entry_signal": bool(r.entry_signal),
+        "signal_type": r.signal_type,
+        "close": float(r.close_price) if r.close_price is not None else None,
+        "close_price": float(r.close_price) if r.close_price is not None else None,
+        "entry_low": float(r.entry_low) if r.entry_low is not None else None,
+        "channel_lower": float(r.channel_lower) if r.channel_lower is not None else None,
+        "channel_upper": float(r.channel_upper) if r.channel_upper is not None else None,
+        "detail": r.detail if isinstance(r.detail, dict) else {},
+        "config_id": int(r.config_id) if r.config_id is not None else None,
+    }
+
+
 def collect_strategy_buy_candidates(
     db: Session,
     asof_date: str,
@@ -145,6 +166,7 @@ def collect_strategy_buy_candidates(
     urt_config_id: Optional[int] = None,
     sbbr_config_id: Optional[int] = None,
     rpe_config_id: Optional[int] = None,
+    csb_config_id: Optional[int] = None,
     limit_per_strategy: int = 500,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """返回 {strategy: [row_dict, ...]}，仅含买点/入场信号。"""
@@ -154,12 +176,14 @@ def collect_strategy_buy_candidates(
         "gms": [],
         "sbbr": [],
         "rpe": [],
+        "csb": [],
     }
 
     gms_cid = gms_config_id or _default_config_id(db, GMSStrategyConfig)
     urt_cid = urt_config_id or _default_config_id(db, URTStrategyConfig)
     sbbr_cid = sbbr_config_id or _default_config_id(db, SBBRStrategyConfig)
     rpe_cid = rpe_config_id or _default_config_id(db, RPEStrategyConfig)
+    csb_cid = csb_config_id or _default_config_id(db, CSBStrategyConfig)
 
     if urt_cid is not None:
         try:
@@ -240,25 +264,66 @@ def collect_strategy_buy_candidates(
             )
             out["rpe"] = [_row_to_dict_rpe(r) for r in rows]
 
+    if csb_cid is not None:
+        try:
+            from datetime import date as _date
+
+            td = _date.fromisoformat(d)
+            from backend_core.strategies.csb.config import CSB_TRACE_SCANNED_MARKER
+
+            marker = CSB_TRACE_SCANNED_MARKER
+        except Exception:
+            td = None
+            marker = "__CSB_SCANNED__"
+        if td is not None:
+            try:
+                rows = (
+                    db.query(CSBSignalTrace)
+                    .filter(
+                        CSBSignalTrace.trade_date == td,
+                        CSBSignalTrace.config_id == int(csb_cid),
+                        CSBSignalTrace.entry_signal.is_(True),
+                        CSBSignalTrace.code != marker,
+                    )
+                    .order_by(CSBSignalTrace.score.desc().nullslast())
+                    .limit(limit_per_strategy)
+                    .all()
+                )
+                out["csb"] = [_row_to_dict_csb(r) for r in rows]
+            except Exception as e:
+                logger.warning("collect CSB candidates failed: %s", e)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
     logger.info(
-        "recommend candidates asof=%s urt=%s gms=%s sbbr=%s rpe=%s",
+        "recommend candidates asof=%s urt=%s gms=%s sbbr=%s rpe=%s csb=%s",
         d,
         len(out["urt"]),
         len(out["gms"]),
         len(out["sbbr"]),
         len(out["rpe"]),
+        len(out["csb"]),
     )
     return out
 
 
 def merge_candidates_by_code(
     by_strategy: Dict[str, List[Dict[str, Any]]],
+    *,
+    priority: Optional[Tuple[str, ...]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """按 code 合并多策略命中。"""
     from backend_core.recommend.config import STRATEGY_PRIORITY
 
+    order = priority or STRATEGY_PRIORITY
+    # 确保未列入 priority 的策略仍被合并
+    extra = [k for k in (by_strategy or {}).keys() if k not in order]
+    full_order = list(order) + extra
+
     merged: Dict[str, Dict[str, Any]] = {}
-    for strat in STRATEGY_PRIORITY:
+    for strat in full_order:
         for row in by_strategy.get(strat) or []:
             code = _norm_code(row.get("code"))
             if not code:
@@ -279,7 +344,9 @@ def merge_candidates_by_code(
             if strat not in bucket["strategies"]:
                 bucket["strategies"].append(strat)
             bucket["strategy_rows"][strat] = row
-            sc = row.get("score")
+            sc = row.get("quality_norm")
+            if sc is None:
+                sc = row.get("score")
             if sc is not None:
                 try:
                     f = float(sc)
@@ -289,7 +356,7 @@ def merge_candidates_by_code(
                     pass
 
     for bucket in merged.values():
-        for strat in STRATEGY_PRIORITY:
+        for strat in full_order:
             if strat in bucket["strategies"]:
                 bucket["primary_strategy"] = strat
                 break

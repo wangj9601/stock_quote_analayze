@@ -51,6 +51,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_urt_hk,
     exec_watchlist_history,
     exec_stock_recommend_brief,
+    exec_stock_recommend_brief_late,
 )
 from backend_core.data_collectors.workflow.adapters.api_nodes import (
     exec_cn_historical_akshare,
@@ -196,6 +197,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
         "strategy",
         exec_stock_recommend_brief,
         description="策略预计算之后：Daily Brief；周/月在日历触发日生成",
+    ),
+    _n(
+        "stock_recommend_brief_late",
+        "个股推荐简报尾盘确认",
+        "strategy",
+        exec_stock_recommend_brief_late,
+        description="建议 14:40 左右：late_run 过滤长上影/假突破后刷新当日日报",
     ),
     _n("rs_rating_cn", "A股相对强度RS预计算", "strategy", exec_rs_rating_cn),
     _n("rs_rating_hk", "港股相对强度RS预计算", "strategy", exec_rs_rating_hk),

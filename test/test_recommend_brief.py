@@ -177,3 +177,177 @@ def test_node_registry_has_recommend():
     n = get_node("stock_recommend_brief")
     assert n is not None
     assert n.key == "stock_recommend_brief"
+
+
+def test_node_registry_has_recommend_late():
+    from backend_core.data_collectors.workflow.node_registry import get_node
+
+    n = get_node("stock_recommend_brief_late")
+    assert n is not None
+    assert n.key == "stock_recommend_brief_late"
+
+
+def test_normalize_minmax_and_rpe():
+    from backend_core.recommend.normalize import (
+        apply_normalized_best_score,
+        map_rpe_z_to_raw,
+        normalize_strategy_scores,
+    )
+
+    assert 50 < map_rpe_z_to_raw(2.0) <= 100
+    by = {
+        "urt": [{"code": "1", "score": 10}, {"code": "2", "score": 90}],
+        "sbbr": [{"code": "3"}],
+        "rpe": [{"code": "4", "score": 1.5}],
+    }
+    normed = normalize_strategy_scores(by)
+    urt_norms = sorted(r["quality_norm"] for r in normed["urt"])
+    assert urt_norms[0] == 0.0
+    assert urt_norms[1] == 100.0
+    assert normed["sbbr"][0]["quality_norm"] == 50.0
+    assert normed["rpe"][0]["quality_norm"] is not None
+
+    merged = {
+        "1": {
+            "strategies": ["urt"],
+            "strategy_rows": {"urt": normed["urt"][0]},
+        },
+        "2": {
+            "strategies": ["urt", "csb"],
+            "strategy_rows": {
+                "urt": normed["urt"][1],
+                "csb": {"quality_norm": 80.0, "quality_raw": 80.0},
+            },
+        },
+    }
+    apply_normalized_best_score(merged, regime_weights={"csb": 1.2, "urt": 0.8})
+    assert merged["2"]["best_score"] is not None
+    assert merged["2"]["best_score"] >= merged["1"]["best_score"]
+
+
+def test_e_slope_mapping_and_combine():
+    from backend_core.recommend.env import combine_e_slope, slope_to_e_multiplier
+
+    assert slope_to_e_multiplier(None) == 1.0
+    assert slope_to_e_multiplier(0.01) >= 0.9
+    e_neg = slope_to_e_multiplier(-0.01)
+    assert 0.2 <= e_neg <= 0.4
+    info = combine_e_slope(0.9, -0.02)
+    assert info["e_slope"] == min(info["e_market"], info["e_board"])
+    assert "floor_hit" in info
+
+
+def test_score_formula_eslope_and_sr():
+    s1, d1 = compute_recommend_score(
+        strategies=["urt"],
+        best_score=100,
+        advice_action="buy",
+        role="mid",
+        board_weak=False,
+        e_slope=1.0,
+        s_sr=0.0,
+    )
+    s2, d2 = compute_recommend_score(
+        strategies=["urt"],
+        best_score=100,
+        advice_action="buy",
+        role="mid",
+        board_weak=False,
+        e_slope=0.4,
+        s_sr=0.0,
+    )
+    assert s2 < s1
+    assert d2["e_slope"] == 0.4
+    assert d2["s_base"] == d1["s_base"]
+    s3, d3 = compute_recommend_score(
+        strategies=["urt"],
+        best_score=100,
+        advice_action="buy",
+        role="mid",
+        board_weak=False,
+        e_slope=1.0,
+        s_sr=100.0,
+    )
+    assert s3 > s1
+    assert d3["s_sr"] == 100.0
+    assert "formula_version" in d3
+
+
+def test_regime_primary_strategy():
+    from backend_core.recommend.regime import (
+        classify_regime,
+        pick_primary_strategy,
+        regime_quality_weights,
+    )
+
+    r_range = classify_regime(market_slope_20=-0.001)
+    assert r_range["regime"] == "range"
+    r_trend = classify_regime(market_slope_20=0.01)
+    assert r_trend["regime"] == "trend"
+    assert pick_primary_strategy(["urt", "gms", "csb"], "range") == "csb"
+    assert pick_primary_strategy(["urt", "gms", "csb"], "trend") == "gms"
+    wr = regime_quality_weights("range")
+    wt = regime_quality_weights("trend")
+    assert wr.get("csb", 1) >= wt.get("csb", 1)
+    assert wt.get("gms", 1) >= wr.get("gms", 1)
+
+
+def test_late_session_filters():
+    from backend_core.recommend.daily_brief import apply_late_session_filters
+
+    items = [
+        {
+            "code": "000001",
+            "action": "buy",
+            "stance": "买入",
+            "buy_zone": {"high": 10.0, "price": 9.8},
+            "constraint_reasons": [],
+            "summary": "ok",
+        },
+        {
+            "code": "000002",
+            "action": "buy",
+            "stance": "买入",
+            "buy_zone": {"high": 10.0},
+            "constraint_reasons": [],
+            "summary": "ok",
+        },
+    ]
+    quotes = {
+        "000001": {"open": 10.0, "high": 11.0, "low": 9.9, "close": 10.05},  # 长上影
+        "000002": {"open": 10.0, "high": 10.2, "low": 9.5, "close": 9.5},  # 假突破
+    }
+    out, n = apply_late_session_filters(items, quotes)
+    assert n >= 1
+    assert all(x["action"] == "watch" for x in out)
+    reasons = set()
+    for x in out:
+        reasons.update(x.get("constraint_reasons") or [])
+    assert "late_upper_shadow" in reasons or "late_false_break" in reasons
+
+
+def test_sr_score_and_merge_advice():
+    from backend_core.recommend.sr_levels import _score_sr, merge_advice_with_sr
+
+    assert 0 <= _score_sr(10.0, 9.5, 11.0) <= 100
+    advice = {"action": "buy", "buy_zone": None, "stop_zone": None}
+    sr = {
+        "ok": True,
+        "s_sr": 70.0,
+        "p_sup": 9.5,
+        "p_res": 11.0,
+        "buy_zone": {"low": 9.3, "high": 9.7, "price": 9.5},
+        "stop_zone": {"price": 9.1},
+        "take_profit": {"price": 11.0},
+    }
+    merged = merge_advice_with_sr(advice, sr)
+    assert merged.get("buy_zone")
+    assert merged.get("stop_zone")
+
+
+def test_strategy_priority_includes_csb():
+    from backend_core.recommend.config import STRATEGY_PRIORITY, strategy_priority_for_regime
+
+    assert "csb" in STRATEGY_PRIORITY
+    assert strategy_priority_for_regime("range")[0] == "csb"
+    assert strategy_priority_for_regime("trend")[0] == "gms"

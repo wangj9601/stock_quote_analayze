@@ -24,12 +24,33 @@ def compute_brief_concentration_kpi(items: List[Dict[str, Any]]) -> Dict[str, An
     cnt = Counter(boards)
     hhi = _herfindahl([float(v) for v in cnt.values()]) if cnt else 0.0
     role_cnt = Counter(str(x.get("role") or "normal") for x in exec_items)
+    regime_cnt = Counter(
+        str(x.get("regime") or ((x.get("evidence") or {}).get("regime")) or "unknown")
+        for x in items
+    )
+    late_degraded = sum(
+        1
+        for x in items
+        if "late_upper_shadow" in (x.get("constraint_reasons") or [])
+        or "late_false_break" in (x.get("constraint_reasons") or [])
+        or x.get("late_degraded")
+    )
+    defense_exec = sum(
+        1
+        for x in exec_items
+        if x.get("defense_mode")
+        or "e_slope_floor" in (x.get("constraint_reasons") or [])
+        or float((x.get("score_detail") or {}).get("e_slope") or 1.0) < 0.5
+    )
     return {
         "executable_count": len(exec_items),
         "board_counts": dict(cnt),
         "board_hhi": round(hhi, 4),
         "role_counts": dict(role_cnt),
         "theme_board_count": len([b for b in cnt if b != "_none_"]),
+        "regime_counts": dict(regime_cnt),
+        "late_degraded_count": late_degraded,
+        "weak_market_executable_hint": defense_exec,
     }
 
 
