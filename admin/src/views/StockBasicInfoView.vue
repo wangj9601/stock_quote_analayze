@@ -50,6 +50,7 @@
           <div class="mb-3 flex gap-2 flex-wrap">
             <el-button :disabled="!selectedRows.length" @click="batchSetCollect(true)">批量启用采集</el-button>
             <el-button :disabled="!selectedRows.length" @click="batchSetCollect(false)">批量停用采集</el-button>
+            <el-button type="danger" :disabled="!selectedRows.length" @click="batchDeleteSelected">批量删除</el-button>
           </div>
 
           <div class="table-scroll">
@@ -76,6 +77,11 @@
                     :model-value="scope.row.collect_enabled"
                     @change="(v: boolean) => toggleCollectFlag(scope.row, v)"
                   />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="90" fixed="right">
+                <template #default="scope">
+                  <el-button type="danger" link @click="deleteRow(scope.row)">删除</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -585,6 +591,46 @@ const batchSetCollect = async (enabled: boolean) => {
   } catch (e: any) {
     if (e !== 'cancel') {
       ElMessage.error(e?.response?.data?.detail || e?.message || '批量更新失败')
+    }
+  }
+}
+
+const deleteRow = async (row: any) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定删除 ${row.code} ${row.name || ''} 的基本信息吗？仅删除基本信息表记录，不可恢复。`,
+      '删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+    const res = await stockBasicService.deleteItem(row.market, row.code)
+    ElMessage.success(`已删除 ${res.data?.deleted ?? 1} 条`)
+    selectedRows.value = []
+    tableRef.value?.clearSelection?.()
+    await loadList()
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.detail || e?.message || '删除失败')
+    }
+  }
+}
+
+const batchDeleteSelected = async () => {
+  if (!selectedRows.value.length) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除选中的 ${selectedRows.value.length} 只股票基本信息吗？仅删除基本信息表记录，不可恢复。`,
+      '批量删除确认',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+    const codes = selectedRows.value.map((r) => r.code)
+    const res = await stockBasicService.batchDelete(mainTab.value, codes)
+    ElMessage.success(`已删除 ${res.data?.deleted ?? 0} 条`)
+    selectedRows.value = []
+    tableRef.value?.clearSelection?.()
+    await loadList()
+  } catch (e: any) {
+    if (e !== 'cancel') {
+      ElMessage.error(e?.response?.data?.detail || e?.message || '批量删除失败')
     }
   }
 }

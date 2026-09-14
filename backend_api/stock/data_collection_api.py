@@ -3154,9 +3154,16 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
             # ------------------
 
             if market == 'HK':
+                from backend_core.data_collectors.akshare.hk_realtime import (
+                    HK_REALTIME_MIN_ROWS,
+                    hk_realtime_row_count,
+                    hk_realtime_spot_insufficient,
+                )
+
                 df = None
                 max_retries = 3
                 retry_delay = 2
+                single_code = bool(stock_code and str(stock_code).strip())
                 
                 # 尝试多个港股数据源，带重试机制
                 for attempt in range(max_retries):
@@ -3167,23 +3174,32 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                         try:
                             df = ak.stock_hk_spot_em()
                             logger.info(f"使用 stock_hk_spot_em 接口获取数据")
-                            if df is not None and not df.empty:
+                            if not hk_realtime_spot_insufficient(df):
                                 break
+                            logger.warning(
+                                "stock_hk_spot_em 数据量不足（%s条，阈值%s条）",
+                                hk_realtime_row_count(df),
+                                HK_REALTIME_MIN_ROWS,
+                            )
                         except Exception as e:
                             logger.warning(f"港股实时接口 stock_hk_spot_em 调用失败: {e}")
                         
-                        # 如果第一个接口失败，尝试第二个接口
-                        if df is None or df.empty:
+                        # 如果第一个接口失败或条数不足，尝试第二个接口
+                        if hk_realtime_spot_insufficient(df):
                             try:
                                 df = ak.stock_hk_spot()
                                 logger.info(f"使用 stock_hk_spot 接口获取数据")
-                                if df is not None and not df.empty:
+                                if not hk_realtime_spot_insufficient(df):
                                     break
+                                logger.warning(
+                                    "stock_hk_spot 数据量不足（%s条，阈值%s条）",
+                                    hk_realtime_row_count(df),
+                                    HK_REALTIME_MIN_ROWS,
+                                )
                             except Exception as e:
                                 logger.warning(f"港股实时接口 stock_hk_spot 调用失败: {e}")
                         
-                        # 如果获取到数据，跳出重试循环
-                        if df is not None and not df.empty:
+                        if not hk_realtime_spot_insufficient(df):
                             break
                             
                         # 如果是最后一次尝试，不需要等待
@@ -3198,15 +3214,54 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                             time.sleep(retry_delay)
                             retry_delay *= 2
 
-                # 检查最终是否获取到数据
-                if df is None or df.empty:
+                fetched_count = hk_realtime_row_count(df)
+                if not single_code and hk_realtime_spot_insufficient(df):
+                    logger.warning(
+                        "港股实时接口数据不足（%s条，阈值%s条），尝试从 hk_fund_flow 文件补采",
+                        fetched_count,
+                        HK_REALTIME_MIN_ROWS,
+                    )
+                    from backend_core.data_collectors.akshare.hk_fund_flow_from_file import (
+                        collect_hk_realtime_quotes_from_file,
+                    )
+
+                    file_result = collect_hk_realtime_quotes_from_file(trade_date=trade_date)
+                    if file_result.get("success"):
+                        written = int(file_result.get("written") or 0)
+                        warn = (
+                            f"接口数据不足（{fetched_count}条），已从文件补采 {written} 条"
+                            f"（{file_result.get('file') or ''}）"
+                        )
+                        logger.info(warn)
+                        with task_lock:
+                            if task_id in collection_tasks:
+                                collection_tasks[task_id].update({
+                                    'status': 'completed',
+                                    'progress': 100,
+                                    'end_time': datetime.now(),
+                                    'total_stocks': written,
+                                    'processed_stocks': written,
+                                    'success_count': written,
+                                    'collected_count': written,
+                                    'warning_message': warn,
+                                })
+                        return
+                    extra = file_result.get("error") or "文件补采失败"
+                    err_msg = (
+                        f"港股实时行情采集失败：接口数据量 {fetched_count} 条，"
+                        f"少于最低要求 {HK_REALTIME_MIN_ROWS} 条；{extra}"
+                    )
+                    logger.error(err_msg)
+                    raise RuntimeError(err_msg)
+
+                if df is None or (hasattr(df, "empty") and df.empty):
                     error_msg = f'港股实时行情数据为空（已重试 {max_retries} 次）'
                     logger.error(error_msg)
                     raise RuntimeError(error_msg)
 
                 logger.info(f"成功获取港股数据，共 {len(df)} 条记录")
 
-                if stock_code and str(stock_code).strip():
+                if single_code:
                     code = str(stock_code).strip()
                     # 兼容字段名
                     code_col = '代码' if '代码' in df.columns else ('symbol' if 'symbol' in df.columns else None)

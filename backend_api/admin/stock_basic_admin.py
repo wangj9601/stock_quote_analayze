@@ -36,6 +36,11 @@ class BatchCollectFlagBody(BaseModel):
     collect_enabled: bool = Field(..., description="采集/处理开关")
 
 
+class BatchDeleteBody(BaseModel):
+    market: str = Field(..., pattern="^(CN|HK)$", description="市场")
+    codes: List[str] = Field(..., min_length=1, description="股票代码列表")
+
+
 DelistedFilter = Literal["all", "only", "exclude"]
 
 
@@ -480,6 +485,99 @@ async def batch_update_collect_flag(
         affected=affected,
     )
     return {"success": True, "data": {"affected": affected}}
+
+
+def _normalize_delete_codes(market: str, codes: List[str]) -> List[str]:
+    unique: List[str] = []
+    seen: set[str] = set()
+    for raw in codes:
+        c = str(raw).strip()
+        if not c:
+            continue
+        if market == "CN":
+            c = c.zfill(6)
+        if c in seen:
+            continue
+        seen.add(c)
+        unique.append(c)
+    return unique
+
+
+def _delete_stock_basic_by_codes(db: Session, market: str, codes: List[str]) -> int:
+    if market == "CN":
+        stmt = text(
+            """
+            DELETE FROM stock_basic_info
+            WHERE LPAD(CAST(code AS TEXT), 6, '0') IN :codes
+            """
+        ).bindparams(bindparam("codes", expanding=True))
+    else:
+        stmt = text(
+            """
+            DELETE FROM stock_basic_info_hk
+            WHERE code IN :codes
+            """
+        ).bindparams(bindparam("codes", expanding=True))
+    result = db.execute(stmt, {"codes": codes})
+    return int(result.rowcount or 0)
+
+
+@router.delete("/item")
+async def delete_stock_basic(
+    market: str = Query(..., pattern="^(CN|HK)$"),
+    code: str = Query(..., min_length=1),
+    db: Session = Depends(get_db),
+    admin: Any = Depends(get_current_admin),
+):
+    """删除单条股票基本信息（仅基本信息表，不级联行情等）。"""
+    ensure_share_columns(db)
+    market = market.upper()
+    codes = _normalize_delete_codes(market, [code])
+    if not codes:
+        raise HTTPException(status_code=400, detail="code 不能为空")
+    deleted = _delete_stock_basic_by_codes(db, market, codes)
+    if deleted <= 0:
+        db.rollback()
+        raise HTTPException(status_code=404, detail="记录不存在")
+    db.commit()
+    _write_operation_log(
+        db,
+        log_type="stock_basic_delete",
+        message=(
+            f"删除股票基本信息 market={market} code={codes[0]} "
+            f"by {getattr(admin, 'username', 'admin')}"
+        ),
+        status="成功",
+        affected=deleted,
+    )
+    return {"success": True, "data": {"deleted": deleted}}
+
+
+@router.post("/batch-delete")
+async def batch_delete_stock_basic(
+    body: BatchDeleteBody,
+    db: Session = Depends(get_db),
+    admin: Any = Depends(get_current_admin),
+):
+    """批量删除股票基本信息（仅基本信息表，不级联行情等）。"""
+    ensure_share_columns(db)
+    market = body.market.upper()
+    codes = _normalize_delete_codes(market, body.codes)
+    if not codes:
+        raise HTTPException(status_code=400, detail="codes 不能为空")
+    deleted = _delete_stock_basic_by_codes(db, market, codes)
+    db.commit()
+    _write_operation_log(
+        db,
+        log_type="stock_basic_delete_batch",
+        message=(
+            f"批量删除股票基本信息 market={market} count={len(codes)} "
+            f"by {getattr(admin, 'username', 'admin')}"
+        ),
+        status="成功",
+        affected=deleted,
+    )
+    return {"success": True, "data": {"deleted": deleted, "requested": len(codes)}}
 
 
 @router.post("/sync-industry")

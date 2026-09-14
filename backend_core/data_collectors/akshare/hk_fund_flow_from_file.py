@@ -3,6 +3,8 @@
 
 口径（1A）：流入 = 外盘/(外盘+内盘)×金额，流出 = 内盘/(外盘+内盘)×金额，净额 = 流入−流出。
 外盘+内盘为 0 或无效时，流入/流出/净额置空。
+
+另：港股实时接口全量不足 100 条时，可从同一文件补写 stock_realtime_quote_hk。
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 FILE_PREFIX = "hk_fund_flow_"
 SUPPORTED_EXTS = (".xlsx", ".xls", ".csv")
+HK_REALTIME_FILE_MIN_ROWS = 100
 
 
 def parse_numeric(val: Any) -> Optional[float]:
@@ -111,6 +114,19 @@ def trade_date_to_yyyymmdd(trade_date: str) -> str:
     raise ValueError(f"无效交易日: {trade_date}")
 
 
+def parse_fund_flow_filename_date(path: Path) -> Optional[str]:
+    """从 hk_fund_flow_YYYYMMDD / YYYY-MM-DD 文件名解析交易日。"""
+    stem = path.stem
+    if not stem.startswith(FILE_PREFIX):
+        return None
+    suffix = stem[len(FILE_PREFIX) :]
+    try:
+        ymd = trade_date_to_yyyymmdd(suffix)
+        return f"{ymd[:4]}-{ymd[4:6]}-{ymd[6:8]}"
+    except ValueError:
+        return None
+
+
 def find_hk_fund_flow_file(trade_date: str, data_dir: Optional[Path] = None) -> Optional[Path]:
     """按交易日查找 hk_fund_flow_YYYYMMDD / YYYY-MM-DD 文件。"""
     root = data_dir or DATA_DIR
@@ -126,6 +142,42 @@ def find_hk_fund_flow_file(trade_date: str, data_dir: Optional[Path] = None) -> 
         if path.is_file():
             return path
     return None
+
+
+def find_latest_hk_fund_flow_file(data_dir: Optional[Path] = None) -> Optional[Path]:
+    """目录中日期最新的 hk_fund_flow_* 文件。"""
+    root = data_dir or DATA_DIR
+    if not root.is_dir():
+        return None
+    dated: List[Tuple[str, Path]] = []
+    for ext in SUPPORTED_EXTS:
+        for path in root.glob(f"{FILE_PREFIX}*{ext}"):
+            d = parse_fund_flow_filename_date(path)
+            if d:
+                dated.append((d, path))
+    if not dated:
+        return None
+    dated.sort(key=lambda x: x[0], reverse=True)
+    return dated[0][1]
+
+
+def resolve_hk_fund_flow_file_for_realtime(
+    trade_date: Optional[str] = None,
+    data_dir: Optional[Path] = None,
+    allow_latest: bool = True,
+) -> Tuple[Optional[Path], Optional[str]]:
+    """优先当日文件，找不到时可用最新一份（交易日取文件名日期）。"""
+    requested = resolve_trade_date_str(trade_date)
+    exact = find_hk_fund_flow_file(requested, data_dir)
+    if exact:
+        return exact, requested
+    if not allow_latest:
+        return None, requested
+    latest = find_latest_hk_fund_flow_file(data_dir)
+    if latest is None:
+        return None, requested
+    file_date = parse_fund_flow_filename_date(latest) or requested
+    return latest, file_date
 
 
 class HkFundFlowFromFileCollector:
@@ -221,19 +273,26 @@ class HkFundFlowFromFileCollector:
             raise RuntimeError(f"港股资金流向文件解析失败: {file_path.name} ({detail})")
         return df
 
+    def _column_map(self, df: pd.DataFrame) -> Dict[str, Any]:
+        return {str(c).strip(): c for c in df.columns}
+
+    def _col(self, col_map: Dict[str, Any], *names: str):
+        for n in names:
+            if n in col_map:
+                return col_map[n]
+        for n in names:
+            n_norm = n.replace("%", "").replace("％", "").strip()
+            for k, v in col_map.items():
+                k_norm = k.replace("%", "").replace("％", "").strip()
+                if k_norm == n_norm:
+                    return v
+        return None
+
     def dataframe_to_rows(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
-        col_map = {str(c).strip(): c for c in df.columns}
+        col_map = self._column_map(df)
 
         def col(*names: str):
-            for n in names:
-                if n in col_map:
-                    return col_map[n]
-            # 宽松：去掉 % 再匹配
-            for n in names:
-                for k, v in col_map.items():
-                    if k.replace("%", "").replace("％", "").strip() == n.replace("%", "").strip():
-                        return v
-            return None
+            return self._col(col_map, *names)
 
         c_code = col("代码", "股票代码", "code")
         c_name = col("名称", "股票名称", "股票简称", "name")
@@ -287,6 +346,196 @@ class HkFundFlowFromFileCollector:
                 "updated_at": now,
             }
         return list(by_code.values())
+
+    def dataframe_to_realtime_quote_rows(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """同花顺资金流向表 → 港股实时行情行（总手按手入库）。"""
+        col_map = self._column_map(df)
+        c_code = self._col(col_map, "代码", "股票代码", "code")
+        c_name = self._col(col_map, "名称", "股票名称", "股票简称", "name")
+        c_price = self._col(col_map, "现价", "最新价", "current_price")
+        c_chg = self._col(col_map, "涨幅%", "涨幅", "涨跌幅", "change_percent")
+        c_chg_amt = self._col(col_map, "涨跌", "涨跌额", "change_amount")
+        c_vol = self._col(col_map, "总手", "成交量", "volume")
+        c_amt = self._col(col_map, "金额", "成交额", "turnover_amount", "amount")
+        c_high = self._col(col_map, "最高", "high")
+        c_low = self._col(col_map, "最低", "low")
+        c_open = self._col(col_map, "开盘", "今开", "open")
+        c_pre = self._col(col_map, "昨收", "昨收价", "pre_close")
+        c_outer = self._col(col_map, "外盘", "outer_volume")
+        c_inner = self._col(col_map, "内盘", "inner_volume")
+        if c_code is None:
+            raise RuntimeError(f"港股资金流向文件缺少代码列: {list(df.columns)}")
+
+        now = datetime.now()
+        now_s = now.strftime("%Y-%m-%d %H:%M:%S")
+        by_code: Dict[str, Dict[str, Any]] = {}
+        for _, row in df.iterrows():
+            code = normalize_hk_fund_flow_code(row.get(c_code) if c_code else None)
+            if not code:
+                continue
+            if code in by_code:
+                continue
+            name_raw = row.get(c_name) if c_name else None
+            name = None
+            if name_raw is not None and not (isinstance(name_raw, float) and pd.isna(name_raw)):
+                ns = str(name_raw).strip()
+                if ns and ns not in ("-", "--"):
+                    name = ns
+            if name and "退" in name:
+                continue
+            price = parse_numeric(row.get(c_price)) if c_price else None
+            if price is None or price <= 0:
+                continue
+            amount = parse_numeric(row.get(c_amt)) if c_amt else None
+            outer = parse_numeric(row.get(c_outer)) if c_outer else None
+            inner = parse_numeric(row.get(c_inner)) if c_inner else None
+            inflow, outflow, net = compute_flow_from_outer_inner(amount, outer, inner)
+            by_code[code] = {
+                "code": code,
+                "trade_date": self.trade_date,
+                "name": name or code,
+                "english_name": None,
+                "current_price": price,
+                "change_percent": parse_percent(row.get(c_chg)) if c_chg else None,
+                "change_amount": parse_numeric(row.get(c_chg_amt)) if c_chg_amt else None,
+                "volume": parse_numeric(row.get(c_vol)) if c_vol else None,
+                "amount": amount,
+                "high": parse_numeric(row.get(c_high)) if c_high else None,
+                "low": parse_numeric(row.get(c_low)) if c_low else None,
+                "open": parse_numeric(row.get(c_open)) if c_open else None,
+                "pre_close": parse_numeric(row.get(c_pre)) if c_pre else None,
+                "inflow_amount": inflow,
+                "outflow_amount": outflow,
+                "net_amount": net,
+                "update_time": now_s,
+            }
+        return list(by_code.values())
+
+    def upsert_realtime_quotes(self, rows: List[Dict[str, Any]], batch_size: int = 500) -> int:
+        if not rows:
+            return 0
+        basic_sql = text(
+            """
+            INSERT INTO stock_basic_info_hk (code, name, create_date)
+            VALUES (:code, :name, :create_date)
+            ON CONFLICT (code) DO UPDATE SET
+                name = EXCLUDED.name,
+                create_date = EXCLUDED.create_date
+            """
+        )
+        quote_sql = text(
+            """
+            INSERT INTO stock_realtime_quote_hk
+            (code, trade_date, name, english_name, current_price, change_percent, change_amount,
+             volume, amount, high, low, open, pre_close,
+             inflow_amount, outflow_amount, net_amount, update_time)
+            VALUES
+            (:code, :trade_date, :name, :english_name, :current_price, :change_percent, :change_amount,
+             :volume, :amount, :high, :low, :open, :pre_close,
+             :inflow_amount, :outflow_amount, :net_amount, :update_time)
+            ON CONFLICT (code, trade_date) DO UPDATE SET
+                name = EXCLUDED.name,
+                english_name = EXCLUDED.english_name,
+                current_price = EXCLUDED.current_price,
+                change_percent = EXCLUDED.change_percent,
+                change_amount = EXCLUDED.change_amount,
+                volume = EXCLUDED.volume,
+                amount = EXCLUDED.amount,
+                high = EXCLUDED.high,
+                low = EXCLUDED.low,
+                open = EXCLUDED.open,
+                pre_close = EXCLUDED.pre_close,
+                inflow_amount = EXCLUDED.inflow_amount,
+                outflow_amount = EXCLUDED.outflow_amount,
+                net_amount = EXCLUDED.net_amount,
+                update_time = EXCLUDED.update_time
+            """
+        )
+        session = SessionLocal()
+        written = 0
+        try:
+            for i in range(0, len(rows), batch_size):
+                chunk = rows[i : i + batch_size]
+                session.execute(
+                    basic_sql,
+                    [{"code": r["code"], "name": r["name"], "create_date": r["update_time"]} for r in chunk],
+                )
+                session.execute(quote_sql, chunk)
+                session.commit()
+                written += len(chunk)
+            return written
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
+    def collect_realtime_quotes(
+        self,
+        min_rows: int = HK_REALTIME_FILE_MIN_ROWS,
+        allow_latest: bool = True,
+    ) -> Dict[str, Any]:
+        """接口不足量时的文件补丁：写入 stock_realtime_quote_hk / stock_basic_info_hk。"""
+        path, file_date = resolve_hk_fund_flow_file_for_realtime(
+            self.trade_date, self.data_dir, allow_latest=allow_latest
+        )
+        if path is None:
+            ymd = trade_date_to_yyyymmdd(self.trade_date)
+            msg = (
+                f"未找到港股资金流向文件: {self.data_dir / (FILE_PREFIX + ymd)}.*"
+                f"（亦尝试目录内最新 hk_fund_flow_*）"
+            )
+            self.logger.error(msg)
+            return {
+                "success": False,
+                "trade_date": self.trade_date,
+                "error": msg,
+                "written": 0,
+                "fetched": 0,
+            }
+        if file_date and file_date != self.trade_date:
+            self.logger.warning(
+                "当日资金流向文件不存在，改用 %s（文件交易日 %s）",
+                path.name,
+                file_date,
+            )
+            self.trade_date = file_date
+        df = self.load_dataframe(path)
+        rows = self.dataframe_to_realtime_quote_rows(df)
+        if len(rows) < min_rows:
+            msg = (
+                f"港股资金流向文件有效行情仅 {len(rows)} 条，少于最低要求 {min_rows} 条"
+                f"（文件 {path.name}）"
+            )
+            self.logger.error(msg)
+            return {
+                "success": False,
+                "trade_date": self.trade_date,
+                "file": str(path),
+                "error": msg,
+                "written": 0,
+                "fetched": len(df),
+                "unique": len(rows),
+            }
+        written = self.upsert_realtime_quotes(rows)
+        result = {
+            "success": True,
+            "trade_date": self.trade_date,
+            "file": str(path),
+            "fetched": len(df),
+            "unique": len(rows),
+            "written": written,
+            "source": self.SOURCE,
+        }
+        self.logger.info(
+            "港股实时行情文件补采完成 trade_date=%s file=%s fetched=%s unique=%s written=%s",
+            self.trade_date,
+            path.name,
+            result["fetched"],
+            result["unique"],
+            written,
+        )
+        return result
 
     def upsert_rows(self, rows: List[Dict[str, Any]], batch_size: int = 500) -> int:
         if not rows:
@@ -435,6 +684,19 @@ def collect_hk_fund_flow_from_file(
     data_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     return HkFundFlowFromFileCollector(trade_date=trade_date, data_dir=data_dir).collect()
+
+
+def collect_hk_realtime_quotes_from_file(
+    trade_date: Optional[str] = None,
+    data_dir: Optional[Path] = None,
+    min_rows: int = HK_REALTIME_FILE_MIN_ROWS,
+    allow_latest: bool = True,
+) -> Dict[str, Any]:
+    """港股实时采集接口不足量时，从 hk_fund_flow_YYYYMMDD 文件补写入库。"""
+    return HkFundFlowFromFileCollector(trade_date=trade_date, data_dir=data_dir).collect_realtime_quotes(
+        min_rows=min_rows,
+        allow_latest=allow_latest,
+    )
 
 
 if __name__ == "__main__":

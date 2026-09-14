@@ -15,6 +15,34 @@ from .base import AKShareCollector
 from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 
+# 全量港股实时快照正常应有数千条；低于此阈值视为接口残缺/失败
+HK_REALTIME_MIN_ROWS = 100
+
+
+class HKRealtimeInsufficientDataError(RuntimeError):
+    """港股实时行情采集条数不足，判定失败。"""
+
+
+def hk_realtime_row_count(df: Any) -> int:
+    if df is None:
+        return 0
+    try:
+        return int(len(df))
+    except Exception:
+        return 0
+
+
+def hk_realtime_spot_insufficient(df: Any, min_rows: int = HK_REALTIME_MIN_ROWS) -> bool:
+    """全量快照是否视为无效（空或条数过少）。"""
+    return hk_realtime_row_count(df) < min_rows
+
+
+def hk_realtime_insufficient_error(count: int, min_rows: int = HK_REALTIME_MIN_ROWS) -> HKRealtimeInsufficientDataError:
+    return HKRealtimeInsufficientDataError(
+        f"港股实时行情采集失败：数据量 {count} 条，少于最低要求 {min_rows} 条"
+    )
+
+
 class HKRealtimeQuoteCollector(AKShareCollector):
     """港股实时行情数据采集器"""
     
@@ -136,26 +164,80 @@ class HKRealtimeQuoteCollector(AKShareCollector):
             
             # 先尝试调用 stock_hk_spot_em（东方财富接口，数据更全）
             try:
-                df = self._retry_on_failure(ak.stock_hk_spot_em)
-                source_name = "stock_hk_spot_em"
-                self.logger.info("成功使用 stock_hk_spot_em 接口获取港股实时行情数据")
+                tmp = self._retry_on_failure(ak.stock_hk_spot_em)
+                if hk_realtime_spot_insufficient(tmp):
+                    self.logger.warning(
+                        "stock_hk_spot_em 数据量不足（%s条，阈值%s条），尝试备用接口",
+                        hk_realtime_row_count(tmp),
+                        HK_REALTIME_MIN_ROWS,
+                    )
+                else:
+                    df = tmp
+                    source_name = "stock_hk_spot_em"
+                    self.logger.info("成功使用 stock_hk_spot_em 接口获取港股实时行情数据")
             except Exception as e1:
                 self.logger.warning(f"调用 stock_hk_spot_em 失败，尝试使用 stock_hk_spot，错误详情: {e1}")
-                # 如果 stock_hk_spot_em 失败，则尝试调用新浪财经接口
+
+            if hk_realtime_spot_insufficient(df):
                 try:
-                    df = self._retry_on_failure(ak.stock_hk_spot)
-                    source_name = "stock_hk_spot"
-                    self.logger.info("成功使用 stock_hk_spot 接口获取港股实时行情数据")
+                    tmp = self._retry_on_failure(ak.stock_hk_spot)
+                    if hk_realtime_spot_insufficient(tmp):
+                        self.logger.warning(
+                            "stock_hk_spot 数据量不足（%s条，阈值%s条）",
+                            hk_realtime_row_count(tmp),
+                            HK_REALTIME_MIN_ROWS,
+                        )
+                    else:
+                        df = tmp
+                        source_name = "stock_hk_spot"
+                        self.logger.info("成功使用 stock_hk_spot 接口获取港股实时行情数据")
                 except Exception as e2:
                     self.logger.error(f"调用 stock_hk_spot 也失败: {e2}")
-                    return False
-            
-            if df is None or (hasattr(df, 'empty') and df.empty):
-                self.logger.error("akshare港股实时行情数据为空或无法获取")
-                return False
+
+            data_count = hk_realtime_row_count(df)
+            if hk_realtime_spot_insufficient(df):
+                self.logger.warning(
+                    "港股实时接口数据不足（%s条，阈值%s条），尝试从 hk_fund_flow 文件补采",
+                    data_count,
+                    HK_REALTIME_MIN_ROWS,
+                )
+                from backend_core.data_collectors.akshare.hk_fund_flow_from_file import (
+                    collect_hk_realtime_quotes_from_file,
+                )
+
+                file_result = collect_hk_realtime_quotes_from_file()
+                if file_result.get("success"):
+                    written = int(file_result.get("written") or 0)
+                    session = SessionLocal()
+                    session.execute(text('''
+                        INSERT INTO realtime_collect_operation_logs 
+                        (operation_type, operation_desc, affected_rows, status, error_message, collect_source, created_at)
+                        VALUES (:operation_type, :operation_desc, :affected_rows, :status, :error_message, :collect_source, :created_at)
+                    '''), {
+                        'operation_type': 'hk_realtime_quote_collect',
+                        'operation_desc': (
+                            f"接口不足量，已从文件补采{written}条 "
+                            f"{file_result.get('file') or ''}"
+                        ),
+                        'affected_rows': written,
+                        'status': 'success',
+                        'error_message': None,
+                        'collect_source': 'file',
+                        'created_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                    session.commit()
+                    self.logger.info(
+                        "港股实时行情已从文件补采完成 written=%s file=%s",
+                        written,
+                        file_result.get("file"),
+                    )
+                    return True
+                extra = file_result.get("error") or "文件补采失败"
+                raise HKRealtimeInsufficientDataError(
+                    f"港股实时行情采集失败：接口数据量 {data_count} 条，少于最低要求 {HK_REALTIME_MIN_ROWS} 条；{extra}"
+                )
 
             session = SessionLocal()
-            data_count = len(df)
             self.logger.info("采集到 %d 条港股行情数据（数据源: %s）", data_count, source_name)
             
             # 检查数据量是否正常（港股应该有2000+只股票）
@@ -363,6 +445,9 @@ class HKRealtimeQuoteCollector(AKShareCollector):
             session.commit()
             self.logger.info("全部港股行情数据采集并入库完成")
             return True
+        except HKRealtimeInsufficientDataError as e:
+            self.logger.error("%s", e)
+            raise
         except Exception as e:
             error_msg = str(e)
             self.logger.error("采集或入库时出错: %s", error_msg, exc_info=True)

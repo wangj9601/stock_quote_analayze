@@ -119,3 +119,98 @@ def test_batch_collect_flag_endpoint():
     assert r.status_code == 200
     assert r.json()["data"]["affected"] == 2
     mock_db.commit.assert_called()
+
+
+def test_delete_item_endpoint():
+    app = FastAPI()
+    app.include_router(stock_basic_admin.router)
+
+    mock_db = MagicMock()
+    mock_result = MagicMock()
+    mock_result.rowcount = 1
+    mock_db.execute.return_value = mock_result
+
+    def _override_admin():
+        return MagicMock(username="tester")
+
+    def _override_db():
+        try:
+            yield mock_db
+        finally:
+            pass
+
+    app.dependency_overrides[stock_basic_admin.get_current_admin] = _override_admin
+    app.dependency_overrides[stock_basic_admin.get_db] = _override_db
+    client = TestClient(app)
+
+    with patch.object(stock_basic_admin, "ensure_share_columns"), patch.object(
+        stock_basic_admin, "_write_operation_log"
+    ):
+        r = client.delete("/api/admin/stock-basic/item?market=CN&code=000001")
+    assert r.status_code == 200
+    assert r.json()["data"]["deleted"] == 1
+    mock_db.commit.assert_called()
+
+
+def test_delete_item_not_found():
+    app = FastAPI()
+    app.include_router(stock_basic_admin.router)
+
+    mock_db = MagicMock()
+    mock_result = MagicMock()
+    mock_result.rowcount = 0
+    mock_db.execute.return_value = mock_result
+
+    def _override_admin():
+        return MagicMock(username="tester")
+
+    def _override_db():
+        try:
+            yield mock_db
+        finally:
+            pass
+
+    app.dependency_overrides[stock_basic_admin.get_current_admin] = _override_admin
+    app.dependency_overrides[stock_basic_admin.get_db] = _override_db
+    client = TestClient(app)
+
+    with patch.object(stock_basic_admin, "ensure_share_columns"), patch.object(
+        stock_basic_admin, "_write_operation_log"
+    ):
+        r = client.delete("/api/admin/stock-basic/item?market=HK&code=00700")
+    assert r.status_code == 404
+
+
+def test_batch_delete_endpoint():
+    app = FastAPI()
+    app.include_router(stock_basic_admin.router)
+
+    mock_db = MagicMock()
+    mock_result = MagicMock()
+    mock_result.rowcount = 2
+    mock_db.execute.return_value = mock_result
+
+    def _override_admin():
+        return MagicMock(username="tester")
+
+    def _override_db():
+        try:
+            yield mock_db
+        finally:
+            pass
+
+    app.dependency_overrides[stock_basic_admin.get_current_admin] = _override_admin
+    app.dependency_overrides[stock_basic_admin.get_db] = _override_db
+    client = TestClient(app)
+
+    with patch.object(stock_basic_admin, "ensure_share_columns"), patch.object(
+        stock_basic_admin, "_write_operation_log"
+    ):
+        r = client.post(
+            "/api/admin/stock-basic/batch-delete",
+            json={"market": "CN", "codes": ["000001", "600000"]},
+        )
+    assert r.status_code == 200
+    assert r.json()["data"]["deleted"] == 2
+    assert r.json()["data"]["requested"] == 2
+    mock_db.commit.assert_called()

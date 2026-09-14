@@ -73,6 +73,23 @@ class StockBasicService {
     })
   }
 
+  async deleteItem(
+    market: StockBasicMarket,
+    code: string
+  ): Promise<{ success: boolean; data: { deleted: number } }> {
+    const q = new URLSearchParams()
+    q.set('market', market)
+    q.set('code', code)
+    return apiService.delete(`/stock-basic/item?${q.toString()}`)
+  }
+
+  async batchDelete(
+    market: StockBasicMarket,
+    codes: string[]
+  ): Promise<{ success: boolean; data: { deleted: number; requested: number } }> {
+    return apiService.post('/stock-basic/batch-delete', { market, codes })
+  }
+
   async downloadTemplate(format: 'csv' | 'xlsx'): Promise<Blob> {
     return apiService.get(`/stock-basic/import/template?format=${format}`, {
       responseType: 'blob'
