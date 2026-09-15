@@ -61,6 +61,50 @@ export interface BoardFundFlowRankParams {
   trade_date?: string
 }
 
+export interface BoardConstituentFundFlowItem {
+  code: string
+  name: string
+  net_amount: number | null
+  inflow_amount: number | null
+  outflow_amount: number | null
+  turnover_amount: number | null
+  change_percent: number | null
+  days_count: number
+}
+
+export interface BoardConstituentFundFlowData {
+  period: BoardFundFlowRankPeriod
+  period_label: string
+  board_kind: string
+  board_code: string
+  board_code_source: string
+  board_name: string | null
+  cons_board_code: string | null
+  mapped_em_board_code: string | null
+  trade_days: number
+  start_date: string | null
+  end_date: string | null
+  member_count: number
+  items: BoardConstituentFundFlowItem[]
+  count: number
+  source: string
+  message?: string
+}
+
+export interface BoardConstituentFundFlowResponse {
+  success: boolean
+  data?: BoardConstituentFundFlowData
+  message?: string
+}
+
+export interface BoardConstituentFundFlowParams {
+  board_kind: 'industry' | 'concept'
+  board_code: string
+  period?: BoardFundFlowRankPeriod
+  board_code_source?: string
+  trade_date?: string
+}
+
 export const BOARD_FUND_FLOW_RANK_PERIODS: {
   value: BoardFundFlowRankPeriod
   label: string
@@ -130,9 +174,38 @@ export async function getBoardFundFlowRank(
   return body
 }
 
+export async function getBoardConstituentFundFlow(
+  params: BoardConstituentFundFlowParams
+): Promise<BoardConstituentFundFlowResponse> {
+  const q = new URLSearchParams()
+  q.set('board_kind', params.board_kind)
+  q.set('board_code', params.board_code)
+  q.set('period', params.period || 'day')
+  q.set('board_code_source', params.board_code_source || 'tonghuashun')
+  if (params.trade_date) q.set('trade_date', params.trade_date)
+
+  const url = `/api/board_fund_flow/constituents?${q.toString()}`
+  const res = await fetch(url, { headers: authHeaders() })
+  const text = await res.text()
+  let body: BoardConstituentFundFlowResponse = { success: false }
+  try {
+    body = text ? (JSON.parse(text) as BoardConstituentFundFlowResponse) : body
+  } catch {
+    body = { success: false, message: text?.slice(0, 200) || `HTTP ${res.status}` }
+  }
+  if (!res.ok) {
+    return {
+      success: false,
+      message: body.message || `请求失败(${res.status})`,
+    }
+  }
+  return body
+}
+
 const boardFundFlowService = {
   getToday: getBoardFundFlowToday,
   getRank: getBoardFundFlowRank,
+  getConstituents: getBoardConstituentFundFlow,
   periods: BOARD_FUND_FLOW_RANK_PERIODS,
 }
 

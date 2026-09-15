@@ -132,6 +132,77 @@ def test_board_env_weak_ignores_r2_by_default():
     assert env["board_weak"] is True
 
 
+def test_multi_window_trend_all_weak():
+    from backend_core.strategies.gms.board_resonance import (
+        evaluate_multi_window_board_trend,
+    )
+
+    trend = evaluate_multi_window_board_trend(
+        {
+            "sector_slope_120": -0.002,
+            "board_env_120": "weak",
+            "sector_slope": -0.003,
+            "board_env": "weak",
+            "sector_slope_20": -0.004,
+            "board_env_20": "weak",
+            "sector_slope_short": -0.005,
+            "board_env_short": "weak",
+            "sector_slope_5": -0.006,
+            "board_env_5": "weak",
+        }
+    )
+    assert trend["board_trend_label"] == "全面走弱"
+    assert trend["board_trend_env"] == "weak"
+    assert "综合判断：全面走弱" in trend["board_trend_summary"]
+
+
+def test_multi_window_trend_long_weak_short_strong():
+    from backend_core.strategies.gms.board_resonance import (
+        evaluate_multi_window_board_trend,
+    )
+
+    trend = evaluate_multi_window_board_trend(
+        {
+            "sector_slope_120": -0.002,
+            "board_env_120": "weak",
+            "sector_slope": -0.003,
+            "board_env": "weak",
+            "sector_slope_20": -0.001,
+            "board_env_20": "weak",
+            "sector_slope_short": 0.003,
+            "board_env_short": "strong",
+            "sector_slope_5": 0.004,
+            "board_env_5": "strong",
+        }
+    )
+    assert trend["board_trend_label"] == "长弱短强"
+    assert trend["board_trend_env"] == "mixed"
+    assert "反抽" in trend["board_trend_summary"] or "修复" in trend["board_trend_summary"]
+
+
+def test_multi_window_trend_long_strong_short_weak():
+    from backend_core.strategies.gms.board_resonance import (
+        evaluate_multi_window_board_trend,
+    )
+
+    trend = evaluate_multi_window_board_trend(
+        {
+            "sector_slope_120": 0.002,
+            "board_env_120": "strong",
+            "sector_slope": 0.002,
+            "board_env": "strong",
+            "sector_slope_20": 0.001,
+            "board_env_20": "neutral",
+            "sector_slope_short": -0.002,
+            "board_env_short": "weak",
+            "sector_slope_5": -0.003,
+            "board_env_5": "weak",
+        }
+    )
+    assert trend["board_trend_label"] == "长强短弱"
+    assert trend["board_trend_env"] == "mixed"
+
+
 def test_sector_slope_log_still_works():
     it = [100.0 * (1.002**i) for i in range(60)]
     bench = [{"date": f"d{i}", "i_t": v} for i, v in enumerate(it)]

@@ -1141,6 +1141,19 @@ def _attach_board_env_fields(item: Dict[str, Any], change_percent: Any = None) -
     item["slope_transform"] = env.get("slope_transform") or item.get("slope_transform") or "log"
 
 
+def _attach_multi_window_trend_fields(item: Dict[str, Any]) -> None:
+    """附加 5/10/20/60/120 日综合走势标签与说明。"""
+    from backend_core.strategies.gms.board_resonance import (
+        evaluate_multi_window_board_trend,
+    )
+
+    trend = evaluate_multi_window_board_trend(item)
+    item["board_trend_label"] = trend.get("board_trend_label")
+    item["board_trend_env"] = trend.get("board_trend_env")
+    item["board_trend_summary"] = trend.get("board_trend_summary")
+    item["board_trend_windows"] = trend.get("board_trend_windows") or []
+
+
 def fetch_industry_board_list_with_metrics(
     db: Session,
     *,
@@ -1217,6 +1230,7 @@ def fetch_industry_board_list_with_metrics(
             change_percent=item.get("change_percent"),
         )
         _attach_board_env_fields(item, item.get("change_percent"))
+        _attach_multi_window_trend_fields(item)
         out.append(item)
 
     # 走强优先，同档内按板块斜率降序；无斜率靠后
@@ -1311,6 +1325,7 @@ def fetch_concept_board_list_with_metrics(
             change_percent=item.get("change_percent"),
         )
         _attach_board_env_fields(item, item.get("change_percent"))
+        _attach_multi_window_trend_fields(item)
         out.append(item)
 
     def _sort_key(x: Dict[str, Any]) -> Tuple[int, int, float, str]:
@@ -1556,6 +1571,7 @@ def fetch_board_detail(
         board_code=code,
         change_percent=change_percent,
     )
+    _attach_multi_window_trend_fields(detail)
 
     if include_roles:
         try:
@@ -1595,6 +1611,7 @@ def fetch_board_detail(
                         detail["board_env_label"] = env2["board_env_label"]
                         detail["board_weak_reason"] = env2["board_weak_reason"]
                         detail["board_weak_summary"] = env2["board_weak_summary"]
+                        _attach_multi_window_trend_fields(detail)
                     except (TypeError, ValueError):
                         pass
         except Exception:

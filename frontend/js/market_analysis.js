@@ -12,9 +12,11 @@ const MarketAnalysis = {
     board: { items: [], meta: {} },
     slope: { items: [], meta: {}, raw: [] },
   },
-  charts: { stock: null, board: null, slope: null },
+  charts: { stock: null, board: null, slope: null, boardConstituents: null },
   loadedOnce: false,
   _resizeBound: null,
+  _boardClickBound: false,
+  boardConstituents: { items: [], meta: {}, board: null },
 
   init() {
     this.bindEvents();
@@ -58,6 +60,29 @@ const MarketAnalysis = {
     map.forEach(([id, fn]) => {
       const el = document.getElementById(id);
       if (el) el.addEventListener('click', fn);
+    });
+
+    const tbody = document.getElementById('maBoardFlowTbody');
+    if (tbody) {
+      tbody.addEventListener('click', (ev) => {
+        const tr = ev.target && ev.target.closest ? ev.target.closest('tr[data-board-code]') : null;
+        if (!tr) return;
+        const code = tr.getAttribute('data-board-code');
+        const name = tr.getAttribute('data-board-name') || '';
+        if (code) this.openBoardConstituents(code, name);
+      });
+    }
+
+    const closeBtn = document.getElementById('maBoardConstituentsClose');
+    if (closeBtn) closeBtn.addEventListener('click', () => this.closeBoardConstituents());
+    const modal = document.getElementById('maBoardConstituentsModal');
+    if (modal) {
+      modal.addEventListener('click', (ev) => {
+        if (ev.target === modal) this.closeBoardConstituents();
+      });
+    }
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape') this.closeBoardConstituents();
     });
   },
 
@@ -434,6 +459,7 @@ const MarketAnalysis = {
       chart.clear();
       return;
     }
+    if (el) el.classList.add('ma-chart--clickable');
     const names = items.map((r) => String(r.board_name || r.board_code || '--'));
     const values = items.map((r) => this.toYi(r.main_net_inflow) || 0);
     const option = this.buildBarOption(names, values, `${label}净流入(亿)`, (params) => {
@@ -441,10 +467,20 @@ const MarketAnalysis = {
       const p = list[0] || {};
       const v = Number(p.value);
       const sign = v > 0 ? '+' : '';
-      return `${p.name || ''}<br/>${label}净流入：${sign}${v.toFixed(2)} 亿`;
+      return `${p.name || ''}<br/>${label}净流入：${sign}${v.toFixed(2)} 亿<br/><span style="color:#94a3b8">点击查看成分股资金流向</span>`;
     });
     chart.setOption(option, true);
     chart.resize();
+    if (!this._boardClickBound) {
+      this._boardClickBound = true;
+      chart.on('click', (params) => {
+        const idx = Number(params && params.dataIndex);
+        const row = Number.isFinite(idx) ? (this.cache.board.items || [])[idx] : null;
+        if (row && row.board_code) {
+          this.openBoardConstituents(row.board_code, row.board_name || '');
+        }
+      });
+    }
   },
 
   renderBoardTable() {
@@ -462,11 +498,176 @@ const MarketAnalysis = {
       .map((r, i) => {
         const net = Number(r.main_net_inflow);
         const chg = r.change_percent;
-        return `<tr>
+        return `<tr class="ma-row-clickable" data-board-code="${this.escapeHtml(r.board_code || '')}" data-board-name="${this.escapeHtml(r.board_name || '')}" title="点击查看成分股资金流向">
           <td>${i + 1}</td>
           <td>${this.escapeHtml(r.board_code || '--')}</td>
           <td>${this.escapeHtml(r.board_name || '--')}</td>
           <td class="ma-num ${this.colorClass(net)}">${this.fmtYi(r.main_net_inflow)}</td>
+          <td class="ma-num">${this.fmtYi(r.inflow_amount)}</td>
+          <td class="ma-num">${this.fmtYi(r.outflow_amount)}</td>
+          <td class="ma-num ${this.colorClass(chg)}">${chg == null || !Number.isFinite(Number(chg)) ? '--' : this.fmtNum(chg, 2)}</td>
+          <td class="ma-num">${r.days_count != null ? r.days_count : '--'}</td>
+        </tr>`;
+      })
+      .join('');
+  },
+
+  /* ---------- 板块成分股资金流向 ---------- */
+
+  openBoardConstituents(boardCode, boardName) {
+    const code = String(boardCode || '').trim();
+    if (!code) return;
+    const modal = document.getElementById('maBoardConstituentsModal');
+    const title = document.getElementById('maBoardConstituentsTitle');
+    if (title) {
+      title.textContent = `${boardName || code} · 成分股资金流向`;
+    }
+    if (modal) {
+      modal.style.display = 'flex';
+      modal.setAttribute('aria-hidden', 'false');
+    }
+    this.loadBoardConstituents(code, boardName || '');
+  },
+
+  closeBoardConstituents() {
+    const modal = document.getElementById('maBoardConstituentsModal');
+    if (!modal || modal.style.display === 'none') return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+  },
+
+  async loadBoardConstituents(boardCode, boardName) {
+    const kind = this.radioValue('maBoardKind', 'industry');
+    const period = this.radioValue('maBoardPeriod', 'day');
+    const statusId = 'maBoardConstituentsStatus';
+    this.setStatus(statusId, '加载中…', false);
+    this.setMeta('maBoardConstituentsMeta', '');
+    const tbody = document.getElementById('maBoardConstituentsTbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="ma-empty">加载中…</td></tr>';
+    try {
+      const q = new URLSearchParams({
+        board_kind: kind,
+        board_code: boardCode,
+        period,
+        board_code_source: this.BOARD_CODE_SOURCE,
+      });
+      const body = await this.fetchJson(
+        `${this.API_BASE_URL}/api/board_fund_flow/constituents?${q.toString()}`
+      );
+      if (!body.success) throw new Error(body.message || '加载失败');
+      const data = body.data || {};
+      const items = Array.isArray(data.items) ? data.items : [];
+      items.sort((a, b) => {
+        const av = a.net_amount == null ? Number.POSITIVE_INFINITY : Number(a.net_amount);
+        const bv = b.net_amount == null ? Number.POSITIVE_INFINITY : Number(b.net_amount);
+        return av - bv;
+      });
+      const displayName = data.board_name || boardName || boardCode;
+      this.boardConstituents = {
+        items,
+        meta: {
+          period: data.period || period,
+          period_label: data.period_label || '日',
+          start_date: data.start_date || null,
+          end_date: data.end_date || null,
+          member_count: data.member_count,
+          message: data.message || null,
+        },
+        board: {
+          code: data.board_code || boardCode,
+          name: displayName,
+          kind,
+        },
+      };
+      const title = document.getElementById('maBoardConstituentsTitle');
+      if (title) title.textContent = `${displayName} · 成分股资金流向`;
+      const kindLabel = kind === 'concept' ? '概念' : '行业';
+      const range = this.fmtRange(data.start_date, data.end_date);
+      const withFlow = items.filter((x) => x.net_amount != null).length;
+      const parts = [
+        kindLabel,
+        `${data.period_label || '日'}净流入`,
+        range || null,
+        data.member_count != null ? `成分 ${data.member_count} 只` : null,
+        withFlow ? `有资金流 ${withFlow} 只` : null,
+        '同花顺',
+      ].filter(Boolean);
+      this.setMeta('maBoardConstituentsMeta', parts.join(' · '));
+      this.renderBoardConstituentsTable();
+      this.renderBoardConstituentsChart();
+      const emptyMsg =
+        data.message ||
+        (items.length ? '' : '暂无成分股资金流（请先同步成分股并日采同花顺资金流向）');
+      this.setStatus(statusId, emptyMsg, false);
+    } catch (e) {
+      this.boardConstituents = { items: [], meta: {}, board: { code: boardCode, name: boardName, kind } };
+      this.renderBoardConstituentsTable();
+      if (this.charts.boardConstituents) this.charts.boardConstituents.clear();
+      this.setStatus(statusId, e.message || '加载失败', true);
+    }
+  },
+
+  renderBoardConstituentsChart() {
+    const el = document.getElementById('maBoardConstituentsChart');
+    const chart = this.ensureChart('boardConstituents', el);
+    if (!chart) return;
+    const items = (this.boardConstituents.items || []).filter((r) => r.net_amount != null);
+    const label = this.boardConstituents.meta.period_label || '日';
+    if (!items.length) {
+      chart.clear();
+      return;
+    }
+    const names = items.map((r) => String(r.name || r.code || '--'));
+    const values = items.map((r) => this.toYi(r.net_amount) || 0);
+    const meta = items.map((r) => ({
+      code: r.code,
+      inflow: r.inflow_amount,
+      outflow: r.outflow_amount,
+      days: r.days_count,
+    }));
+    const option = this.buildBarOption(names, values, `${label}净流入(亿)`, (params) => {
+      const list = Array.isArray(params) ? params : [params];
+      const p = list[0] || {};
+      const idx = Number(p.dataIndex);
+      const m = Number.isFinite(idx) ? meta[idx] : undefined;
+      const v = Number(p.value);
+      const sign = v > 0 ? '+' : '';
+      return [
+        `${p.name || ''}${m?.code ? `（${m.code}）` : ''}`,
+        `${label}净流入：${sign}${v.toFixed(2)} 亿`,
+        `流入：${this.fmtYi(m?.inflow)} 亿`,
+        `流出：${this.fmtYi(m?.outflow)} 亿`,
+        m?.days != null ? `覆盖交易日：${m.days}` : '',
+      ]
+        .filter(Boolean)
+        .join('<br/>');
+    });
+    chart.setOption(option, true);
+    chart.resize();
+  },
+
+  renderBoardConstituentsTable() {
+    const tbody = document.getElementById('maBoardConstituentsTbody');
+    if (!tbody) return;
+    const items = this.boardConstituents.items || [];
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="ma-empty">暂无数据</td></tr>';
+      return;
+    }
+    const rows = [...items].sort((a, b) => {
+      const av = a.net_amount == null ? Number.NEGATIVE_INFINITY : Number(a.net_amount);
+      const bv = b.net_amount == null ? Number.NEGATIVE_INFINITY : Number(b.net_amount);
+      return bv - av;
+    });
+    tbody.innerHTML = rows
+      .map((r, i) => {
+        const net = r.net_amount == null ? null : Number(r.net_amount);
+        const chg = r.change_percent;
+        return `<tr>
+          <td>${i + 1}</td>
+          <td><a class="ma-code-link" href="stock.html?code=${encodeURIComponent(r.code || '')}" target="_blank" rel="noopener">${this.escapeHtml(r.code || '--')}</a></td>
+          <td>${this.escapeHtml(r.name || '--')}</td>
+          <td class="ma-num ${this.colorClass(net)}">${this.fmtYi(r.net_amount)}</td>
           <td class="ma-num">${this.fmtYi(r.inflow_amount)}</td>
           <td class="ma-num">${this.fmtYi(r.outflow_amount)}</td>
           <td class="ma-num ${this.colorClass(chg)}">${chg == null || !Number.isFinite(Number(chg)) ? '--' : this.fmtNum(chg, 2)}</td>

@@ -308,6 +308,59 @@
     color: #b91c1c;
 }
 
+.ma-hint {
+    margin: 0 0 0.5rem;
+    font-size: 0.8125rem;
+    color: #64748b;
+}
+
+.ma-table tbody tr.ma-row-clickable {
+    cursor: pointer;
+}
+
+.ma-table tbody tr.ma-row-clickable:hover {
+    background: #f1f5f9;
+}
+
+.ma-chart.ma-chart--clickable {
+    cursor: pointer;
+}
+
+.ma-constituents-modal {
+    width: min(960px, 100%);
+    max-height: min(90vh, 880px);
+}
+
+.ma-constituents-meta {
+    padding: 0.55rem 1.1rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.ma-constituents-body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.75rem 1.1rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.ma-constituents-chart {
+    height: 280px;
+    flex-shrink: 0;
+}
+
+.ma-constituents-table-wrap {
+    max-height: 320px;
+}
+
+.ma-constituents-modal .ma-status {
+    padding: 0.35rem 1.1rem 0.75rem;
+}
+
 a.ma-code-link {
     color: #1d4ed8;
     text-decoration: none;

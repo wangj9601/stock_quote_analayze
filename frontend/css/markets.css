@@ -1173,8 +1173,6 @@
 }
 
 .sector-limit-up-table-wrap {
-    max-height: 320px;
-    overflow: auto;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
 }
@@ -1293,6 +1291,29 @@
     border-left: 3px solid var(--color-primary);
     padding: 10px 12px;
     border-radius: 0 4px 4px 0;
+}
+
+.sector-trend-summary-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    margin-bottom: 6px;
+}
+
+.sector-trend-summary-title {
+    font-weight: 600;
+    color: #334155;
+}
+
+.sector-trend-summary-body {
+    color: #475569;
+    word-break: break-word;
+}
+
+.sector-weak-chip.mixed {
+    color: #6d28d9;
+    background: #ede9fe;
 }
 
 .sector-slope-trend-wrap {

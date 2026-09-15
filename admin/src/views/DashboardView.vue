@@ -25,6 +25,7 @@
             <span class="fund-flow-date">
               {{ boardFlowPeriodLabel }}净流入
               <template v-if="boardFlowRangeText"> · {{ boardFlowRangeText }}</template>
+              <span class="board-flow-hint"> · 点击柱形查看成分股</span>
             </span>
           </div>
         </template>
@@ -41,7 +42,7 @@
               <div
                 v-show="!industryEmpty && !industryError"
                 ref="industryChartRef"
-                class="fund-flow-chart"
+                class="fund-flow-chart fund-flow-chart--clickable"
               />
               <div v-if="industryEmpty" class="fund-flow-empty">暂无板块资金流（请先日采）</div>
               <div v-else-if="industryError" class="fund-flow-empty fund-flow-error">
@@ -61,7 +62,7 @@
               <div
                 v-show="!conceptEmpty && !conceptError"
                 ref="conceptChartRef"
-                class="fund-flow-chart"
+                class="fund-flow-chart fund-flow-chart--clickable"
               />
               <div v-if="conceptEmpty" class="fund-flow-empty">暂无板块资金流（请先日采）</div>
               <div v-else-if="conceptError" class="fund-flow-empty fund-flow-error">
@@ -72,6 +73,59 @@
         </el-row>
       </el-card>
     </div>
+
+    <el-dialog
+      v-model="constituentsVisible"
+      :title="constituentsTitle"
+      width="920px"
+      destroy-on-close
+      class="board-constituents-dialog"
+      @closed="onConstituentsDialogClosed"
+    >
+      <div class="constituents-meta" v-if="constituentsMetaText">{{ constituentsMetaText }}</div>
+      <div v-loading="constituentsLoading">
+        <div
+          v-show="!constituentsEmpty && !constituentsError"
+          ref="constituentsChartRef"
+          class="constituents-chart"
+        />
+        <div v-if="constituentsEmpty" class="constituents-empty">
+          {{ constituentsEmptyMsg || '暂无成分股资金流' }}
+        </div>
+        <div v-else-if="constituentsError" class="constituents-empty fund-flow-error">
+          {{ constituentsError }}
+        </div>
+        <el-table
+          v-if="!constituentsEmpty && !constituentsError && constituentsRows.length"
+          :data="constituentsTableRows"
+          size="small"
+          max-height="320"
+          stripe
+          class="constituents-table"
+        >
+          <el-table-column type="index" label="排名" width="60" />
+          <el-table-column prop="code" label="代码" width="90" />
+          <el-table-column prop="name" label="名称" min-width="100" />
+          <el-table-column label="净流入(亿)" width="110" align="right">
+            <template #default="{ row }">
+              <span :class="netClass(row.net_amount)">{{ formatYi(row.net_amount) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="流入(亿)" width="100" align="right">
+            <template #default="{ row }">{{ formatYi(row.inflow_amount) }}</template>
+          </el-table-column>
+          <el-table-column label="流出(亿)" width="100" align="right">
+            <template #default="{ row }">{{ formatYi(row.outflow_amount) }}</template>
+          </el-table-column>
+          <el-table-column label="涨跌幅%" width="90" align="right">
+            <template #default="{ row }">
+              <span :class="netClass(row.change_percent)">{{ formatPct(row.change_percent) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="days_count" label="覆盖交易日" width="100" align="right" />
+        </el-table>
+      </div>
+    </el-dialog>
 
     <!-- 个股资金流向趋势跟踪（日 / 周 / 月） -->
     <div class="fund-flow-charts stock-fund-flow-charts">
@@ -171,34 +225,15 @@
         </el-col>
       </el-row>
     </div>
-
-    <!-- 最近活动 -->
-    <div class="recent-activity">
-      <el-card>
-        <template #header>
-          <span>最近活动</span>
-        </template>
-        
-        <el-timeline>
-          <el-timeline-item
-            v-for="activity in recentActivities"
-            :key="activity.id"
-            :timestamp="activity.time"
-            :type="activity.type"
-          >
-            {{ activity.content }}
-          </el-timeline-item>
-        </el-timeline>
-      </el-card>
-    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import boardFundFlowService, {
   BOARD_FUND_FLOW_RANK_PERIODS,
+  type BoardConstituentFundFlowItem,
   type BoardFundFlowRankPeriod,
   type BoardFundFlowTodayItem
 } from '@/services/boardFundFlow.service'
@@ -211,48 +246,33 @@ import stockFundFlowRankService, {
   type StockFundFlowRankPeriod
 } from '@/services/stockFundFlowRank.service'
 
-const recentActivities = ref<{
-  id: number
-  content: string
-  time: string
-  type: 'success' | 'primary' | 'warning' | 'info' | 'danger'
-}[]>([
-  {
-    id: 1,
-    content: '系统启动完成',
-    time: '2024-01-01 08:00:00',
-    type: 'success'
-  },
-  {
-    id: 2,
-    content: '数据采集任务开始',
-    time: '2024-01-01 08:30:00',
-    type: 'primary'
-  },
-  {
-    id: 3,
-    content: '用户登录：admin',
-    time: '2024-01-01 09:00:00',
-    type: 'info'
-  },
-  {
-    id: 4,
-    content: '系统备份完成',
-    time: '2024-01-01 10:00:00',
-    type: 'success'
-  }
-])
-
 const industryChartRef = ref<HTMLDivElement | null>(null)
 const conceptChartRef = ref<HTMLDivElement | null>(null)
 const industrySlopeChartRef = ref<HTMLDivElement | null>(null)
 const conceptSlopeChartRef = ref<HTMLDivElement | null>(null)
 const stockFlowChartRef = ref<HTMLDivElement | null>(null)
+const constituentsChartRef = ref<HTMLDivElement | null>(null)
 let industryChart: echarts.ECharts | null = null
 let conceptChart: echarts.ECharts | null = null
 let industrySlopeChart: echarts.ECharts | null = null
 let conceptSlopeChart: echarts.ECharts | null = null
 let stockFlowChart: echarts.ECharts | null = null
+let constituentsChart: echarts.ECharts | null = null
+let industryClickBound = false
+let conceptClickBound = false
+
+const industryRows = ref<BoardFundFlowTodayItem[]>([])
+const conceptRows = ref<BoardFundFlowTodayItem[]>([])
+
+const constituentsVisible = ref(false)
+const constituentsLoading = ref(false)
+const constituentsEmpty = ref(false)
+const constituentsError = ref('')
+const constituentsEmptyMsg = ref('')
+const constituentsTitle = ref('板块成分股资金流向')
+const constituentsMetaText = ref('')
+const constituentsRows = ref<BoardConstituentFundFlowItem[]>([])
+const constituentsPeriodLabel = ref('日')
 
 const industryLoading = ref(false)
 const conceptLoading = ref(false)
@@ -323,7 +343,7 @@ function buildChartOption(
         const p = list[0] as { name?: string; value?: number }
         const v = Number(p?.value)
         const sign = v > 0 ? '+' : ''
-        return `${p?.name || ''}<br/>${periodLabel}净流入：${sign}${v.toFixed(2)} 亿`
+        return `${p?.name || ''}<br/>${periodLabel}净流入：${sign}${v.toFixed(2)} 亿<br/><span style="color:#94a3b8">点击查看成分股资金流向</span>`
       }
     },
     grid: {
@@ -390,6 +410,25 @@ function ensureChart(el: HTMLDivElement | null, existing: echarts.ECharts | null
   return echarts.init(el)
 }
 
+function bindBoardChartClick(kind: 'industry' | 'concept', chart: echarts.ECharts | null) {
+  if (!chart) return
+  if (kind === 'industry') {
+    if (industryClickBound) return
+    industryClickBound = true
+  } else {
+    if (conceptClickBound) return
+    conceptClickBound = true
+  }
+  chart.on('click', (params: { dataIndex?: number }) => {
+    const rows = kind === 'industry' ? industryRows.value : conceptRows.value
+    const idx = Number(params?.dataIndex)
+    const row = Number.isFinite(idx) ? rows[idx] : undefined
+    if (row?.board_code) {
+      void openBoardConstituents(kind, row.board_code, row.board_name || '')
+    }
+  })
+}
+
 function renderFundFlowChart(
   kind: 'industry' | 'concept',
   items: BoardFundFlowTodayItem[]
@@ -397,14 +436,204 @@ function renderFundFlowChart(
   const rows = sortAllByNetInflow(items)
   const label = boardFlowPeriodLabel.value || '日'
   if (kind === 'industry') {
+    industryRows.value = rows
     industryChart = ensureChart(industryChartRef.value, industryChart)
     industryChart?.setOption(buildChartOption(rows, '行业', label), true)
     industryChart?.resize()
+    bindBoardChartClick('industry', industryChart)
   } else {
+    conceptRows.value = rows
     conceptChart = ensureChart(conceptChartRef.value, conceptChart)
     conceptChart?.setOption(buildChartOption(rows, '概念', label), true)
     conceptChart?.resize()
+    bindBoardChartClick('concept', conceptChart)
   }
+}
+
+function formatYi(yuan: number | null | undefined) {
+  if (yuan == null || !Number.isFinite(Number(yuan))) return '--'
+  const yi = Math.round((Number(yuan) / 1e8) * 100) / 100
+  const sign = yi > 0 ? '+' : ''
+  return `${sign}${yi.toFixed(2)}`
+}
+
+function formatPct(v: number | null | undefined) {
+  if (v == null || !Number.isFinite(Number(v))) return '--'
+  const n = Number(v)
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${n.toFixed(2)}`
+}
+
+function netClass(v: number | null | undefined) {
+  if (v == null || !Number.isFinite(Number(v))) return ''
+  if (Number(v) > 0) return 'net-pos'
+  if (Number(v) < 0) return 'net-neg'
+  return ''
+}
+
+const constituentsTableRows = computed(() =>
+  [...constituentsRows.value].sort((a, b) => {
+    const av = a.net_amount == null ? Number.NEGATIVE_INFINITY : Number(a.net_amount)
+    const bv = b.net_amount == null ? Number.NEGATIVE_INFINITY : Number(b.net_amount)
+    return bv - av
+  })
+)
+
+function buildConstituentsChartOption(rows: BoardConstituentFundFlowItem[], periodLabel: string) {
+  const list = rows.filter((r) => r.net_amount != null)
+  const names = list.map((r) => String(r.name || r.code || '--'))
+  const values = list.map((r) => Math.round((Number(r.net_amount) / 1e8) * 100) / 100)
+  const meta = list.map((r) => ({
+    code: r.code,
+    inflow: r.inflow_amount,
+    outflow: r.outflow_amount,
+    days: r.days_count
+  }))
+  const useZoom = list.length > 20
+  const windowSize = 20
+  const startPct = useZoom
+    ? Math.max(0, ((list.length - windowSize) / list.length) * 100)
+    : 0
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params: unknown) => {
+        const arr = Array.isArray(params) ? params : [params]
+        const p = arr[0] as { name?: string; value?: number; dataIndex?: number }
+        const idx = Number(p?.dataIndex)
+        const m = Number.isFinite(idx) ? meta[idx] : undefined
+        const v = Number(p?.value)
+        const sign = v > 0 ? '+' : ''
+        return [
+          `${p?.name || ''}${m?.code ? `（${m.code}）` : ''}`,
+          `${periodLabel}净流入：${sign}${v.toFixed(2)} 亿`,
+          `流入：${formatYi(m?.inflow)} 亿`,
+          `流出：${formatYi(m?.outflow)} 亿`,
+          m?.days != null ? `覆盖交易日：${m.days}` : ''
+        ]
+          .filter(Boolean)
+          .join('<br/>')
+      }
+    },
+    grid: {
+      left: 108,
+      right: useZoom ? 36 : 28,
+      top: 12,
+      bottom: 28
+    },
+    dataZoom: useZoom
+      ? [
+          {
+            type: 'slider',
+            yAxisIndex: 0,
+            width: 14,
+            right: 4,
+            start: startPct,
+            end: 100,
+            brushSelect: false
+          },
+          { type: 'inside', yAxisIndex: 0, start: startPct, end: 100 }
+        ]
+      : [],
+    xAxis: {
+      type: 'value',
+      name: `${periodLabel}净流入(亿)`,
+      nameLocation: 'middle',
+      nameGap: 22,
+      axisLabel: { fontSize: 11 },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } }
+    },
+    yAxis: {
+      type: 'category',
+      data: names,
+      axisLabel: { fontSize: 11, width: 96, overflow: 'truncate' }
+    },
+    series: [
+      {
+        type: 'bar',
+        data: values.map((v) => ({
+          value: v,
+          itemStyle: {
+            color: v >= 0 ? '#dc2626' : '#16a34a',
+            borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
+          }
+        })),
+        barMaxWidth: 14
+      }
+    ]
+  }
+}
+
+async function openBoardConstituents(
+  kind: 'industry' | 'concept',
+  boardCode: string,
+  boardName: string
+) {
+  constituentsVisible.value = true
+  constituentsLoading.value = true
+  constituentsEmpty.value = false
+  constituentsError.value = ''
+  constituentsEmptyMsg.value = ''
+  constituentsRows.value = []
+  constituentsTitle.value = `${boardName || boardCode} · 成分股资金流向`
+  constituentsMetaText.value = ''
+  try {
+    const resp = await boardFundFlowService.getConstituents({
+      board_kind: kind,
+      board_code: boardCode,
+      period: boardFlowPeriod.value
+    })
+    if (!resp.success) throw new Error(resp.message || '加载失败')
+    const data = resp.data
+    const items = data?.items || []
+    const name = data?.board_name || boardName || boardCode
+    constituentsTitle.value = `${name} · 成分股资金流向`
+    constituentsPeriodLabel.value = data?.period_label || boardFlowPeriodLabel.value || '日'
+    const range = formatBoardFlowRange(data?.start_date, data?.end_date)
+    const withFlow = items.filter((x) => x.net_amount != null).length
+    const kindLabel = kind === 'concept' ? '概念' : '行业'
+    constituentsMetaText.value = [
+      kindLabel,
+      `${constituentsPeriodLabel.value}净流入`,
+      range || null,
+      data?.member_count != null ? `成分 ${data.member_count} 只` : null,
+      withFlow ? `有资金流 ${withFlow} 只` : null,
+      '同花顺'
+    ]
+      .filter(Boolean)
+      .join(' · ')
+
+    const sorted = [...items].sort((a, b) => {
+      const av = a.net_amount == null ? Number.POSITIVE_INFINITY : Number(a.net_amount)
+      const bv = b.net_amount == null ? Number.POSITIVE_INFINITY : Number(b.net_amount)
+      return av - bv
+    })
+    constituentsRows.value = sorted
+    if (!items.length) {
+      constituentsEmpty.value = true
+      constituentsEmptyMsg.value =
+        data?.message || '暂无成分股资金流（请先同步成分股并日采同花顺资金流向）'
+      return
+    }
+    await nextTick()
+    constituentsChart = ensureChart(constituentsChartRef.value, constituentsChart)
+    constituentsChart?.setOption(
+      buildConstituentsChartOption(sorted, constituentsPeriodLabel.value),
+      true
+    )
+    constituentsChart?.resize()
+  } catch (e: unknown) {
+    constituentsError.value = e instanceof Error ? e.message : '加载失败'
+  } finally {
+    constituentsLoading.value = false
+  }
+}
+
+function onConstituentsDialogClosed() {
+  constituentsChart?.dispose()
+  constituentsChart = null
+  constituentsRows.value = []
 }
 
 function formatBoardFlowRange(start: string | null | undefined, end: string | null | undefined) {
@@ -808,6 +1037,7 @@ function handleResize() {
   industrySlopeChart?.resize()
   conceptSlopeChart?.resize()
   stockFlowChart?.resize()
+  constituentsChart?.resize()
 }
 
 onMounted(() => {
@@ -826,11 +1056,13 @@ onBeforeUnmount(() => {
   industrySlopeChart?.dispose()
   conceptSlopeChart?.dispose()
   stockFlowChart?.dispose()
+  constituentsChart?.dispose()
   industryChart = null
   conceptChart = null
   industrySlopeChart = null
   conceptSlopeChart = null
   stockFlowChart = null
+  constituentsChart = null
 })
 </script>
 
@@ -857,6 +1089,52 @@ onBeforeUnmount(() => {
   margin-bottom: 0.5rem;
   font-weight: 600;
   font-size: 0.875rem;
+}
+
+.board-flow-hint {
+  color: #94a3b8;
+}
+
+.fund-flow-chart--clickable {
+  cursor: pointer;
+}
+
+.constituents-meta {
+  margin-bottom: 0.75rem;
+  font-size: 0.8125rem;
+  color: rgb(107 114 128);
+}
+
+.constituents-chart {
+  width: 100%;
+  height: 280px;
+  margin-bottom: 0.75rem;
+}
+
+.constituents-empty {
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgb(107 114 128);
+  font-size: 0.875rem;
+  background: #f8fafc;
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+  padding: 0 1rem;
+  text-align: center;
+}
+
+.constituents-table {
+  width: 100%;
+}
+
+.net-pos {
+  color: #dc2626;
+}
+
+.net-neg {
+  color: #16a34a;
 }
 
 .slope-trend-charts {
@@ -914,10 +1192,6 @@ onBeforeUnmount(() => {
   text-align: center;
 }
 
-.recent-activity {
-  margin-bottom: 1.5rem;
-}
-
 /* 响应式设计 */
 @media (max-width: 1024px) {
   .dashboard-view {
@@ -953,10 +1227,6 @@ onBeforeUnmount(() => {
   .board-flow-panel {
     margin-bottom: 16px;
   }
-
-  .recent-activity {
-    margin-bottom: 1rem;
-  }
 }
 
 @media (max-width: 640px) {
@@ -970,10 +1240,6 @@ onBeforeUnmount(() => {
   .dashboard-view {
     gap: 0.75rem;
     padding: 12px;
-  }
-
-  .recent-activity .el-card {
-    margin-bottom: 0.75rem;
   }
 }
 

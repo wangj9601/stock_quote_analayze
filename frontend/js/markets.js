@@ -1214,7 +1214,11 @@ const MarketsPage = {
         let env = '';
         let label = '';
         let tipRaw = '';
-        if (mode === 'short') {
+        if (mode === 'trend') {
+            env = (d && d.board_trend_env) || '';
+            label = (d && d.board_trend_label) || '--';
+            tipRaw = (d && d.board_trend_summary) || label;
+        } else if (mode === 'short') {
             env = (d && d.board_env_short) || (d && d.board_strong_short ? 'strong' : (d && d.board_weak_short ? 'weak' : ''));
             label = (d && d.board_env_short_label)
                 || (env === 'strong' ? '走强' : env === 'weak' ? '走弱' : env === 'neutral' ? '正常' : '--');
@@ -1236,7 +1240,24 @@ const MarketsPage = {
         if (env === 'strong') cls = 'sector-weak-chip strong';
         else if (env === 'weak') cls = 'sector-weak-chip weak';
         else if (env === 'neutral') cls = 'sector-weak-chip ok';
+        else if (env === 'mixed') cls = 'sector-weak-chip mixed';
         return `<span class="${cls}" title="${tip}">${this.escapeHtml(label)}</span>`;
+    },
+
+    boardTrendSummaryHtml(d) {
+        const summary = (d && d.board_trend_summary)
+            || (d && d.board_weak_summary)
+            || '暂无判断说明';
+        const chip = d && d.board_trend_label
+            ? this.boardEnvChipHtml(d, 'trend')
+            : this.boardEnvChipHtml(d);
+        return `
+            <div class="sector-trend-summary-head">
+                <span class="sector-trend-summary-title">综合走势</span>
+                ${chip}
+            </div>
+            <div class="sector-trend-summary-body">${this.escapeHtml(summary)}</div>
+        `;
     },
 
     escapeHtml(s) {
@@ -1540,7 +1561,7 @@ const MarketsPage = {
         if (title) title.textContent = d.board_name || d.board_code || '板块详情';
         if (sub) {
             const kindLabel = d.board_kind === 'concept' ? '概念板块' : '行业板块';
-            sub.innerHTML = `${kindLabel} · ${this.escapeHtml(d.board_code || '--')} · ${this.escapeHtml(d.board_code_source_label || d.board_code_source || '')}${d.mapped_em_board_code ? ` · 映射东财 ${this.escapeHtml(d.mapped_em_board_code)}` : ''}${d.mapped_ths_board_code ? ` · 映射同花顺 ${this.escapeHtml(d.mapped_ths_board_code)}` : ''}${d.quote_board_code && d.quote_board_code !== d.board_code ? ` · 行情码 ${this.escapeHtml(d.quote_board_code)}` : ''}${this.boardEnvChipHtml(d)}`;
+            sub.innerHTML = `${kindLabel} · ${this.escapeHtml(d.board_code || '--')} · ${this.escapeHtml(d.board_code_source_label || d.board_code_source || '')}${d.mapped_em_board_code ? ` · 映射东财 ${this.escapeHtml(d.mapped_em_board_code)}` : ''}${d.mapped_ths_board_code ? ` · 映射同花顺 ${this.escapeHtml(d.mapped_ths_board_code)}` : ''}${d.quote_board_code && d.quote_board_code !== d.board_code ? ` · 行情码 ${this.escapeHtml(d.quote_board_code)}` : ''}${d.board_trend_label ? this.boardEnvChipHtml(d, 'trend') : this.boardEnvChipHtml(d)}`;
         }
 
         const item = (label, value, cls) => `
@@ -1589,7 +1610,7 @@ const MarketsPage = {
                     ${item('10日asof', d.slope_short_asof_date || '--')}
                     ${item('member_count_used', d.member_count_used != null ? d.member_count_used : '--')}
                 </div>
-                <div class="sector-detail-summary">${this.escapeHtml(d.board_weak_summary || '暂无判断说明')}（窗口：120/60/20/10/5 日；官方指数优先，不足则前复权等权收益；走强需 R² 达标）</div>
+                <div class="sector-detail-summary">${this.boardTrendSummaryHtml(d)}</div>
                 <div class="sector-slope-trend-wrap">
                     <div class="sector-slope-trend-head">
                         <span class="sector-slope-trend-title">斜率趋势</span>

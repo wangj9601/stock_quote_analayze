@@ -334,6 +334,215 @@ BOARD_ENV_LABELS = {
     "unknown": "--",
 }
 
+# 多窗口综合走势：字段映射（窗口从长到短）
+_MULTI_WINDOW_TREND_SPECS: Tuple[Tuple[int, str, str, str], ...] = (
+    (120, "sector_slope_120", "board_env_120", "120日"),
+    (60, "sector_slope", "board_env", "60日"),
+    (20, "sector_slope_20", "board_env_20", "20日"),
+    (10, "sector_slope_short", "board_env_short", "10日"),
+    (5, "sector_slope_5", "board_env_5", "5日"),
+)
+
+_ENV_SCORE = {"strong": 1, "neutral": 0, "weak": -1}
+
+
+def _safe_slope_float(value: Any) -> Optional[float]:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _avg_env_score(envs: Sequence[str]) -> Optional[float]:
+    scores = [_ENV_SCORE[e] for e in envs if e in _ENV_SCORE]
+    if not scores:
+        return None
+    return sum(scores) / len(scores)
+
+
+def evaluate_multi_window_board_trend(
+    item: Optional[Dict[str, Any]] = None,
+    *,
+    windows: Optional[Sequence[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """结合 120/60/20/10/5 日斜率环境，给出细分走势标签与说明。
+
+    可传已挂载斜率字段的 item，或显式 windows 列表
+    ``[{window, env, slope, label}, ...]``。
+    """
+    rows: List[Dict[str, Any]] = []
+    if windows is not None:
+        for w in windows:
+            if not isinstance(w, dict):
+                continue
+            env = str(w.get("env") or "unknown").strip().lower()
+            if env not in ("strong", "neutral", "weak", "unknown"):
+                env = "unknown"
+            rows.append(
+                {
+                    "window": int(w.get("window") or 0),
+                    "env": env,
+                    "env_label": BOARD_ENV_LABELS.get(env, "--"),
+                    "slope": _safe_slope_float(w.get("slope")),
+                    "label": str(w.get("label") or f"{w.get('window')}日"),
+                }
+            )
+    elif item:
+        for win, slope_key, env_key, label in _MULTI_WINDOW_TREND_SPECS:
+            env = str(item.get(env_key) or "unknown").strip().lower()
+            if env not in ("strong", "neutral", "weak", "unknown"):
+                env = "unknown"
+            rows.append(
+                {
+                    "window": int(win),
+                    "env": env,
+                    "env_label": BOARD_ENV_LABELS.get(env, "--")
+                    or str(item.get(f"{env_key}_label") or "--"),
+                    "slope": _safe_slope_float(item.get(slope_key)),
+                    "label": label,
+                }
+            )
+
+    known = [r for r in rows if r["env"] in _ENV_SCORE]
+    empty = {
+        "board_trend_label": "数据不足",
+        "board_trend_env": "unknown",
+        "board_trend_summary": "多窗口斜率不足，暂无法给出综合走势判断。",
+        "board_trend_windows": rows,
+    }
+    if len(known) < 2:
+        return empty
+
+    by_win = {int(r["window"]): r for r in known}
+    long_envs = [by_win[w]["env"] for w in (120, 60) if w in by_win]
+    short_envs = [by_win[w]["env"] for w in (10, 5) if w in by_win]
+    mid = by_win.get(60)
+    ultra = by_win.get(5)
+    short10 = by_win.get(10)
+
+    long_avg = _avg_env_score(long_envs)
+    short_avg = _avg_env_score(short_envs)
+    all_envs = [r["env"] for r in known]
+
+    s60 = mid["slope"] if mid else None
+    s5 = ultra["slope"] if ultra else None
+    s10 = short10["slope"] if short10 else None
+    short_slope = s5 if s5 is not None else s10
+
+    # 动量旁证：短窗相对中线的斜率变化
+    momentum_note = ""
+    if s60 is not None and short_slope is not None:
+        if s60 >= 0 and short_slope > s60 * 1.2 and short_slope > 0:
+            momentum_note = "短线相对中线上行加速。"
+        elif s60 > 0 and 0 <= short_slope < s60 * 0.5:
+            momentum_note = "中线上行但短线斜率明显放缓。"
+        elif s60 < 0 and short_slope < s60 * 1.2:
+            momentum_note = "短线相对中线下行加速。"
+        elif s60 < 0 and short_slope > s60 * 0.5:
+            momentum_note = "中线偏弱但短线跌速放缓，有企稳迹象。"
+        elif s60 < 0 <= short_slope:
+            momentum_note = "中线偏弱、短线斜率已转正或走平，偏修复。"
+        elif s60 > 0 >= short_slope:
+            momentum_note = "中线仍偏强、短线斜率转弱，偏短修/回调。"
+
+    # 模式判定（优先级从明确到模糊）
+    label = "走势分化"
+    tone = "mixed"
+    rationale = ""
+
+    if all(e == "weak" for e in all_envs):
+        label, tone = "全面走弱", "weak"
+        rationale = "各窗口斜率均为走弱，趋势偏空。"
+    elif all(e == "strong" for e in all_envs):
+        label, tone = "全面走强", "strong"
+        rationale = "各窗口斜率均为走强，趋势偏多。"
+    elif all(e == "neutral" for e in all_envs):
+        label, tone = "横盘震荡", "neutral"
+        rationale = "各窗口均未达走强/走弱阈值，以震荡为主。"
+    elif (
+        long_avg is not None
+        and short_avg is not None
+        and long_avg >= 0.5
+        and short_avg <= -0.5
+    ):
+        label, tone = "长强短弱", "mixed"
+        rationale = "中长线偏强而短线走弱，更像强趋势中的短修/回调。"
+    elif (
+        long_avg is not None
+        and short_avg is not None
+        and long_avg <= -0.5
+        and short_avg >= 0.5
+    ):
+        label, tone = "长弱短强", "mixed"
+        rationale = "中长线偏弱而短线走强，更像弱势中的反抽/修复，需防一日游。"
+    elif mid and mid["env"] == "weak" and short_avg is not None and short_avg >= 0:
+        label, tone = "中弱短稳", "mixed"
+        rationale = "中线走弱，但 10/5 日已企稳或转强，关注能否扭转中线。"
+    elif mid and mid["env"] == "strong" and short_avg is not None and short_avg >= 0.5:
+        label, tone = "中强短加速", "strong"
+        rationale = "中线走强且短线同步偏强，短线动能较充足。"
+    elif mid and mid["env"] == "strong" and short_avg is not None and short_avg < 0:
+        label, tone = "中强短修", "mixed"
+        rationale = "中线仍走强、短线转弱，属强趋势内短修。"
+    elif mid and mid["env"] == "weak" and short_avg is not None and short_avg < 0:
+        if (
+            s60 is not None
+            and short_slope is not None
+            and short_slope < s60
+        ):
+            label, tone = "下行加速", "weak"
+            rationale = "中线走弱且短线更弱，下行仍在加速。"
+        else:
+            label, tone = "中弱延续", "weak"
+            rationale = "中线与短线均偏弱，弱势延续。"
+    elif mid and mid["env"] == "neutral":
+        if short_avg is not None and short_avg >= 0.5:
+            label, tone = "短线转强", "mixed"
+            rationale = "中线正常、短线走强，偏短线启动或脉冲。"
+        elif short_avg is not None and short_avg <= -0.5:
+            label, tone = "短线转弱", "mixed"
+            rationale = "中线正常、短线走弱，偏短线降温。"
+        else:
+            label, tone = "中性震荡", "neutral"
+            rationale = "中线正常，长短窗口未形成清晰方向。"
+    else:
+        # 按均值兜底
+        overall = _avg_env_score(all_envs)
+        if overall is not None and overall >= 0.4:
+            label, tone = "偏强分化", "strong"
+            rationale = "多数窗口偏强，但长短节奏不完全一致。"
+        elif overall is not None and overall <= -0.4:
+            label, tone = "偏弱分化", "weak"
+            rationale = "多数窗口偏弱，但长短节奏不完全一致。"
+        else:
+            label, tone = "走势分化", "mixed"
+            rationale = "各窗口强弱不一致，需结合长短节奏分别看待。"
+
+    win_bits = []
+    for r in rows:
+        slope_txt = "--"
+        if r["slope"] is not None:
+            slope_txt = f"{r['slope']:+.6f}"
+        win_bits.append(f"{r['label']}{r['env_label']}({slope_txt})")
+    detail_line = "；".join(win_bits)
+    summary_parts = [
+        f"综合判断：{label}。",
+        rationale,
+        momentum_note,
+        f"分窗：{detail_line}。",
+        "口径：ln(I_t) 近窗回归；走强需斜率达阈值且 R² 达标；官方指数优先，不足则前复权等权收益。",
+    ]
+    summary = "".join(p for p in summary_parts if p)
+
+    return {
+        "board_trend_label": label,
+        "board_trend_env": tone,
+        "board_trend_summary": summary,
+        "board_trend_windows": rows,
+    }
+
 
 def evaluate_board_environment(
     *,

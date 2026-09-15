@@ -546,6 +546,7 @@
                                 </div>
                             </div>
                             <div class="ma-body">
+                                <p class="ma-hint" id="maBoardFlowHint">点击板块柱形或列表行，可查看该板块成分股资金流向（同花顺）</p>
                                 <div class="ma-chart" id="maBoardFlowChart"></div>
                                 <div class="ma-table-wrap" id="maBoardFlowTableWrap" hidden>
                                     <table class="ma-table" id="maBoardFlowTable">
@@ -1165,6 +1166,40 @@
     </div>
 
     <!-- 板块分析：板块多选弹窗 -->
+    <!-- 板块成分股资金流向 -->
+    <div id="maBoardConstituentsModal" class="lm-modal-overlay" style="display:none;" aria-hidden="true">
+        <div class="lm-modal-card lm-modal-card-wide ma-constituents-modal" role="dialog" aria-labelledby="maBoardConstituentsTitle">
+            <div class="lm-modal-header">
+                <h3 id="maBoardConstituentsTitle">板块成分股资金流向</h3>
+                <button type="button" class="lm-modal-close" id="maBoardConstituentsClose" aria-label="关闭">×</button>
+            </div>
+            <div class="ma-constituents-meta" id="maBoardConstituentsMeta"></div>
+            <div class="ma-constituents-body">
+                <div class="ma-chart ma-constituents-chart" id="maBoardConstituentsChart"></div>
+                <div class="ma-table-wrap ma-constituents-table-wrap">
+                    <table class="ma-table" id="maBoardConstituentsTable">
+                        <thead>
+                            <tr>
+                                <th>排名</th>
+                                <th>代码</th>
+                                <th>名称</th>
+                                <th>净流入(亿)</th>
+                                <th>流入(亿)</th>
+                                <th>流出(亿)</th>
+                                <th>涨跌幅%</th>
+                                <th>覆盖交易日</th>
+                            </tr>
+                        </thead>
+                        <tbody id="maBoardConstituentsTbody">
+                            <tr><td colspan="8" class="ma-empty">加载中…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="ma-status" id="maBoardConstituentsStatus"></div>
+        </div>
+    </div>
+
     <div id="baBoardPickerModal" class="lm-modal-overlay" style="display:none;" aria-hidden="true">
         <div class="lm-modal-card" role="dialog" aria-labelledby="baBoardPickerTitle">
             <div class="lm-modal-header">
@@ -1304,7 +1339,7 @@
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/trade_observe.js"></script>
     <script src="js/recommend.js?v=20260914a"></script>
-    <script src="js/market_analysis.js?v=20260914a"></script>
+    <script src="js/market_analysis.js?v=20260915a"></script>
     <script src="js/analysis.js?v=20260914a"></script>
 </body>
 
