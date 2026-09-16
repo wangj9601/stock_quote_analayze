@@ -110,6 +110,7 @@ def load_traces(
     entry_only: bool = False,
     signal_type: str = None,
     limit: int = 500,
+    include_no_signal: bool = False,
 ) -> List[Dict[str, Any]]:
     from backend_api.models import RPESignalTrace
 
@@ -122,6 +123,9 @@ def load_traces(
         q = q.filter(RPESignalTrace.entry_signal.is_(True))
     if signal_type:
         q = q.filter(RPESignalTrace.signal_type == signal_type)
+    elif not include_no_signal:
+        # 全市场预计算列表：排除 in_band / 无类型（板块扫描、单股追溯会写入这些行）
+        q = q.filter(RPESignalTrace.signal_type.isnot(None))
     rows = (
         q.order_by(RPESignalTrace.entry_signal.desc(), RPESignalTrace.z_score.asc())
         .limit(limit)

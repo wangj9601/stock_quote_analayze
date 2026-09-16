@@ -46,6 +46,10 @@ const MarketsPage = {
 
     // 初始化
     async init() {
+        // 独立板块详情页只复用 showSectorDetail，不跑行情中心全量初始化
+        if (document.body && document.body.classList.contains('board-detail-page')) {
+            return;
+        }
         if (!this.initialized) {
             this.bindEvents();
             this.startDataUpdate();
@@ -64,6 +68,38 @@ const MarketsPage = {
         if (searchModal) {
             searchModal.classList.remove('show');
         }
+
+        await this.applySectorDetailDeepLink();
+    },
+
+    /**
+     * 深链：旧版 markets.html?board_code=… 统一跳到独立板块详情页。
+     */
+    async applySectorDetailDeepLink() {
+        let q;
+        try {
+            q = new URLSearchParams(window.location.search || '');
+        } catch (e) {
+            return;
+        }
+        const code = String(q.get('board_code') || '').trim();
+        if (!code) return;
+        // 已在独立详情页则不再跳转（board_detail 也会加载 markets.js）
+        const path = String(window.location.pathname || '');
+        if (/board_detail\.html$/i.test(path)) return;
+        const kind =
+            String(q.get('board_kind') || '').trim().toLowerCase() === 'concept'
+                ? 'concept'
+                : 'industry';
+        const name = String(q.get('board_name') || '').trim();
+        const source = String(q.get('board_code_source') || 'tonghuashun').trim() || 'tonghuashun';
+        const next = new URLSearchParams({
+            board_kind: kind,
+            board_code: code,
+            board_code_source: source,
+        });
+        if (name) next.set('board_name', name);
+        window.location.replace(`board_detail.html?${next.toString()}`);
     },
 
     // 绑定事件
@@ -2794,6 +2830,9 @@ function addToWatchlist(code, event) {
 // DOM加载完成后初始化
 // 查询到股票代码后定位到表格列表中相应记录
 document.addEventListener('DOMContentLoaded', function () {
+    if (document.body && document.body.classList.contains('board-detail-page')) {
+        return;
+    }
     MarketsPage.init();
     // 查询输入框和按钮只绑定一次
     setTimeout(function () {

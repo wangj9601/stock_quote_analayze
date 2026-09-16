@@ -69,6 +69,7 @@ class RPEFrontendInterface:
                     entry_only=entry_only,
                     signal_type=signal_type,
                     limit=max_results,
+                    include_no_signal=include_no_signal,
                 )
                 return {
                     "data": rows,
@@ -111,11 +112,20 @@ class RPEFrontendInterface:
             )
 
             # 前复权现算仅供对照，禁止回写 rpe_signal_trace（避免污染不复权预计算）
+            # 无信号行也不回写：避免板块全成分/单股 in_band 覆盖日终 catch_up/lead
             if adjust_n != "qfq":
-                try:
-                    upsert_signal_traces(session, rows, config_id=cid, trade_date=trade_date)
-                except Exception as e:
-                    logger.warning("RPE save traces skipped: %s", e)
+                to_save = [
+                    r
+                    for r in rows
+                    if r.get("signal_type") or r.get("entry_signal")
+                ]
+                if to_save:
+                    try:
+                        upsert_signal_traces(
+                            session, to_save, config_id=cid, trade_date=trade_date
+                        )
+                    except Exception as e:
+                        logger.warning("RPE save traces skipped: %s", e)
 
             out: Dict[str, Any] = {
                 "data": rows,

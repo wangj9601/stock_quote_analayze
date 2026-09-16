@@ -1,0 +1,59 @@
+/* 独立板块详情页：复用 markets 详情 DOM，铺成整页而非遮罩弹窗 */
+
+.board-detail-page .board-detail-main {
+    padding-top: 1rem;
+    padding-bottom: 2rem;
+    min-height: calc(100vh - 160px);
+}
+
+.board-detail-toolbar {
+    margin-bottom: 0.75rem;
+}
+
+.board-detail-back {
+    color: #1d4ed8;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.board-detail-back:hover {
+    text-decoration: underline;
+    color: #1e40af;
+}
+
+.sector-detail-modal.is-standalone {
+    display: block;
+    position: static;
+    width: auto;
+    height: auto;
+    max-width: none;
+    padding: 0;
+    background: transparent;
+    z-index: auto;
+}
+
+.sector-detail-modal.is-standalone .sector-detail-content {
+    max-width: 920px;
+    max-height: none;
+    width: 100%;
+    margin: 0 auto;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.sector-detail-modal.is-standalone .sector-detail-body {
+    overflow: visible;
+}
+
+.sector-detail-modal.is-standalone .close-sector-detail {
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 640px) {
+    .sector-detail-modal.is-standalone .sector-detail-content {
+        border-radius: 6px;
+    }
+}

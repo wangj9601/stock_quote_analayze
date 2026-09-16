@@ -187,3 +187,38 @@ def test_get_selection_results_none_still_upserts():
 
     assert out["source"] == "live"
     upsert.assert_called_once()
+    saved = upsert.call_args[0][1]
+    assert saved[0]["code"] == "000001"
+
+
+def test_get_selection_results_skips_upsert_for_in_band():
+    fake_engine = MagicMock()
+    fake_engine.loader.resolve_trade_date.return_value = "2024-03-20"
+    fake_engine._resolve_boards_for_codes.return_value = [
+        {"board_code": "BK1", "board_name": "测试板", "board_kind": "industry"}
+    ]
+    fake_engine.screen.return_value = [
+        {"code": "000001", "entry_signal": False, "signal_type": None, "z_score": -0.2}
+    ]
+
+    cm = MagicMock()
+    cm.get_default_config_id.return_value = 1
+    cm.get_config.return_value = {}
+
+    with patch("backend_core.strategies.rpe.config.RPEConfigManager", return_value=cm), patch(
+        "backend_core.strategies.rpe.strategy_engine.RPEStrategyEngine",
+        return_value=fake_engine,
+    ), patch(
+        "backend_core.strategies.rpe.signal_storage.upsert_signal_traces"
+    ) as upsert, patch(
+        "backend_api.database.SessionLocal", return_value=MagicMock()
+    ):
+        out = RPEFrontendInterface.get_selection_results(
+            codes=["000001"],
+            adjust="none",
+            include_no_signal=True,
+            max_results=50,
+        )
+
+    assert out["total"] == 1
+    upsert.assert_not_called()

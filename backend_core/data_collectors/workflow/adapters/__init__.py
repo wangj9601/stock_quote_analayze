@@ -530,6 +530,20 @@ def _ths_fund_flow_daily() -> Any:
     return collect_ths_fund_flow_daily()
 
 
+def _zt_pool_em_daily() -> Any:
+    from backend_core.data_collectors.akshare.zt_pool_em import collect_zt_pool_em
+
+    # 失败不抛：返回 dict 供工作流记录；复盘节点可回退 hist_proxy
+    return collect_zt_pool_em()
+
+
+def _market_daily_review() -> Any:
+    from backend_core.market_review.compute import collect_and_build_review
+
+    # 工作流内不再重复采涨停池（应由前置节点完成）；此处仍允许池为空时回退
+    return collect_and_build_review(collect_zt=False, export_md=True)
+
+
 def _board_fund_flow_daily() -> Any:
     from backend_core.data_collectors.akshare.board_fund_flow_daily import (
         collect_board_fund_flow_daily,
@@ -657,6 +671,8 @@ exec_csb_cn = _wrap_plain(_csb_cn, "CSB信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
 exec_ths_fund_flow_daily = _wrap_cn(_ths_fund_flow_daily, "同花顺资金流入流出日采")
+exec_zt_pool_em_daily = _wrap_cn(_zt_pool_em_daily, "东财涨停股池日采")
+exec_market_daily_review = _wrap_cn(_market_daily_review, "每日复盘指标")
 exec_board_fund_flow_daily = _wrap_cn(_board_fund_flow_daily, "板块资金流向日采")
 exec_hk_fund_flow_daily = _wrap_hk(_hk_fund_flow_daily, "港股资金流向文件日采")
 exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")

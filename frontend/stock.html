@@ -487,16 +487,35 @@
         })();
     </script>
 
-    <!-- 顶底快速滚动（长页） -->
-    <div class="ssa-scroll-fab" id="stockScrollFab" aria-label="页面快速滚动">
-        <button type="button" class="ssa-scroll-fab__btn" id="stockScrollToggleBtn" title="直达底部">Bottom</button>
+    <!-- 顶底快速滚动（双圆形 FAB，对齐选股 RPE） -->
+    <div class="ssa-scroll-fab is-visible" id="stockScrollFab" data-scroll-fab aria-label="页面快速滚动">
+        <button type="button" class="ssa-scroll-fab__btn ssa-scroll-fab__btn--top" id="stockScrollTopBtn" title="回到顶部" aria-label="回到顶部">
+            <svg class="ssa-scroll-fab__svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+            </svg>
+        </button>
+        <button type="button" class="ssa-scroll-fab__btn ssa-scroll-fab__btn--bottom" id="stockScrollBottomBtn" title="直达底部" aria-label="直达底部">
+            <svg class="ssa-scroll-fab__svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+            </svg>
+        </button>
     </div>
     <script src="js/page_scroll_fab.js"></script>
     <script>
         (function () {
             function tryBind() {
-                if (window.PageScrollFab && typeof window.PageScrollFab.bind === 'function') {
-                    window.PageScrollFab.bind({ btnId: 'stockScrollToggleBtn' });
+                if (window.PageScrollFab && typeof window.PageScrollFab.bindDual === 'function') {
+                    window.PageScrollFab.bindDual({
+                        fabId: 'stockScrollFab',
+                        topBtnId: 'stockScrollTopBtn',
+                        bottomBtnId: 'stockScrollBottomBtn',
+                        showTopAfterPx: 240,
+                        nearBottomPx: 120,
+                        onlyWhenScrollable: true,
+                    });
+                    if (typeof window.PageScrollFab.setVisible === 'function') {
+                        window.PageScrollFab.setVisible('stockScrollFab', true);
+                    }
                 }
             }
             if (document.readyState === 'loading') {

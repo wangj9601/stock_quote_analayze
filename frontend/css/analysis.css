@@ -1602,46 +1602,102 @@ a.ba-stock-code-link:focus {
   line-height: 1.35;
 }
 
-/* Ã¤Â¸ÂªÃ¨ÂÂ¡Ã¥ÂÂÃ¦ÂÂÃ¯Â¼ÂÃ¥ÂÂÃ§Â­ÂÃ§ÂÂ¥Ã¥ÂÂ½Ã¤Â¸Â­ */
+/* 个股分析：顶/底滚动 FAB（双圆形，对齐选股 RPE BackTop 风格） */
 .ssa-scroll-fab {
     position: fixed;
-    right: 1.25rem;
-    bottom: 1.75rem;
-    z-index: 900;
+    right: 20px;
+    bottom: 28px;
+    z-index: 920;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.ssa-scroll-fab.is-visible.is-scrollable {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: none;
 }
 .ssa-scroll-fab__btn {
-    min-width: 3.25rem;
-    height: 2.5rem;
-    padding: 0 0.65rem;
-    border: 1px solid #cbd5e1;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.96);
-    color: #1e40af;
-    font-size: 0.8rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+    width: 40px;
+    height: 40px;
+    min-width: 0;
+    padding: 0;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 50%;
+    background: #fff;
+    color: #475569;
+    font-size: inherit;
+    font-weight: inherit;
+    letter-spacing: normal;
+    box-shadow:
+        0 1px 2px rgba(15, 23, 42, 0.06),
+        0 6px 16px rgba(15, 23, 42, 0.1);
     cursor: pointer;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(6px) scale(0.92);
+    transition:
+        opacity 0.2s ease,
+        visibility 0.2s ease,
+        transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+        background 0.15s ease,
+        color 0.15s ease,
+        border-color 0.15s ease,
+        box-shadow 0.15s ease;
 }
-.ssa-scroll-fab__btn:hover {
-    background: #1e40af;
-    border-color: #1e40af;
-    color: #fff;
+.ssa-scroll-fab__btn.is-active {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+.ssa-scroll-fab__btn:hover:not(:disabled) {
+    color: #1d4ed8;
+    border-color: rgba(37, 99, 235, 0.28);
+    background: #f8fafc;
+    box-shadow:
+        0 2px 4px rgba(37, 99, 235, 0.08),
+        0 8px 20px rgba(15, 23, 42, 0.12);
+    transform: translateY(-1px) scale(1);
+}
+.ssa-scroll-fab__btn:active:not(:disabled) {
+    transform: translateY(0) scale(0.96);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
 }
 .ssa-scroll-fab__btn:focus-visible {
     outline: 2px solid #93c5fd;
     outline-offset: 2px;
 }
+.ssa-scroll-fab__btn:disabled {
+    cursor: default;
+}
+.ssa-scroll-fab__svg {
+    display: block;
+    flex-shrink: 0;
+}
 @media (max-width: 640px) {
     .ssa-scroll-fab {
-        right: 0.75rem;
-        bottom: 1.1rem;
+        right: 12px;
+        bottom: 18px;
+        gap: 8px;
     }
     .ssa-scroll-fab__btn {
-        min-width: 2.85rem;
-        height: 2.35rem;
-        font-size: 0.72rem;
+        width: 36px;
+        height: 36px;
+    }
+    .ssa-scroll-fab__svg {
+        width: 18px;
+        height: 18px;
     }
 }
 
@@ -3983,4 +4039,41 @@ html.analysis-popup-window .main-content {
 }
 html.analysis-popup-window .analysis-tabs {
   margin-top: 0;
+}
+
+/* ===== 每日复盘 ===== */
+.dr-workbench { padding: 0.5rem 0 1.5rem; }
+.dr-desc { color: #64748b; margin-bottom: 0.75rem; }
+.dr-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; margin-bottom: 1rem; }
+.dr-status { color: #64748b; font-size: 0.9rem; }
+.dr-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.75rem; margin-bottom: 1rem; }
+.dr-metric { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0.75rem; }
+.dr-metric span { display: block; font-size: 0.75rem; color: #64748b; }
+.dr-metric strong { font-size: 1.15rem; color: #0f172a; }
+.dr-section { margin-bottom: 1.25rem; }
+.dr-section h3 { margin: 0 0 0.5rem; font-size: 1.05rem; }
+.dr-section h3.dr-subhead { margin-top: 1rem; font-size: 0.98rem; font-weight: 600; }
+.dr-summary { color: #334155; margin: 0 0 0.5rem; }
+.dr-table-wrap { overflow-x: auto; overflow-y: visible; max-height: none; }
+.dr-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.dr-table th, .dr-table td { border: 1px solid #e2e8f0; padding: 0.4rem 0.55rem; text-align: left; }
+.dr-table th { background: #f1f5f9; }
+.dr-table .is-ok { color: #15803d; }
+.dr-table .is-bad { color: #b91c1c; }
+.dr-table a.dr-board-link {
+  color: #1d4ed8;
+  text-decoration: none;
+  font-weight: 600;
+}
+.dr-table a.dr-board-link:hover,
+.dr-table a.dr-board-link:focus {
+  text-decoration: underline;
+  color: #1e40af;
+}
+.dr-editors { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.dr-editors textarea { width: 100%; box-sizing: border-box; border: 1px solid #cbd5e1; border-radius: 6px; padding: 0.5rem; font-family: inherit; }
+.dr-md-preview { background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 8px; overflow: auto; max-height: 420px; white-space: pre-wrap; font-size: 0.8rem; }
+.dr-empty { color: #94a3b8; }
+@media (max-width: 900px) {
+  .dr-editors { grid-template-columns: 1fr; }
 }

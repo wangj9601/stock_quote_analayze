@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>板块详情 - 股票分析</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/markets.css">
+    <link rel="stylesheet" href="css/board_detail.css">
+    <script src="js/echarts.min.js"
+        onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
+</head>
+<body data-channel="quotes" class="board-detail-page">
+<script src="components/header.js"></script>
+<script>loadHeader('quotes');</script>
+
+<main class="main-content board-detail-main">
+    <div class="container">
+        <div class="board-detail-toolbar">
+            <a class="board-detail-back" id="boardDetailBackLink" href="markets.html">← 返回行情中心</a>
+        </div>
+        <div class="sector-detail-modal show is-standalone" id="sectorDetailModal" aria-label="板块详情">
+            <div class="sector-detail-content">
+                <div class="sector-detail-header">
+                    <div>
+                        <h2 id="sectorDetailTitle">板块详情</h2>
+                        <div class="sector-detail-sub" id="sectorDetailSub"></div>
+                    </div>
+                    <a class="close-sector-detail" id="closeSectorDetailBtn" href="markets.html" aria-label="返回行情中心" title="返回行情中心">×</a>
+                </div>
+                <div class="sector-detail-body" id="sectorDetailBody">
+                    <div class="sector-detail-loading">加载中...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+
+<footer class="footer">
+    <div class="container">
+        <p>&copy; 2024 股票分析系统. 数据仅供参考，投资有风险.</p>
+    </div>
+</footer>
+
+<script src="js/config.js"></script>
+<script src="js/common.js"></script>
+<script src="js/stock_trade_link.js"></script>
+<script src="js/markets.js?v=20260916c"></script>
+<script src="js/board_detail.js?v=20260916a"></script>
+</body>
+</html>

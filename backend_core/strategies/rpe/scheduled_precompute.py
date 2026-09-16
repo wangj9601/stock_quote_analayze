@@ -31,12 +31,17 @@ def run_rpe_precompute(
     date_s = trade_date or engine.loader.resolve_trade_date()
     logger.info("RPE precompute start config_id=%s date=%s", cid, date_s)
 
+    # 全市场预计算：按同花顺行业板块逐板量权比价（非全市场横截面、非概念板）；
+    # 只落库 catch_up/lead，不写入区间内无信号成分股。
     rows = engine.screen(
         date=date_s,
         config=cfg,
+        board_kind="industry",
         entry_only=False,
+        include_no_signal=False,
         max_results=max_results or int((cfg.get("scan") or {}).get("max_results", 200)),
     )
+    rows = [r for r in rows if r.get("signal_type") or r.get("entry_signal")]
     db = SessionLocal()
     try:
         saved = upsert_signal_traces(db, rows, config_id=cid, trade_date=date_s)

@@ -290,23 +290,53 @@ const StockMultiStrategy = {
     },
 
     bindScrollFab() {
-        const btn = document.getElementById('ssaScrollToggleBtn');
-        if (!btn || btn.dataset.bound === '1') return;
-        btn.dataset.bound = '1';
-        btn.addEventListener('click', () => this.onScrollFabClick());
-        const sync = () => this.syncScrollFab();
-        window.addEventListener('scroll', sync, { passive: true });
-        window.addEventListener('resize', sync, { passive: true });
-        this.syncScrollFab();
+        if (window.PageScrollFab && typeof window.PageScrollFab.bindDual === 'function') {
+            window.PageScrollFab.bindDual({
+                fabId: 'ssaScrollFab',
+                topBtnId: 'ssaScrollTopBtn',
+                bottomBtnId: 'ssaScrollBottomBtn',
+                showTopAfterPx: 240,
+                nearBottomPx: 120,
+                onlyWhenScrollable: true,
+            });
+            if (typeof window.PageScrollFab.setVisible === 'function') {
+                window.PageScrollFab.setVisible('ssaScrollFab', true);
+            }
+            return;
+        }
+        // 无公共模块时降级：不再绑定旧单按钮
+    },
+
+    syncScrollFab() {
+        const fab = document.getElementById('ssaScrollFab');
+        const opts = fab && fab._scrollFabDualOpts;
+        if (opts && window.PageScrollFab && typeof window.PageScrollFab.syncDual === 'function') {
+            window.PageScrollFab.syncDual(opts);
+        }
+    },
+
+    scrollPageTop() {
+        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
+        window.setTimeout(() => this.syncScrollFab(), 380);
+    },
+
+    scrollPageBottom() {
+        const metrics =
+            window.PageScrollFab && typeof window.PageScrollFab.scrollMetrics === 'function'
+                ? window.PageScrollFab.scrollMetrics()
+                : this._scrollMetrics();
+        window.scrollTo({ top: metrics.scrollHeight, left: 0, behavior: 'smooth' });
+        window.setTimeout(() => this.syncScrollFab(), 380);
     },
 
     _scrollMetrics() {
         const doc = document.documentElement;
         const body = document.body;
-        const scrollTop = window.pageYOffset
-            || (doc && doc.scrollTop)
-            || (body && body.scrollTop)
-            || 0;
+        const scrollTop =
+            window.pageYOffset ||
+            (doc && doc.scrollTop) ||
+            (body && body.scrollTop) ||
+            0;
         const viewport = window.innerHeight || (doc && doc.clientHeight) || 0;
         const scrollHeight = Math.max(
             doc ? doc.scrollHeight : 0,
@@ -315,47 +345,6 @@ const StockMultiStrategy = {
             body ? body.offsetHeight : 0
         );
         return { scrollTop, viewport, scrollHeight };
-    },
-
-    /** 靠近底部时显示 Top，其余显示 Bottom */
-    syncScrollFab() {
-        const btn = document.getElementById('ssaScrollToggleBtn');
-        if (!btn) return;
-        const { scrollTop, viewport, scrollHeight } = this._scrollMetrics();
-        const nearBottom = scrollTop + viewport >= scrollHeight - 80;
-        const mode = nearBottom ? 'top' : 'bottom';
-        btn.dataset.mode = mode;
-        if (mode === 'top') {
-            btn.textContent = 'Top';
-            btn.title = '回到顶部';
-            btn.setAttribute('aria-label', '回到顶部');
-        } else {
-            btn.textContent = 'Bottom';
-            btn.title = '直达底部';
-            btn.setAttribute('aria-label', '直达底部');
-        }
-    },
-
-    onScrollFabClick() {
-        const btn = document.getElementById('ssaScrollToggleBtn');
-        const mode = (btn && btn.dataset.mode) || 'bottom';
-        if (mode === 'top') {
-            this.scrollPageTop();
-        } else {
-            this.scrollPageBottom();
-        }
-    },
-
-    scrollPageTop() {
-        window.scrollTo({ top: 0, left: 0, behavior: 'smooth' });
-        // smooth 滚动中主动刷新文案
-        window.setTimeout(() => this.syncScrollFab(), 350);
-    },
-
-    scrollPageBottom() {
-        const { scrollHeight } = this._scrollMetrics();
-        window.scrollTo({ top: scrollHeight, left: 0, behavior: 'smooth' });
-        window.setTimeout(() => this.syncScrollFab(), 350);
     },
 
     bindWatchlistPanel() {
@@ -3095,6 +3084,7 @@ const StockMultiStrategy = {
                 rtBtn.textContent = '实时分析';
             }
             this.updateExportBtn();
+            window.setTimeout(() => this.syncScrollFab(), 80);
         }
     },
 

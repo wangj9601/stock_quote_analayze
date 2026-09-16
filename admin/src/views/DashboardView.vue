@@ -1,12 +1,21 @@
 <template>
   <div class="dashboard-view">
+    <el-tabs v-model="dashboardTab" class="dashboard-tabs" @tab-change="onDashboardTabChange">
+      <el-tab-pane label="资金流向" name="fund-flow">
     <!-- 行业 / 概念板块资金流向（日 / 周 / 月） -->
     <div class="fund-flow-charts">
       <el-card class="fund-flow-card board-flow-card">
         <template #header>
-          <div class="fund-flow-card-header stock-flow-header">
-            <div class="stock-flow-header-left">
-              <span>板块资金流向趋势跟踪</span>
+          <div class="ff-card-header">
+            <div class="ff-card-title-row">
+              <span class="ff-card-title">板块资金流向趋势跟踪</span>
+              <span class="fund-flow-date">
+                {{ boardFlowPeriodLabel }}净流入
+                <template v-if="boardFlowRangeText"> · {{ boardFlowRangeText }}</template>
+                <span class="board-flow-hint"> · 点击柱形/列表行查看成分股</span>
+              </span>
+            </div>
+            <div class="ff-toolbar">
               <el-radio-group
                 v-model="boardFlowPeriod"
                 size="small"
@@ -16,17 +25,16 @@
                 <el-radio-button
                   v-for="p in boardFlowPeriods"
                   :key="p.value"
-                  :label="p.value"
+                  :value="p.value"
                 >
                   {{ p.label }}
                 </el-radio-button>
               </el-radio-group>
+              <el-radio-group v-model="boardFlowView" size="small" class="ff-view-toggle">
+                <el-radio-button value="chart">图形</el-radio-button>
+                <el-radio-button value="list">列表</el-radio-button>
+              </el-radio-group>
             </div>
-            <span class="fund-flow-date">
-              {{ boardFlowPeriodLabel }}净流入
-              <template v-if="boardFlowRangeText"> · {{ boardFlowRangeText }}</template>
-              <span class="board-flow-hint"> · 点击柱形查看成分股</span>
-            </span>
           </div>
         </template>
         <el-row :gutter="16">
@@ -40,10 +48,34 @@
                 </span>
               </div>
               <div
-                v-show="!industryEmpty && !industryError"
+                v-show="boardFlowView === 'chart' && !industryEmpty && !industryError"
                 ref="industryChartRef"
                 class="fund-flow-chart fund-flow-chart--clickable"
               />
+              <el-table
+                v-if="boardFlowView === 'list' && !industryEmpty && !industryError"
+                :data="industryTableRows"
+                size="small"
+                stripe
+                max-height="480"
+                class="ff-rank-table"
+                @row-click="onBoardFlowRowClick"
+              >
+                <el-table-column type="index" label="排名" width="58" />
+                <el-table-column prop="board_code" label="代码" width="100" />
+                <el-table-column prop="board_name" label="名称" min-width="110" />
+                <el-table-column label="净流入(亿)" width="110" align="right">
+                  <template #default="{ row }">
+                    <span :class="netClass(row.main_net_inflow)">{{ formatYi(row.main_net_inflow) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="涨跌幅%" width="90" align="right">
+                  <template #default="{ row }">
+                    <span :class="netClass(row.change_percent)">{{ formatPct(row.change_percent) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="days_count" label="覆盖日" width="80" align="right" />
+              </el-table>
               <div v-if="industryEmpty" class="fund-flow-empty">暂无板块资金流（请先日采）</div>
               <div v-else-if="industryError" class="fund-flow-empty fund-flow-error">
                 {{ industryError }}
@@ -60,10 +92,34 @@
                 </span>
               </div>
               <div
-                v-show="!conceptEmpty && !conceptError"
+                v-show="boardFlowView === 'chart' && !conceptEmpty && !conceptError"
                 ref="conceptChartRef"
                 class="fund-flow-chart fund-flow-chart--clickable"
               />
+              <el-table
+                v-if="boardFlowView === 'list' && !conceptEmpty && !conceptError"
+                :data="conceptTableRows"
+                size="small"
+                stripe
+                max-height="480"
+                class="ff-rank-table"
+                @row-click="onBoardFlowRowClick"
+              >
+                <el-table-column type="index" label="排名" width="58" />
+                <el-table-column prop="board_code" label="代码" width="100" />
+                <el-table-column prop="board_name" label="名称" min-width="110" />
+                <el-table-column label="净流入(亿)" width="110" align="right">
+                  <template #default="{ row }">
+                    <span :class="netClass(row.main_net_inflow)">{{ formatYi(row.main_net_inflow) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="涨跌幅%" width="90" align="right">
+                  <template #default="{ row }">
+                    <span :class="netClass(row.change_percent)">{{ formatPct(row.change_percent) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="days_count" label="覆盖日" width="80" align="right" />
+              </el-table>
               <div v-if="conceptEmpty" class="fund-flow-empty">暂无板块资金流（请先日采）</div>
               <div v-else-if="conceptError" class="fund-flow-empty fund-flow-error">
                 {{ conceptError }}
@@ -131,9 +187,16 @@
     <div class="fund-flow-charts stock-fund-flow-charts">
       <el-card class="fund-flow-card" v-loading="stockFlowLoading">
         <template #header>
-          <div class="fund-flow-card-header stock-flow-header">
-            <div class="stock-flow-header-left">
-              <span>个股资金流向趋势跟踪</span>
+          <div class="ff-card-header">
+            <div class="ff-card-title-row">
+              <span class="ff-card-title">个股资金流向趋势跟踪</span>
+              <span class="fund-flow-date">
+                {{ stockFlowPeriodLabel }}净流入
+                <template v-if="stockFlowRangeText"> · {{ stockFlowRangeText }}</template>
+                <template v-if="stockFlowCount"> · {{ stockFlowCount }} 只</template>
+              </span>
+            </div>
+            <div class="ff-toolbar">
               <el-radio-group
                 v-model="stockFlowPeriod"
                 size="small"
@@ -143,24 +206,47 @@
                 <el-radio-button
                   v-for="p in stockFlowPeriods"
                   :key="p.value"
-                  :label="p.value"
+                  :value="p.value"
                 >
                   {{ p.label }}
                 </el-radio-button>
               </el-radio-group>
+              <el-radio-group v-model="stockFlowView" size="small" class="ff-view-toggle">
+                <el-radio-button value="chart">图形</el-radio-button>
+                <el-radio-button value="list">列表</el-radio-button>
+              </el-radio-group>
             </div>
-            <span class="fund-flow-date">
-              {{ stockFlowPeriodLabel }}净流入
-              <template v-if="stockFlowRangeText"> · {{ stockFlowRangeText }}</template>
-              <template v-if="stockFlowCount"> · {{ stockFlowCount }} 只</template>
-            </span>
           </div>
         </template>
         <div
-          v-show="!stockFlowEmpty && !stockFlowError"
+          v-show="stockFlowView === 'chart' && !stockFlowEmpty && !stockFlowError"
           ref="stockFlowChartRef"
           class="fund-flow-chart"
         />
+        <el-table
+          v-if="stockFlowView === 'list' && !stockFlowEmpty && !stockFlowError"
+          :data="stockFlowTableRows"
+          size="small"
+          stripe
+          max-height="480"
+          class="ff-rank-table"
+        >
+          <el-table-column type="index" label="排名" width="58" />
+          <el-table-column prop="code" label="代码" width="90" />
+          <el-table-column prop="name" label="名称" min-width="110" />
+          <el-table-column label="净流入(亿)" width="110" align="right">
+            <template #default="{ row }">
+              <span :class="netClass(row.net_amount)">{{ formatYi(row.net_amount) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="流入(亿)" width="100" align="right">
+            <template #default="{ row }">{{ formatYi(row.inflow_amount) }}</template>
+          </el-table-column>
+          <el-table-column label="流出(亿)" width="100" align="right">
+            <template #default="{ row }">{{ formatYi(row.outflow_amount) }}</template>
+          </el-table-column>
+          <el-table-column prop="days_count" label="覆盖日" width="80" align="right" />
+        </el-table>
         <div v-if="stockFlowEmpty" class="fund-flow-empty">
           暂无个股资金流（请先日采同花顺资金流向）
         </div>
@@ -172,6 +258,13 @@
 
     <!-- 行业 / 概念板块趋势跟踪（中线 60 日斜率） -->
     <div class="fund-flow-charts slope-trend-charts">
+      <div class="ff-card-header slope-toolbar-bar">
+        <span class="ff-card-title">板块斜率趋势跟踪</span>
+        <el-radio-group v-model="slopeView" size="small" class="ff-view-toggle">
+          <el-radio-button value="chart">图形</el-radio-button>
+          <el-radio-button value="list">列表</el-radio-button>
+        </el-radio-group>
+      </div>
       <el-row :gutter="16">
         <el-col :xs="24" :sm="24" :md="12" :lg="12" :xl="12">
           <el-card class="fund-flow-card" v-loading="industrySlopeLoading">
@@ -186,10 +279,30 @@
               </div>
             </template>
             <div
-              v-show="!industrySlopeEmpty && !industrySlopeError"
+              v-show="slopeView === 'chart' && !industrySlopeEmpty && !industrySlopeError"
               ref="industrySlopeChartRef"
               class="fund-flow-chart"
             />
+            <el-table
+              v-if="slopeView === 'list' && !industrySlopeEmpty && !industrySlopeError"
+              :data="industrySlopeTableRows"
+              size="small"
+              stripe
+              max-height="480"
+              class="ff-rank-table"
+            >
+              <el-table-column type="index" label="排名" width="58" />
+              <el-table-column prop="board_code" label="代码" width="100" />
+              <el-table-column prop="board_name" label="名称" min-width="110" />
+              <el-table-column label="中线斜率" width="120" align="right">
+                <template #default="{ row }">
+                  <span :class="netClass(row.sector_slope)">{{ formatSlope(Number(row.sector_slope)) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="环境" min-width="90">
+                <template #default="{ row }">{{ row.board_env_label || row.board_env || '—' }}</template>
+              </el-table-column>
+            </el-table>
             <div v-if="industrySlopeEmpty" class="fund-flow-empty">
               暂无板块斜率（请先在行情页刷新斜率入库）
             </div>
@@ -211,10 +324,30 @@
               </div>
             </template>
             <div
-              v-show="!conceptSlopeEmpty && !conceptSlopeError"
+              v-show="slopeView === 'chart' && !conceptSlopeEmpty && !conceptSlopeError"
               ref="conceptSlopeChartRef"
               class="fund-flow-chart"
             />
+            <el-table
+              v-if="slopeView === 'list' && !conceptSlopeEmpty && !conceptSlopeError"
+              :data="conceptSlopeTableRows"
+              size="small"
+              stripe
+              max-height="480"
+              class="ff-rank-table"
+            >
+              <el-table-column type="index" label="排名" width="58" />
+              <el-table-column prop="board_code" label="代码" width="100" />
+              <el-table-column prop="board_name" label="名称" min-width="110" />
+              <el-table-column label="中线斜率" width="120" align="right">
+                <template #default="{ row }">
+                  <span :class="netClass(row.sector_slope)">{{ formatSlope(Number(row.sector_slope)) }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="环境" min-width="90">
+                <template #default="{ row }">{{ row.board_env_label || row.board_env || '—' }}</template>
+              </el-table-column>
+            </el-table>
             <div v-if="conceptSlopeEmpty" class="fund-flow-empty">
               暂无板块斜率（请先在行情页刷新斜率入库）
             </div>
@@ -225,12 +358,19 @@
         </el-col>
       </el-row>
     </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="每日复盘" name="daily-review">
+        <DailyReviewPanel />
+      </el-tab-pane>
+    </el-tabs>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
+import DailyReviewPanel from '@/views/dashboard/DailyReviewPanel.vue'
 import boardFundFlowService, {
   BOARD_FUND_FLOW_RANK_PERIODS,
   type BoardConstituentFundFlowItem,
@@ -245,6 +385,12 @@ import stockFundFlowRankService, {
   type StockFundFlowRankItem,
   type StockFundFlowRankPeriod
 } from '@/services/stockFundFlowRank.service'
+
+const dashboardTab = ref('fund-flow')
+type FundFlowViewMode = 'chart' | 'list'
+const boardFlowView = ref<FundFlowViewMode>('chart')
+const stockFlowView = ref<FundFlowViewMode>('chart')
+const slopeView = ref<FundFlowViewMode>('chart')
 
 const industryChartRef = ref<HTMLDivElement | null>(null)
 const conceptChartRef = ref<HTMLDivElement | null>(null)
@@ -307,6 +453,36 @@ const stockFlowError = ref('')
 const stockFlowCount = ref(0)
 const stockFlowPeriodLabel = ref('日')
 const stockFlowRangeText = ref('')
+const stockFlowRows = ref<StockFundFlowRankItem[]>([])
+const industrySlopeRows = ref<BoardSectorTrendItem[]>([])
+const conceptSlopeRows = ref<BoardSectorTrendItem[]>([])
+
+/** 列表按净流入强→弱（与前台市场分析一致） */
+const industryTableRows = computed(() =>
+  [...industryRows.value].sort(
+    (a, b) => Number(b.main_net_inflow || 0) - Number(a.main_net_inflow || 0)
+  )
+)
+const conceptTableRows = computed(() =>
+  [...conceptRows.value].sort(
+    (a, b) => Number(b.main_net_inflow || 0) - Number(a.main_net_inflow || 0)
+  )
+)
+const stockFlowTableRows = computed(() =>
+  [...stockFlowRows.value].sort(
+    (a, b) => Number(b.net_amount || 0) - Number(a.net_amount || 0)
+  )
+)
+const industrySlopeTableRows = computed(() =>
+  [...industrySlopeRows.value].sort(
+    (a, b) => Number(b.sector_slope || 0) - Number(a.sector_slope || 0)
+  )
+)
+const conceptSlopeTableRows = computed(() =>
+  [...conceptSlopeRows.value].sort(
+    (a, b) => Number(b.sector_slope || 0) - Number(a.sector_slope || 0)
+  )
+)
 
 function sortAllByNetInflow(items: BoardFundFlowTodayItem[]) {
   return [...items]
@@ -604,22 +780,19 @@ async function openBoardConstituents(
       .filter(Boolean)
       .join(' · ')
 
-    const sorted = [...items].sort((a, b) => {
-      const av = a.net_amount == null ? Number.POSITIVE_INFINITY : Number(a.net_amount)
-      const bv = b.net_amount == null ? Number.POSITIVE_INFINITY : Number(b.net_amount)
-      return av - bv
-    })
-    constituentsRows.value = sorted
     if (!items.length) {
       constituentsEmpty.value = true
       constituentsEmptyMsg.value =
         data?.message || '暂无成分股资金流（请先同步成分股并日采同花顺资金流向）'
       return
     }
+    constituentsRows.value = [...items].sort(
+      (a, b) => Number(b.net_amount || 0) - Number(a.net_amount || 0)
+    )
     await nextTick()
     constituentsChart = ensureChart(constituentsChartRef.value, constituentsChart)
     constituentsChart?.setOption(
-      buildConstituentsChartOption(sorted, constituentsPeriodLabel.value),
+      buildConstituentsChartOption(constituentsRows.value, constituentsPeriodLabel.value),
       true
     )
     constituentsChart?.resize()
@@ -628,6 +801,17 @@ async function openBoardConstituents(
   } finally {
     constituentsLoading.value = false
   }
+}
+
+function onBoardFlowRowClick(row: BoardFundFlowTodayItem) {
+  if (!row?.board_code) return
+  const kind =
+    row.board_kind === 'concept' || row.board_kind === 'industry'
+      ? row.board_kind
+      : String(row.board_code || '').startsWith('88')
+        ? 'industry'
+        : 'concept'
+  void openBoardConstituents(kind, row.board_code, row.board_name || '')
 }
 
 function onConstituentsDialogClosed() {
@@ -671,8 +855,13 @@ async function loadKind(kind: 'industry' | 'concept') {
     }
 
     if (!items.length) {
-      if (isIndustry) industryEmpty.value = true
-      else conceptEmpty.value = true
+      if (isIndustry) {
+        industryEmpty.value = true
+        industryRows.value = []
+      } else {
+        conceptEmpty.value = true
+        conceptRows.value = []
+      }
       return
     }
     await nextTick()
@@ -817,10 +1006,12 @@ function buildSlopeChartOption(rows: BoardSectorTrendItem[], titleHint: string) 
 function renderSlopeChart(kind: 'industry' | 'concept', items: BoardSectorTrendItem[]) {
   const rows = sortAllBySectorSlope(items)
   if (kind === 'industry') {
+    industrySlopeRows.value = rows
     industrySlopeChart = ensureChart(industrySlopeChartRef.value, industrySlopeChart)
     industrySlopeChart?.setOption(buildSlopeChartOption(rows, '行业趋势'), true)
     industrySlopeChart?.resize()
   } else {
+    conceptSlopeRows.value = rows
     conceptSlopeChart = ensureChart(conceptSlopeChartRef.value, conceptSlopeChart)
     conceptSlopeChart?.setOption(buildSlopeChartOption(rows, '概念趋势'), true)
     conceptSlopeChart?.resize()
@@ -855,8 +1046,13 @@ async function loadSlopeKind(kind: 'industry' | 'concept') {
     }
 
     if (!rows.length) {
-      if (isIndustry) industrySlopeEmpty.value = true
-      else conceptSlopeEmpty.value = true
+      if (isIndustry) {
+        industrySlopeEmpty.value = true
+        industrySlopeRows.value = []
+      } else {
+        conceptSlopeEmpty.value = true
+        conceptSlopeRows.value = []
+      }
       return
     }
     await nextTick()
@@ -986,6 +1182,7 @@ function buildStockFlowChartOption(rows: StockFundFlowRankItem[], periodLabel: s
 
 function renderStockFlowChart(items: StockFundFlowRankItem[], periodLabel: string) {
   const rows = sortStockFlowByNet(items)
+  stockFlowRows.value = rows
   stockFlowChart = ensureChart(stockFlowChartRef.value, stockFlowChart)
   stockFlowChart?.setOption(buildStockFlowChartOption(rows, periodLabel), true)
   stockFlowChart?.resize()
@@ -1015,6 +1212,7 @@ async function loadStockFlowRank() {
 
     if (!items.length) {
       stockFlowEmpty.value = true
+      stockFlowRows.value = []
       stockFlowChart?.clear()
       return
     }
@@ -1022,6 +1220,7 @@ async function loadStockFlowRank() {
     renderStockFlowChart(items, stockFlowPeriodLabel.value)
   } catch (e: unknown) {
     stockFlowError.value = e instanceof Error ? e.message : '加载失败'
+    stockFlowRows.value = []
   } finally {
     stockFlowLoading.value = false
   }
@@ -1039,6 +1238,33 @@ function handleResize() {
   stockFlowChart?.resize()
   constituentsChart?.resize()
 }
+
+function onDashboardTabChange(name: string | number) {
+  if (String(name) !== 'fund-flow') return
+  window.setTimeout(() => {
+    handleResize()
+  }, 80)
+}
+
+watch(boardFlowView, async (mode) => {
+  if (mode !== 'chart') return
+  await nextTick()
+  industryChart?.resize()
+  conceptChart?.resize()
+})
+
+watch(stockFlowView, async (mode) => {
+  if (mode !== 'chart') return
+  await nextTick()
+  stockFlowChart?.resize()
+})
+
+watch(slopeView, async (mode) => {
+  if (mode !== 'chart') return
+  await nextTick()
+  industrySlopeChart?.resize()
+  conceptSlopeChart?.resize()
+})
 
 onMounted(() => {
   void loadKind('industry')
@@ -1071,6 +1297,63 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.dashboard-tabs :deep(.el-tabs__content) {
+  overflow: visible;
+}
+
+.dashboard-tabs :deep(.el-tab-pane) {
+  outline: none;
+}
+
+.fund-flow-card :deep(.el-card__header) {
+  overflow: visible;
+}
+
+.ff-card-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.ff-card-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.ff-card-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #0f172a;
+}
+
+.ff-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ff-view-toggle {
+  margin-left: 0;
+}
+
+.ff-rank-table {
+  width: 100%;
+  cursor: pointer;
+}
+
+.slope-toolbar-bar {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
 }
 
 .fund-flow-charts {

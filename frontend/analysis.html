@@ -40,6 +40,7 @@
                     <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
                     <button type="button" class="analysis-tab" data-tab="recommend" data-perm="channel.analyze.tab.recommend">策略推荐</button>
                     <button class="analysis-tab" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
+                    <button class="analysis-tab" data-tab="daily-review" data-perm="channel.analyze.tab.market">每日复盘</button>
                     <button class="analysis-tab" data-tab="technical-tools" data-perm="channel.analyze.tab.technical">技术工具</button>
                     <button type="button" class="analysis-tab" data-tab="strategy" hidden aria-hidden="true" data-perm-hidden-by-other="1" style="display:none!important">投资策略</button>
                     <button class="analysis-tab" data-tab="reports" data-perm="channel.analyze.tab.report">分析报告</button>
@@ -278,8 +279,17 @@
                             输入股票代码或名称，也可从自选 / 行业龙头 / 概念龙头选择后点击「分析」。
                         </div>
                     </div>
-                    <div class="ssa-scroll-fab" id="ssaScrollFab" aria-label="页面快速滚动">
-                        <button type="button" class="ssa-scroll-fab__btn" id="ssaScrollToggleBtn" title="直达底部">Bottom</button>
+                    <div class="ssa-scroll-fab is-visible" id="ssaScrollFab" data-scroll-fab aria-label="页面快速滚动">
+                        <button type="button" class="ssa-scroll-fab__btn ssa-scroll-fab__btn--top" id="ssaScrollTopBtn" title="回到顶部" aria-label="回到顶部">
+                            <svg class="ssa-scroll-fab__svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+                            </svg>
+                        </button>
+                        <button type="button" class="ssa-scroll-fab__btn ssa-scroll-fab__btn--bottom" id="ssaScrollBottomBtn" title="直达底部" aria-label="直达底部">
+                            <svg class="ssa-scroll-fab__svg" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
@@ -625,6 +635,68 @@
                                 </div>
                                 <div class="ma-status" id="maSlopeStatus"></div>
                             </div>
+                        </section>
+                    </div>
+                </div>
+
+                <!-- 每日复盘 -->
+                <div class="tab-panel" id="daily-review">
+                    <div class="dr-workbench" data-perm="channel.analyze.tab.market">
+                        <p class="dr-desc">日终情绪复盘：量能 / 连板高度 / Lo·Hi·Sp / 硬门槛 / 主线（同花顺<strong>概念</strong>；行业仅当日赛道确认）；涨停连板优先东财涨停池，失败则回退日终涨幅代理。</p>
+                        <div class="dr-toolbar">
+                            <label>交易日 <input type="date" id="drTradeDate"></label>
+                            <button type="button" class="btn btn-secondary" id="drLoadBtn">加载</button>
+                            <button type="button" class="btn btn-primary" id="drComputeBtn">重算</button>
+                            <button type="button" class="btn btn-secondary" id="drSaveBtn">保存观点/建议</button>
+                            <button type="button" class="btn btn-secondary" id="drExportBtn">导出 MD</button>
+                            <button type="button" class="btn btn-secondary" id="drExportPdfBtn">导出 PDF</button>
+                            <span class="dr-status" id="drStatus"></span>
+                        </div>
+                        <div class="dr-metrics" id="drMetrics"></div>
+                        <section class="dr-section">
+                            <h3>趋势摘要</h3>
+                            <p id="drTrendSummary" class="dr-summary"></p>
+                        </section>
+                        <section class="dr-section">
+                            <h3>五项硬门槛 <small id="drGatesRate"></small></h3>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>序号</th><th>门槛</th><th>标准</th><th>今日</th><th>结果</th></tr></thead>
+                                    <tbody id="drGatesBody"><tr><td colspan="5">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                        </section>
+                        <section class="dr-section">
+                            <h3>主线板块（近10日·同花顺概念）</h3>
+                            <p class="dr-summary" id="drMainlineSummary"></p>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>概念板块</th><th>上榜</th><th>定性</th><th>今日</th><th>梯队</th></tr></thead>
+                                    <tbody id="drMainlineBody"><tr><td colspan="5">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                            <h3 class="dr-subhead">当日行业赛道确认</h3>
+                            <p class="dr-summary" id="drIndustryConfirmSummary"></p>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>行业板块</th><th>上榜原因</th><th>涨跌幅%</th><th>净流入</th></tr></thead>
+                                    <tbody id="drIndustryConfirmBody"><tr><td colspan="4">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                        </section>
+                        <section class="dr-section dr-editors">
+                            <div>
+                                <h3>观点与盘面分析</h3>
+                                <textarea id="drViewpoint" rows="5" placeholder="可编辑后保存"></textarea>
+                            </div>
+                            <div>
+                                <h3>操作建议</h3>
+                                <textarea id="drAdvice" rows="5" placeholder="可编辑后保存"></textarea>
+                            </div>
+                        </section>
+                        <section class="dr-section">
+                            <h3>Markdown 预览</h3>
+                            <pre class="dr-md-preview" id="drMarkdownPreview"></pre>
                         </section>
                     </div>
                 </div>
@@ -1336,10 +1408,12 @@
     <script src="js/stock_analysis_pdf.js"></script>
     <script src="js/stock_analysis_png.js"></script>
     <script src="js/stock_trade_plan.js"></script>
+    <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_multi_strategy.js"></script>
     <script src="js/trade_observe.js"></script>
     <script src="js/recommend.js?v=20260914a"></script>
     <script src="js/market_analysis.js?v=20260915a"></script>
+    <script src="js/daily_review.js?v=20260916a"></script>
     <script src="js/analysis.js?v=20260914a"></script>
 </body>
 

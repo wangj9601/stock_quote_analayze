@@ -178,6 +178,9 @@ const AnalysisPage = {
                 break;
             case 'stock-ai':
                 if (window.StockMultiStrategy) {
+                    if (typeof StockMultiStrategy.syncScrollFab === 'function') {
+                        window.setTimeout(() => StockMultiStrategy.syncScrollFab(), 80);
+                    }
                     let isBatch = false;
                     try {
                         const batch = (new URLSearchParams(window.location.search || '').get('batch') || '').trim();
@@ -233,6 +236,9 @@ const AnalysisPage = {
             case 'market-analysis':
                 if (window.MarketAnalysis) MarketAnalysis.load();
                 else this.loadMarketAnalysis();
+                break;
+            case 'daily-review':
+                if (window.DailyReviewPage) DailyReviewPage.init();
                 break;
             case 'technical-tools':
                 this.loadTechnicalTools();
