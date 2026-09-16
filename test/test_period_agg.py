@@ -1,4 +1,4 @@
-"""季/半年/年线：日历期末日聚合单测。"""
+"""月/季/半年/年线：日历期末日聚合单测。"""
 
 from datetime import date
 
@@ -10,22 +10,45 @@ from backend_core.data_collectors.akshare.period_agg import (
     is_last_session_day_of_period,
     resample_ohlcv_to_period_ends,
     to_calendar_half_end,
+    to_calendar_month_end,
     to_calendar_quarter_end,
     to_calendar_year_end,
 )
 
 
 def test_calendar_period_ends():
+    assert to_calendar_month_end("2024-08-05") == pd.Timestamp("2024-08-31")
     assert to_calendar_quarter_end("2024-02-15") == pd.Timestamp("2024-03-31")
     assert to_calendar_quarter_end("2024-06-01") == pd.Timestamp("2024-06-30")
     assert to_calendar_half_end("2024-03-31") == pd.Timestamp("2024-06-30")
     assert to_calendar_half_end("2024-07-01") == pd.Timestamp("2024-12-31")
     assert to_calendar_year_end("2024-05-01") == pd.Timestamp("2024-12-31")
     assert calendar_period_end("2024-08-05", "quarterly") == date(2024, 9, 30)
+    assert calendar_period_end("2024-08-05", "monthly") == date(2024, 8, 31)
 
 
 def _weekend_closed(d: date) -> bool:
     return d.weekday() >= 5
+
+
+def test_last_session_day_month_end():
+    # 2024-08-31 周六 → 8 月最后交易日 2024-08-30（周五）
+    assert is_last_session_day_of_period(
+        date(2024, 8, 30), "monthly", is_session_closed=_weekend_closed
+    )
+    assert not is_last_session_day_of_period(
+        date(2024, 8, 29), "monthly", is_session_closed=_weekend_closed
+    )
+    assert not is_last_session_day_of_period(
+        date(2024, 8, 31), "monthly", is_session_closed=_weekend_closed
+    )
+    # 2024-09-30 周一，即为 9 月末日
+    assert is_last_session_day_of_period(
+        date(2024, 9, 30), "monthly", is_session_closed=_weekend_closed
+    )
+    assert not is_last_session_day_of_period(
+        date(2024, 9, 15), "monthly", is_session_closed=_weekend_closed
+    )
 
 
 def test_last_session_day_quarter_end_on_weekday():
@@ -69,6 +92,9 @@ def test_last_session_day_semiannual_and_annual():
 
 
 def test_mid_year_not_period_end():
+    assert not is_last_session_day_of_period(
+        date(2026, 8, 5), "monthly", is_session_closed=_weekend_closed
+    )
     assert not is_last_session_day_of_period(
         date(2026, 8, 5), "quarterly", is_session_closed=_weekend_closed
     )

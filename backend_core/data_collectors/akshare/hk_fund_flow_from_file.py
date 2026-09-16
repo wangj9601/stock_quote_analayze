@@ -4,7 +4,8 @@
 口径（1A）：流入 = 外盘/(外盘+内盘)×金额，流出 = 内盘/(外盘+内盘)×金额，净额 = 流入−流出。
 外盘+内盘为 0 或无效时，流入/流出/净额置空。
 
-另：港股实时接口全量不足 100 条时，可从同一文件补写 stock_realtime_quote_hk。
+另：港股实时接口全量不足 100 条时，可从当日 hk_fund_flow_YYYYMMDD 文件补写
+stock_realtime_quote_hk；当日文件不存在则视为采集失败（不再回退历史文件）。
 """
 
 from __future__ import annotations
@@ -164,9 +165,9 @@ def find_latest_hk_fund_flow_file(data_dir: Optional[Path] = None) -> Optional[P
 def resolve_hk_fund_flow_file_for_realtime(
     trade_date: Optional[str] = None,
     data_dir: Optional[Path] = None,
-    allow_latest: bool = True,
+    allow_latest: bool = False,
 ) -> Tuple[Optional[Path], Optional[str]]:
-    """优先当日文件，找不到时可用最新一份（交易日取文件名日期）。"""
+    """优先当日文件；默认不允许回退最新文件（实时补采须与交易日一致）。"""
     requested = resolve_trade_date_str(trade_date)
     exact = find_hk_fund_flow_file(requested, data_dir)
     if exact:
@@ -473,18 +474,27 @@ class HkFundFlowFromFileCollector:
     def collect_realtime_quotes(
         self,
         min_rows: int = HK_REALTIME_FILE_MIN_ROWS,
-        allow_latest: bool = True,
+        allow_latest: bool = False,
     ) -> Dict[str, Any]:
-        """接口不足量时的文件补丁：写入 stock_realtime_quote_hk / stock_basic_info_hk。"""
+        """接口不足量时的文件补丁：写入 stock_realtime_quote_hk / stock_basic_info_hk。
+
+        默认仅使用当日 hk_fund_flow 文件；当日不存在则失败（按错误处理）。
+        """
         path, file_date = resolve_hk_fund_flow_file_for_realtime(
             self.trade_date, self.data_dir, allow_latest=allow_latest
         )
         if path is None:
             ymd = trade_date_to_yyyymmdd(self.trade_date)
-            msg = (
-                f"未找到港股资金流向文件: {self.data_dir / (FILE_PREFIX + ymd)}.*"
-                f"（亦尝试目录内最新 hk_fund_flow_*）"
-            )
+            if allow_latest:
+                msg = (
+                    f"未找到港股资金流向文件: {self.data_dir / (FILE_PREFIX + ymd)}.*"
+                    f"（亦尝试目录内最新 hk_fund_flow_*）"
+                )
+            else:
+                msg = (
+                    f"未找到当日港股资金流向文件: {self.data_dir / (FILE_PREFIX + ymd)}.*"
+                    f"（接口无数据且当日文件不存在，按错误处理）"
+                )
             self.logger.error(msg)
             return {
                 "success": False,
@@ -690,9 +700,12 @@ def collect_hk_realtime_quotes_from_file(
     trade_date: Optional[str] = None,
     data_dir: Optional[Path] = None,
     min_rows: int = HK_REALTIME_FILE_MIN_ROWS,
-    allow_latest: bool = True,
+    allow_latest: bool = False,
 ) -> Dict[str, Any]:
-    """港股实时采集接口不足量时，从 hk_fund_flow_YYYYMMDD 文件补写入库。"""
+    """港股实时采集接口不足量时，从当日 hk_fund_flow_YYYYMMDD 文件补写入库。
+
+    默认 allow_latest=False：当日文件不存在则返回 success=False（由调用方按错误处理）。
+    """
     return HkFundFlowFromFileCollector(trade_date=trade_date, data_dir=data_dir).collect_realtime_quotes(
         min_rows=min_rows,
         allow_latest=allow_latest,

@@ -232,6 +232,17 @@ def test_collect_realtime_quotes_missing_file(tmp_path: Path):
     out = c.collect_realtime_quotes(allow_latest=False)
     assert out["success"] is False
     assert "未找到" in out["error"]
+    assert "当日" in out["error"]
+    assert "按错误处理" in out["error"]
+
+
+def test_collect_realtime_quotes_does_not_fallback_to_latest_by_default(tmp_path: Path):
+    older = tmp_path / "hk_fund_flow_20260910.xls"
+    older.write_bytes(b"x")
+    c = HkFundFlowFromFileCollector(trade_date="2026-09-14", data_dir=tmp_path)
+    out = c.collect_realtime_quotes()
+    assert out["success"] is False
+    assert "当日港股资金流向文件" in out["error"]
 
 
 def test_find_latest_hk_fund_flow_file(tmp_path: Path):

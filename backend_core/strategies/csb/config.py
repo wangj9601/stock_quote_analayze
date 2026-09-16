@@ -62,7 +62,7 @@ def get_default_csb_config() -> Dict[str, Any]:
         },
         "scan": {
             "history_bars": 280,
-            "max_results": 200,
+            "max_results": 0,
             "batch_size": 200,
         },
         "backtest": {

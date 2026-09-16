@@ -89,7 +89,7 @@ def load_traces(
     config_id: int,
     entry_only: bool = False,
     signal_type: Optional[str] = None,
-    limit: int = 500,
+    limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     from backend_api.models import CSBSignalTrace
 
@@ -103,5 +103,8 @@ def load_traces(
         q = q.filter(CSBSignalTrace.entry_signal.is_(True))
     if signal_type:
         q = q.filter(CSBSignalTrace.signal_type == signal_type)
-    rows = q.order_by(CSBSignalTrace.score.desc(), CSBSignalTrace.code.asc()).limit(limit).all()
+    q = q.order_by(CSBSignalTrace.score.desc(), CSBSignalTrace.code.asc())
+    if limit is not None and int(limit) > 0:
+        q = q.limit(int(limit))
+    rows = q.all()
     return [_row_to_dict(r) for r in rows]

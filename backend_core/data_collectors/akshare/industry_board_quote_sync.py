@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""行业板块：实时行情表 ↔ 历史指数日 K 字段互补。
+"""行业板块：实时行情表 <-> 历史指数日 K 字段互补。
 
 同花顺实时一览无指数点位（latest_price 故意为空）；
 ``ak.stock_board_industry_index_ths`` 写入 ``industry_board_historical_quotes.close``。
@@ -223,7 +223,7 @@ def supplement_industry_board_quotes(
         if commit:
             db.commit()
         logger.info(
-            "行业板实时↔历史互补完成 hist+=%s rt+=%s date=%s",
+            "行业板实时<->历史互补完成 hist+=%s rt+=%s date=%s",
             out["hist_from_realtime"].get("upserted"),
             out["realtime_from_hist"].get("updated"),
             td,

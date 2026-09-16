@@ -533,7 +533,7 @@ class BoardFundFlowDailyCollector:
                         session, board_kind=kind
                     )
                 except Exception as e:
-                    self.logger.warning("加载 THS↔EM 码表失败 kind=%s: %s", kind, e)
+                    self.logger.warning("加载 THS<->EM 码表失败 kind=%s: %s", kind, e)
                     try:
                         session.rollback()
                     except Exception:

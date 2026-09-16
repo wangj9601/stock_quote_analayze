@@ -630,12 +630,12 @@ class RealtimeStockIndustryBoardCollector:
 
                     sync_out = supplement_industry_board_quotes()
                     print(
-                        "[采集] 实时↔历史指数互补: "
+                        "[采集] 实时<->历史指数互补: "
                         f"hist+={sync_out.get('hist_from_realtime', {}).get('upserted')} "
                         f"rt+={sync_out.get('realtime_from_hist', {}).get('updated')}"
                     )
                 except Exception as sync_err:
-                    print(f"[采集] 实时↔历史指数互补跳过: {sync_err}")
+                    print(f"[采集] 实时<->历史指数互补跳过: {sync_err}")
                 # 斜率依赖成分日线，与实时涨跌分离；失败不拖垮整次采集
                 self._refresh_sector_slopes_after_quotes()
             else:
@@ -649,7 +649,12 @@ class RealtimeStockIndustryBoardCollector:
                 )
         except Exception as e:
             tb = traceback.format_exc()
-            print(f"[采集] 采集异常: {e}\n{tb}")
+            # Windows 控制台常为 GBK：避免异常文案含非常用 Unicode 导致二次 UnicodeEncodeError
+            msg = f"[采集] 采集异常: {e}\n{tb}"
+            try:
+                print(msg)
+            except UnicodeEncodeError:
+                print(msg.encode("gbk", errors="replace").decode("gbk", errors="replace"))
             self.write_log(
                 operation_type="industry_board_realtime",
                 operation_desc="采集行业板块实时行情",

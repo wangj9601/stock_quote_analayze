@@ -160,16 +160,34 @@ function Assert-LastExitCode([string]$StepName) {
 function Invoke-PythonPip {
     param(
         [Parameter(Mandatory = $true)]
-        [string[]]$PipArguments
+        [string[]]$PipArguments,
+        [int]$RetryCount = 3,
+        [int]$RetryDelaySec = 5,
+        [switch]$AllowFailure
     )
     $allArgs = @('-m', 'pip') + $PipArguments
     $savedPipUser = $env:PIP_USER
     $env:PIP_USER = '0'
     try {
-        $p = Start-Process -FilePath $PythonExe -ArgumentList $allArgs -WorkingDirectory (Get-Location).Path -Wait -PassThru -NoNewWindow
-        $code = $p.ExitCode
-        if ($null -eq $code -or $code -ne 0) {
-            throw ("pip failed (exit {0}): python {1}" -f $code, ($allArgs -join ' '))
+        $attempt = 0
+        while ($true) {
+            $attempt++
+            $p = Start-Process -FilePath $PythonExe -ArgumentList $allArgs -WorkingDirectory (Get-Location).Path -Wait -PassThru -NoNewWindow
+            $code = $p.ExitCode
+            if ($null -ne $code -and $code -eq 0) {
+                return
+            }
+            $msg = ("pip failed (exit {0}): python {1}" -f $code, ($allArgs -join ' '))
+            if ($attempt -lt $RetryCount) {
+                Write-Host ("[WARN] {0}; retry {1}/{2} after {3}s ..." -f $msg, $attempt, $RetryCount, $RetryDelaySec) -ForegroundColor Yellow
+                Start-Sleep -Seconds $RetryDelaySec
+                continue
+            }
+            if ($AllowFailure) {
+                Write-Host ("[WARN] {0}; continue (AllowFailure)." -f $msg) -ForegroundColor Yellow
+                return
+            }
+            throw $msg
         }
     }
     finally {
@@ -956,20 +974,23 @@ if (-not $SkipPip) {
         Invoke-KillPythonSameInterpreter -WorkDirForMarkers $currentDir
         Start-Sleep -Seconds 3
     }
-    Invoke-PythonPip @('install', '--upgrade', 'pip')
+    # pip 自身升级：网络抖动常见且非必须（日志里常见 already satisfied）；失败只告警
+    Invoke-PythonPip -PipArguments @('install', '--upgrade', 'pip', '--retries', '5', '--timeout', '60') -RetryCount 3 -AllowFailure
     $prodReq = Join-Path $newRelease "requirements-prod.txt"
     if (-not (Test-Path -LiteralPath $prodReq)) {
         throw 'requirements-prod.txt not found in release package (expected to aggregate backend_api/requirements-minimal.txt and backend_core/requirements-minimal.txt).'
     }
     Assert-RequirementsProdMinimalDeps -RequirementsProdPath $prodReq
     Write-Host '[pip] requirements-prod only (backend_api + backend_core minimal); pydantic-core forced binary wheel.' -ForegroundColor DarkGray
-    Invoke-PythonPip @(
+    Invoke-PythonPip -PipArguments @(
         'install',
         '--prefer-binary',
         '--only-binary', 'pydantic-core',
         '--only-binary', 'pydantic',
+        '--retries', '5',
+        '--timeout', '60',
         '-r', 'requirements-prod.txt'
-    )
+    ) -RetryCount 3
 }
 else {
     Write-Host '[INFO] SkipPip: no pip on server (pre-install deps into this Python or use current\requirements-prod.txt manually).' -ForegroundColor Yellow
@@ -1204,7 +1225,8 @@ catch {
         Restart-IfExists 'stock-quote-notify'
         Restart-IfExists 'stock-quote-frontend'
     }
-    throw
+    # Start-Process 调用本脚本时，仅 throw 不一定能得到非 0 ExitCode；显式 exit 1
+    exit 1
 }
 finally {
     if ($locationPushed) {

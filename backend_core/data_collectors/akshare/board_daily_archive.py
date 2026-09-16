@@ -170,12 +170,12 @@ class BoardDailyArchiveCollector:
 
             sync_result = supplement_industry_board_quotes(trade_date=trade_date)
             self.logger.info(
-                "行业板实时↔历史互补 rt+=%s hist+=%s",
+                "行业板实时<->历史互补 rt+=%s hist+=%s",
                 sync_result.get("realtime_from_hist", {}).get("updated"),
                 sync_result.get("hist_from_realtime", {}).get("upserted"),
             )
         except Exception as sync_err:
-            self.logger.warning("行业板实时↔历史互补跳过: %s", sync_err)
+            self.logger.warning("行业板实时<->历史互补跳过: %s", sync_err)
             sync_result = {"error": str(sync_err)}
 
         return {

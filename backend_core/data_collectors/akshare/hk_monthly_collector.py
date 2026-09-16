@@ -215,8 +215,8 @@ class HKMonthlyDataGenerator:
 
     def generate_current_month_data(self, stock_codes: Optional[List[str]] = None) -> Dict[str, any]:
         """
-        生成当前月的月线数据（每日更新模式）
-        计算本月1号到今天的数据，覆盖写入
+        生成本月月线（供月末最后一个交易日调用）。
+        计算本月1号到今天的数据，覆盖写入。
         """
         try:
             today = datetime.now()
@@ -229,16 +229,16 @@ class HKMonthlyDataGenerator:
             start_date = (first_day - timedelta(days=35)).strftime('%Y-%m-%d')
             end_date = today.strftime('%Y-%m-%d')
             
-            logger.info(f"开始生成港股当前月线数据: 本月1号 {first_day.strftime('%Y-%m-%d')} 到今天 {end_date}")
+            logger.info(f"开始生成港股月末月线数据: 本月1号 {first_day.strftime('%Y-%m-%d')} 到今天 {end_date}")
             
             # 调用通用生成方法
             result = self.generate_monthly_data(start_date, end_date, stock_codes)
             
-            logger.info(f"港股当前月线数据生成完成: {result}")
+            logger.info(f"港股月末月线数据生成完成: {result}")
             return result
             
         except Exception as e:
-            logger.error(f"生成港股当前月线数据失败: {e}")
+            logger.error(f"生成港股月末月线数据失败: {e}")
             return {'total': 0, 'success': 0, 'failed': 1}
 
     def generate_monthly_data(self, start_date: str, end_date: str, stock_codes: Optional[List[str]] = None) -> Dict[str, any]:

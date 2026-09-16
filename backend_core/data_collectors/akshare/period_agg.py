@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """多周期 K 线日历期末日聚合。
 
-季线 / 半年线 / 年线的 bar 日期统一为自然日历：
+月线 / 季线 / 半年线 / 年线的 bar 日期统一为自然日历：
+  - 月末：当月最后一天
   - 季末：03-31 / 06-30 / 09-30 / 12-31
   - 半年末：06-30 / 12-31
   - 年末：12-31
@@ -29,6 +30,12 @@ OHLCV_AGG: Dict[str, str] = {
 }
 
 
+def to_calendar_month_end(ts) -> pd.Timestamp:
+    """任意日期 → 所在月最后一天。"""
+    t = pd.Timestamp(ts)
+    return pd.Timestamp(year=int(t.year), month=int(t.month), day=1) + pd.offsets.MonthEnd(0)
+
+
 def to_calendar_quarter_end(ts) -> pd.Timestamp:
     """任意日期 → 所在季度最后一天。"""
     t = pd.Timestamp(ts)
@@ -52,17 +59,19 @@ def to_calendar_year_end(ts) -> pd.Timestamp:
 
 def _period_end_fn(period: str):
     p = str(period or "").strip().lower()
+    if p in ("monthly", "month", "m"):
+        return to_calendar_month_end
     if p in ("quarterly", "quarter", "q"):
         return to_calendar_quarter_end
     if p in ("semiannual", "semi", "half", "6m"):
         return to_calendar_half_end
     if p in ("annual", "year", "y", "a"):
         return to_calendar_year_end
-    raise ValueError(f"不支持的周期: {period}（仅 quarterly/semiannual/annual）")
+    raise ValueError(f"不支持的周期: {period}（仅 monthly/quarterly/semiannual/annual）")
 
 
 def calendar_period_end(ts: DateLike, period: str) -> date:
-    """任意日期 → 所在季/半年/年的自然日历期末日。"""
+    """任意日期 → 所在月/季/半年/年的自然日历期末日。"""
     return _period_end_fn(period)(ts).date()
 
 
@@ -72,7 +81,7 @@ def is_last_session_day_of_period(
     *,
     is_session_closed: Callable[[date], bool],
 ) -> bool:
-    """判断 ``d`` 是否为该周期（季末 / 半年末 / 年末）内最后一个交易日。
+    """判断 ``d`` 是否为该周期（月末 / 季末 / 半年末 / 年末）内最后一个交易日。
 
     规则（与 bar 日期自然期末一致）：
     - ``d`` 当日必须为交易日；
@@ -108,7 +117,7 @@ def resample_ohlcv_to_period_ends(
     Parameters
     ----------
     df : 索引为 DatetimeIndex 的行情 DataFrame
-    period : quarterly | semiannual | annual
+    period : monthly | quarterly | semiannual | annual
     columns : 参与聚合的列；默认取 df 中出现在 OHLCV_AGG 的列
     """
     if df is None or df.empty:

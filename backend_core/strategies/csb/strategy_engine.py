@@ -248,7 +248,14 @@ class CSBStrategyEngine:
     ) -> List[Dict[str, Any]]:
         cfg = config or self.config
         scan = cfg.get("scan") or {}
-        max_n = max_results if max_results is not None else int(scan.get("max_results", 200))
+        if max_results is not None:
+            max_n = int(max_results)
+        else:
+            raw_n = scan.get("max_results")
+            try:
+                max_n = int(raw_n) if raw_n is not None else 0
+            except (TypeError, ValueError):
+                max_n = 0
         trade_date = self.loader.resolve_effective_trade_date(as_of_end_date)
 
         results: List[Dict[str, Any]] = []
@@ -281,7 +288,9 @@ class CSBStrategyEngine:
             ),
             reverse=True,
         )
-        return results[:max_n]
+        if max_n > 0:
+            return results[:max_n]
+        return results
 
     def screen_universe_for_dates(
         self,

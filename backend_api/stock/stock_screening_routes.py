@@ -4604,9 +4604,9 @@ async def get_csb_strategy(
     trace_only: bool = Query(False, description="仅读 csb_signal_trace（建议 scope=market）"),
     signal_type: Optional[str] = Query(None, description="CSB_PROBE|CSB_BREAKOUT 等"),
     entry_only: bool = Query(True, description="仅返回入场信号"),
-    cn_board_segment: Optional[str] = Query(
+    cn_board_segment: Optional[List[str]] = Query(
         None,
-        description="可选 A 股板型: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
+        description="可选 A 股板型（可多选）: ALL/MAIN/CYB/SZ_SME/KCB/BJ；不传=不限",
     ),
     industry_board_code: Optional[List[str]] = Query(
         None, description="scope=industry_board 时：行业板块 BK 编码，可多选"
@@ -4615,7 +4615,9 @@ async def get_csb_strategy(
         None, description="scope=concept_board 时：概念板块代码，可多选"
     ),
     stock_code: Optional[str] = Query(None, description="scope=single 时：股票代码或名称"),
-    max_results: Optional[int] = Query(200, ge=1, le=2000),
+    max_results: Optional[int] = Query(
+        10000, ge=1, le=10000, description="最大返回条数；默认不按 200 截断"
+    ),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ):
@@ -4626,8 +4628,7 @@ async def get_csb_strategy(
         from backend_core.strategies.csb.signal_storage import load_traces
         from backend_api.models import User, Watchlist
         from backend_api.utils.cn_listed_board_filter import (
-            filter_stock_codes_by_board_segment,
-            normalize_list_board_segment,
+            filter_stock_codes_by_board_segments,
         )
     except Exception as e:
         return JSONResponse(
@@ -4642,20 +4643,21 @@ async def get_csb_strategy(
     if scope_raw not in allowed:
         raise HTTPException(status_code=400, detail=f"scope 仅支持 {'|'.join(allowed)}")
 
-    seg_raw = (cn_board_segment or "").strip().upper()
-    if seg_raw and seg_raw != "ALL":
-        if not normalize_list_board_segment(cn_board_segment):
-            raise HTTPException(
-                status_code=400,
-                detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ",
-            )
-    else:
-        seg_raw = ""
+    seg_list = _gms_normalize_cn_board_segment_query(cn_board_segment)
+    seg_joined = ",".join(seg_list) if seg_list else ""
+    seg_label = _gms_cn_board_seg_label(seg_list) if seg_list else ""
 
     def _apply_seg(codes: List[str]) -> List[str]:
-        if not seg_raw:
+        if not seg_list:
             return codes
-        return filter_stock_codes_by_board_segment(codes, seg_raw)
+        return filter_stock_codes_by_board_segments(codes, seg_list)
+
+    def _filter_rows_by_seg(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not seg_list or not rows:
+            return rows
+        codes = [str(r.get("code") or "").strip() for r in rows]
+        keep = set(filter_stock_codes_by_board_segments(codes, seg_list))
+        return [r for r in rows if str(r.get("code") or "").strip() in keep]
 
     def _norm_codes(raw_codes: List[str]) -> List[str]:
         out: List[str] = []
@@ -4666,7 +4668,11 @@ async def get_csb_strategy(
         return out
 
     stock_codes: Optional[List[str]] = None
-    extra_meta: Dict[str, Any] = {}
+    extra_meta: Dict[str, Any] = {
+        "cn_board_segment": seg_joined or None,
+        "cn_board_segments": list(seg_list) if seg_list else [],
+        "cn_board_segment_label": seg_label or None,
+    }
 
     if scope_raw == "single":
         if not stock_code or not str(stock_code).strip():
@@ -4675,7 +4681,7 @@ async def get_csb_strategy(
         if not resolved:
             raise HTTPException(status_code=400, detail="未找到匹配的股票，请检查代码或名称")
         stock_codes = _apply_seg([str(resolved).zfill(6)])
-        extra_meta["stock_code"] = stock_codes[0]
+        extra_meta["stock_code"] = stock_codes[0] if stock_codes else str(resolved).zfill(6)
     elif scope_raw == "watchlist":
         if not token:
             raise HTTPException(status_code=401, detail="watchlist 需要登录")
@@ -4698,7 +4704,8 @@ async def get_csb_strategy(
                     "total": 0,
                     "strategy_name": "CSB通道突破",
                     "scope": scope_raw,
-                    "message": "自选股为空" + ("（板型过滤后无匹配）" if seg_raw else ""),
+                    "message": "自选股为空" + ("（板型过滤后无匹配）" if seg_list else ""),
+                    **extra_meta,
                 }
             )
     elif scope_raw == "industry_board":
@@ -4716,6 +4723,18 @@ async def get_csb_strategy(
         )
         stock_codes = _apply_seg(_norm_codes([str(r.stock_code) for r in rows_ib if r.stock_code]))
         extra_meta["industry_board_codes"] = bcodes
+        if not stock_codes:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "strategy_name": "CSB通道突破",
+                    "scope": scope_raw,
+                    "message": "行业板块在选定板型下无匹配成分股" if seg_list else "行业板块成分股为空",
+                    **extra_meta,
+                }
+            )
     elif scope_raw == "concept_board":
         from backend_api.models import ConceptBoardConstituent
 
@@ -4730,6 +4749,18 @@ async def get_csb_strategy(
         )
         stock_codes = _apply_seg(_norm_codes([str(r.stock_code) for r in rows_cb if r.stock_code]))
         extra_meta["concept_board_codes"] = bcodes
+        if not stock_codes:
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "strategy_name": "CSB通道突破",
+                    "scope": scope_raw,
+                    "message": "概念板块在选定板型下无匹配成分股" if seg_list else "概念板块成分股为空",
+                    **extra_meta,
+                }
+            )
 
     cm = CSBConfigManager()
     cm.ensure_default_row(db)
@@ -4758,8 +4789,15 @@ async def get_csb_strategy(
             config_id=int(cid),
             entry_only=entry_only,
             signal_type=signal_type,
-            limit=max_results or 200,
+            limit=max_results,
         )
+        rows = _filter_rows_by_seg(rows)
+        empty_msg = None
+        if not rows:
+            empty_msg = (
+                f"全市场暂无预计算（{effective}）。"
+                "将自动尝试现算；若仍无结果，请先执行 CSB 预计算或缩小范围。"
+            )
         return JSONResponse(
             {
                 "success": True,
@@ -4771,7 +4809,8 @@ async def get_csb_strategy(
                 "config_id": cid,
                 "source": "csb_signal_trace",
                 "trace_only": True,
-                "cn_board_segment": seg_raw or None,
+                "need_precompute": not bool(rows),
+                "message": empty_msg,
                 **extra_meta,
             }
         )
@@ -4790,6 +4829,9 @@ async def get_csb_strategy(
     data_rows = result.get("data") or []
     if signal_type:
         data_rows = [r for r in data_rows if str(r.get("signal_type") or "") == signal_type]
+    # 全市场未预先收窄代码池时，按板型对结果再过滤
+    if scope_raw == "market" and seg_list:
+        data_rows = _filter_rows_by_seg(data_rows)
 
     return JSONResponse(
         {
@@ -4804,7 +4846,6 @@ async def get_csb_strategy(
             "message": result.get("message"),
             "need_precompute": result.get("need_precompute"),
             "trace_only": trace_only,
-            "cn_board_segment": seg_raw or None,
             **extra_meta,
         }
     )

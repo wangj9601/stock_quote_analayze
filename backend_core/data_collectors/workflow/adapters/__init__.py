@@ -391,6 +391,8 @@ def _gen_cn_weekly() -> Any:
 def _gen_cn_monthly() -> Any:
     from backend_core.data_collectors.akshare.monthly_collector import MonthlyDataGenerator
 
+    if not _is_period_end("CN", "monthly"):
+        return {"skipped": True, "reason": "非月末交易日"}
     return MonthlyDataGenerator().generate_current_month_data()
 
 
@@ -427,6 +429,8 @@ def _gen_hk_weekly() -> Any:
 def _gen_hk_monthly() -> Any:
     from backend_core.data_collectors.akshare.hk_monthly_collector import HKMonthlyDataGenerator
 
+    if not _is_period_end("HK", "monthly"):
+        return {"skipped": True, "reason": "非月末交易日"}
     return HKMonthlyDataGenerator().generate_current_month_data()
 
 

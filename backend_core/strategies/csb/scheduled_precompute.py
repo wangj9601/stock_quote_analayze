@@ -70,7 +70,9 @@ def run_csb_precompute_for_config(
         date_s = loader.resolve_effective_trade_date(date_s)
         stocks = loader.list_a_share_candidates(limit=limit)
         engine = CSBStrategyEngine(loader, cfg)
-        hits = engine.screen(stocks, as_of_end_date=date_s, require_entry=True)
+        hits = engine.screen(
+            stocks, as_of_end_date=date_s, require_entry=True, max_results=0
+        )
         written = upsert_trace_rows(db, config_id=config_id, rows=hits)
         mark_date_scanned(
             db,

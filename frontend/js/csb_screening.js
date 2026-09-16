@@ -113,9 +113,21 @@
       : [];
   }
 
-  function selectedBoardSegment() {
-    const el = document.querySelector('input[name="csbCnBoardSegment"]:checked');
-    return el ? String(el.value || 'ALL').trim().toUpperCase() : 'ALL';
+  const CSB_CN_BOARD_SEG_LABELS = {
+    MAIN: '主板',
+    CYB: '创业板',
+    SZ_SME: '中小板',
+    KCB: '科创板',
+    BJ: '北证',
+  };
+
+  function selectedBoardSegments() {
+    const segs = [];
+    document.querySelectorAll('input[name="csbCnBoardSegment"]:checked').forEach((el) => {
+      const v = String(el.value || '').trim().toUpperCase();
+      if (v && v !== 'ALL' && !segs.includes(v)) segs.push(v);
+    });
+    return segs;
   }
 
   function preferredBoardCodeSource(kind, codes) {
@@ -150,14 +162,15 @@
     }
   }
 
-  function renderSignalRows(rows) {
+  function renderSignalRows(rows, opts = {}) {
     const body = document.getElementById('csbResultsBody');
     if (!body) return;
     const list = rows || [];
     lastSignalRows = list;
     document.getElementById('csbResultsCount').textContent = `共 ${list.length} 只`;
     if (!list.length) {
-      body.innerHTML = '<tr><td colspan="9" class="empty-state">无符合条件的结果</td></tr>';
+      const emptyText = opts.emptyHint || '无符合条件的结果';
+      body.innerHTML = `<tr><td colspan="9" class="empty-state">${esc(emptyText)}</td></tr>`;
       return;
     }
     body.innerHTML = list
@@ -208,7 +221,7 @@
       const stockCode = (document.getElementById('csbStockCode')?.value || '').trim();
       const industryCodes = selectedIndustryCodes();
       const conceptCodes = selectedConceptCodes();
-      const boardSeg = selectedBoardSegment();
+      const boardSegs = selectedBoardSegments();
 
       if (scope === 'industry_board' && !industryCodes.length) {
         throw new Error('请先选择行业板块');
@@ -223,14 +236,16 @@
       const q = new URLSearchParams({
         scope,
         entry_only: String(entryOnly),
-        max_results: scope === 'single' ? '10' : '200',
+        max_results: scope === 'single' ? '10' : '10000',
       });
       if (date) q.set('date', date);
       if (stockCode) q.set('stock_code', stockCode);
       if (signalType) q.set('signal_type', signalType);
       if (configRaw && /^\d+$/.test(configRaw)) q.set('config_id', configRaw);
       if (traceOnly && scope === 'market') q.set('trace_only', 'true');
-      if (boardSeg && boardSeg !== 'ALL' && scope !== 'single') q.set('cn_board_segment', boardSeg);
+      if (scope !== 'single') {
+        boardSegs.forEach((seg) => q.append('cn_board_segment', seg));
+      }
       industryCodes.forEach((c) => q.append('industry_board_code', c));
       conceptCodes.forEach((c) => q.append('concept_board_code', c));
       if (scope === 'industry_board' && industryCodes.length) {
@@ -259,7 +274,13 @@
         data.config_id != null ? `config ${data.config_id}` : '',
       ].filter(Boolean);
       if (data.stock_code) metaParts.push(`个股 ${data.stock_code}`);
-      if (data.cn_board_segment) metaParts.push(`板型 ${data.cn_board_segment}`);
+      const boardLabel =
+        data.cn_board_segment_label ||
+        data.cn_board_segment ||
+        (Array.isArray(data.cn_board_segments) && data.cn_board_segments.length
+          ? data.cn_board_segments.map((s) => CSB_CN_BOARD_SEG_LABELS[s] || s).join('、')
+          : '');
+      if (boardLabel) metaParts.push(`板型 ${boardLabel}`);
       if (data.industry_board_codes && data.industry_board_codes.length) {
         metaParts.push(`行业 ${data.industry_board_codes.join(',')}`);
       }
@@ -281,7 +302,11 @@
       if (dateEl && asof && asof !== '-' && (!date || data.date_snapped)) {
         dateEl.value = asof;
       }
-      renderSignalRows(rows);
+      renderSignalRows(rows, {
+        emptyHint: data.need_precompute
+          ? '全市场暂无预计算结果。请先在管理端执行 CSB 预计算，或改用自选/板块/个股范围。'
+          : null,
+      });
     } catch (e) {
       showErr(e.message || String(e));
       if (body) body.innerHTML = '<tr><td colspan="9" class="empty-state">加载失败</td></tr>';

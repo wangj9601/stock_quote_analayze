@@ -124,7 +124,7 @@ def _hk_session_closed_today() -> bool:
 
 
 def _is_period_end_trading_day(market: str, period: str, d=None) -> bool:
-    """今日是否为季末/半年末/年末对应的最后一个交易日（自然期末遇休市则提前到前一交易日）。"""
+    """今日是否为月末/季末/半年末/年末对应的最后一个交易日（自然期末遇休市则提前到前一交易日）。"""
     day = d or datetime.now().date()
     session = ApiSessionLocal()
     try:
@@ -163,7 +163,12 @@ def _skip_unless_period_end(market: str, period: str, label: str) -> bool:
         "[定时任务] %s 今日 %s 非%s末日（本周期自然期末 %s），跳过生成。",
         label,
         today.isoformat(),
-        {"quarterly": "季", "semiannual": "半年", "annual": "年"}.get(period, period),
+        {
+            "monthly": "月",
+            "quarterly": "季",
+            "semiannual": "半年",
+            "annual": "年",
+        }.get(period, period),
         end.isoformat(),
     )
     return True
@@ -474,22 +479,26 @@ def generate_monthly_data():
         if _cn_session_closed_today():
             logging.info("[定时任务] A股休市日，跳过月线数据生成。")
             return
-        logging.info("[定时任务] A股当前月线数据生成开始...")
+        if _skip_unless_period_end("CN", "monthly", "A股"):
+            return
+        logging.info("[定时任务] A股月末月线数据生成开始...")
         result = monthly_generator.generate_current_month_data()
-        logging.info(f"[定时任务] A股当前月线数据生成完成: {result}")
+        logging.info(f"[定时任务] A股月末月线数据生成完成: {result}")
     except Exception as e:
-        logging.error(f"[定时任务] A股当前月线数据生成异常: {e}")
+        logging.error(f"[定时任务] A股月线数据生成异常: {e}")
 
 def generate_hk_monthly_data():
     try:
         if _hk_session_closed_today():
             logging.info("[定时任务] 港股休市日，跳过月线数据生成。")
             return
-        logging.info("[定时任务] 港股当前月线数据生成开始...")
+        if _skip_unless_period_end("HK", "monthly", "港股"):
+            return
+        logging.info("[定时任务] 港股月末月线数据生成开始...")
         result = hk_monthly_generator.generate_current_month_data()
-        logging.info(f"[定时任务] 港股当前月线数据生成完成: {result}")
+        logging.info(f"[定时任务] 港股月末月线数据生成完成: {result}")
     except Exception as e:
-        logging.error(f"[定时任务] 港股当前月线数据生成异常: {e}")
+        logging.error(f"[定时任务] 港股月线数据生成异常: {e}")
 
 def generate_quarterly_data():
     try:
@@ -1157,6 +1166,7 @@ if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
         hour=_cron_int('SCHED_HK_WEEKLY_HOUR', 17),
         minute=_cron_int('SCHED_HK_WEEKLY_MINUTE', 1),
         id='generate_hk_weekly')
+    # 月线：工作日 cron 触发，但仅在月末最后一个交易日真正生成（月末休市则提前）
     scheduler.add_job(generate_monthly_data, 'cron',
         day_of_week=_cron('SCHED_MONTHLY_DOW', 'mon-fri'),
         hour=_cron_int('SCHED_MONTHLY_HOUR', 16),

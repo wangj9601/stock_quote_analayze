@@ -51,8 +51,9 @@ def test_file_fallback_used_when_api_insufficient(monkeypatch):
 
     called = {}
 
-    def _fake_file_collect():
+    def _fake_file_collect(*args, **kwargs):
         called["ok"] = True
+        called["allow_latest"] = kwargs.get("allow_latest")
         return {
             "success": True,
             "written": 200,
@@ -83,3 +84,25 @@ def test_file_fallback_used_when_api_insufficient(monkeypatch):
     )
     assert collector.collect_quotes() is True
     assert called.get("ok") is True
+    assert called.get("allow_latest") is False
+
+
+def test_file_fallback_errors_when_today_file_missing(monkeypatch):
+    from backend_core.data_collectors.akshare.hk_realtime import HKRealtimeQuoteCollector
+
+    collector = HKRealtimeQuoteCollector({})
+    monkeypatch.setattr(collector, "_init_db", lambda: True)
+    monkeypatch.setattr(collector, "_retry_on_failure", lambda fn: pd.DataFrame({"代码": ["00700"]}))
+
+    monkeypatch.setattr(
+        "backend_core.data_collectors.akshare.hk_fund_flow_from_file.collect_hk_realtime_quotes_from_file",
+        lambda *a, **k: {
+            "success": False,
+            "error": "未找到当日港股资金流向文件: backend_core/data/hk_fund_flow_20260915.*（接口无数据且当日文件不存在，按错误处理）",
+            "written": 0,
+        },
+    )
+
+    with pytest.raises(HKRealtimeInsufficientDataError) as ei:
+        collector.collect_quotes()
+    assert "当日港股资金流向文件" in str(ei.value)

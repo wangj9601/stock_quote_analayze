@@ -3217,7 +3217,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                 fetched_count = hk_realtime_row_count(df)
                 if not single_code and hk_realtime_spot_insufficient(df):
                     logger.warning(
-                        "港股实时接口数据不足（%s条，阈值%s条），尝试从 hk_fund_flow 文件补采",
+                        "港股实时接口数据不足（%s条，阈值%s条），尝试从当日 hk_fund_flow 文件补采",
                         fetched_count,
                         HK_REALTIME_MIN_ROWS,
                     )
@@ -3225,7 +3225,10 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                         collect_hk_realtime_quotes_from_file,
                     )
 
-                    file_result = collect_hk_realtime_quotes_from_file(trade_date=trade_date)
+                    # 仅允许当日资金流向文件补采；当日文件不存在则按错误处理（不回退历史文件）
+                    file_result = collect_hk_realtime_quotes_from_file(
+                        trade_date=trade_date, allow_latest=False
+                    )
                     if file_result.get("success"):
                         written = int(file_result.get("written") or 0)
                         warn = (

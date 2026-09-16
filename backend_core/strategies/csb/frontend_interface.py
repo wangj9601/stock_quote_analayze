@@ -90,18 +90,24 @@ class CSBFrontendInterface:
             allow_full_rt = (os.getenv("CSB_ALLOW_FULL_MARKET_REALTIME") or "").strip().lower() in (
                 "1", "true", "yes", "on",
             )
-            if stock_codes is None and not limit and not allow_full_rt:
+            # 全市场无预计算时：默认禁止「只扫前 N 只」的误导性现算（几乎必然 0 条入场）
+            if stock_codes is None and not allow_full_rt:
                 return {
-                    "success": False,
+                    "success": True,
                     "data": [],
                     "total": 0,
                     "strategy_name": "CSB通道突破",
-                    "message": f"全市场暂无预计算（{effective}），请先执行 CSB 预计算或缩小范围。",
+                    "message": (
+                        f"全市场暂无预计算（{effective}）。"
+                        "请先在管理端/工作流执行 CSB 信号预计算，或将范围缩小为自选/板块/个股后再刷新。"
+                    ),
                     "need_precompute": True,
                     "search_date": effective,
+                    "config_id": resolved_id,
+                    "source": "empty_trace",
+                    "data_source": "empty_trace",
                 }
             stocks = loader.list_a_share_candidates(
-                limit=limit if stock_codes is None else None,
                 stock_codes=stock_codes,
             )
             engine = CSBStrategyEngine(loader, cfg)
