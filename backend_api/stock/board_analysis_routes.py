@@ -459,6 +459,60 @@ def get_multi_strategy_check(
         )
 
 
+@router.get("/stock-analysis-bundle")
+def get_stock_analysis_bundle(
+    code: Optional[str] = Query(None, description="股票代码或名称"),
+    stock_code: Optional[str] = Query(None, description="同 code，兼容别名"),
+    date: Optional[str] = Query(None, description="基准日 YYYY-MM-DD，可选"),
+    strategies: Optional[str] = Query(
+        None, description="逗号分隔：gms,urt,sbbr,rpe；默认全部"
+    ),
+    use_realtime: bool = Query(
+        False,
+        description="实时分析：拉取最新现价；明细与策略按实时口径",
+    ),
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.analyze.tab.stock_ai")),
+):
+    """个股分析统一入口：四策略 + RS/资金/阻力/形态/波段/江恩 + 综合交易计划。"""
+    raw = (code or stock_code or "").strip()
+    if not raw:
+        return JSONResponse(
+            {"success": False, "message": "请提供股票代码或名称"},
+            status_code=400,
+        )
+    try:
+        from backend_core.analysis.stock_analysis_bundle import build_stock_analysis_bundle
+
+        result = build_stock_analysis_bundle(
+            db,
+            code=raw,
+            date=date,
+            strategies=_parse_strategies(strategies),
+            use_realtime=bool(use_realtime),
+        )
+        if not result.get("success"):
+            status = int(result.get("http_status") or 400)
+            body = {
+                "success": False,
+                "message": result.get("message") or "分析失败",
+            }
+            if result.get("candidates") is not None:
+                body["candidates"] = result.get("candidates") or []
+            return JSONResponse(body, status_code=status)
+        return {"success": True, "data": result.get("data")}
+    except Exception as e:
+        logger.exception("stock-analysis-bundle failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return JSONResponse(
+            {"success": False, "message": f"个股综合分析失败: {e}"},
+            status_code=500,
+        )
+
+
 class StockIntegratedTradePlanBody(BaseModel):
     code: str = Field(..., min_length=1, max_length=32, description="股票代码")
     date: Optional[str] = Field(None, description="基准日 YYYY-MM-DD")

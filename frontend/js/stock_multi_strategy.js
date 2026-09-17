@@ -2320,11 +2320,7 @@ const StockMultiStrategy = {
         const options = opts || {};
         const useRealtime = !!options.useRealtime;
         const timeoutMs = options.timeoutMs;
-        const detailConcurrency = Math.max(
-            1,
-            Number(options.detailConcurrency) || this.BATCH_DETAIL_CONCURRENCY || 2
-        );
-        const query = name ? `${code} ${name}` : code;
+        const query = name ? (code + ' ' + name) : code;
         const q = new URLSearchParams({ code: query });
         if (asof && !useRealtime) q.set('date', asof);
         if (useRealtime) q.set('use_realtime', 'true');
@@ -2338,382 +2334,137 @@ const StockMultiStrategy = {
             }, Math.max(5000, Number(timeoutMs) || 90000));
         }
         const signal = bundleCtrl ? bundleCtrl.signal : options.signal;
-        const fetchFn = (url, o) => {
-            const merged = { ...(o || {}) };
-            if (signal) merged.signal = signal;
-            return authFetch(url, merged);
+        const fetchOpts = signal ? { signal } : {};
+
+        try {
+            const resp = await authFetch(
+                this.API_BASE_URL + '/api/analysis/stock-analysis-bundle?' + q.toString(),
+                fetchOpts
+            );
+            const payload = await resp.json().catch(() => ({}));
+            const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+            if (candidates.length > 1 || (candidates.length > 0 && !payload.data)) {
+                const err = new Error(payload.message || '股票代码不唯一，请使用精确代码');
+                err.candidates = candidates;
+                err.bundleMessage = payload.message || '';
+                throw err;
+            }
+            if (!resp.ok || !payload.success) {
+                const err = new Error(payload.message || payload.detail || ('分析失败 ' + resp.status));
+                if (candidates.length) {
+                    err.candidates = candidates;
+                    err.bundleMessage = payload.message || '';
+                }
+                throw err;
+            }
+            return this._normalizeServerBundle(payload.data || {}, { useRealtime, asof, code, name });
+        } catch (e) {
+            if (timeoutMs && this._isAbortError(e)) {
+                throw new Error(
+                    '分析超时（>' + Math.round(Number(timeoutMs) / 1000) + 's），请检查后端是否过载或刚热重载'
+                );
+            }
+            throw e;
+        } finally {
+            if (bundleTimer) clearTimeout(bundleTimer);
+        }
+    },
+
+    _normalizeServerBundle(data, opts) {
+        const options = opts || {};
+        const useRealtime = !!options.useRealtime;
+        const strategyData = data.strategy || null;
+        const strategyError = data.strategy_error || null;
+        const stock = data.stock || { code: options.code, name: options.name || '' };
+        const tradeDate = data.trade_date
+            || (strategyData && (strategyData.realtime_trade_date || strategyData.trade_date))
+            || options.asof
+            || '';
+        const resolvedCode = (stock && stock.code) || options.code || '';
+
+        const rsRaw = data.rs || {};
+        const rs = {
+            ok: !!rsRaw.ok,
+            data: rsRaw.data || null,
+            reason: rsRaw.reason || null,
+            error: rsRaw.error || (rsRaw.ok ? null : '相对强度加载失败'),
         };
 
-        try {
-        const resp = await fetchFn(
-            `${this.API_BASE_URL}/api/analysis/multi-strategy-check?${q}`
-        );
-        const payload = await resp.json().catch(() => ({}));
-        const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-        if (candidates.length > 1 || (candidates.length > 0 && !payload.data)) {
-            throw new Error(payload.message || '股票代码不唯一，请使用精确代码');
-        }
-        if (!resp.ok || !payload.success) {
-            throw new Error(payload.message || payload.detail || `分析失败 ${resp.status}`);
-        }
-        const strategyData = payload.data || {};
-        const stock = strategyData.stock || { code, name };
-        const resolvedCode = stock.code || code;
-        const tradeDate = useRealtime
-            ? (strategyData.realtime_trade_date || (strategyData.realtime && strategyData.realtime.trade_date) || strategyData.trade_date || asof || '')
-            : (strategyData.trade_date || asof || '');
+        const ffRaw = data.fund_flow || {};
+        const fundFlow = {
+            ok: !!ffRaw.ok,
+            data: ffRaw.data || null,
+            error: ffRaw.error || (ffRaw.ok ? null : '资金流向加载失败'),
+        };
 
-        const rtOpts = useRealtime ? { use_realtime: true } : {};
-        const levelsAdjust = useRealtime ? 'none' : 'qfq';
-        const sigOpts = signal ? { signal } : {};
+        const lvRaw = data.levels || {};
+        const levelsFetched = lvRaw.payload || null;
+        const levels = {
+            ok: !!lvRaw.ok,
+            data: lvRaw.data || (levelsFetched && levelsFetched.data) || null,
+            error: lvRaw.error || (lvRaw.ok ? null : '阻力支撑计算失败'),
+            fetched: levelsFetched,
+        };
 
-        const detailJobs = [
-            async () => {
-                try {
-                    const r = await fetchFn(
-                        `${this.API_BASE_URL}/api/analysis/rs-rating?${new URLSearchParams({
-                            code: resolvedCode,
-                            ...(tradeDate ? { date: tradeDate } : {}),
-                        })}`,
-                        sigOpts
-                    );
-                    const body = await r.json().catch(() => ({}));
-                    if (!r.ok || !body.success) {
-                        return { __error: body.message || `相对强度加载失败 ${r.status}` };
-                    }
-                    return body;
-                } catch (e) {
-                    if (this._isAbortError(e)) throw e;
-                    return { __error: e.message || '相对强度加载失败' };
-                }
-            },
-            async () => {
-                try {
-                    const r = await fetchFn(
-                        `${this.API_BASE_URL}/api/stock_fund_flow/daily?${new URLSearchParams({
-                            code: resolvedCode,
-                            days: '20',
-                        })}`,
-                        sigOpts
-                    );
-                    const body = await r.json().catch(() => ({}));
-                    if (!r.ok || !body.success) {
-                        return { __error: body.message || `资金流向加载失败 ${r.status}` };
-                    }
-                    return body;
-                } catch (e) {
-                    if (this._isAbortError(e)) throw e;
-                    return { __error: e.message || '资金流向加载失败' };
-                }
-            },
-            async () => {
-                const Levels = this._analysisTool('KdeLevelsTool');
-                if (!Levels || typeof Levels.fetchLevels !== 'function') {
-                    return { __error: '阻力支撑模块未加载' };
-                }
-                try {
-                    return await Levels.fetchLevels(resolvedCode, {
-                        adjust: levelsAdjust,
-                        factor_source: 'auto',
-                        max_levels: 8,
-                        ...rtOpts,
-                        ...sigOpts,
-                    });
-                } catch (e) {
-                    if (this._isAbortError(e)) throw e;
-                    return { __error: e.message || '阻力支撑计算失败' };
-                }
-            },
-            async () => {
-                const PT = this._analysisTool('PatternTool');
-                if (!PT || typeof PT.fetchSingle !== 'function') {
-                    return { __error: '形态识别模块未加载' };
-                }
-                try {
-                    return await PT.fetchSingle(resolvedCode, {
-                        adjust: useRealtime ? 'none' : 'qfq',
-                        asof: useRealtime ? undefined : (tradeDate || undefined),
-                        ...rtOpts,
-                        ...sigOpts,
-                    });
-                } catch (e) {
-                    if (this._isAbortError(e)) throw e;
-                    return { __error: e.message || '形态识别失败' };
-                }
-            },
-            async () => {
-                const MST = this._analysisTool('MarketStructureTool');
-                if (MST && typeof MST.fetchStructure === 'function') {
-                    try {
-                        return await MST.fetchStructure(resolvedCode, {
-                            adjust: useRealtime ? 'none' : 'qfq',
-                            asof: useRealtime ? undefined : (tradeDate || undefined),
-                            ...rtOpts,
-                            ...sigOpts,
-                        });
-                    } catch (e) {
-                        if (this._isAbortError(e)) throw e;
-                        return { __error: e.message || '波段趋势分析失败' };
-                    }
-                }
-                // 工具脚本未挂上时仍直连接口，避免批量结果误报「模块未加载」
-                try {
-                    const params = new URLSearchParams({
-                        adjust: useRealtime ? 'none' : 'qfq',
-                        factor_source: 'auto',
-                        lookback: '180',
-                        max_points: '12',
-                    });
-                    if (!useRealtime && tradeDate) params.set('asof', tradeDate);
-                    if (useRealtime) params.set('use_realtime', 'true');
-                    const r = await fetchFn(
-                        `${this.API_BASE_URL}/api/analysis/market-structure/${encodeURIComponent(resolvedCode)}?${params}`,
-                        sigOpts
-                    );
-                    const body = await r.json().catch(() => ({}));
-                    if (!r.ok) {
-                        const detail = body.detail;
-                        let msg = body.message || body.error || `HTTP ${r.status}`;
-                        if (typeof detail === 'string') msg = detail;
-                        else if (detail && detail.message) msg = detail.message;
-                        return { __error: msg };
-                    }
-                    return body;
-                } catch (e) {
-                    if (this._isAbortError(e)) throw e;
-                    return { __error: e.message || '波段趋势分析失败' };
-                }
-            },
-            async () => {
-                const GT = this._analysisTool('GannTrendTool');
-                if (GT && typeof GT.fetchGann === 'function') {
-                    try {
-                        return await GT.fetchGann(resolvedCode, {
-                            adjust: useRealtime ? 'none' : 'qfq',
-                            asof: useRealtime ? undefined : (tradeDate || undefined),
-                            ...rtOpts,
-                            ...sigOpts,
-                        });
-                    } catch (e) {
-                        if (this._isAbortError(e)) throw e;
-                        return { __error: e.message || '江恩趋势分析失败' };
-                    }
-                }
-                try {
-                    const params = new URLSearchParams({
-                        adjust: useRealtime ? 'none' : 'qfq',
-                        factor_source: 'auto',
-                        lookback: '180',
-                    });
-                    if (!useRealtime && tradeDate) params.set('asof', tradeDate);
-                    if (useRealtime) params.set('use_realtime', 'true');
-                    const r = await fetchFn(
-                        `${this.API_BASE_URL}/api/analysis/gann-trend/${encodeURIComponent(resolvedCode)}?${params}`,
-                        sigOpts
-                    );
-                    const body = await r.json().catch(() => ({}));
-                    if (!r.ok) {
-                        const detail = body.detail;
-                        let msg = body.message || body.error || `HTTP ${r.status}`;
-                        if (typeof detail === 'string') msg = detail;
-                        else if (detail && detail.message) msg = detail.message;
-                        return { __error: msg };
-                    }
-                    return body;
-                } catch (e) {
-                    if (this._isAbortError(e)) throw e;
-                    return { __error: e.message || '江恩趋势分析失败' };
-                }
-            },
-        ];
+        const ptRaw = data.pattern || {};
+        const patternFetched = ptRaw.payload || null;
+        const pattern = {
+            ok: !!ptRaw.ok,
+            items: ptRaw.items || (patternFetched && patternFetched.items) || [],
+            invalidated_count: ptRaw.invalidated_count
+                || (patternFetched && patternFetched.invalidated_count)
+                || 0,
+            code: ptRaw.code || (patternFetched && patternFetched.code) || resolvedCode,
+            name: ptRaw.name || (patternFetched && patternFetched.name) || '',
+            asof: ptRaw.asof || (patternFetched && patternFetched.asof) || tradeDate || '',
+            price_adjust: ptRaw.price_adjust
+                || (patternFetched && patternFetched.price_adjust)
+                || (useRealtime ? 'none' : 'qfq'),
+            tactical: ptRaw.tactical || (patternFetched && patternFetched.tactical) || null,
+            error: ptRaw.error || (ptRaw.ok ? null : '形态识别失败'),
+            fetched: patternFetched,
+        };
 
-        const detailResults = new Array(detailJobs.length);
-        await this._mapPool(detailJobs, detailConcurrency, async (job, idx) => {
-            detailResults[idx] = await job();
-        });
-        const [
-            rsFetched,
-            fundFlowFetched,
-            levelsFetched,
-            patternFetched,
-            swingFetched,
-            gannFetched,
-        ] = detailResults;
+        const swRaw = data.swing || {};
+        const swingFetched = swRaw.payload || swRaw.data || null;
+        const swing = {
+            ok: !!swRaw.ok,
+            data: swRaw.data || swingFetched,
+            code: swRaw.code || (swingFetched && swingFetched.code) || resolvedCode,
+            name: swRaw.name || (swingFetched && swingFetched.name) || '',
+            asof: swRaw.asof || (swingFetched && swingFetched.asof) || tradeDate || '',
+            error: swRaw.error || (swRaw.ok ? null : '波段趋势分析失败'),
+            fetched: swingFetched,
+        };
 
-        let rs = null;
-        if (rsFetched && !rsFetched.__error) {
-            rs = {
-                ok: true,
-                data: rsFetched.data || {},
-                reason: rsFetched.reason || null,
-                error: null,
-            };
-        } else {
-            rs = {
-                ok: false,
-                data: null,
-                reason: null,
-                error: (rsFetched && rsFetched.__error) || '相对强度加载失败',
-            };
-        }
+        const gnRaw = data.gann || {};
+        const gannFetched = gnRaw.payload || gnRaw.data || null;
+        const gOk = gnRaw.ok != null
+            ? !!gnRaw.ok
+            : !!(gannFetched && gannFetched.gann_trend && gannFetched.gann_trend.ok);
+        const gann = {
+            ok: gOk,
+            data: gnRaw.data || gannFetched,
+            code: gnRaw.code || (gannFetched && gannFetched.code) || resolvedCode,
+            name: gnRaw.name || (gannFetched && gannFetched.name) || '',
+            asof: gnRaw.asof || (gannFetched && gannFetched.asof) || tradeDate || '',
+            error: gnRaw.error || (gOk ? null : '江恩趋势分析失败'),
+            fetched: gannFetched,
+        };
 
-        let fundFlow = null;
-        if (fundFlowFetched && !fundFlowFetched.__error) {
-            fundFlow = {
-                ok: true,
-                data: fundFlowFetched.data || {},
-                error: null,
-            };
-        } else {
-            fundFlow = {
-                ok: false,
-                data: null,
-                error: (fundFlowFetched && fundFlowFetched.__error) || '资金流向加载失败',
-            };
-        }
-
-        let levels = null;
-        if (levelsFetched && !levelsFetched.__error) {
-            levels = {
-                ok: !!levelsFetched.ok,
-                data: levelsFetched.data || {},
-                error: levelsFetched.ok ? null : (levelsFetched.message || null),
-                fetched: levelsFetched,
-            };
-        } else {
-            levels = {
-                ok: false,
-                data: null,
-                error: (levelsFetched && levelsFetched.__error) || '阻力支撑计算失败',
-                fetched: null,
-            };
-        }
-
-        let pattern = null;
-        if (patternFetched && !patternFetched.__error) {
-            pattern = {
-                ok: true,
-                items: patternFetched.items || [],
-                invalidated_count: patternFetched.invalidated_count || 0,
-                code: patternFetched.code || resolvedCode,
-                name: patternFetched.name || '',
-                asof: patternFetched.asof || tradeDate || '',
-                price_adjust: patternFetched.price_adjust || 'qfq',
-                tactical: patternFetched.tactical || null,
-                error: null,
-                fetched: patternFetched,
-            };
-        } else {
-            pattern = {
-                ok: false,
-                items: [],
-                code: resolvedCode,
-                name: '',
-                asof: tradeDate || '',
-                price_adjust: 'qfq',
-                error: (patternFetched && patternFetched.__error) || '形态识别失败',
-                fetched: null,
-            };
-        }
-
-        let swing = null;
-        if (swingFetched && !swingFetched.__error) {
-            swing = {
-                ok: !!(swingFetched.market_structure && swingFetched.market_structure.ok !== false),
-                data: swingFetched,
-                code: swingFetched.code || resolvedCode,
-                name: swingFetched.name || '',
-                asof: swingFetched.asof || tradeDate || '',
-                error: null,
-                fetched: swingFetched,
-            };
-        } else {
-            swing = {
-                ok: false,
-                data: null,
-                code: resolvedCode,
-                name: '',
-                asof: tradeDate || '',
-                error: (swingFetched && swingFetched.__error) || '波段趋势分析失败',
-                fetched: null,
-            };
-        }
-
-        let gann = null;
-        if (gannFetched && !gannFetched.__error) {
-            const g = gannFetched.gann_trend || {};
-            gann = {
-                ok: !!g.ok,
-                data: gannFetched,
-                code: gannFetched.code || resolvedCode,
-                name: gannFetched.name || '',
-                asof: gannFetched.asof || tradeDate || '',
-                error: null,
-                fetched: gannFetched,
-            };
-        } else {
-            gann = {
-                ok: false,
-                data: null,
-                code: resolvedCode,
-                name: '',
-                asof: tradeDate || '',
-                error: (gannFetched && gannFetched.__error) || '江恩趋势分析失败',
-                fetched: null,
-            };
-        }
-
-        let tradePlan = null;
-        try {
-            const snapshots = {};
-            if (levels && levels.data) snapshots.levels = { data: levels.data };
-            if (pattern) {
-                snapshots.pattern = {
-                    tactical: pattern.tactical || null,
-                    items: pattern.items || [],
-                };
-            }
-            if (swing) snapshots.swing = { data: swing.data || null };
-            if (gann) snapshots.gann = { data: gann.data || null };
-            const body = { code: resolvedCode, snapshots };
-            if (tradeDate) body.date = tradeDate;
-            const planResp = await fetchFn(
-                `${this.API_BASE_URL}/api/analysis/stock-integrated-trade-plan`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body),
-                    ...sigOpts,
-                }
-            );
-            const planPayload = await planResp.json().catch(() => ({}));
-            if (!planResp.ok || !planPayload.success) {
-                throw new Error(planPayload.message || planPayload.detail || `合成失败 ${planResp.status}`);
-            }
-            const pdata = planPayload.data || {};
-            tradePlan = {
-                ok: true,
-                plan: pdata.plan || {},
-                code: (pdata.stock && pdata.stock.code) || resolvedCode,
-                name: (pdata.stock && pdata.stock.name) || '',
-                trade_date: pdata.trade_date || tradeDate || '',
-                error: null,
-            };
-        } catch (e) {
-            if (this._isAbortError(e)) throw e;
-            tradePlan = {
-                ok: false,
-                plan: null,
-                code: resolvedCode,
-                name: '',
-                trade_date: tradeDate || '',
-                error: e.message || '综合交易策略合成失败',
-            };
-        }
+        const tpRaw = data.trade_plan || {};
+        const tradePlan = {
+            ok: !!tpRaw.ok,
+            plan: tpRaw.plan || null,
+            code: tpRaw.code || resolvedCode,
+            name: tpRaw.name || (stock && stock.name) || '',
+            trade_date: tpRaw.trade_date || tradeDate || '',
+            error: tpRaw.error || (tpRaw.ok ? null : '综合交易策略合成失败'),
+        };
 
         return {
             strategyData,
-            strategyError: null,
+            strategyError,
             stock,
             tradeDate,
             rs,
@@ -2724,18 +2475,8 @@ const StockMultiStrategy = {
             gann,
             tradePlan,
             useRealtime,
-            realtime: strategyData.realtime || null,
+            realtime: data.realtime || (strategyData && strategyData.realtime) || null,
         };
-        } catch (e) {
-            if (timeoutMs && this._isAbortError(e)) {
-                throw new Error(
-                    `分析超时（>${Math.round(Number(timeoutMs) / 1000)}s），请检查后端是否过载或刚热重载`
-                );
-            }
-            throw e;
-        } finally {
-            if (bundleTimer) clearTimeout(bundleTimer);
-        }
     },
 
     _applyAnalysisBundle(bundle) {
@@ -3166,123 +2907,85 @@ const StockMultiStrategy = {
         const codeInput = document.getElementById('ssaStockCode');
         const empty = document.getElementById('ssaEmpty');
         const meta = document.getElementById('ssaMeta');
+        const dateEl = document.getElementById('ssaTradeDate');
+        const asof = (!useRealtime && dateEl && dateEl.value) ? dateEl.value : '';
 
         try {
-            const q = new URLSearchParams({ code: query });
-            const dateEl = document.getElementById('ssaTradeDate');
-            const asof = (!useRealtime && dateEl && dateEl.value) ? dateEl.value : '';
-            if (asof) q.set('date', asof);
-            if (useRealtime) q.set('use_realtime', 'true');
-            const resp = await authFetch(
-                `${this.API_BASE_URL}/api/analysis/multi-strategy-check?${q}`
-            );
-            const payload = await resp.json().catch(() => ({}));
-            const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
-            if (candidates.length > 1 || (candidates.length > 0 && !payload.data)) {
-                this.renderCandidates(candidates, payload.message);
-                CommonUtils.showToast(payload.message || '请从候选中选择股票', 'warning');
-                throw new Error(payload.message || '请从候选中选择股票');
-            }
-            if (!resp.ok || !payload.success) {
-                throw new Error(payload.message || payload.detail || `分析失败 ${resp.status}`);
-            }
-            const data = payload.data || {};
-            const stock = data.stock || {};
+            const bundle = await this._fetchAnalysisBundle(query, '', asof, { useRealtime });
+            const stock = bundle.stock || {};
             if (stock.code && codeInput) {
-                codeInput.value = stock.name ? `${stock.code} ${stock.name}` : stock.code;
+                codeInput.value = stock.name ? (stock.code + ' ' + stock.name) : stock.code;
             }
-            this.lastUseRealtime = useRealtime;
-            this.lastRealtime = data.realtime || null;
-            this.lastTradeDate = useRealtime
-                ? (data.realtime_trade_date || (data.realtime && data.realtime.trade_date) || data.trade_date || asof || null)
-                : (data.trade_date || asof || null);
-            this.renderStrategyResult(data);
-            if (empty) empty.hidden = true;
-
-            const resolvedCode = stock.code || query;
-            const tradeDate = this.lastTradeDate || '';
-            await Promise.all([
-                this.loadRsRatingSection(resolvedCode, tradeDate),
-                this.loadFundFlowSection(resolvedCode),
-                this.loadLevelsSection(resolvedCode, { useRealtime }),
-                this.loadPatternSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
-                this.loadSwingSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
-                this.loadGannSection(resolvedCode, useRealtime ? '' : tradeDate, { useRealtime }),
-            ]);
-            await this.loadTradePlanSection(resolvedCode, tradeDate);
-            this.updateExportBtn();
+            this._applyAnalysisBundle(bundle);
 
             if (!options.quietToast) {
-                const rt = data.realtime;
+                const data = bundle.strategyData || {};
+                const rt = data.realtime || bundle.realtime;
                 const px = rt && rt.current_price != null ? Number(rt.current_price).toFixed(2) : '';
-                if (useRealtime && px) {
+                if (bundle.strategyError) {
+                    CommonUtils.showToast(
+                        '策略分析失败，已尝试计算阻力支撑、形态、波段与江恩',
+                        'warning'
+                    );
+                } else if (useRealtime && px) {
                     CommonUtils.showToast(
                         data.any_hit
-                            ? `实时分析完成 · 现价 ${px} · 命中 ${data.hit_count || 0} 个策略`
-                            : `实时分析完成 · 现价 ${px} · 四策略均未命中`,
+                            ? ('实时分析完成 · 现价 ' + px + ' · 命中 ' + (data.hit_count || 0) + ' 个策略')
+                            : ('实时分析完成 · 现价 ' + px + ' · 四策略均未命中'),
                         data.any_hit ? 'success' : 'info'
                     );
                 } else {
                     CommonUtils.showToast(
-                        data.any_hit ? `命中 ${data.hit_count || 0} 个策略` : '四策略均未命中',
+                        data.any_hit ? ('命中 ' + (data.hit_count || 0) + ' 个策略') : '四策略均未命中',
                         data.any_hit ? 'success' : 'info'
                     );
                 }
             }
         } catch (e) {
             console.error(e);
-            const dateEl = document.getElementById('ssaTradeDate');
+            if (e && Array.isArray(e.candidates) && e.candidates.length) {
+                this.renderCandidates(e.candidates, e.bundleMessage || e.message);
+                CommonUtils.showToast(e.message || '请从候选中选择股票', 'warning');
+                throw e;
+            }
             const asofFallback = dateEl && dateEl.value ? dateEl.value : '';
             const looksLikeCode = /^\d{4,6}$/.test(
                 (/^(sh|sz|bj|hk)/i.test(firstToken) ? firstToken.slice(2) : firstToken)
             ) || /^(sh|sz|bj|hk)\d{4,6}$/i.test(firstToken);
-            if (looksLikeCode) {
-                if (empty) empty.hidden = true;
-                const strategyBlock = document.getElementById('ssaStrategyBlock');
-                const strategyHost = document.getElementById('ssaResults');
-                this.lastStrategy = null;
-                this.lastStrategyError = e.message || '策略分析失败';
-                this.lastStock = { code: firstToken };
-                this.lastTradeDate = asofFallback || null;
-                const observeBtn = document.getElementById('ssaTradeObserveBtn');
-                if (observeBtn) {
-                    observeBtn.classList.remove('is-added');
-                    delete observeBtn.dataset.observeCode;
-                    observeBtn.textContent = '交易观察';
+            // 后端 bundle 已含策略失败时的明细；整请求失败且像代码时再兜底一次
+            if (looksLikeCode && !options._bundleFallbackTried) {
+                try {
+                    const fallbackBundle = await this._fetchAnalysisBundle(firstToken, '', asofFallback, {
+                        useRealtime: false,
+                    });
+                    if (codeInput) {
+                        const st = fallbackBundle.stock || { code: firstToken };
+                        codeInput.value = st.name ? (st.code + ' ' + st.name) : (st.code || firstToken);
+                    }
+                    this._applyAnalysisBundle(fallbackBundle);
+                    if (!options.quietToast) {
+                        CommonUtils.showToast(
+                            '分析部分失败，已展示可用的阻力支撑、形态、波段与江恩',
+                            'warning'
+                        );
+                    }
+                    return;
+                } catch (e2) {
+                    /* fall through */
                 }
-                this.resetGannTradeObserveBtn();
-                if (strategyBlock && strategyHost) {
-                    strategyBlock.hidden = false;
-                    strategyHost.innerHTML = `<div class="ssa-block-status is-error">${this.esc(e.message || '策略分析失败')}</div>`;
-                }
-                await Promise.all([
-                    this.loadRsRatingSection(firstToken, asofFallback),
-                    this.loadFundFlowSection(firstToken),
-                    this.loadLevelsSection(firstToken),
-                    this.loadPatternSection(firstToken, asofFallback),
-                    this.loadSwingSection(firstToken, asofFallback),
-                    this.loadGannSection(firstToken, asofFallback),
-                ]);
-                await this.loadTradePlanSection(firstToken, asofFallback);
-                this.updateExportBtn();
-                if (!options.quietToast) {
-                    CommonUtils.showToast('策略分析失败，已尝试计算阻力支撑、形态、波段与江恩', 'warning');
-                }
-            } else {
-                if (empty) {
-                    empty.hidden = false;
-                    empty.textContent = e.message || '分析失败';
-                }
-                if (!options.quietToast) {
-                    CommonUtils.showToast(e.message || '分析失败', 'error');
-                }
-                throw e;
             }
+            if (empty) {
+                empty.hidden = false;
+                empty.textContent = e.message || '分析失败';
+            }
+            if (!options.quietToast) {
+                CommonUtils.showToast(e.message || '分析失败', 'error');
+            }
+            throw e;
         } finally {
             if (meta && this.lastStrategy) meta.hidden = false;
         }
     },
-
     async analyze(opts) {
         const options = opts || {};
         const useRealtime = !!options.useRealtime;

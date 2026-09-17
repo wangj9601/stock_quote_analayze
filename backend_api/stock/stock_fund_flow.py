@@ -184,6 +184,120 @@ def _merge_fund_flow_series(
     return list(reversed(series_desc)), source
 
 
+def compute_daily_fund_flow(db: Session, code: str, days: int = 20) -> dict:
+    """
+    近 N 日流入/流出/净额 + 简单变化分析（同步，供路由与个股 bundle 复用）。
+    成功返回 {"success": True, "data": {...}}；失败返回 {"success": False, "message": ...}。
+    """
+    code_n = normalize_equity_code(code) or normalize_ths_code(code)
+    if not code_n:
+        return {"success": False, "message": "无效股票代码"}
+    market = "HK" if is_hk_equity_code(code_n) else "CN"
+    days_n = max(1, min(120, int(days or 20)))
+    fetch_n = max(days_n * 2, days_n + 5)
+    if market == "HK":
+        hist_rows = db.execute(
+            text(
+                """
+                SELECT code,
+                       date AS trade_date,
+                       name,
+                       inflow_amount,
+                       outflow_amount,
+                       net_amount,
+                       amount AS turnover_amount,
+                       change_percent,
+                       turnover_rate,
+                       close AS current_price
+                FROM historical_quotes_hk
+                WHERE code = :code
+                  AND (inflow_amount IS NOT NULL OR outflow_amount IS NOT NULL OR net_amount IS NOT NULL)
+                ORDER BY date DESC
+                LIMIT :days
+                """
+            ),
+            {"code": code_n, "days": fetch_n},
+        ).mappings().all()
+        daily_rows = db.execute(
+            text(
+                """
+                SELECT code, trade_date, name, inflow_amount, outflow_amount,
+                       net_amount, turnover_amount, change_percent, turnover_rate,
+                       current_price, source, updated_at
+                FROM stock_fund_flow_daily_hk
+                WHERE code = :code
+                ORDER BY trade_date DESC
+                LIMIT :days
+                """
+            ),
+            {"code": code_n, "days": fetch_n},
+        ).mappings().all()
+        series_asc, source = _merge_fund_flow_series(
+            [dict(r) for r in daily_rows],
+            [dict(r) for r in hist_rows],
+            days=days_n,
+            primary_label="stock_fund_flow_daily_hk",
+            secondary_label="historical_quotes_hk",
+        )
+    else:
+        hist_rows = db.execute(
+            text(
+                """
+                SELECT code,
+                       date AS trade_date,
+                       name,
+                       inflow_amount,
+                       outflow_amount,
+                       net_amount,
+                       amount AS turnover_amount,
+                       change_percent,
+                       turnover_rate,
+                       close AS current_price
+                FROM historical_quotes
+                WHERE code = :code
+                  AND (inflow_amount IS NOT NULL OR outflow_amount IS NOT NULL OR net_amount IS NOT NULL)
+                ORDER BY date DESC
+                LIMIT :days
+                """
+            ),
+            {"code": code_n, "days": fetch_n},
+        ).mappings().all()
+        daily_rows = db.execute(
+            text(
+                """
+                SELECT code, trade_date, name, inflow_amount, outflow_amount,
+                       net_amount, turnover_amount, change_percent, turnover_rate,
+                       current_price, source, updated_at
+                FROM stock_fund_flow_daily
+                WHERE code = :code
+                ORDER BY trade_date DESC
+                LIMIT :days
+                """
+            ),
+            {"code": code_n, "days": fetch_n},
+        ).mappings().all()
+        series_asc, source = _merge_fund_flow_series(
+            [dict(r) for r in daily_rows],
+            [dict(r) for r in hist_rows],
+            days=days_n,
+            primary_label="stock_fund_flow_daily",
+            secondary_label="historical_quotes",
+        )
+
+    analysis = analyze_fund_flow_series(series_asc)
+    return {
+        "success": True,
+        "data": {
+            "code": code_n,
+            "market": market,
+            "days_requested": days_n,
+            "series_source": source,
+            "series": series_asc,
+            "analysis": analysis,
+        },
+    }
+
+
 @router.get("/daily")
 async def get_daily_inflow_outflow(
     code: str = Query(..., description="股票代码（A股6位或港股5位）"),
@@ -195,116 +309,11 @@ async def get_daily_inflow_outflow(
     A股：合并 stock_fund_flow_daily 与 historical_quotes（同日优先日表，避免行情表滞后丢最新日）。
     港股：合并 stock_fund_flow_daily_hk 与 historical_quotes_hk（同上）。
     """
-    code_n = normalize_equity_code(code) or normalize_ths_code(code)
-    if not code_n:
-        return JSONResponse(
-            {"success": False, "message": "无效股票代码"}, status_code=400
-        )
-    market = "HK" if is_hk_equity_code(code_n) else "CN"
-    # 多取一些再截断，合并后仍保证近 N 日
-    fetch_n = max(int(days) * 2, int(days) + 5)
     try:
-        if market == "HK":
-            hist_rows = db.execute(
-                text(
-                    """
-                    SELECT code,
-                           date AS trade_date,
-                           name,
-                           inflow_amount,
-                           outflow_amount,
-                           net_amount,
-                           amount AS turnover_amount,
-                           change_percent,
-                           turnover_rate,
-                           close AS current_price
-                    FROM historical_quotes_hk
-                    WHERE code = :code
-                      AND (inflow_amount IS NOT NULL OR outflow_amount IS NOT NULL OR net_amount IS NOT NULL)
-                    ORDER BY date DESC
-                    LIMIT :days
-                    """
-                ),
-                {"code": code_n, "days": fetch_n},
-            ).mappings().all()
-            daily_rows = db.execute(
-                text(
-                    """
-                    SELECT code, trade_date, name, inflow_amount, outflow_amount,
-                           net_amount, turnover_amount, change_percent, turnover_rate,
-                           current_price, source, updated_at
-                    FROM stock_fund_flow_daily_hk
-                    WHERE code = :code
-                    ORDER BY trade_date DESC
-                    LIMIT :days
-                    """
-                ),
-                {"code": code_n, "days": fetch_n},
-            ).mappings().all()
-            series_asc, source = _merge_fund_flow_series(
-                [dict(r) for r in daily_rows],
-                [dict(r) for r in hist_rows],
-                days=days,
-                primary_label="stock_fund_flow_daily_hk",
-                secondary_label="historical_quotes_hk",
-            )
-        else:
-            hist_rows = db.execute(
-                text(
-                    """
-                    SELECT code,
-                           date AS trade_date,
-                           name,
-                           inflow_amount,
-                           outflow_amount,
-                           net_amount,
-                           amount AS turnover_amount,
-                           change_percent,
-                           turnover_rate,
-                           close AS current_price
-                    FROM historical_quotes
-                    WHERE code = :code
-                      AND (inflow_amount IS NOT NULL OR outflow_amount IS NOT NULL OR net_amount IS NOT NULL)
-                    ORDER BY date DESC
-                    LIMIT :days
-                    """
-                ),
-                {"code": code_n, "days": fetch_n},
-            ).mappings().all()
-            daily_rows = db.execute(
-                text(
-                    """
-                    SELECT code, trade_date, name, inflow_amount, outflow_amount,
-                           net_amount, turnover_amount, change_percent, turnover_rate,
-                           current_price, source, updated_at
-                    FROM stock_fund_flow_daily
-                    WHERE code = :code
-                    ORDER BY trade_date DESC
-                    LIMIT :days
-                    """
-                ),
-                {"code": code_n, "days": fetch_n},
-            ).mappings().all()
-            series_asc, source = _merge_fund_flow_series(
-                [dict(r) for r in daily_rows],
-                [dict(r) for r in hist_rows],
-                days=days,
-                primary_label="stock_fund_flow_daily",
-                secondary_label="historical_quotes",
-            )
-
-        analysis = analyze_fund_flow_series(series_asc)
-        return {
-            "success": True,
-            "data": {
-                "code": code_n,
-                "market": market,
-                "days_requested": days,
-                "series_source": source,
-                "series": series_asc,
-                "analysis": analysis,
-            },
-        }
+        result = compute_daily_fund_flow(db, code, days=days)
+        if not result.get("success"):
+            return JSONResponse(result, status_code=400)
+        return result
     except Exception as e:
         return JSONResponse(
             {"success": False, "message": f"查询日资金流失败: {e}"}, status_code=500
