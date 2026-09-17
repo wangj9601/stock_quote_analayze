@@ -23,6 +23,12 @@ const StockMultiStrategy = {
     MAX_WATCHLIST_BATCH: 0,
     /** 未勾选「一次分析全部」时的建议上限；0 表示不限制 */
     WATCHLIST_BATCH_SOFT_LIMIT: 15,
+    /** 批量单票完整分析超时（毫秒）；含策略+明细，超时后 Abort 释放后端连接 */
+    BATCH_FETCH_TIMEOUT_MS: 90000,
+    /** 批量股票并行度：单进程 uvicorn 下过高会打满线程池导致全站无响应 */
+    BATCH_CONCURRENCY: 1,
+    /** 单票内明细接口并行度（相对强度/资金/阻力/形态/波段/江恩） */
+    BATCH_DETAIL_CONCURRENCY: 2,
     stockSessions: {},
     activeSessionKey: null,
     watchlistStocks: [],
@@ -182,7 +188,20 @@ const StockMultiStrategy = {
         const batch = (params.get('batch') || '').trim();
         if (batch === 'watchlist' || batch === 'selected') {
             this._urlBootstrapped = true;
-            void this._bootstrapWatchlistBatch(params, batch);
+            // 等面板切换完成后再启动，避免首屏未就绪
+            const run = () => {
+                void this._bootstrapWatchlistBatch(params, batch).catch((err) => {
+                    console.error('[StockMultiStrategy] 批量分析启动失败', err);
+                    if (window.CommonUtils && CommonUtils.showToast) {
+                        CommonUtils.showToast('批量分析启动失败，请重试', 'error');
+                    }
+                });
+            };
+            if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(() => window.setTimeout(run, 0));
+            } else {
+                window.setTimeout(run, 0);
+            }
             return;
         }
         const code = (params.get('code') || '').trim();
@@ -196,7 +215,7 @@ const StockMultiStrategy = {
         void this.analyze();
     },
 
-    /** 读取并清除批量分析载荷（跨标签页 localStorage） */
+    /** 读取并清除批量分析载荷（localStorage + sessionStorage，跨标签页） */
     _consumeWatchlistBatchStorage(batchKind) {
         const keys = [];
         if (batchKind === 'selected') {
@@ -212,33 +231,77 @@ const StockMultiStrategy = {
                     'ssa_trade_analysis_batch'
             );
         }
+        const stores = [];
+        try {
+            if (window.localStorage) stores.push(window.localStorage);
+        } catch (e) { /* ignore */ }
+        try {
+            if (window.sessionStorage) stores.push(window.sessionStorage);
+        } catch (e) { /* ignore */ }
+
         let stocks = [];
         for (const key of keys) {
-            let raw = null;
-            try {
-                raw = localStorage.getItem(key);
-                if (raw != null) localStorage.removeItem(key);
-            } catch (e) {
-                continue;
+            for (const store of stores) {
+                let raw = null;
+                try {
+                    raw = store.getItem(key);
+                } catch (e) {
+                    continue;
+                }
+                if (!raw) continue;
+                try {
+                    const data = JSON.parse(raw);
+                    const ts = Number(data && data.ts) || 0;
+                    if (ts && Date.now() - ts > 5 * 60 * 1000) {
+                        try { store.removeItem(key); } catch (e2) { /* ignore */ }
+                        continue;
+                    }
+                    const list = Array.isArray(data && data.stocks) ? data.stocks : [];
+                    const parsed = list
+                        .map((s) => ({
+                            code: String((s && s.code) || '').trim(),
+                            name: String((s && (s.name || s.stock_name)) || '').trim(),
+                        }))
+                        .filter((s) => s.code);
+                    if (parsed.length) {
+                        stocks = parsed;
+                        break;
+                    }
+                } catch (e) {
+                    /* try next */
+                }
             }
-            if (!raw) continue;
-            try {
-                const data = JSON.parse(raw);
-                const ts = Number(data && data.ts) || 0;
-                if (ts && Date.now() - ts > 5 * 60 * 1000) continue;
-                const list = Array.isArray(data && data.stocks) ? data.stocks : [];
-                stocks = list
-                    .map((s) => ({
-                        code: String((s && s.code) || '').trim(),
-                        name: String((s && s.name) || '').trim(),
-                    }))
-                    .filter((s) => s.code);
-                if (stocks.length) break;
-            } catch (e) {
-                /* try next key */
+            if (stocks.length) break;
+        }
+        // 成功取到后再清除，避免解析失败时误删
+        if (stocks.length) {
+            for (const key of keys) {
+                for (const store of stores) {
+                    try { store.removeItem(key); } catch (e) { /* ignore */ }
+                }
             }
         }
         return stocks;
+    },
+
+    /** 从 URL codes 参数解析股票列表（兼容 %2C 与异常 2C 前缀） */
+    _parseBatchCodesParam(params) {
+        const codesRaw = ((params && params.get('codes')) || '').trim();
+        if (!codesRaw) return [];
+        return codesRaw
+            .split(/[,，\s]+/)
+            .map((c) => {
+                let t = String(c || '').trim();
+                if (!t) return '';
+                try {
+                    t = decodeURIComponent(t).trim();
+                } catch (e) { /* keep t */ }
+                // 兼容错误编码产生的 "2C002603" 前缀
+                if (/^2C\d{5,6}$/i.test(t)) t = t.slice(2);
+                if (/^\d{1,6}$/.test(t)) t = t.padStart(6, '0');
+                return t;
+            })
+            .filter(Boolean);
     },
 
     /**
@@ -250,18 +313,7 @@ const StockMultiStrategy = {
 
         let stocks = this._consumeWatchlistBatchStorage(batchKind || 'watchlist');
         if (!stocks.length) {
-            const codesRaw = (params.get('codes') || '').trim();
-            const codes = codesRaw
-                ? codesRaw.split(/[,，\s]+/).map((c) => {
-                    const t = c.trim();
-                    if (!t) return '';
-                    try {
-                        return decodeURIComponent(t).trim();
-                    } catch (e) {
-                        return t;
-                    }
-                }).filter(Boolean)
-                : [];
+            const codes = this._parseBatchCodesParam(params);
             // 仅尝试补名称；失败不影响按 codes 启动
             try {
                 await this.loadWatchlistOptions();
@@ -275,17 +327,25 @@ const StockMultiStrategy = {
             });
         }
         if (!stocks.length) {
-            if (window.CommonUtils) {
-                CommonUtils.showToast(
-                    batchKind === 'selected' ? '未找到待分析的股票列表' : '未找到待分析的自选股',
-                    'warning'
-                );
+            const msg =
+                batchKind === 'selected' ? '未找到待分析的股票列表' : '未找到待分析的自选股';
+            if (window.CommonUtils && CommonUtils.showToast) {
+                CommonUtils.showToast(msg, 'warning');
+            } else {
+                console.warn('[StockMultiStrategy]', msg);
+            }
+            const empty = document.getElementById('ssaEmpty');
+            if (empty) {
+                empty.hidden = false;
+                empty.textContent = msg + '（请从选股/板块重新勾选后打开）';
             }
             return;
         }
 
         this._watchlistSelectedCodes = new Set(stocks.map((s) => String(s.code)));
-        this.updateWatchlistSummary();
+        try {
+            this.updateWatchlistSummary();
+        } catch (e) { /* ignore */ }
         await this.analyzeWatchlistBatch(stocks, { skipLargeConfirm: true });
     },
 
@@ -2208,14 +2268,84 @@ const StockMultiStrategy = {
         await Promise.all(runners);
     },
 
+    /**
+     * 带超时的 authFetch；可传入外部 AbortSignal（整票分析共用，超时一并取消）。
+     */
+    async _authFetchTimeout(url, options, timeoutMs) {
+        const ms = Math.max(5000, Number(timeoutMs) || this.BATCH_FETCH_TIMEOUT_MS || 90000);
+        const baseOpts = options || {};
+        if (typeof AbortController === 'undefined') {
+            return authFetch(url, baseOpts);
+        }
+        const ctrl = new AbortController();
+        const onAbort = () => {
+            try { ctrl.abort(); } catch (e) { /* ignore */ }
+        };
+        if (baseOpts.signal) {
+            if (baseOpts.signal.aborted) onAbort();
+            else baseOpts.signal.addEventListener('abort', onAbort, { once: true });
+        }
+        const timer = setTimeout(onAbort, ms);
+        try {
+            return await authFetch(url, { ...baseOpts, signal: ctrl.signal });
+        } catch (e) {
+            if (e && (e.name === 'AbortError' || String(e.message || '').includes('abort'))) {
+                throw new Error(`请求超时（>${Math.round(ms / 1000)}s），请检查后端是否在跑或刚热重载`);
+            }
+            throw e;
+        } finally {
+            clearTimeout(timer);
+        }
+    },
+
+    _isAbortError(e) {
+        if (!e) return false;
+        if (e.name === 'AbortError') return true;
+        const msg = String(e.message || e || '');
+        return /abort|超时|timeout/i.test(msg);
+    },
+
+    /** 优先 window，避免个别环境下裸标识符解析不到全局 const */
+    _analysisTool(name) {
+        try {
+            if (typeof window !== 'undefined' && window[name]) return window[name];
+        } catch (e) { /* ignore */ }
+        try {
+            if (typeof globalThis !== 'undefined' && globalThis[name]) return globalThis[name];
+        } catch (e2) { /* ignore */ }
+        return null;
+    },
+
     async _fetchAnalysisBundle(code, name, asof, opts) {
         const options = opts || {};
         const useRealtime = !!options.useRealtime;
+        const timeoutMs = options.timeoutMs;
+        const detailConcurrency = Math.max(
+            1,
+            Number(options.detailConcurrency) || this.BATCH_DETAIL_CONCURRENCY || 2
+        );
         const query = name ? `${code} ${name}` : code;
         const q = new URLSearchParams({ code: query });
         if (asof && !useRealtime) q.set('date', asof);
         if (useRealtime) q.set('use_realtime', 'true');
-        const resp = await authFetch(
+
+        let bundleCtrl = null;
+        let bundleTimer = null;
+        if (timeoutMs && typeof AbortController !== 'undefined') {
+            bundleCtrl = new AbortController();
+            bundleTimer = setTimeout(() => {
+                try { bundleCtrl.abort(); } catch (e) { /* ignore */ }
+            }, Math.max(5000, Number(timeoutMs) || 90000));
+        }
+        const signal = bundleCtrl ? bundleCtrl.signal : options.signal;
+        const fetchFn = (url, o) => {
+            const merged = { ...(o || {}) };
+            if (signal) merged.signal = signal;
+            return authFetch(url, merged);
+        };
+
+        try {
+        const resp = await fetchFn(
             `${this.API_BASE_URL}/api/analysis/multi-strategy-check?${q}`
         );
         const payload = await resp.json().catch(() => ({}));
@@ -2232,68 +2362,183 @@ const StockMultiStrategy = {
         const tradeDate = useRealtime
             ? (strategyData.realtime_trade_date || (strategyData.realtime && strategyData.realtime.trade_date) || strategyData.trade_date || asof || '')
             : (strategyData.trade_date || asof || '');
+
         const rtOpts = useRealtime ? { use_realtime: true } : {};
         const levelsAdjust = useRealtime ? 'none' : 'qfq';
+        const sigOpts = signal ? { signal } : {};
 
-        const [rsFetched, fundFlowFetched, levelsFetched, patternFetched, swingFetched, gannFetched] = await Promise.all([
-            authFetch(
-                `${this.API_BASE_URL}/api/analysis/rs-rating?${new URLSearchParams({
-                    code: resolvedCode,
-                    ...(tradeDate ? { date: tradeDate } : {}),
-                })}`
-            )
-                .then(async (r) => {
+        const detailJobs = [
+            async () => {
+                try {
+                    const r = await fetchFn(
+                        `${this.API_BASE_URL}/api/analysis/rs-rating?${new URLSearchParams({
+                            code: resolvedCode,
+                            ...(tradeDate ? { date: tradeDate } : {}),
+                        })}`,
+                        sigOpts
+                    );
                     const body = await r.json().catch(() => ({}));
                     if (!r.ok || !body.success) {
                         return { __error: body.message || `相对强度加载失败 ${r.status}` };
                     }
                     return body;
-                })
-                .catch((e) => ({ __error: e.message || '相对强度加载失败' })),
-            authFetch(
-                `${this.API_BASE_URL}/api/stock_fund_flow/daily?${new URLSearchParams({
-                    code: resolvedCode,
-                    days: '20',
-                })}`
-            )
-                .then(async (r) => {
+                } catch (e) {
+                    if (this._isAbortError(e)) throw e;
+                    return { __error: e.message || '相对强度加载失败' };
+                }
+            },
+            async () => {
+                try {
+                    const r = await fetchFn(
+                        `${this.API_BASE_URL}/api/stock_fund_flow/daily?${new URLSearchParams({
+                            code: resolvedCode,
+                            days: '20',
+                        })}`,
+                        sigOpts
+                    );
                     const body = await r.json().catch(() => ({}));
                     if (!r.ok || !body.success) {
                         return { __error: body.message || `资金流向加载失败 ${r.status}` };
                     }
                     return body;
-                })
-                .catch((e) => ({ __error: e.message || '资金流向加载失败' })),
-            (typeof KdeLevelsTool !== 'undefined' && KdeLevelsTool.fetchLevels)
-                ? KdeLevelsTool.fetchLevels(resolvedCode, {
-                    adjust: levelsAdjust,
-                    factor_source: 'auto',
-                    max_levels: 8,
-                    ...rtOpts,
-                }).catch((e) => ({ __error: e.message || '阻力支撑计算失败' }))
-                : Promise.resolve({ __error: '阻力支撑模块未加载' }),
-            (typeof PatternTool !== 'undefined' && PatternTool.fetchSingle)
-                ? PatternTool.fetchSingle(resolvedCode, {
-                    adjust: useRealtime ? 'none' : 'qfq',
-                    asof: useRealtime ? undefined : (tradeDate || undefined),
-                    ...rtOpts,
-                }).catch((e) => ({ __error: e.message || '形态识别失败' }))
-                : Promise.resolve({ __error: '形态识别模块未加载' }),
-            (typeof MarketStructureTool !== 'undefined' && MarketStructureTool.fetchStructure)
-                ? MarketStructureTool.fetchStructure(resolvedCode, {
-                    adjust: useRealtime ? 'none' : 'qfq',
-                    asof: useRealtime ? undefined : (tradeDate || undefined),
-                    ...rtOpts,
-                }).catch((e) => ({ __error: e.message || '波段趋势分析失败' }))
-                : Promise.resolve({ __error: '波段趋势模块未加载' }),
-            (typeof GannTrendTool !== 'undefined' && GannTrendTool.fetchGann)
-                ? GannTrendTool.fetchGann(resolvedCode, {
-                    adjust: useRealtime ? 'none' : 'qfq',
-                    asof: useRealtime ? undefined : (tradeDate || undefined),
-                    ...rtOpts,
-                }).catch((e) => ({ __error: e.message || '江恩趋势分析失败' }))
-                : Promise.resolve({ __error: '江恩趋势模块未加载' }),
-        ]);
+                } catch (e) {
+                    if (this._isAbortError(e)) throw e;
+                    return { __error: e.message || '资金流向加载失败' };
+                }
+            },
+            async () => {
+                const Levels = this._analysisTool('KdeLevelsTool');
+                if (!Levels || typeof Levels.fetchLevels !== 'function') {
+                    return { __error: '阻力支撑模块未加载' };
+                }
+                try {
+                    return await Levels.fetchLevels(resolvedCode, {
+                        adjust: levelsAdjust,
+                        factor_source: 'auto',
+                        max_levels: 8,
+                        ...rtOpts,
+                        ...sigOpts,
+                    });
+                } catch (e) {
+                    if (this._isAbortError(e)) throw e;
+                    return { __error: e.message || '阻力支撑计算失败' };
+                }
+            },
+            async () => {
+                const PT = this._analysisTool('PatternTool');
+                if (!PT || typeof PT.fetchSingle !== 'function') {
+                    return { __error: '形态识别模块未加载' };
+                }
+                try {
+                    return await PT.fetchSingle(resolvedCode, {
+                        adjust: useRealtime ? 'none' : 'qfq',
+                        asof: useRealtime ? undefined : (tradeDate || undefined),
+                        ...rtOpts,
+                        ...sigOpts,
+                    });
+                } catch (e) {
+                    if (this._isAbortError(e)) throw e;
+                    return { __error: e.message || '形态识别失败' };
+                }
+            },
+            async () => {
+                const MST = this._analysisTool('MarketStructureTool');
+                if (MST && typeof MST.fetchStructure === 'function') {
+                    try {
+                        return await MST.fetchStructure(resolvedCode, {
+                            adjust: useRealtime ? 'none' : 'qfq',
+                            asof: useRealtime ? undefined : (tradeDate || undefined),
+                            ...rtOpts,
+                            ...sigOpts,
+                        });
+                    } catch (e) {
+                        if (this._isAbortError(e)) throw e;
+                        return { __error: e.message || '波段趋势分析失败' };
+                    }
+                }
+                // 工具脚本未挂上时仍直连接口，避免批量结果误报「模块未加载」
+                try {
+                    const params = new URLSearchParams({
+                        adjust: useRealtime ? 'none' : 'qfq',
+                        factor_source: 'auto',
+                        lookback: '180',
+                        max_points: '12',
+                    });
+                    if (!useRealtime && tradeDate) params.set('asof', tradeDate);
+                    if (useRealtime) params.set('use_realtime', 'true');
+                    const r = await fetchFn(
+                        `${this.API_BASE_URL}/api/analysis/market-structure/${encodeURIComponent(resolvedCode)}?${params}`,
+                        sigOpts
+                    );
+                    const body = await r.json().catch(() => ({}));
+                    if (!r.ok) {
+                        const detail = body.detail;
+                        let msg = body.message || body.error || `HTTP ${r.status}`;
+                        if (typeof detail === 'string') msg = detail;
+                        else if (detail && detail.message) msg = detail.message;
+                        return { __error: msg };
+                    }
+                    return body;
+                } catch (e) {
+                    if (this._isAbortError(e)) throw e;
+                    return { __error: e.message || '波段趋势分析失败' };
+                }
+            },
+            async () => {
+                const GT = this._analysisTool('GannTrendTool');
+                if (GT && typeof GT.fetchGann === 'function') {
+                    try {
+                        return await GT.fetchGann(resolvedCode, {
+                            adjust: useRealtime ? 'none' : 'qfq',
+                            asof: useRealtime ? undefined : (tradeDate || undefined),
+                            ...rtOpts,
+                            ...sigOpts,
+                        });
+                    } catch (e) {
+                        if (this._isAbortError(e)) throw e;
+                        return { __error: e.message || '江恩趋势分析失败' };
+                    }
+                }
+                try {
+                    const params = new URLSearchParams({
+                        adjust: useRealtime ? 'none' : 'qfq',
+                        factor_source: 'auto',
+                        lookback: '180',
+                    });
+                    if (!useRealtime && tradeDate) params.set('asof', tradeDate);
+                    if (useRealtime) params.set('use_realtime', 'true');
+                    const r = await fetchFn(
+                        `${this.API_BASE_URL}/api/analysis/gann-trend/${encodeURIComponent(resolvedCode)}?${params}`,
+                        sigOpts
+                    );
+                    const body = await r.json().catch(() => ({}));
+                    if (!r.ok) {
+                        const detail = body.detail;
+                        let msg = body.message || body.error || `HTTP ${r.status}`;
+                        if (typeof detail === 'string') msg = detail;
+                        else if (detail && detail.message) msg = detail.message;
+                        return { __error: msg };
+                    }
+                    return body;
+                } catch (e) {
+                    if (this._isAbortError(e)) throw e;
+                    return { __error: e.message || '江恩趋势分析失败' };
+                }
+            },
+        ];
+
+        const detailResults = new Array(detailJobs.length);
+        await this._mapPool(detailJobs, detailConcurrency, async (job, idx) => {
+            detailResults[idx] = await job();
+        });
+        const [
+            rsFetched,
+            fundFlowFetched,
+            levelsFetched,
+            patternFetched,
+            swingFetched,
+            gannFetched,
+        ] = detailResults;
 
         let rs = null;
         if (rsFetched && !rsFetched.__error) {
@@ -2432,12 +2677,13 @@ const StockMultiStrategy = {
             if (gann) snapshots.gann = { data: gann.data || null };
             const body = { code: resolvedCode, snapshots };
             if (tradeDate) body.date = tradeDate;
-            const planResp = await authFetch(
+            const planResp = await fetchFn(
                 `${this.API_BASE_URL}/api/analysis/stock-integrated-trade-plan`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body),
+                    ...sigOpts,
                 }
             );
             const planPayload = await planResp.json().catch(() => ({}));
@@ -2454,6 +2700,7 @@ const StockMultiStrategy = {
                 error: null,
             };
         } catch (e) {
+            if (this._isAbortError(e)) throw e;
             tradePlan = {
                 ok: false,
                 plan: null,
@@ -2479,6 +2726,16 @@ const StockMultiStrategy = {
             useRealtime,
             realtime: strategyData.realtime || null,
         };
+        } catch (e) {
+            if (timeoutMs && this._isAbortError(e)) {
+                throw new Error(
+                    `分析超时（>${Math.round(Number(timeoutMs) / 1000)}s），请检查后端是否过载或刚热重载`
+                );
+            }
+            throw e;
+        } finally {
+            if (bundleTimer) clearTimeout(bundleTimer);
+        }
     },
 
     _applyAnalysisBundle(bundle) {
@@ -2596,9 +2853,10 @@ const StockMultiStrategy = {
         const levelsHost = document.getElementById('ssaLevelsHost');
         if (levelsBlock && levelsHost) {
             levelsBlock.hidden = false;
-            if (bundle.levels && bundle.levels.fetched && typeof KdeLevelsTool !== 'undefined') {
+            if (bundle.levels && bundle.levels.fetched && this._analysisTool('KdeLevelsTool')) {
+                const Levels = this._analysisTool('KdeLevelsTool');
                 const fetched = bundle.levels.fetched;
-                KdeLevelsTool.renderEmbedded(levelsHost, fetched.data || {}, fetched.ok, fetched.message, {
+                Levels.renderEmbedded(levelsHost, fetched.data || {}, fetched.ok, fetched.message, {
                     code: this._levelsStockCode()
                         || (fetched.data && (fetched.data.stock_code || fetched.data.code))
                         || (bundle.stock && bundle.stock.code)
@@ -2630,14 +2888,15 @@ const StockMultiStrategy = {
         const patternHost = document.getElementById('ssaPatternHost');
         if (patternBlock && patternHost) {
             patternBlock.hidden = false;
-            if (bundle.pattern && bundle.pattern.fetched && typeof PatternTool !== 'undefined') {
+            if (bundle.pattern && bundle.pattern.fetched && this._analysisTool('PatternTool')) {
+                const PT = this._analysisTool('PatternTool');
                 const fetched = bundle.pattern.fetched;
                 const invN = fetched.invalidated_count || 0;
-                const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PatternTool.adjustLabel(fetched.price_adjust))} · ${this.esc(PatternTool.formatHitMeta((fetched.items || []).length, invN))}`;
+                const meta = `个股 ${this.esc(fetched.code)} ${this.esc(fetched.name || '')} · 基准日 ${this.esc(fetched.asof || '--')} · ${this.esc(PT.adjustLabel(fetched.price_adjust))} · ${this.esc(PT.formatHitMeta((fetched.items || []).length, invN))}`;
                 const levelsData = (this.lastLevels && this.lastLevels.data) || {};
                 const classic = levelsData.classic_levels || levelsData.classic || {};
                 const confluence = classic.confluence_zones || levelsData.confluence_zones || null;
-                PatternTool.renderEmbedded(patternHost, fetched.items || [], meta, fetched.price_adjust, {
+                PT.renderEmbedded(patternHost, fetched.items || [], meta, fetched.price_adjust, {
                     asof: fetched.asof || '',
                     confluenceZones: confluence,
                     classicLevels: classic,
@@ -2664,14 +2923,19 @@ const StockMultiStrategy = {
         const swingHost = document.getElementById('ssaSwingHost');
         if (swingBlock && swingHost) {
             swingBlock.hidden = false;
-            if (bundle.swing && bundle.swing.fetched && typeof MarketStructureTool !== 'undefined') {
-                MarketStructureTool.renderEmbedded(swingHost, bundle.swing.fetched);
+            const MST = this._analysisTool('MarketStructureTool');
+            if (bundle.swing && bundle.swing.fetched && MST && typeof MST.renderEmbedded === 'function') {
+                MST.renderEmbedded(swingHost, bundle.swing.fetched);
                 this.setBlockOk('ssaSwingStatus', '');
                 const st = document.getElementById('ssaSwingStatus');
                 if (st) st.hidden = true;
             } else {
                 swingHost.innerHTML = '';
-                this.setBlockError('ssaSwingStatus', (bundle.swing && bundle.swing.error) || '波段趋势分析失败');
+                this.setBlockError(
+                    'ssaSwingStatus',
+                    (bundle.swing && bundle.swing.error)
+                        || (!MST ? '波段趋势模块未加载' : '波段趋势分析失败')
+                );
             }
         }
 
@@ -2680,14 +2944,19 @@ const StockMultiStrategy = {
         const gannHost = document.getElementById('ssaGannHost');
         if (gannBlock && gannHost) {
             gannBlock.hidden = false;
-            if (bundle.gann && bundle.gann.fetched && typeof GannTrendTool !== 'undefined') {
-                GannTrendTool.renderEmbedded(gannHost, bundle.gann.fetched);
+            const GT = this._analysisTool('GannTrendTool');
+            if (bundle.gann && bundle.gann.fetched && GT && typeof GT.renderEmbedded === 'function') {
+                GT.renderEmbedded(gannHost, bundle.gann.fetched);
                 this.setBlockOk('ssaGannStatus', '');
                 const st = document.getElementById('ssaGannStatus');
                 if (st) st.hidden = true;
             } else {
                 gannHost.innerHTML = '';
-                this.setBlockError('ssaGannStatus', (bundle.gann && bundle.gann.error) || '江恩趋势分析失败');
+                this.setBlockError(
+                    'ssaGannStatus',
+                    (bundle.gann && bundle.gann.error)
+                        || (!GT ? '江恩趋势模块未加载' : '江恩趋势分析失败')
+                );
             }
         }
 
@@ -2786,22 +3055,41 @@ const StockMultiStrategy = {
         if (empty) {
             empty.hidden = false;
             empty.textContent = useRealtime
-                ? `正在并行实时分析 0/${list.length}…`
-                : `正在并行分析 0/${list.length}…`;
+                ? `准备实时分析 0/${list.length}（逐只进行，避免后端过载）…`
+                : `准备分析 0/${list.length}（逐只进行，避免后端过载）…`;
         }
 
         const dateEl = document.getElementById('ssaTradeDate');
         const asof = (!useRealtime && dateEl && dateEl.value) ? dateEl.value : '';
         let doneCount = 0;
         let okCount = 0;
-        const concurrency = Math.min(3, list.length);
+        let lastTabRenderAt = 0;
+        const concurrency = Math.min(this.BATCH_CONCURRENCY || 1, list.length);
+        const detailConcurrency = Math.max(1, this.BATCH_DETAIL_CONCURRENCY || 2);
+        const timeoutSec = Math.round((this.BATCH_FETCH_TIMEOUT_MS || 90000) / 1000);
+
+        const updateProgress = (current) => {
+            const label = current
+                ? `正在分析 ${current.code}${current.name ? ' ' + current.name : ''}（${doneCount}/${list.length}，超时 ${timeoutSec}s）…`
+                : `正在分析 ${doneCount}/${list.length}…`;
+            if (empty) {
+                empty.hidden = false;
+                empty.textContent = useRealtime
+                    ? label.replace('正在分析', '正在实时分析')
+                    : label;
+            }
+            if (btn) btn.textContent = `分析中 ${doneCount}/${list.length}`;
+        };
 
         await this._mapPool(list, concurrency, async ({ code, name }) => {
             const key = this._sessionKey(code);
             const session = this.stockSessions[key];
+            updateProgress({ code, name });
             try {
                 const bundle = await this._fetchAnalysisBundle(code, name, asof, {
                     useRealtime,
+                    timeoutMs: this.BATCH_FETCH_TIMEOUT_MS,
+                    detailConcurrency,
                 });
                 if (session) {
                     session.bundle = bundle;
@@ -2819,16 +3107,16 @@ const StockMultiStrategy = {
                 }
             } finally {
                 doneCount += 1;
-                if (empty) {
-                    empty.hidden = false;
-                    empty.textContent = `正在并行分析 ${doneCount}/${list.length}…`;
+                updateProgress(null);
+                const now = Date.now();
+                if (doneCount === list.length || now - lastTabRenderAt > 800) {
+                    lastTabRenderAt = now;
+                    this._renderStockTabs();
                 }
-                if (btn) btn.textContent = `分析中 ${doneCount}/${list.length}`;
-                this._renderStockTabs();
             }
         });
 
-        // 全部请求完成后，依次渲染并缓存 DOM，保证切 Tab 即时展示
+        // 全部请求完成后，依次渲染并缓存 DOM；综合计划就绪后 Tab 即可显示偏多星号
         const keys = list.map(({ code }) => this._sessionKey(code)).filter(Boolean);
         for (const key of keys) {
             const session = this.stockSessions[key];
@@ -2838,7 +3126,6 @@ const StockMultiStrategy = {
             this._applyAnalysisBundle(session.bundle);
             this._persistSessionKey(key);
             session.status = 'ready';
-            // bundle 已物化为 DOM 快照，释放原始 fetched 体积（可选保留 plan/state）
             session.bundle = null;
             this._renderStockTabs();
         }
@@ -3534,14 +3821,15 @@ const StockMultiStrategy = {
     _refreshSwingContrast() {
         const host = document.getElementById('ssaSwingHost');
         if (!host || !this.lastSwing || !this.lastSwing.data) return;
-        if (typeof MarketStructureTool === 'undefined') return;
+        const MST = this._analysisTool('MarketStructureTool');
+        if (!MST || typeof MST.fetchStructure !== 'function') return;
         const bias = this._patternShortBias();
         const ms = this.lastSwing.data.market_structure || this.lastSwing.data;
         if (!ms) return;
         // 后端未带对照时，用已加载形态 bias 再请求一次（轻量）会慢；此处仅前端提示占位已由 API pattern_contrast
         if (bias && !ms.pattern_contrast && this.lastSwing.code) {
             // 异步静默补对照
-            void MarketStructureTool.fetchStructure(this.lastSwing.code, {
+            void MST.fetchStructure(this.lastSwing.code, {
                 adjust: 'qfq',
                 asof: this.lastSwing.asof || undefined,
                 pattern_short_bias: bias,
@@ -3555,7 +3843,7 @@ const StockMultiStrategy = {
                         asof: data.asof || '',
                         error: null,
                     };
-                    MarketStructureTool.renderEmbedded(host, data);
+                    MST.renderEmbedded(host, data);
                 })
                 .catch(() => {});
         }
@@ -3569,18 +3857,19 @@ const StockMultiStrategy = {
         if (!block || !host) return;
         this.setBlockLoading('ssaSwingBlock', 'ssaSwingStatus', useRealtime ? '正在按实时价分析波段与趋势…' : '正在分析波段与趋势…');
         try {
-            if (typeof MarketStructureTool === 'undefined' || typeof MarketStructureTool.fetchStructure !== 'function') {
+            const MST = this._analysisTool('MarketStructureTool');
+            if (!MST || typeof MST.fetchStructure !== 'function') {
                 throw new Error('波段趋势模块未加载');
             }
             // 稍候形态可能未完成；先拉结构，有 bias 再带上
             const bias = this._patternShortBias();
-            const fetched = await MarketStructureTool.fetchStructure(code, {
+            const fetched = await MST.fetchStructure(code, {
                 adjust: useRealtime ? 'none' : 'qfq',
                 asof: useRealtime ? undefined : (asof || undefined),
                 pattern_short_bias: bias || undefined,
                 use_realtime: useRealtime,
             });
-            MarketStructureTool.renderEmbedded(host, fetched);
+            MST.renderEmbedded(host, fetched);
             this.lastSwing = {
                 ok: !!(fetched.market_structure && fetched.market_structure.ok !== false),
                 data: fetched,
@@ -3617,15 +3906,16 @@ const StockMultiStrategy = {
         if (!block || !host) return;
         this.setBlockLoading('ssaGannBlock', 'ssaGannStatus', useRealtime ? '正在按实时价计算江恩趋势…' : '正在计算江恩趋势…');
         try {
-            if (typeof GannTrendTool === 'undefined' || typeof GannTrendTool.fetchGann !== 'function') {
+            const GT = this._analysisTool('GannTrendTool');
+            if (!GT || typeof GT.fetchGann !== 'function') {
                 throw new Error('江恩趋势模块未加载');
             }
-            const fetched = await GannTrendTool.fetchGann(code, {
+            const fetched = await GT.fetchGann(code, {
                 adjust: useRealtime ? 'none' : 'qfq',
                 asof: useRealtime ? undefined : (asof || undefined),
                 use_realtime: useRealtime,
             });
-            GannTrendTool.renderEmbedded(host, fetched);
+            GT.renderEmbedded(host, fetched);
             const g = fetched.gann_trend || {};
             this.lastGann = {
                 ok: !!g.ok,

@@ -175,6 +175,7 @@ def _normalize_import_board_code(raw: str, board_type: str = "concept") -> str:
     """导入侧板块代码规范化：与 bk_board_code 工具层一致，纯数字不加 BK。"""
     from backend_api.utils.bk_board_code import (
         normalize_concept_board_code,
+        normalize_index_board_code,
         normalize_industry_board_code,
     )
 
@@ -185,6 +186,8 @@ def _normalize_import_board_code(raw: str, board_type: str = "concept") -> str:
         s = s[:-2]
     if board_type == "industry":
         return normalize_industry_board_code(s)
+    if board_type == "index":
+        return normalize_index_board_code(s)
     return normalize_concept_board_code(s)
 
 
@@ -455,7 +458,7 @@ def align_all_import_constituent_rows(
                 db, raw_board, board_name, file_index
             )
         else:
-            board_code = _normalize_import_board_code(raw_board, board_type="concept")
+            board_code = _normalize_import_board_code(raw_board, board_type=board_type)
 
         if not board_code:
             issues.append({"row_no": row_no, "message": "板块代码为空或无法识别，已跳过"})

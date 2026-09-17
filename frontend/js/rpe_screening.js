@@ -215,10 +215,12 @@
     const scope = document.getElementById('rpeScope')?.value || 'cn';
     const indWrap = document.getElementById('rpeIndustryBoardWrap');
     const conWrap = document.getElementById('rpeConceptBoardWrap');
+    const idxWrap = document.getElementById('rpeIndexBoardWrap');
     const stockGroup = document.getElementById('rpeStockCodeGroup');
     const singleHint = document.getElementById('rpeSingleSkipFilterHint');
     if (indWrap) indWrap.style.display = scope === 'industry_board' ? 'flex' : 'none';
     if (conWrap) conWrap.style.display = scope === 'concept_board' ? 'flex' : 'none';
+    if (idxWrap) idxWrap.style.display = scope === 'index_board' ? 'flex' : 'none';
     if (stockGroup) stockGroup.style.display = scope === 'single' ? 'flex' : 'none';
     if (singleHint) singleHint.style.display = scope === 'single' ? 'flex' : 'none';
     const app = getScreeningApp();
@@ -227,6 +229,8 @@
         void app.loadGmsIndustryBoardOptions().then(() => app.refreshBoardRolesPanelForOwner('rpe'));
       } else if (scope === 'concept_board' && typeof app.loadGmsConceptBoardOptions === 'function') {
         void app.loadGmsConceptBoardOptions().then(() => app.refreshBoardRolesPanelForOwner('rpe'));
+      } else if (scope === 'index_board' && typeof app.loadGmsIndexBoardOptions === 'function') {
+        void app.loadGmsIndexBoardOptions().then(() => app.refreshBoardRolesPanelForOwner('rpe'));
       } else {
         app.refreshBoardRolesPanelForOwner('rpe');
       }
@@ -275,6 +279,16 @@
       : [];
   }
 
+  function selectedIndexCodes() {
+    const app = getScreeningApp();
+    if (app && typeof app.getRpeSelectedIndexBoardCodes === 'function') {
+      return app.getRpeSelectedIndexBoardCodes();
+    }
+    return Array.isArray(app?.rpeSelectedIndexBoardCodes)
+      ? app.rpeSelectedIndexBoardCodes.filter(Boolean)
+      : [];
+  }
+
   function collectResultCodes() {
     const body = document.getElementById('rpeResultsBody');
     if (!body) return [];
@@ -290,6 +304,103 @@
     return codes;
   }
 
+  const RPE_RESULT_COLSPAN = 13;
+  let lastSignalPayload = null;
+
+  function boardFilterFlags() {
+    return {
+      excludeStar: !!document.getElementById('rpeExcludeStar')?.checked,
+      excludeChiNext: !!document.getElementById('rpeExcludeChinext')?.checked,
+      excludeBse: !!document.getElementById('rpeExcludeBse')?.checked,
+    };
+  }
+
+  /** 按代码前缀判断市场板块（A 股常见口径） */
+  function stockBoardKind(code) {
+    const c = normCode(code);
+    if (!c) return 'other';
+    if (c.startsWith('68')) return 'star'; // 科创板
+    if (c.startsWith('3')) return 'chinext'; // 创业板 300/301
+    if (c.startsWith('8') || c.startsWith('4')) return 'bse'; // 北交所为主
+    return 'main';
+  }
+
+  function applyBoardFilters(rows) {
+    const flags = boardFilterFlags();
+    if (!flags.excludeStar && !flags.excludeChiNext && !flags.excludeBse) {
+      return Array.isArray(rows) ? rows.slice() : [];
+    }
+    return (rows || []).filter((r) => {
+      const kind = stockBoardKind(r && r.code);
+      if (flags.excludeStar && kind === 'star') return false;
+      if (flags.excludeChiNext && kind === 'chinext') return false;
+      if (flags.excludeBse && kind === 'bse') return false;
+      return true;
+    });
+  }
+
+  function setAllResultChecks(checked) {
+    const body = document.getElementById('rpeResultsBody');
+    if (!body) return;
+    body.querySelectorAll('.rpe-row-cb').forEach((el) => {
+      el.checked = !!checked;
+    });
+    const headerCb = document.getElementById('rpeSelectAllCb');
+    if (headerCb) headerCb.checked = !!checked;
+  }
+
+  function syncHeaderSelectAll() {
+    const body = document.getElementById('rpeResultsBody');
+    const headerCb = document.getElementById('rpeSelectAllCb');
+    if (!body || !headerCb) return;
+    const boxes = body.querySelectorAll('.rpe-row-cb');
+    if (!boxes.length) {
+      headerCb.checked = false;
+      headerCb.indeterminate = false;
+      return;
+    }
+    let checked = 0;
+    boxes.forEach((el) => {
+      if (el.checked) checked += 1;
+    });
+    headerCb.checked = checked === boxes.length;
+    headerCb.indeterminate = checked > 0 && checked < boxes.length;
+  }
+
+  function collectCheckedResultStocks() {
+    const body = document.getElementById('rpeResultsBody');
+    if (!body) return [];
+    const stocks = [];
+    const seen = new Set();
+    body.querySelectorAll('.rpe-row-cb:checked').forEach((el) => {
+      const code = normCode(el.getAttribute('data-code') || el.value);
+      if (!code || seen.has(code)) return;
+      seen.add(code);
+      stocks.push({
+        code,
+        name: String(el.getAttribute('data-name') || '').trim(),
+      });
+    });
+    return stocks;
+  }
+
+  function openBatchTradeAnalysis() {
+    const stocks = collectCheckedResultStocks();
+    if (!stocks.length) {
+      if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+        CommonUtils.showToast('请先勾选至少一只股票', 'warning');
+      } else {
+        alert('请先勾选至少一只股票');
+      }
+      return;
+    }
+    if (window.StockTradeLink && typeof window.StockTradeLink.openBatchAnalysis === 'function') {
+      window.StockTradeLink.openBatchAnalysis(stocks, { toastPrefix: '已打开交易分析' });
+      return;
+    }
+    alert('交易分析组件未加载，请刷新页面后重试');
+  }
+
   function buildRpeQuery({ adjust = 'none', extraCodes = null } = {}) {
     const scope = document.getElementById('rpeScope').value || 'cn';
     const date = document.getElementById('rpeDate').value || '';
@@ -299,12 +410,16 @@
     const stockCode = (document.getElementById('rpeStockCode').value || '').trim();
     const industryCodes = selectedIndustryCodes();
     const conceptCodes = selectedConceptCodes();
+    const indexCodes = selectedIndexCodes();
 
     if (scope === 'industry_board' && !industryCodes.length) {
       throw new Error('请先选择行业板块（与 GMS 相同的选择面板）');
     }
     if (scope === 'concept_board' && !conceptCodes.length) {
       throw new Error('请先选择概念板块（与 GMS 相同的选择面板）');
+    }
+    if (scope === 'index_board' && !indexCodes.length) {
+      throw new Error('请先选择指数板块');
     }
     if (scope === 'single' && !stockCode) {
       throw new Error('单股范围需要填写股票代码');
@@ -314,7 +429,10 @@
     const q = new URLSearchParams({
       scope,
       entry_only: String(entryOnly),
-      max_results: scope === 'industry_board' || scope === 'concept_board' ? '2000' : '200',
+      max_results:
+        scope === 'industry_board' || scope === 'concept_board' || scope === 'index_board'
+          ? '2000'
+          : '200',
       adjust: adjustN,
     });
     if (date) q.set('date', date);
@@ -327,10 +445,13 @@
     }
     industryCodes.forEach((c) => q.append('industry_board_code', c));
     conceptCodes.forEach((c) => q.append('concept_board_code', c));
+    indexCodes.forEach((c) => q.append('index_board_code', c));
     if (scope === 'industry_board' && industryCodes.length) {
       q.set('board_code_source', preferredBoardCodeSource('industry', industryCodes));
     } else if (scope === 'concept_board' && conceptCodes.length) {
       q.set('board_code_source', preferredBoardCodeSource('concept', conceptCodes));
+    } else if (scope === 'index_board' && indexCodes.length) {
+      q.set('board_code_source', preferredBoardCodeSource('index', indexCodes));
     }
     if (Array.isArray(extraCodes)) {
       extraCodes.forEach((c) => {
@@ -343,8 +464,16 @@
 
   function renderSignalRows(data) {
     const body = document.getElementById('rpeResultsBody');
-    const rows = data.data || [];
-    document.getElementById('rpeResultsCount').textContent = `共 ${rows.length} 只`;
+    lastSignalPayload = data || null;
+    const allRows = (data && data.data) || [];
+    const rows = applyBoardFilters(allRows);
+    const filteredN = allRows.length - rows.length;
+    const countEl = document.getElementById('rpeResultsCount');
+    if (countEl) {
+      countEl.textContent = filteredN > 0
+        ? `共 ${rows.length} 只（已过滤 ${filteredN}）`
+        : `共 ${rows.length} 只`;
+    }
     const metaParts = [
       `日期 ${data.search_date || '-'}`,
       `来源 ${data.source || 'live'}`,
@@ -354,11 +483,16 @@
       metaParts.push('价格口径 前复权(不落库)');
     }
     if (data.stock_code) metaParts.push(`个股 ${data.stock_code}`);
-    document.getElementById('rpeSearchMeta').textContent = metaParts.join(' · ');
+    const metaEl = document.getElementById('rpeSearchMeta');
+    if (metaEl) metaEl.textContent = metaParts.join(' · ');
     if (!rows.length) {
-      const emptyMsg = data.message ? `无结果：${data.message}` : '无符合条件的结果';
-      if (data.message) showErr(data.message);
-      body.innerHTML = `<tr><td colspan="12" class="empty-state">${emptyMsg}</td></tr>`;
+      const emptyMsg = !allRows.length
+        ? (data.message ? `无结果：${data.message}` : '无符合条件的结果')
+        : '当前过滤条件下无股票（可取消「排除科创板/创业板」等）';
+      if (data.message && !allRows.length) showErr(data.message);
+      body.innerHTML = `<tr><td colspan="${RPE_RESULT_COLSPAN}" class="empty-state">${emptyMsg}</td></tr>`;
+      setAllResultChecks(false);
+      syncHeaderSelectAll();
       return;
     }
     body.innerHTML = rows
@@ -370,7 +504,11 @@
         const qfqTitle = r.price_adjust === 'qfq' ? '前复权' : '';
         const roleHtml = roleTagsHtml(r);
         const nm = displayName(r);
-        return `<tr data-rpe-row="${index}" data-code="${r.code || ''}">
+        const code = String(r.code || '').trim();
+        return `<tr data-rpe-row="${index}" data-code="${escAttr(code)}">
+            <td class="rpe-col-check">
+              <input type="checkbox" class="rpe-row-cb" data-code="${escAttr(code)}" data-name="${escAttr(nm)}" value="${escAttr(code)}" title="勾选后可批量交易分析">
+            </td>
             <td>${stockCodeLinkHtml(r.code, nm)}</td>
             <td>${nm || '-'}${roleHtml ? ` ${roleHtml}` : ''}</td>
             <td>${r.sector_name || r.sector_id || '-'}</td>
@@ -391,10 +529,21 @@
             </td>
           </tr>
           <tr class="gms-score-detail-row rpe-score-detail-row" data-detail-for="${index}" style="display:none;">
-            <td colspan="12" class="gms-score-detail-cell">${detailHtml}</td>
+            <td colspan="${RPE_RESULT_COLSPAN}" class="gms-score-detail-cell">${detailHtml}</td>
           </tr>`;
       })
       .join('');
+    const headerCb = document.getElementById('rpeSelectAllCb');
+    if (headerCb) {
+      headerCb.checked = false;
+      headerCb.indeterminate = false;
+    }
+  }
+
+  function reapplyBoardFilters() {
+    if (!lastSignalPayload) return;
+    renderSignalRows(lastSignalPayload);
+    syncScrollFabSoon();
   }
 
   async function refreshSignals() {
@@ -414,7 +563,9 @@
       renderSignalRows(data);
     } catch (e) {
       showErr(e.message || String(e));
-      body.innerHTML = '<tr><td colspan="12" class="empty-state">加载失败</td></tr>';
+      body.innerHTML = `<tr><td colspan="${RPE_RESULT_COLSPAN}" class="empty-state">加载失败</td></tr>`;
+      setAllResultChecks(false);
+      syncHeaderSelectAll();
     } finally {
       if (loading) loading.style.display = 'none';
       syncScrollFabSoon();
@@ -637,6 +788,21 @@
     });
     document.getElementById('rpeObserveRefreshBtn')?.addEventListener('click', () => refreshObserve());
     document.getElementById('rpeFormalRefreshBtn')?.addEventListener('click', () => refreshFormal());
+
+    document.getElementById('rpeSelectAllBtn')?.addEventListener('click', () => setAllResultChecks(true));
+    document.getElementById('rpeClearSelectBtn')?.addEventListener('click', () => setAllResultChecks(false));
+    document.getElementById('rpeBatchTradeBtn')?.addEventListener('click', () => openBatchTradeAnalysis());
+    document.getElementById('rpeSelectAllCb')?.addEventListener('change', (e) => {
+      setAllResultChecks(!!e.target.checked);
+    });
+    document.getElementById('rpeResultsBody')?.addEventListener('change', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('rpe-row-cb')) {
+        syncHeaderSelectAll();
+      }
+    });
+    ['rpeExcludeStar', 'rpeExcludeChinext', 'rpeExcludeBse'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', () => reapplyBoardFilters());
+    });
 
     document.getElementById('rpeResultsBody')?.addEventListener('click', async (e) => {
       const detailBtn = e.target.closest('.rpe-score-detail-toggle');

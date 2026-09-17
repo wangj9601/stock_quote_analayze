@@ -12,7 +12,7 @@
 python migrations/add_collection_workflow_tables.py
 ```
 
-2. 重启 `backend_api` 与（如使用定时流程）`start_backend_core.py`。
+2. 重启 `backend_api`；定时流程需运行 `start_backend_core.py`（或 `start_backend_core.bat`）。
 
 3. 管理端打开 **采集流程**（`/collection-workflows`），编辑预置「A股收盘后标准流程」或新建流程。
 
@@ -22,7 +22,13 @@ python migrations/add_collection_workflow_tables.py
 ENABLE_LEGACY_COLLECTION_CRON=false
 ```
 
-流程的 cron 变更后需重启 `start_backend_core.py` 才会重新注册。
+### 修改后是否要重启 core？
+
+- **节点增删改 / 失败策略 / 重试**：无需重启。每次运行（手动或定时触发）都会从 DB 重新加载节点。
+- **启用开关、触发方式、cron 时间**：无需重启。core 每 30 秒检测流程配置签名；**仅当没有 pending/running 流程**时自动热同步 APScheduler。
+- 若当时有流程在跑，会暂缓同步，待空闲后下一轮自动生效。
+
+旧说明「cron 变更须重启 core」已废弃。
 
 ## API
 

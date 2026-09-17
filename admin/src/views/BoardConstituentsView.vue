@@ -3,13 +3,14 @@
     <div class="page-header">
       <h1 class="text-xl font-semibold">板块成分股维护</h1>
       <p class="text-sm text-gray-500 mt-1">
-        维护行业/概念板块成分股映射（东财、同花顺等代码来源均可同步）；支持板块信息编辑、按来源自动同步、全量/单板 Excel 导入导出、单个录入与手动增删；可按股票代码/名称反查所属板块。
+        维护行业/概念/指数板块成分股映射（东财、同花顺等代码来源均可同步）；支持板块信息编辑、按来源自动同步、全量/单板 Excel 导入导出、单个录入与手动增删；可按股票代码/名称反查所属板块。
       </p>
     </div>
 
     <el-radio-group v-model="boardType" class="mb-2" @change="onBoardTypeChange">
       <el-radio-button label="industry">行业板块</el-radio-button>
       <el-radio-button label="concept">概念板块</el-radio-button>
+      <el-radio-button label="index">指数板块</el-radio-button>
     </el-radio-group>
 
     <el-card shadow="never" class="code-map-card">
@@ -18,7 +19,7 @@
           <div>
             <span class="font-semibold">同花顺 ↔ 东财 代码映射</span>
             <span class="text-xs text-gray-500 ml-2">
-              {{ boardType === 'concept' ? '概念板' : '行业板' }}采集源切换时用映射对齐；支持同名自动重建与手工维护
+              {{ boardTypeLabel }}采集源切换时用映射对齐；支持同名自动重建与手工维护
             </span>
           </div>
           <div class="flex flex-wrap gap-2">
@@ -73,7 +74,7 @@
           <el-input v-model="codeMapForm.board_name" placeholder="可选，便于查阅" />
         </el-form-item>
         <el-form-item label="同花顺码" required>
-          <el-input v-model="codeMapForm.ths_board_code" :placeholder="boardType === 'concept' ? '如 885801' : '如 881178'" />
+          <el-input v-model="codeMapForm.ths_board_code" :placeholder="boardType === 'industry' ? '如 881178' : (boardType === 'index' ? '如 000300' : '如 885801')" />
         </el-form-item>
         <el-form-item label="东财码" required>
           <el-input v-model="codeMapForm.em_board_code" placeholder="如 BK0740" />
@@ -402,7 +403,7 @@
                 ? (boardType === 'industry'
                   ? '可改：数字/BK/中文/英文；留空则保存时自动生成'
                   : '可改：数字或 BK+数字；留空则保存时自动生成')
-                : (boardType === 'industry' ? '数字/BK/中文/英文' : '数字或 BK+数字，如 0428')"
+                : (boardType === 'industry' ? '数字/BK/中文/英文' : (boardType === 'index' ? '数字或 BK+数字，如 000300' : '数字或 BK+数字，如 0428'))"
               clearable
               class="flex-1"
             />
@@ -461,7 +462,7 @@
             active-text="是"
             inactive-text="否"
           />
-          <p class="text-xs text-gray-500 mt-1">关闭后网站 GMS 选股页的行业/概念板块选择器中不再展示该板块。</p>
+          <p class="text-xs text-gray-500 mt-1">关闭后网站 GMS 选股页的行业/概念/指数板块选择器中不再展示该板块。</p>
         </el-form-item>
         <p v-if="boardEditForm.original_board_code" class="text-xs text-gray-500">
           当前原代码：{{ boardEditForm.original_board_code }}；若与上方不一致，保存时将执行改码并联动成分股。
@@ -505,14 +506,18 @@
         class="mb-4"
         :title="boardType === 'concept'
           ? '请使用「导出全部」得到的 .xlsx（含 board_code 列），或下载全量模板。不支持东财单板 Table.xls（仅名称列）；单板文件请选中板块后用右侧「Excel 导入」。概念板块导入前将清空原有全部数据。'
-          : '文件需含 board_code、stock_code/stock_name 列（与「导出全部」格式一致，见示意图）。板块代码须与列表中一致：若列表为 BK1028 等新编码，文件中 BK0420 等旧编码将导入到对应旧板块行，不会填充 BK1028。导入后可在列表搜索 board_code 核对成分数。'"
+          : boardType === 'index'
+            ? '文件需含 board_code、stock_code/stock_name 列（与「导出全部」格式一致）。指数代码一般为纯数字（如 000300）。导入后可在列表搜索 board_code 核对成分数。'
+            : '文件需含 board_code、stock_code/stock_name 列（与「导出全部」格式一致，见示意图）。板块代码须与列表中一致：若列表为 BK1028 等新编码，文件中 BK0420 等旧编码将导入到对应旧板块行，不会填充 BK1028。导入后可在列表搜索 board_code 核对成分数。'"
       />
       <el-checkbox
-        v-if="boardType === 'industry'"
+        v-if="boardType === 'industry' || boardType === 'index'"
         v-model="importAllClearExisting"
         class="mb-3"
       >
-        导入前清空全部行业板块数据（基础信息、成分股、实时行情）
+        {{ boardType === 'industry'
+          ? '导入前清空全部行业板块数据（基础信息、成分股、实时行情）'
+          : '导入前清空全部指数板块数据（基础信息、成分股）' }}
       </el-checkbox>
       <div class="mb-3 flex flex-wrap gap-2">
         <el-button size="small" @click="downloadAllTemplate('xlsx')">下载 XLSX 模板</el-button>
@@ -626,6 +631,12 @@ function formatApiError(e: unknown, fallback: string): string {
 }
 
 const boardType = ref<BoardType>('industry')
+const boardTypeLabel = computed(() => {
+  if (boardType.value === 'concept') return '概念'
+  if (boardType.value === 'index') return '指数'
+  return '行业'
+})
+const boardTypeFullLabel = computed(() => `${boardTypeLabel.value}板块`)
 const boardKeyword = ref('')
 /** 代码来源过滤：all 表示不过滤 */
 const boardCodeSourceFilter = ref<string>('all')
@@ -731,7 +742,7 @@ function onBoardTypeChange() {
   selectedBoardRows.value = []
   constituents.value = []
   boardPage.value = 1
-  // 切换行业/概念时保留代码来源过滤与排序，仅重置页码
+  // 切换行业/概念/指数时保留代码来源过滤与排序，仅重置页码
   stockLookupBoards.value = []
   stockLookupHint.value = ''
   stockLookupSearched.value = false
@@ -757,7 +768,7 @@ async function loadCodeMaps() {
 }
 
 async function rebuildCodeMaps() {
-  const kindLabel = boardType.value === 'concept' ? '概念' : '行业'
+  const kindLabel = boardTypeLabel.value
   try {
     await ElMessageBox.confirm(
       `将按 ${kindLabel} basic_info 同名精确匹配重建自动映射（保留手工/导入映射）。是否继续？`,
@@ -1126,7 +1137,9 @@ async function submitBoardEdit() {
     ElMessage.warning(
       boardType.value === 'industry'
         ? '行业板块代码须为数字、BK+数字、中文或英文字符'
-        : '概念板块代码须为 BK+数字或纯数字',
+        : boardType.value === 'index'
+          ? '指数板块代码须为 BK+数字或纯数字'
+          : '概念板块代码须为 BK+数字或纯数字',
     )
     return
   }
@@ -1213,7 +1226,7 @@ async function removeSelectedBoards() {
   if (!selectedBoardRows.value.length) return
   const codes = selectedBoardRows.value.map((r) => r.board_code).filter(Boolean)
   if (!codes.length) return
-  const label = boardType.value === 'industry' ? '行业板块' : '概念板块'
+  const label = boardTypeFullLabel.value
   const preview = codes.slice(0, 8).join('、')
   const suffix = codes.length > 8 ? ` 等 ${codes.length} 个` : ''
   try {
@@ -1291,7 +1304,8 @@ async function exportAllConstituents() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    const prefix = boardType.value === 'industry' ? 'industry' : 'concept'
+    const prefix =
+      boardType.value === 'industry' ? 'industry' : boardType.value === 'index' ? 'index' : 'concept'
     a.download = `${prefix}_board_constituents_all.xlsx`
     document.body.appendChild(a)
     a.click()
@@ -1307,10 +1321,12 @@ async function exportAllConstituents() {
 
 async function submitImportAll() {
   if (!importAllFile.value) return
-  if (boardType.value === 'industry' && importAllClearExisting.value) {
+  if ((boardType.value === 'industry' || boardType.value === 'index') && importAllClearExisting.value) {
     try {
       await ElMessageBox.confirm(
-        '将清空全部行业板块的基础信息、成分股与实时行情，再导入文件数据。此操作不可恢复，是否继续？',
+        boardType.value === 'industry'
+          ? '将清空全部行业板块的基础信息、成分股与实时行情，再导入文件数据。此操作不可恢复，是否继续？'
+          : '将清空全部指数板块的基础信息与成分股，再导入文件数据。此操作不可恢复，是否继续？',
         '清空并导入确认',
         { type: 'warning' },
       )
@@ -1323,7 +1339,10 @@ async function submitImportAll() {
     const res = await boardConstituentsService.importAllFromFile({
       boardType: boardType.value,
       file: importAllFile.value,
-      clearExisting: boardType.value === 'industry' ? importAllClearExisting.value : undefined,
+      clearExisting:
+        boardType.value === 'industry' || boardType.value === 'index'
+          ? importAllClearExisting.value
+          : undefined,
     })
     if (!res.success) {
       const detail = res.data?.issues?.[0]?.message
@@ -1505,7 +1524,9 @@ async function syncAllBoards() {
   const tip =
     boardType.value === 'concept'
       ? '将先同步概念板块列表（东财+同花顺），再按各板代码来源同步全部成分股（耗时较长），是否继续？'
-      : '将按各板代码来源同步全部行业板块成分股（东财/同花顺走对应接口；手动等来源会明确跳过，耗时较长），是否继续？'
+      : boardType.value === 'index'
+        ? '将按各板代码来源同步全部指数板块成分股（东财/同花顺走指数成分接口；手动等来源会明确跳过，耗时较长），是否继续？'
+        : '将按各板代码来源同步全部行业板块成分股（东财/同花顺走对应接口；手动等来源会明确跳过，耗时较长），是否继续？'
   try {
     await ElMessageBox.confirm(tip, '全量同步', { type: 'info' })
     syncingBoards.value = true

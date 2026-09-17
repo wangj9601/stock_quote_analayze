@@ -1258,80 +1258,55 @@ else:
 def _register_workflow_cron_jobs():
     """从 DB 加载 trigger_type=cron 的启用流程，各注册一个 APScheduler job。"""
     try:
-        from backend_core.data_collectors.workflow.engine import workflow_engine
+        from backend_core.data_collectors.workflow.cron_sync import (
+            SYNC_JOB_ID,
+            reload_workflow_cron_jobs,
+            sync_workflow_cron_if_idle,
+        )
+        from backend_core.data_collectors.workflow.mutex import is_busy as _wf_mutex_busy
         from backend_core.database.db import SessionLocal
-        from backend_core.models.collection_workflow import CollectionWorkflow
     except Exception as e:
-        logging.error("导入采集流程引擎失败，跳过流程 cron 注册: %s", e)
+        logging.error("导入采集流程 cron 同步模块失败，跳过流程 cron 注册: %s", e)
         return
 
-    db = SessionLocal()
     try:
-        rows = (
-            db.query(CollectionWorkflow)
-            .filter(
-                CollectionWorkflow.enabled.is_(True),
-                CollectionWorkflow.trigger_type == "cron",
-            )
-            .all()
-        )
-    finally:
-        db.close()
-
-    if not rows:
-        logging.info("无启用的 cron 采集流程，跳过流程级定时注册")
+        changed, msg = reload_workflow_cron_jobs(scheduler, SessionLocal, force=True)
+        if not changed:
+            logging.info("采集流程 cron 初始注册：%s", msg)
+    except Exception as e:
+        logging.error("注册采集流程 cron 失败: %s", e)
         return
 
-    for wf in rows:
-        wid = wf.id
-        job_id = f"collection_workflow_{wid}"
+    def _sync_job():
+        try:
+            sync_workflow_cron_if_idle(
+                scheduler,
+                SessionLocal,
+                local_busy_check=_wf_mutex_busy,
+            )
+        except Exception as e:
+            logging.warning("采集流程 cron 热同步异常: %s", e)
 
-        def _make_job(workflow_id: int):
-            def _job():
-                try:
-                    run_id = workflow_engine.start(
-                        workflow_id, trigger_source="cron", background=True
-                    )
-                    logging.info(
-                        "[流程定时] 已触发 workflow_id=%s run_id=%s",
-                        workflow_id,
-                        run_id,
-                    )
-                except RuntimeError as e:
-                    logging.warning("[流程定时] workflow_id=%s 跳过: %s", workflow_id, e)
-                except Exception as e:
-                    logging.error("[流程定时] workflow_id=%s 异常: %s", workflow_id, e)
-
-            return _job
-
-        kwargs = {"id": job_id}
-        if wf.cron_dow:
-            kwargs["day_of_week"] = wf.cron_dow
-        if wf.cron_hour is not None and str(wf.cron_hour).strip() != "":
-            # APScheduler hour 可为 int 或 逗号表达式字符串
-            hour_raw = str(wf.cron_hour).strip()
-            if "," in hour_raw:
-                kwargs["hour"] = hour_raw
-            else:
-                try:
-                    kwargs["hour"] = int(hour_raw)
-                except ValueError:
-                    kwargs["hour"] = hour_raw
-        if wf.cron_minute is not None:
-            kwargs["minute"] = int(wf.cron_minute)
-        scheduler.add_job(_make_job(wid), "cron", **kwargs)
-        logging.info(
-            "已注册采集流程 cron：id=%s name=%s dow=%s hour=%s minute=%s",
-            wid,
-            wf.name,
-            wf.cron_dow,
-            wf.cron_hour,
-            wf.cron_minute,
-        )
-
+    # 空闲时自动把管理端对流程/节点/定时的修改同步进本进程，无需重启 core
+    try:
+        if scheduler.get_job(SYNC_JOB_ID):
+            scheduler.remove_job(SYNC_JOB_ID)
+    except Exception:
+        pass
+    scheduler.add_job(
+        _sync_job,
+        "interval",
+        seconds=30,
+        id=SYNC_JOB_ID,
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+    logging.info("已启用采集流程 cron 热同步（每 30s，仅空闲时重载）")
 
 
 _register_workflow_cron_jobs()
+
 
 if __name__ == "__main__":
     enable_sched = os.getenv('ENABLE_SCHEDULED_COLLECTION', 'true').lower() in ('true', '1', 'yes')

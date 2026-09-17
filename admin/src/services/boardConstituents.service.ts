@@ -1,6 +1,6 @@
 import { apiService } from './api'
 
-export type BoardType = 'industry' | 'concept'
+export type BoardType = 'industry' | 'concept' | 'index'
 
 export interface BoardSummary {
   board_code: string

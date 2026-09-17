@@ -4262,7 +4262,7 @@ def _sbbr_attach_industry_names(
 
 @router.get("/rpe-strategy")
 async def get_rpe_strategy(
-    scope: str = Query("cn", description="cn|watchlist|industry_board|concept_board|single"),
+    scope: str = Query("cn", description="cn|watchlist|industry_board|concept_board|index_board|single"),
     date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     config_id: Optional[int] = Query(None),
     entry_only: bool = Query(False),
@@ -4274,9 +4274,12 @@ async def get_rpe_strategy(
     concept_board_code: Optional[List[str]] = Query(
         None, description="scope=concept_board 时：概念板块代码，可多选"
     ),
+    index_board_code: Optional[List[str]] = Query(
+        None, description="scope=index_board 时：指数板块代码，可多选"
+    ),
     board_code_source: Optional[str] = Query(
         None,
-        description="行业/概念板块代码来源，默认 tonghuashun；用于龙头/中军 role_tags",
+        description="行业/概念/指数板块代码来源，默认 tonghuashun；用于龙头/中军 role_tags",
     ),
     stock_code: Optional[str] = Query(
         None, description="scope=single 时：股票代码或名称（如 000001 / 平安银行）"
@@ -4303,7 +4306,7 @@ async def get_rpe_strategy(
     比价效应（RPE）选股。
     scope=single：按个股所属行业（无则概念）板块建簇，计算相对基准的 Z-Score/KDE/信号；
     跳过「仅有信号才返回」过滤，始终返回该股策略明细（含区间内 in_band）。
-    scope=industry_board|concept_board：返回所选板块成分股策略结果，默认包含未出现信号的股票；
+    scope=industry_board|concept_board|index_board：返回所选板块成分股策略结果，默认包含未出现信号的股票；
     勾选「仅入场信号」或指定 signal_type 时仍按条件过滤。
     scope=watchlist：按自选股代码列表解析所属板块后计算信号。
     adjust=qfq：对板块成分与标的统一前复权后重算 Z/KDE/结构/入场等，结果不落库污染 rpe_signal_trace。
@@ -4421,10 +4424,28 @@ async def get_rpe_strategy(
         if not board_codes:
             raise HTTPException(status_code=400, detail="未找到有效的概念板块代码")
         include_no_signal = True
+    elif scope_raw == "index_board":
+        board_kind = "index"
+        board_codes = _normalize_gms_board_codes(index_board_code) or (
+            [board_code] if board_code else []
+        )
+        if not board_codes:
+            raise HTTPException(status_code=400, detail="index_board 需要选择指数板块")
+        try:
+            from backend_api.utils.bk_board_code import resolve_index_board_codes
+
+            resolved = resolve_index_board_codes(db, board_codes)
+            if resolved:
+                board_codes = resolved
+        except Exception:
+            pass
+        if not board_codes:
+            raise HTTPException(status_code=400, detail="未找到有效的指数板块代码")
+        include_no_signal = True
     elif scope_raw != "cn":
         raise HTTPException(
             status_code=400,
-            detail="scope 仅支持 cn|watchlist|industry_board|concept_board|single",
+            detail="scope 仅支持 cn|watchlist|industry_board|concept_board|index_board|single",
         )
 
     # 全市场 + 前复权：必须带当前列表 code，避免扫全市场板块超时/误写对照结果
@@ -4454,7 +4475,7 @@ async def get_rpe_strategy(
 
     # 板块全成分展示：放宽上限，避免无信号股被截断
     effective_max = max_results or 200
-    if scope_raw in ("industry_board", "concept_board") and effective_max < 2000:
+    if scope_raw in ("industry_board", "concept_board", "index_board") and effective_max < 2000:
         effective_max = 2000
     if adjust_n == "qfq" and codes and effective_max < len(codes):
         effective_max = min(2000, len(codes))
@@ -4522,7 +4543,7 @@ async def get_rpe_strategy(
         )
 
     data_rows = result.get("data") or []
-    if scope_raw in ("industry_board", "concept_board") and isinstance(data_rows, list) and data_rows:
+    if scope_raw in ("industry_board", "concept_board", "index_board") and isinstance(data_rows, list) and data_rows:
         role_db = None
         try:
             from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
@@ -4563,7 +4584,7 @@ async def get_rpe_strategy(
                 data_rows,
                 board_code_source=_board_code_source,
                 prefer_ths_industry=scope_raw
-                not in ("industry_board", "concept_board"),
+                not in ("industry_board", "concept_board", "index_board"),
             )
         except Exception as _enrich_ex:
             logger.warning("RPE 选股名称/板块补全失败: %s", _enrich_ex)

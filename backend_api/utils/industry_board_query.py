@@ -32,7 +32,7 @@ def resolve_board_for_roles(
     不静默回退到东财成分。
     """
     btype = str(board_type or "").strip().lower()
-    if btype not in ("industry", "concept"):
+    if btype not in ("industry", "concept", "index"):
         return None
     code = str(board_code or "").strip()
     if not code:
@@ -40,11 +40,11 @@ def resolve_board_for_roles(
     source = resolve_board_code_source(
         board_code_source, fallback=DEFAULT_BOARD_CODE_SOURCE
     )
-    table = (
-        "industry_board_basic_info"
-        if btype == "industry"
-        else "concept_board_basic_info"
-    )
+    table = {
+        "industry": "industry_board_basic_info",
+        "concept": "concept_board_basic_info",
+        "index": "index_board_basic_info",
+    }[btype]
 
     def _row_to_meta(row: Any) -> Dict[str, Any]:
         src = resolve_board_code_source(
@@ -178,10 +178,10 @@ def resolve_board_for_roles(
 def list_board_constituent_codes(
     db: Session, board_type: str, board_code: str
 ) -> List[Dict[str, str]]:
-    """按板码取成分股（行业/概念），不含来源混用。"""
+    """按板码取成分股（行业/概念/指数），不含来源混用。"""
     btype = str(board_type or "").strip().lower()
     code = str(board_code or "").strip()
-    if not code or btype not in ("industry", "concept"):
+    if not code or btype not in ("industry", "concept", "index"):
         return []
     if btype == "industry":
         rows = (
@@ -197,11 +197,16 @@ def list_board_constituent_codes(
             for c in rows
             if c.stock_code
         ]
+    table = (
+        "index_board_constituents"
+        if btype == "index"
+        else "concept_board_constituents"
+    )
     rows = db.execute(
         text(
-            """
+            f"""
             SELECT stock_code, stock_name
-            FROM concept_board_constituents
+            FROM {table}
             WHERE board_code = :board_code
             """
         ),
@@ -248,7 +253,7 @@ def fetch_board_recent_limit_up_stocks(
     )
 
     btype = str(board_type or "").strip().lower()
-    if btype not in ("industry", "concept"):
+    if btype not in ("industry", "concept", "index"):
         return None
 
     meta = resolve_board_for_roles(
@@ -588,11 +593,14 @@ def _fetch_board_catalog(
     frontend_only: bool = True,
     board_code_source: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
-    """行业/概念板 catalog：basic_info + 成分股数量；同名不同代码来源可并存。"""
+    """行业/概念/指数板 catalog：basic_info + 成分股数量；同名不同代码来源可并存。"""
     kind = (board_kind or "industry").strip().lower()
     if kind == "concept":
         basic_table = "concept_board_basic_info"
         cons_table = "concept_board_constituents"
+    elif kind == "index":
+        basic_table = "index_board_basic_info"
+        cons_table = "index_board_constituents"
     else:
         basic_table = "industry_board_basic_info"
         cons_table = "industry_board_constituents"
@@ -680,6 +688,21 @@ def fetch_concept_board_catalog(
     return _fetch_board_catalog(
         db,
         board_kind="concept",
+        frontend_only=frontend_only,
+        board_code_source=board_code_source,
+    )
+
+
+def fetch_index_board_catalog(
+    db: Session,
+    *,
+    frontend_only: bool = True,
+    board_code_source: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """指数板块选择器 catalog（管理端维护的 index_board_*）。"""
+    return _fetch_board_catalog(
+        db,
+        board_kind="index",
         frontend_only=frontend_only,
         board_code_source=board_code_source,
     )

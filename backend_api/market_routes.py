@@ -29,6 +29,7 @@ from backend_api.utils.industry_board_query import (
     fetch_board_recent_limit_up_stocks,
     fetch_concept_board_detail,
     fetch_concept_board_list_with_metrics,
+    fetch_index_board_catalog,
     fetch_industry_board_catalog,
     fetch_industry_board_detail,
     fetch_industry_board_list_with_metrics,
@@ -803,6 +804,81 @@ def get_concept_board(db: Session = Depends(get_db)):
             },
             status_code=500,
         )
+
+
+@router.get("/index_board")
+def get_index_board(db: Session = Depends(get_db)):
+    """获取指数板块列表（从 index_board_basic_info 读取，含代码来源）。"""
+    try:
+        from backend_api.utils.board_code_source import (
+            LEGACY_DEFAULT_BOARD_CODE_SOURCE,
+            board_code_source_label,
+            resolve_board_code_source,
+        )
+
+        data = fetch_index_board_catalog(db, frontend_only=True)
+        for item in data:
+            source = resolve_board_code_source(
+                item.get("board_code_source"), fallback=LEGACY_DEFAULT_BOARD_CODE_SOURCE
+            )
+            item["board_code_source"] = source
+            item["board_code_source_label"] = item.get(
+                "board_code_source_label"
+            ) or board_code_source_label(source)
+            if "member_count" not in item and "stock_count" in item:
+                item["member_count"] = item.get("stock_count")
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取指数板块列表失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
+
+@router.get("/index_board/{board_code}/roles")
+def get_index_board_roles(
+    board_code: str,
+    board_code_source: str = Query(
+        DEFAULT_BOARD_CODE_SOURCE, description="板块代码来源，默认 tonghuashun"
+    ),
+    board_name: Optional[str] = Query(None, description="可选：板名称"),
+    db: Session = Depends(get_db),
+):
+    """指数板龙头/中军摘要（选股页展示用）。"""
+    try:
+        payload = fetch_board_roles_payload(
+            db,
+            board_type="index",
+            board_code=board_code,
+            board_code_source=board_code_source,
+            board_name=board_name,
+            limit=None,
+        )
+        data = extract_leader_mid_from_payload(payload)
+        if not data.get("board_code"):
+            return JSONResponse(
+                {"success": False, "message": "未找到指数板块或成分", "data": data},
+                status_code=404,
+            )
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        tb = traceback.format_exc()
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取指数板龙头/中军失败",
+                "error": str(e),
+                "traceback": tb,
+            },
+            status_code=500,
+        )
+
 
 # 获取港股指数数据
 @router.get("/hk-indices")

@@ -48,7 +48,9 @@ class RPEFrontendInterface:
                 board_code_source=board_code_source,
             )
             trade_date = date or engine.loader.resolve_trade_date()
-            kind = "concept" if board_kind == "concept" else "industry"
+            kind = str(board_kind or "industry").strip().lower()
+            if kind not in ("industry", "concept", "index"):
+                kind = "industry"
             adjust_n = str(adjust or "none").strip().lower() or "none"
             if adjust_n not in ("none", "qfq"):
                 adjust_n = "none"
@@ -85,7 +87,7 @@ class RPEFrontendInterface:
             if codes and not resolved_boards:
                 board_jobs = engine._resolve_boards_for_codes(list(codes), kind)
                 if not board_jobs:
-                    message = "未找到所选股票的行业/概念板块归属，无法计算比价效应"
+                    message = "未找到所选股票的行业/概念/指数板块归属，无法计算比价效应"
                     return {
                         "data": [],
                         "search_date": trade_date,

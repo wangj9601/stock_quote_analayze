@@ -137,8 +137,10 @@ const PatternTool = {
     q.set('adjust', adjust);
     if (options.asof) q.set('asof', options.asof);
     if (options.use_realtime) q.set('use_realtime', 'true');
+    const fetchOpts = options.signal ? { signal: options.signal } : {};
     const resp = await authFetch(
-      `${API_BASE_URL}/api/analysis/patterns/${encodeURIComponent(code)}?${q.toString()}`
+      `${API_BASE_URL}/api/analysis/patterns/${encodeURIComponent(code)}?${q.toString()}`,
+      fetchOpts
     );
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {

@@ -147,13 +147,18 @@ const AnalysisPage = {
         }
 
         try {
-            const url = new URL(window.location.href);
-            if (tabId && tabId !== 'board-analysis') {
-                url.searchParams.set('tab', tabId);
-            } else {
-                url.searchParams.delete('tab');
+            const cur = new URLSearchParams(window.location.search || '');
+            const batch = (cur.get('batch') || '').trim();
+            // 批量深链勿改写 URL：避免超长 codes 被 replaceState 截断/破坏，导致无法启动批量分析
+            if (batch !== 'selected' && batch !== 'watchlist') {
+                const url = new URL(window.location.href);
+                if (tabId && tabId !== 'board-analysis') {
+                    url.searchParams.set('tab', tabId);
+                } else {
+                    url.searchParams.delete('tab');
+                }
+                window.history.replaceState({}, '', url.pathname + url.search + url.hash);
             }
-            window.history.replaceState({}, '', url.pathname + url.search + url.hash);
         } catch (e) { /* ignore */ }
 
         // 根据标签加载相应数据

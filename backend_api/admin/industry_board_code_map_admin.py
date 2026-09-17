@@ -1,5 +1,5 @@
 """
-板块代码映射管理（同花顺 ↔ 东财，行业/概念）— 管理端 API
+板块代码映射管理（同花顺 ↔ 东财，行业/概念/指数）— 管理端 API
 """
 
 from __future__ import annotations
@@ -26,13 +26,13 @@ router = APIRouter(
     tags=["admin_board_code_map"],
 )
 
-BoardKind = Literal["industry", "concept"]
+BoardKind = Literal["industry", "concept", "index"]
 
 
 def _normalize_kind(raw: Optional[str]) -> str:
     k = str(raw or "industry").strip().lower()
-    if k not in ("industry", "concept"):
-        raise HTTPException(status_code=400, detail="board_kind 须为 industry 或 concept")
+    if k not in ("industry", "concept", "index"):
+        raise HTTPException(status_code=400, detail="board_kind 须为 industry、concept 或 index")
     return k
 
 

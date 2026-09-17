@@ -40,6 +40,26 @@
      * @param {{confirmLarge?:boolean,toastPrefix?:string}} [opts]
      * @returns {boolean} 是否已打开（含当前页回退）
      */
+    function writeBatchPayload(list) {
+        const payload = JSON.stringify({ ts: Date.now(), stocks: list });
+        let wrote = false;
+        try {
+            global.localStorage.setItem(BATCH_STORAGE_KEY, payload);
+            wrote = true;
+        } catch (e) {
+            console.warn('写入 localStorage 批量交易分析载荷失败', e);
+        }
+        try {
+            if (global.sessionStorage) {
+                global.sessionStorage.setItem(BATCH_STORAGE_KEY, payload);
+                wrote = true;
+            }
+        } catch (e) {
+            console.warn('写入 sessionStorage 批量交易分析载荷失败', e);
+        }
+        return wrote;
+    }
+
     function openBatchAnalysis(stocks, opts) {
         const options = opts || {};
         const list = normalizeBatchStocks(stocks);
@@ -55,20 +75,22 @@
             );
             if (!ok) return false;
         }
-        try {
-            global.localStorage.setItem(
-                BATCH_STORAGE_KEY,
-                JSON.stringify({ ts: Date.now(), stocks: list })
-            );
-        } catch (e) {
-            console.warn('写入批量交易分析载荷失败', e);
+        if (!writeBatchPayload(list)) {
             if (global.CommonUtils && CommonUtils.showToast) {
                 CommonUtils.showToast('无法写入分析参数，请检查浏览器存储权限', 'error');
             }
             return false;
         }
-        const codesQs = list.map((s) => encodeURIComponent(s.code)).join(',');
-        const url = `analysis.html?tab=stock-ai&batch=selected&popup=1&codes=${codesQs}`;
+        // 超长 codes 易被 history.replaceState / 地址栏截断；仅带少量兜底 codes，主数据走 storage
+        const maxCodesInUrl = 30;
+        const codesQs = list
+            .slice(0, maxCodesInUrl)
+            .map((s) => encodeURIComponent(s.code))
+            .join(',');
+        const url =
+            `analysis.html?tab=stock-ai&batch=selected&popup=1` +
+            (codesQs ? `&codes=${codesQs}` : '') +
+            (list.length > maxCodesInUrl ? `&batch_count=${list.length}` : '');
         const win = global.open(url, '_blank');
         if (!win) {
             global.location.href = url;

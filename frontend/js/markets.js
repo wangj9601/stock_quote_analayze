@@ -2827,6 +2827,9 @@ function addToWatchlist(code, event) {
 
 
 
+// 供独立页 / 内联 onclick 通过 window 访问（const 不会自动挂到 window）
+window.MarketsPage = MarketsPage;
+
 // DOM加载完成后初始化
 // 查询到股票代码后定位到表格列表中相应记录
 document.addEventListener('DOMContentLoaded', function () {

@@ -88,6 +88,13 @@ assert(js.includes("getElementById('ssaExportPngBtn')"), '应绑定 PNG 按钮')
 assert(js.includes('analyzeWatchlistBatch'), '应支持自选股批量分析');
 assert(js.includes('WATCHLIST_BATCH_SOFT_LIMIT'), '应支持批量分析软上限选项');
 assert(js.includes('_fetchAnalysisBundle'), '批量应并行拉取各股数据');
+assert(js.includes('_authFetchTimeout'), '批量请求应有超时保护');
+assert(js.includes('BATCH_DETAIL_CONCURRENCY'), '批量明细接口应限制并行度');
+assert(/BATCH_CONCURRENCY:\s*1/.test(js), '批量股票并行度应为 1，避免打满后端');
+assert(js.includes('_analysisTool'), '应通过 window 解析分析工具模块');
+assert(js.includes('/api/analysis/market-structure/'), '波段趋势在工具缺失时应直连接口');
+assert(js.includes('/api/analysis/gann-trend/'), '江恩趋势在工具缺失时应直连接口');
+assert(!js.includes('strategyOnly: true'), '批量不应再延时/仅拉策略');
 assert(html.includes('id="ssaAnalyzeAllSelected"'), '应有一次分析全部勾选选项');
 assert(js.includes('_closeStockTab'), '个股分析 Tab 应支持关闭');
 assert(js.includes('ssa-stock-tab-close'), 'Tab 应有关闭按钮');

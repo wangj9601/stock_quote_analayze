@@ -2,7 +2,7 @@
 
 采集源不稳定时，列表/详情默认展示同花顺码，东财侧多为 BKxxxx。
 本模块提供持久化 crosswalk（表名历史原因仍为 industry_board_code_map，
-以 board_kind 区分 industry / concept），并支持按「同名」自动重建。
+以 board_kind 区分 industry / concept / index），并支持按「同名」自动重建。
 """
 
 from __future__ import annotations
@@ -309,12 +309,12 @@ def rebuild_name_exact_maps(
     - replace_auto=True 时刷新 match_method=name_exact 的活跃行；保留 manual/import
     """
     ensure_industry_board_code_map_table(db)
-    kind = board_kind if board_kind in ("industry", "concept") else "industry"
-    basic = (
-        "industry_board_basic_info"
-        if kind == "industry"
-        else "concept_board_basic_info"
-    )
+    kind = board_kind if board_kind in ("industry", "concept", "index") else "industry"
+    basic = {
+        "industry": "industry_board_basic_info",
+        "concept": "concept_board_basic_info",
+        "index": "index_board_basic_info",
+    }[kind]
 
     rows = db.execute(
         text(

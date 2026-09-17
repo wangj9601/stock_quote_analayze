@@ -159,7 +159,12 @@
   }
 
   async function fetchBoardRoles(boardType, boardCode, boardCodeSource) {
-    const kind = boardType === 'concept' ? 'concept_board' : 'industry_board';
+    const kind =
+      boardType === 'concept'
+        ? 'concept_board'
+        : boardType === 'index'
+          ? 'index_board'
+          : 'industry_board';
     const q = new URLSearchParams();
     if (boardCodeSource) q.set('board_code_source', boardCodeSource);
     const url = `${apiBase()}/api/market/${kind}/${encodeURIComponent(boardCode)}/roles?${q}`;

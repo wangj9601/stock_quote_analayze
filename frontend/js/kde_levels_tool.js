@@ -183,7 +183,8 @@ const KdeLevelsTool = {
             qs.set('anchor_price', String(options.anchor_price));
         }
         const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
-        const resp = await authFetch(url);
+        const fetchOpts = options.signal ? { signal: options.signal } : {};
+        const resp = await authFetch(url, fetchOpts);
         const payload = await resp.json().catch(() => ({}));
         const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
         return {

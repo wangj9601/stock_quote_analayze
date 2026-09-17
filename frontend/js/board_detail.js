@@ -38,14 +38,22 @@
 
         document.title = (name || code || '板块详情') + ' - 股票分析';
 
-        if (!window.MarketsPage || typeof MarketsPage.showSectorDetail !== 'function') {
+        // markets.js 使用 const MarketsPage，不会自动挂到 window；勿仅用 window.MarketsPage 判断
+        const page =
+            (typeof MarketsPage !== 'undefined' && MarketsPage)
+            || (typeof window !== 'undefined' && window.MarketsPage)
+            || null;
+        if (!page || typeof page.showSectorDetail !== 'function') {
             const body = document.getElementById('sectorDetailBody');
             if (body) body.innerHTML = '<div class="sector-detail-error">详情模块未加载</div>';
             return;
         }
+        if (typeof window !== 'undefined' && !window.MarketsPage) {
+            window.MarketsPage = page;
+        }
 
         // 独立页：关闭动作改为回列表，避免仅去掉 show class
-        MarketsPage.hideSectorDetailModal = function () {
+        page.hideSectorDetailModal = function () {
             window.location.href = listHref;
         };
 
@@ -60,7 +68,7 @@
             return;
         }
 
-        await MarketsPage.showSectorDetail(name, code, source, kind);
+        await page.showSectorDetail(name, code, source, kind);
 
         // 确保独立页始终可见
         const modal = document.getElementById('sectorDetailModal');

@@ -303,7 +303,11 @@ class RPEStrategyEngine:
         db = getattr(self.loader, "_db", None)
         if db is None:
             return None
-        kind = "concept" if board_kind == "concept" else "industry"
+        kind = str(board_kind or "industry").strip().lower()
+        if kind == "index":
+            return None  # 指数板块暂无板斜率日表
+        if kind not in ("industry", "concept"):
+            kind = "industry"
         win = int(window or 60)
         try:
             stored = load_board_sector_slopes(
@@ -468,11 +472,15 @@ class RPEStrategyEngine:
         优先指定 kind（默认行业）；无归属则回退概念；同 kind 多板块取成分最多者。
         返回项含 board_code / board_name / board_kind（按板块去重）。
         """
-        kind = "concept" if board_kind == "concept" else "industry"
+        kind = str(board_kind or "industry").strip().lower()
+        if kind not in ("industry", "concept", "index"):
+            kind = "industry"
         jobs: List[Dict[str, str]] = []
         seen = set()
         for c in codes:
-            picked = self.loader.resolve_primary_board(c, board_kind=kind, allow_fallback=True)
+            picked = self.loader.resolve_primary_board(
+                c, board_kind=kind, allow_fallback=(kind == "industry")
+            )
             if not picked:
                 continue
             use_kind = str(picked.get("board_kind") or kind)
@@ -509,7 +517,9 @@ class RPEStrategyEngine:
         scan = cfg.get("scan") or {}
         max_n = max_results if max_results is not None else int(scan.get("max_results", 200))
         trade_date = date or self.loader.resolve_trade_date()
-        kind = "concept" if board_kind == "concept" else "industry"
+        kind = str(board_kind or "industry").strip().lower()
+        if kind not in ("industry", "concept", "index"):
+            kind = "industry"
         code_filter = {_norm_code(c) for c in codes} if codes else None
         adjust_n = str(price_adjust or "none").strip().lower() or "none"
 

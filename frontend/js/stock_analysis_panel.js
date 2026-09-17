@@ -139,9 +139,14 @@
         _loadingScripts: null,
 
         async ensureScripts() {
-            if (global.StockMultiStrategy && typeof global.StockMultiStrategy.analyzeForCode === 'function') {
-                return;
-            }
+            const need =
+                !global.StockMultiStrategy
+                || typeof global.StockMultiStrategy.analyzeForCode !== 'function'
+                || !global.MarketStructureTool
+                || !global.GannTrendTool
+                || !global.PatternTool
+                || !global.KdeLevelsTool;
+            if (!need) return;
             if (!this._loadingScripts) {
                 this._loadingScripts = ensureScripts().finally(() => {
                     this._loadingScripts = null;

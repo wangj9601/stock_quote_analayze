@@ -53,6 +53,8 @@ RESOURCE_BOARD = [
     "industry_board_constituents",
     "concept_board_basic_info",
     "concept_board_constituents",
+    "index_board_basic_info",
+    "index_board_constituents",
 ]
 
 # —— 行情（须日期范围）——
@@ -289,6 +291,16 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
                 "code": "concept_board_constituents",
                 "name": "概念板块成分股",
                 "desc": "concept_board_constituents",
+            },
+            {
+                "code": "index_board_basic_info",
+                "name": "指数板块基本信息",
+                "desc": "index_board_basic_info",
+            },
+            {
+                "code": "index_board_constituents",
+                "name": "指数板块成分股",
+                "desc": "index_board_constituents",
             },
         ],
     },

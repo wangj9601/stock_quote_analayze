@@ -1,5 +1,5 @@
 """
-板块成分股管理（行业 / 概念）— 管理端 API
+板块成分股管理（行业 / 概念 / 指数）— 管理端 API
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import logging
 import threading
 from datetime import datetime
 from io import BytesIO, StringIO
-from typing import Any, Iterable, List, Literal, Optional
+from typing import Any, Dict, Iterable, List, Literal, Optional
 
 import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
@@ -26,7 +26,7 @@ from backend_api.admin.board_constituents_import import (
 )
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
-from backend_api.models import ConceptBoardConstituent, IndustryBoardConstituent
+from backend_api.models import ConceptBoardConstituent, IndexBoardConstituent, IndustryBoardConstituent
 from backend_api.utils.board_code_source import (
     BOARD_CODE_SOURCE_OPTIONS,
     DEFAULT_BOARD_CODE_SOURCE,
@@ -40,9 +40,11 @@ from backend_api.utils.bk_board_code import (
     generate_next_bk_board_code,
     is_valid_bk_board_code,
     is_valid_concept_board_code,
+    is_valid_index_board_code,
     is_valid_industry_board_code,
     normalize_bk_board_code,
     normalize_concept_board_code,
+    normalize_index_board_code,
     normalize_industry_board_code,
 )
 
@@ -50,7 +52,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/board-constituents", tags=["admin_board_constituents"])
 
-BoardType = Literal["industry", "concept"]
+BoardType = Literal["industry", "concept", "index"]
+
+_BOARD_TYPE_LABELS = {"industry": "行业", "concept": "概念", "index": "指数"}
+
+
+def _board_type_label(board_type: BoardType, *, suffix: str = "") -> str:
+    base = _BOARD_TYPE_LABELS.get(board_type, board_type)
+    return f"{base}{suffix}" if suffix else base
 
 
 def _normalize_board_code(raw: Any) -> str:
@@ -60,12 +69,16 @@ def _normalize_board_code(raw: Any) -> str:
 def _normalize_board_code_for_type(board_type: BoardType, raw: Any) -> str:
     if board_type == "industry":
         return normalize_industry_board_code(raw)
+    if board_type == "index":
+        return normalize_index_board_code(raw)
     return normalize_concept_board_code(raw)
 
 
 def _is_valid_board_code_for_type(board_type: BoardType, code: str) -> bool:
     if board_type == "industry":
         return is_valid_industry_board_code(code)
+    if board_type == "index":
+        return is_valid_index_board_code(code)
     return is_valid_concept_board_code(code)
 
 
@@ -140,7 +153,7 @@ def _industry_board_list_src_sql(t: dict[str, str]) -> str:
 
 
 def _board_list_src_sql(board_type: BoardType, t: dict[str, str]) -> str:
-    if board_type == "industry":
+    if board_type in ("industry", "index"):
         return _industry_board_list_src_sql(t)
     return f"""
         SELECT {_board_basic_select_cols().strip()}
@@ -324,6 +337,12 @@ def _tables(board_type: BoardType) -> dict[str, str]:
             "constituents": "industry_board_constituents",
             "realtime": "industry_board_realtime_quotes",
         }
+    if board_type == "index":
+        return {
+            "basic": "index_board_basic_info",
+            "constituents": "index_board_constituents",
+            "realtime": "",
+        }
     return {
         "basic": "concept_board_basic_info",
         "constituents": "concept_board_constituents",
@@ -336,7 +355,7 @@ _board_schema_ensured = False
 
 
 def ensure_board_trade_observe_columns(db: Session) -> None:
-    """确保行业/概念板块基础表存在 trade_observe / frontend_visible / board_code_source 列。"""
+    """确保行业/概念/指数板块基础表存在 trade_observe / frontend_visible / board_code_source 列。"""
     global _board_schema_ensured
     if _board_schema_ensured:
         return
@@ -348,7 +367,40 @@ def ensure_board_trade_observe_columns(db: Session) -> None:
 
 
 def _ensure_board_trade_observe_columns_once(db: Session) -> None:
-    for table in ("industry_board_basic_info", "concept_board_basic_info"):
+    for table in (
+        "industry_board_basic_info",
+        "concept_board_basic_info",
+        "index_board_basic_info",
+    ):
+        # 指数表可能尚未建表：先确保存在
+        if table == "index_board_basic_info":
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS index_board_basic_info (
+                        board_code VARCHAR(20) PRIMARY KEY,
+                        board_name VARCHAR(100),
+                        create_date TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+                        trade_observe_flag BOOLEAN NOT NULL DEFAULT FALSE,
+                        frontend_visible_flag BOOLEAN NOT NULL DEFAULT TRUE,
+                        board_code_source VARCHAR(32)
+                    )
+                    """
+                )
+            )
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS index_board_constituents (
+                        board_code VARCHAR(20) NOT NULL,
+                        stock_code VARCHAR(20) NOT NULL,
+                        stock_name VARCHAR(100),
+                        updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+                        PRIMARY KEY (board_code, stock_code)
+                    )
+                    """
+                )
+            )
         db.execute(
             text(
                 f"""
@@ -376,7 +428,11 @@ def _ensure_board_trade_observe_columns_once(db: Session) -> None:
 
 
 def _constituent_model(board_type: BoardType):
-    return IndustryBoardConstituent if board_type == "industry" else ConceptBoardConstituent
+    if board_type == "industry":
+        return IndustryBoardConstituent
+    if board_type == "index":
+        return IndexBoardConstituent
+    return ConceptBoardConstituent
 
 
 def _upsert_constituents(
@@ -477,6 +533,8 @@ def _assert_board_code_format(board_type: BoardType, code: str) -> None:
         return
     if board_type == "industry":
         detail = "行业板块代码须为数字、BK+数字、中文或英文字符（1~20 位）"
+    elif board_type == "index":
+        detail = "指数板块代码须为 BK+数字或纯数字（1~20 位，如 000300）"
     else:
         detail = "概念板块代码须为 BK+数字或纯数字（1~20 位）"
     raise HTTPException(status_code=400, detail=detail)
@@ -518,6 +576,8 @@ class SaveBoardInfoBody(BaseModel):
             if not _is_valid_board_code_for_type(bt, code):
                 if bt == "industry":
                     raise ValueError("行业板块代码须为数字、BK+数字、中文或英文字符")
+                if bt == "index":
+                    raise ValueError("指数板块代码须为 BK+数字或纯数字")
                 raise ValueError("概念板块代码须为 BK+数字或纯数字")
             self.board_code = code
         if self.board_code_source is not None and str(self.board_code_source).strip():
@@ -928,6 +988,72 @@ def _sync_concept_board_basic_from_import(
     return synced
 
 
+def _clear_all_index_boards(db: Session) -> tuple[int, int]:
+    """清空全部指数板块基本信息与成分股。"""
+    Model = _constituent_model("index")
+    cons_deleted = db.query(Model).delete(synchronize_session=False)
+    basic_deleted = db.execute(text("DELETE FROM index_board_basic_info")).rowcount
+    return int(cons_deleted or 0), int(basic_deleted or 0)
+
+
+def _sync_index_board_basic_from_import(
+    db: Session,
+    rows: List[Dict[str, str]],
+    now: datetime,
+    issues: List[Dict[str, Any]],
+) -> int:
+    """从全量导入数据同步 index_board_basic_info（按板块代码聚合名称/来源）。"""
+    board_names: dict[str, str] = {}
+    board_sources: dict[str, Optional[str]] = {}
+    for r in rows:
+        code = _normalize_board_code_for_type("index", r.get("board_code"))
+        if not code:
+            continue
+        name = (r.get("board_name") or "").strip()
+        src = normalize_board_code_source(r.get("board_code_source"))
+        if code not in board_names:
+            board_names[code] = name
+            board_sources[code] = src
+        else:
+            if name and not board_names[code]:
+                board_names[code] = name
+            if src and not board_sources.get(code):
+                board_sources[code] = src
+
+    synced = 0
+    for code in sorted(board_names.keys()):
+        raw_name = board_names[code]
+        upsert_name: Optional[str] = raw_name.strip() or None if raw_name else None
+        file_source = board_sources.get(code)
+        effective_source = (
+            file_source
+            if file_source
+            else _read_board_code_source(db, "index", code)
+        )
+        if upsert_name:
+            dup_code = _find_same_name_source_board(
+                db, "index", upsert_name, effective_source, code
+            )
+            if dup_code:
+                issues.append({
+                    "row_no": 0,
+                    "board_code": code,
+                    "message": (
+                        f"板块名称「{upsert_name}」与 {dup_code} 同名且同代码来源，仍写入名称"
+                    ),
+                })
+        _upsert_board_basic(
+            db,
+            "index",
+            code,
+            upsert_name,
+            now,
+            board_code_source=file_source,
+        )
+        synced += 1
+    return synced
+
+
 def _rename_board_records(
     db: Session,
     board_type: BoardType,
@@ -1021,7 +1147,7 @@ async def get_next_board_code(
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """预览下一个可用数字编码（行业/概念均全局唯一，不加 BK）。"""
+    """预览下一个可用数字编码（行业/概念/指数均全局唯一，不加 BK）。"""
     _ = current_user
     code = generate_next_bk_board_code(db, after_code=after_code)
     return {"success": True, "data": {"board_code": code}}
@@ -1051,6 +1177,9 @@ async def save_board_info(
         old_code = new_code
     elif body.board_type == "industry":
         new_code = _generate_next_industry_board_code(db)
+        old_code = new_code
+    elif body.board_type == "index":
+        new_code = generate_next_bk_board_code(db)
         old_code = new_code
     else:
         raise HTTPException(status_code=400, detail="板块代码无效")
@@ -1297,7 +1426,7 @@ async def delete_boards_batch(
         realtime_deleted = _delete_industry_realtime_quotes(db, codes)
     db.commit()
     uname = getattr(current_user, "username", None) or "admin"
-    label = "行业板块" if body.board_type == "industry" else "概念板块"
+    label = _board_type_label(body.board_type, suffix="板块")
     extra = f"，实时行情 {realtime_deleted} 条" if body.board_type == "industry" else ""
     return {
         "success": True,
@@ -1315,7 +1444,7 @@ async def delete_boards_batch(
 
 @router.get("/boards")
 async def list_boards_with_summary(
-    board_type: BoardType = Query(..., description="industry 或 concept"),
+    board_type: BoardType = Query(..., description="industry / concept / index"),
     keyword: Optional[str] = None,
     board_code_source: Optional[str] = Query(
         None,
@@ -1442,12 +1571,12 @@ async def list_boards_with_summary(
 
 @router.get("/boards/by-stock")
 async def list_boards_by_stock(
-    board_type: BoardType = Query(..., description="industry 或 concept"),
+    board_type: BoardType = Query(..., description="industry / concept / index"),
     stock: str = Query(..., min_length=1, description="股票代码或名称"),
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """按股票代码或名称反查所属行业/概念板块。"""
+    """按股票代码或名称反查所属行业/概念/指数板块。"""
     _ = current_user
     ensure_board_trade_observe_columns(db)
     stock_codes, stock_names, err = _resolve_stock_lookup_codes(db, stock)
@@ -1479,7 +1608,7 @@ async def list_boards_by_stock(
         }
         for r in rows
     ]
-    label = "行业" if board_type == "industry" else "概念"
+    label = _board_type_label(board_type)
     if not boards:
         msg = f"股票 {'/'.join(stock_codes)} 未归入任何{label}板块"
     else:
@@ -1709,6 +1838,12 @@ async def sync_board_constituents(
             )
 
             result = IndustryBoardConstituentsCollector().run(board_codes=codes)
+        elif body.board_type == "index":
+            from backend_core.data_collectors.akshare.index_board_constituents_ak import (
+                IndexBoardConstituentsCollector,
+            )
+
+            result = IndexBoardConstituentsCollector().run(board_codes=codes)
         else:
             from backend_core.data_collectors.akshare.concept_board_constituents_ak import (
                 ConceptBoardConstituentsCollector,
@@ -1717,7 +1852,7 @@ async def sync_board_constituents(
             result = ConceptBoardConstituentsCollector().run(board_codes=codes)
 
         scope = "全部" if not codes else f"{len(codes)} 个板块"
-        kind = "行业" if body.board_type == "industry" else "概念"
+        kind = _board_type_label(body.board_type)
         detail = (result or {}).get("message") or ""
         status_flag = (result or {}).get("status") or "success"
         prefix = f"{kind}成分股同步"
@@ -1765,7 +1900,7 @@ EXPORT_ALL_COLUMNS = [
 
 def _export_all_board_src_sql(board_type: BoardType, t: dict[str, str]) -> str:
     """导出全部用的板块源：含 board_name / board_code_source。"""
-    if board_type == "industry":
+    if board_type in ("industry", "index"):
         return f"""
             SELECT
                 board_code,
@@ -1819,7 +1954,9 @@ async def export_all_constituents(
     _ = current_user
     ensure_board_trade_observe_columns(db)
     t = _tables(board_type)
-    label = "industry" if board_type == "industry" else "concept"
+    label = {"industry": "industry", "concept": "concept", "index": "index"}.get(
+        board_type, board_type
+    )
     board_src_sql = _export_all_board_src_sql(board_type, t)
     sql = text(
         f"""
@@ -1917,13 +2054,13 @@ async def import_all_board_constituents(
     board_type: BoardType = Query(...),
     clear_existing: bool = Query(
         False,
-        description="行业板块：导入前清空全部基础信息/成分股/实时行情；概念板块固定清空",
+        description="行业/指数板块：导入前清空全部基础信息与成分股（行业另清实时行情）；概念板块固定清空",
     ),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: Any = Depends(get_current_admin),
 ):
-    """Excel/CSV 全量导入多板块成分股。概念板块会先清空原有数据再导入；行业板块可选清空。"""
+    """Excel/CSV 全量导入多板块成分股。概念板块会先清空原有数据再导入；行业/指数板块可选清空。"""
     content = await file.read()
     rows, issues = parse_all_constituents_file(file.filename or "", content, board_type=board_type)
     if not rows:
@@ -1942,26 +2079,31 @@ async def import_all_board_constituents(
     if board_type == "concept":
         cleared_cons, cleared_basic = _clear_all_concept_boards(db)
         basic_synced = _sync_concept_board_basic_from_import(db, rows, now, issues)
+    elif board_type == "index" and clear_existing:
+        cleared_cons, cleared_basic = _clear_all_index_boards(db)
     elif board_type == "industry" and clear_existing:
         cleared_cons, cleared_basic, cleared_realtime = _clear_all_industry_boards(db)
 
     if board_type == "industry":
         basic_synced = _sync_industry_board_basic_from_import(db, rows, now, issues)
+    elif board_type == "index":
+        basic_synced = _sync_index_board_basic_from_import(db, rows, now, issues)
 
     aligned, board_only_count, stock_row_count = align_all_import_constituent_rows(
         db, rows, board_type, issues
     )
 
     if not aligned:
-        if basic_synced or (board_type == "industry" and board_only_count > 0):
+        if basic_synced or (board_type in ("industry", "index") and board_only_count > 0):
             db.commit()
             uname = getattr(current_user, "username", None) or "admin"
+            kind_label = _board_type_label(board_type, suffix="板块")
             if board_only_count > 0 and stock_row_count == 0:
                 msg = (
                     f"已同步板块基本信息 {basic_synced} 个，但文件中没有有效成分股数据"
                     f"（仅含 {board_only_count} 行板块定义）。"
                     f"请使用「导出全部」格式的完整文件（含股票代码/名称列），"
-                    f"或导入板块列表后点击「同步全部成分」从东财拉取成分股。"
+                    f"或导入板块列表后点击「同步全部成分」拉取成分股。"
                 )
             elif stock_row_count > 0:
                 msg = (
@@ -1976,11 +2118,17 @@ async def import_all_board_constituents(
                     + msg
                 )
             elif clear_existing and (cleared_basic or cleared_cons):
-                msg = (
-                    f"已清空原行业板块 {cleared_basic} 个、成分股 {cleared_cons} 条"
-                    f"，实时行情 {cleared_realtime} 条；"
-                    + msg
-                )
+                if board_type == "industry":
+                    msg = (
+                        f"已清空原行业板块 {cleared_basic} 个、成分股 {cleared_cons} 条"
+                        f"，实时行情 {cleared_realtime} 条；"
+                        + msg
+                    )
+                else:
+                    msg = (
+                        f"已清空原{kind_label} {cleared_basic} 个、成分股 {cleared_cons} 条；"
+                        + msg
+                    )
             if issues:
                 msg += f"，告警 {len(issues)} 条"
             return {
@@ -2022,6 +2170,7 @@ async def import_all_board_constituents(
     db.commit()
 
     uname = getattr(current_user, "username", None) or "admin"
+    kind_label = _board_type_label(board_type, suffix="板块")
     msg = (
         f"全量导入完成：{len(board_stats)} 个板块，"
         f"有效 {total_processed} 条，新增 {total_added} 条"
@@ -2032,11 +2181,17 @@ async def import_all_board_constituents(
             + msg
         )
     elif clear_existing and (cleared_basic or cleared_cons):
-        msg = (
-            f"已清空原行业板块 {cleared_basic} 个、成分股 {cleared_cons} 条"
-            f"，实时行情 {cleared_realtime} 条；"
-            + msg
-        )
+        if board_type == "industry":
+            msg = (
+                f"已清空原行业板块 {cleared_basic} 个、成分股 {cleared_cons} 条"
+                f"，实时行情 {cleared_realtime} 条；"
+                + msg
+            )
+        else:
+            msg = (
+                f"已清空原{kind_label} {cleared_basic} 个、成分股 {cleared_cons} 条；"
+                + msg
+            )
     if basic_synced:
         msg += f"，同步板块基本信息 {basic_synced} 个"
     if issues:

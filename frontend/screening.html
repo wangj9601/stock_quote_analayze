@@ -1873,6 +1873,7 @@
                             <option value="watchlist">自选股</option>
                             <option value="industry_board">行业板块</option>
                             <option value="concept_board">概念板块</option>
+                            <option value="index_board">指数板块</option>
                             <option value="single">单股</option>
                         </select>
                     </div>
@@ -1924,21 +1925,54 @@
                         <span id="rpeConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
                     </div>
                 </div>
+                <div id="rpeIndexBoardWrap" class="rpe-board-wrap" style="display:none;">
+                    <span class="rpe-board-wrap-label">指数板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="rpeIndexBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="rpeIndexBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
                 <div id="rpeBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
                 <div id="rpeLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
                 <div id="rpeError" class="error-message" style="display:none;"></div>
                 <div class="results-container">
-                    <div class="results-header"><span id="rpeResultsCount">共 0 只</span></div>
+                    <div class="results-header rpe-results-header">
+                        <div class="rpe-results-header-left">
+                            <span id="rpeResultsCount">共 0 只</span>
+                            <div class="rpe-board-filters" title="对当前结果列表做板块过滤（不影响重新筛选）">
+                                <label class="rpe-board-filter-opt">
+                                    <input type="checkbox" id="rpeExcludeStar">
+                                    排除科创板(68)
+                                </label>
+                                <label class="rpe-board-filter-opt">
+                                    <input type="checkbox" id="rpeExcludeChinext">
+                                    排除创业板(3)
+                                </label>
+                                <label class="rpe-board-filter-opt">
+                                    <input type="checkbox" id="rpeExcludeBse">
+                                    排除北交所(8/4)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="rpe-batch-actions">
+                            <button type="button" id="rpeSelectAllBtn" class="gms-btn-outline" title="全选当前列表">全选</button>
+                            <button type="button" id="rpeClearSelectBtn" class="gms-btn-outline" title="取消勾选">清空</button>
+                            <button type="button" id="rpeBatchTradeBtn" class="refresh-btn" title="将勾选股票批量打开个股交易分析">批量交易分析</button>
+                        </div>
+                    </div>
                     <div class="results-table-wrapper">
                         <table class="results-table">
                             <thead>
                                 <tr>
+                                    <th class="rpe-col-check">
+                                        <input type="checkbox" id="rpeSelectAllCb" title="全选/取消全选">
+                                    </th>
                                     <th>代码</th><th>名称</th><th>板块</th><th>收盘</th><th>Z</th><th>信号</th>
                                     <th>入场</th><th>支撑</th><th>阻力</th><th>结构</th><th>流动性</th><th>操作</th>
                                 </tr>
                             </thead>
                             <tbody id="rpeResultsBody">
-                                <tr><td colspan="12" class="empty-state">点击「刷新筛选」开始</td></tr>
+                                <tr><td colspan="13" class="empty-state">点击「刷新筛选」开始</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -2352,9 +2386,10 @@
     <script src="js/csb_score_detail.js"></script>
     <script src="js/board_roles_panel.js"></script>
     <script src="js/page_scroll_fab.js"></script>
+    <script src="js/stock_trade_link.js?v=20260917a"></script>
     <script src="js/screening.js?v=urt50220260907a"></script>
     <script src="js/sbbr_screening.js"></script>
-    <script src="js/rpe_screening.js"></script>
+    <script src="js/rpe_screening.js?v=20260917a"></script>
     <script src="js/csb_screening.js?v=20260915c"></script>
 
     <!-- 比价效应：顶/底滚动（双圆形 FAB，仅 RPE Tab） -->

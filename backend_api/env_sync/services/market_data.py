@@ -38,6 +38,8 @@ BOARD_TABLES = (
     "industry_board_constituents",
     "concept_board_basic_info",
     "concept_board_constituents",
+    "index_board_basic_info",
+    "index_board_constituents",
 )
 
 DEFAULT_QUOTE_MAX_DAYS = 366
@@ -315,6 +317,18 @@ def export_board_data(db: Session, *, tables: Optional[Set[str]] = None, env_lab
             items["_errors"] = items.get("_errors") or []
             items["_errors"].append(f"concept_board_basic_info export: {e}")
 
+    if "index_board_basic_info" in want:
+        try:
+            cols = _board_basic_cols(db.connection(), table_name="index_board_basic_info")
+            col_sql = ", ".join(cols)
+            items["index_board_basic_info"] = fetch_all(
+                f"SELECT {col_sql} FROM index_board_basic_info ORDER BY board_code"
+            )
+        except Exception as e:
+            items["index_board_basic_info"] = []
+            items["_errors"] = items.get("_errors") or []
+            items["_errors"].append(f"index_board_basic_info export: {e}")
+
     if "industry_board_constituents" in want:
         items["industry_board_constituents"] = fetch_all(
             "SELECT board_code, stock_code, stock_name, updated_at "
@@ -324,6 +338,11 @@ def export_board_data(db: Session, *, tables: Optional[Set[str]] = None, env_lab
         items["concept_board_constituents"] = fetch_all(
             "SELECT board_code, stock_code, stock_name, updated_at "
             "FROM concept_board_constituents ORDER BY board_code, stock_code"
+        )
+    if "index_board_constituents" in want:
+        items["index_board_constituents"] = fetch_all(
+            "SELECT board_code, stock_code, stock_name, updated_at "
+            "FROM index_board_constituents ORDER BY board_code, stock_code"
         )
 
     bundle = make_bundle(module="board_data", items={k: v for k, v in items.items() if not k.startswith("_")}, env_label=env_label)
@@ -646,6 +665,10 @@ def import_board_data(
             upsert_basic_pg_bulk(
                 "concept_board_basic_info", items.get("concept_board_basic_info") or []
             )
+        if "index_board_basic_info" in want:
+            upsert_basic_pg_bulk(
+                "index_board_basic_info", items.get("index_board_basic_info") or []
+            )
         if "industry_board_constituents" in want:
             upsert_const_pg_bulk_safe(
                 "industry_board_constituents", items.get("industry_board_constituents") or []
@@ -653,6 +676,10 @@ def import_board_data(
         if "concept_board_constituents" in want:
             upsert_const_pg_bulk_safe(
                 "concept_board_constituents", items.get("concept_board_constituents") or []
+            )
+        if "index_board_constituents" in want:
+            upsert_const_pg_bulk_safe(
+                "index_board_constituents", items.get("index_board_constituents") or []
             )
     else:
         if "industry_board_basic_info" in want:
@@ -663,6 +690,10 @@ def import_board_data(
             upsert_basic_row(
                 "concept_board_basic_info", items.get("concept_board_basic_info") or []
             )
+        if "index_board_basic_info" in want:
+            upsert_basic_row(
+                "index_board_basic_info", items.get("index_board_basic_info") or []
+            )
         if "industry_board_constituents" in want:
             upsert_const_row(
                 "industry_board_constituents", items.get("industry_board_constituents") or []
@@ -671,6 +702,10 @@ def import_board_data(
             upsert_const_row(
                 "concept_board_constituents", items.get("concept_board_constituents") or []
             )
+        if "index_board_constituents" in want:
+            upsert_const_row(
+                "index_board_constituents", items.get("index_board_constituents") or []
+            )
         db.commit()
     return result
 
@@ -678,10 +713,12 @@ def import_board_data(
 BOARD_BASIC_ITEM_KEYS = (
     "industry_board_basic_info",
     "concept_board_basic_info",
+    "index_board_basic_info",
 )
 BOARD_CONST_ITEM_KEYS = (
     "industry_board_constituents",
     "concept_board_constituents",
+    "index_board_constituents",
 )
 
 

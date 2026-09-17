@@ -131,16 +131,42 @@ class RPEDataLoader:
             if own:
                 db.close()
 
+    def list_index_boards(self, limit: Optional[int] = None) -> List[Dict[str, str]]:
+        db = self._session()
+        own = self._db is None
+        try:
+            sql = text(
+                f"""
+                SELECT board_code, board_name
+                FROM index_board_basic_info b
+                WHERE board_code IS NOT NULL AND TRIM(board_code) <> ''
+                  AND {self._source_sql("b")}
+                ORDER BY board_code
+                """
+            )
+            rows = db.execute(sql, self._source_params()).fetchall()
+            out = [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
+            if limit:
+                out = out[: int(limit)]
+            return out
+        except Exception as e:
+            logger.warning("list_index_boards failed: %s", e)
+            return []
+        finally:
+            if own:
+                db.close()
+
     def lookup_board_name(self, board_code: str, board_kind: str = "industry") -> Optional[str]:
         """按 board_code 取板块名：优先当前 board_code_source，否则任意来源。"""
         bc = str(board_code or "").strip()
         if not bc:
             return None
-        table = (
-            "concept_board_basic_info"
-            if board_kind == "concept"
-            else "industry_board_basic_info"
-        )
+        kind = str(board_kind or "industry").strip().lower()
+        table = {
+            "concept": "concept_board_basic_info",
+            "index": "index_board_basic_info",
+            "industry": "industry_board_basic_info",
+        }.get(kind, "industry_board_basic_info")
         db = self._session()
         own = self._db is None
         try:
@@ -208,8 +234,11 @@ class RPEDataLoader:
                 db.close()
 
     def list_boards(self, board_kind: str = "industry", limit: Optional[int] = None) -> List[Dict[str, str]]:
-        if board_kind == "concept":
+        kind = str(board_kind or "industry").strip().lower()
+        if kind == "concept":
             return self.list_concept_boards(limit=limit)
+        if kind == "index":
+            return self.list_index_boards(limit=limit)
         return self.list_industry_boards(limit=limit)
 
     def load_stock_names(self, codes: List[str]) -> Dict[str, str]:
@@ -245,11 +274,12 @@ class RPEDataLoader:
     def load_board_members(self, board_code: str, board_kind: str = "industry") -> List[Dict[str, str]]:
         db = self._session()
         own = self._db is None
-        table = (
-            "concept_board_constituents"
-            if board_kind == "concept"
-            else "industry_board_constituents"
-        )
+        kind = str(board_kind or "industry").strip().lower()
+        table = {
+            "concept": "concept_board_constituents",
+            "index": "index_board_constituents",
+            "industry": "industry_board_constituents",
+        }.get(kind, "industry_board_constituents")
         members: List[Dict[str, str]] = []
         try:
             sql = text(
@@ -292,28 +322,23 @@ class RPEDataLoader:
         try:
             variants = self._code_variants(code)
             params = {"codes": variants, **self._source_params()}
-            if board_kind == "concept":
-                sql = text(
-                    f"""
-                    SELECT c.board_code, COALESCE(b.board_name, c.board_code)
-                    FROM concept_board_constituents c
-                    INNER JOIN concept_board_basic_info b ON b.board_code = c.board_code
-                    WHERE c.stock_code IN :codes
-                      AND {self._source_sql("b")}
-                    ORDER BY c.board_code
-                    """
-                ).bindparams(bindparam("codes", expanding=True))
+            kind = str(board_kind or "industry").strip().lower()
+            if kind == "concept":
+                cons, basic = "concept_board_constituents", "concept_board_basic_info"
+            elif kind == "index":
+                cons, basic = "index_board_constituents", "index_board_basic_info"
             else:
-                sql = text(
-                    f"""
-                    SELECT c.board_code, COALESCE(b.board_name, c.board_code)
-                    FROM industry_board_constituents c
-                    INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code
-                    WHERE c.stock_code IN :codes
-                      AND {self._source_sql("b")}
-                    ORDER BY c.board_code
-                    """
-                ).bindparams(bindparam("codes", expanding=True))
+                cons, basic = "industry_board_constituents", "industry_board_basic_info"
+            sql = text(
+                f"""
+                SELECT c.board_code, COALESCE(b.board_name, c.board_code)
+                FROM {cons} c
+                INNER JOIN {basic} b ON b.board_code = c.board_code
+                WHERE c.stock_code IN :codes
+                  AND {self._source_sql("b")}
+                ORDER BY c.board_code
+                """
+            ).bindparams(bindparam("codes", expanding=True))
             rows = db.execute(sql, params).fetchall()
             return [{"board_code": str(r[0]), "board_name": str(r[1] or r[0])} for r in rows]
         except Exception as e:
@@ -334,12 +359,14 @@ class RPEDataLoader:
         固定个股主板块（用于选股/追溯，避免同股多板块按日跳变）。
 
         规则：
-        1. 优先指定 kind（默认 industry）；行业/概念均仅取 ``board_code_source``（默认同花顺）
-        2. 无同花顺行业归属且 allow_fallback 时回退同花顺概念
+        1. 优先指定 kind（默认 industry）；行业/概念/指数均仅取 ``board_code_source``（默认同花顺）
+        2. 无同花顺行业归属且 allow_fallback 时回退同花顺概念（指数不回退）
         3. 同 kind 多板块时取成分股数量最多者
         4. 成分数并列时按 board_code 升序，保证稳定可复现
         """
-        kind = "concept" if board_kind == "concept" else "industry"
+        kind = str(board_kind or "industry").strip().lower()
+        if kind not in ("industry", "concept", "index"):
+            kind = "industry"
         picked = self._pick_primary_board_among(code, kind)
         if picked is None and allow_fallback and kind == "industry":
             picked = self._pick_primary_board_among(code, "concept")
@@ -353,55 +380,41 @@ class RPEDataLoader:
             params = {"codes": variants, **self._source_params()}
             src_filter = self._source_sql("b")
             src_filter2 = self._source_sql("b2")
-            if board_kind == "concept":
-                sql = text(
-                    f"""
-                    SELECT c.board_code,
-                           COALESCE(b.board_name, c.board_code) AS board_name,
-                           cnt.n AS member_count
-                    FROM concept_board_constituents c
-                    JOIN (
-                        SELECT c2.board_code, COUNT(*) AS n
-                        FROM concept_board_constituents c2
-                        INNER JOIN concept_board_basic_info b2 ON b2.board_code = c2.board_code
-                        WHERE {src_filter2}
-                        GROUP BY c2.board_code
-                    ) cnt ON cnt.board_code = c.board_code
-                    INNER JOIN concept_board_basic_info b ON b.board_code = c.board_code
-                    WHERE c.stock_code IN :codes
-                      AND {src_filter}
-                    ORDER BY cnt.n DESC, c.board_code ASC
-                    LIMIT 1
-                    """
-                ).bindparams(bindparam("codes", expanding=True))
+            kind = str(board_kind or "industry").strip().lower()
+            if kind == "concept":
+                cons, basic = "concept_board_constituents", "concept_board_basic_info"
+            elif kind == "index":
+                cons, basic = "index_board_constituents", "index_board_basic_info"
             else:
-                sql = text(
-                    f"""
-                    SELECT c.board_code,
-                           COALESCE(b.board_name, c.board_code) AS board_name,
-                           cnt.n AS member_count
-                    FROM industry_board_constituents c
-                    JOIN (
-                        SELECT c2.board_code, COUNT(*) AS n
-                        FROM industry_board_constituents c2
-                        INNER JOIN industry_board_basic_info b2 ON b2.board_code = c2.board_code
-                        WHERE {src_filter2}
-                        GROUP BY c2.board_code
-                    ) cnt ON cnt.board_code = c.board_code
-                    INNER JOIN industry_board_basic_info b ON b.board_code = c.board_code
-                    WHERE c.stock_code IN :codes
-                      AND {src_filter}
-                    ORDER BY cnt.n DESC, c.board_code ASC
-                    LIMIT 1
-                    """
-                ).bindparams(bindparam("codes", expanding=True))
+                cons, basic = "industry_board_constituents", "industry_board_basic_info"
+                kind = "industry"
+            sql = text(
+                f"""
+                SELECT c.board_code,
+                       COALESCE(b.board_name, c.board_code) AS board_name,
+                       cnt.n AS member_count
+                FROM {cons} c
+                JOIN (
+                    SELECT c2.board_code, COUNT(*) AS n
+                    FROM {cons} c2
+                    INNER JOIN {basic} b2 ON b2.board_code = c2.board_code
+                    WHERE {src_filter2}
+                    GROUP BY c2.board_code
+                ) cnt ON cnt.board_code = c.board_code
+                INNER JOIN {basic} b ON b.board_code = c.board_code
+                WHERE c.stock_code IN :codes
+                  AND {src_filter}
+                ORDER BY cnt.n DESC, c.board_code ASC
+                LIMIT 1
+                """
+            ).bindparams(bindparam("codes", expanding=True))
             row = db.execute(sql, params).fetchone()
             if not row:
                 return None
             return {
                 "board_code": str(row[0]),
                 "board_name": str(row[1] or row[0]),
-                "board_kind": "concept" if board_kind == "concept" else "industry",
+                "board_kind": kind,
                 "member_count": int(row[2] or 0),
                 "board_code_source": self.board_code_source,
             }

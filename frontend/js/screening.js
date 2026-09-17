@@ -50,25 +50,29 @@ const ScreeningPage = {
     _gmsIndustryBoardsLoaded: false,
     /** 概念板块下拉是否已加载 */
     _gmsConceptBoardsLoaded: false,
-    /** 行业/概念板块选项缓存 */
+    /** 指数板块下拉是否已加载 */
+    _gmsIndexBoardsLoaded: false,
+    /** 行业/概念/指数板块选项缓存 */
     gmsIndustryBoardCatalog: [],
     gmsConceptBoardCatalog: [],
+    gmsIndexBoardCatalog: [],
     /** 已选板块代码 */
     gmsSelectedIndustryBoardCodes: [],
     gmsSelectedConceptBoardCodes: [],
     /** URT 已选行业/概念板块 */
     urtSelectedIndustryBoardCodes: [],
     urtSelectedConceptBoardCodes: [],
-    /** RPE 已选行业/概念板块 */
+    /** RPE 已选行业/概念/指数板块 */
     rpeSelectedIndustryBoardCodes: [],
     rpeSelectedConceptBoardCodes: [],
+    rpeSelectedIndexBoardCodes: [],
     /** SBBR 已选行业/概念板块 */
     sbbrSelectedIndustryBoardCodes: [],
     sbbrSelectedConceptBoardCodes: [],
     /** CSB 已选行业/概念板块 */
     csbSelectedIndustryBoardCodes: [],
     csbSelectedConceptBoardCodes: [],
-    /** 板块选择弹窗：industry | concept */
+    /** 板块选择弹窗：industry | concept | index */
     _gmsBoardPickerKind: null,
     _gmsBoardPickerDraft: new Set(),
     /** 板块选择弹窗代码来源筛选：all | eastmoney | tonghuashun */
@@ -1178,6 +1182,10 @@ const ScreeningPage = {
         const rpeConceptBtn = document.getElementById('rpeConceptBoardPickBtn');
         if (rpeConceptBtn) {
             rpeConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'rpe'));
+        }
+        const rpeIndexBtn = document.getElementById('rpeIndexBoardPickBtn');
+        if (rpeIndexBtn) {
+            rpeIndexBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('index', 'rpe'));
         }
         const sbbrIndustryBtn = document.getElementById('sbbrIndustryBoardPickBtn');
         if (sbbrIndustryBtn) {
@@ -2581,9 +2589,15 @@ const ScreeningPage = {
         let boardKind = String(params.get('board_kind') || '').trim().toLowerCase();
         if (boardKind === 'industry_board') boardKind = 'industry';
         if (boardKind === 'concept_board') boardKind = 'concept';
-        if (!boardCode || (boardKind !== 'industry' && boardKind !== 'concept')) return;
+        if (boardKind === 'index_board') boardKind = 'index';
+        if (!boardCode || !['industry', 'concept', 'index'].includes(boardKind)) return;
 
-        const scope = boardKind === 'concept' ? 'concept_board' : 'industry_board';
+        const scope =
+            boardKind === 'concept'
+                ? 'concept_board'
+                : boardKind === 'index'
+                    ? 'index_board'
+                    : 'industry_board';
         const scopeEl = document.getElementById('rpeScope');
         if (scopeEl) {
             scopeEl.value = scope;
@@ -2594,6 +2608,10 @@ const ScreeningPage = {
                 await this.loadGmsIndustryBoardOptions();
                 this.rpeSelectedIndustryBoardCodes = [boardCode];
                 this.updateRpeIndustryBoardSummary();
+            } else if (boardKind === 'index') {
+                await this.loadGmsIndexBoardOptions();
+                this.rpeSelectedIndexBoardCodes = [boardCode];
+                this.updateRpeIndexBoardSummary();
             } else {
                 await this.loadGmsConceptBoardOptions();
                 this.rpeSelectedConceptBoardCodes = [boardCode];
@@ -2604,6 +2622,9 @@ const ScreeningPage = {
             if (boardKind === 'industry') {
                 this.rpeSelectedIndustryBoardCodes = [boardCode];
                 this.updateRpeIndustryBoardSummary();
+            } else if (boardKind === 'index') {
+                this.rpeSelectedIndexBoardCodes = [boardCode];
+                this.updateRpeIndexBoardSummary();
             } else {
                 this.rpeSelectedConceptBoardCodes = [boardCode];
                 this.updateRpeConceptBoardSummary();
@@ -3065,7 +3086,9 @@ const ScreeningPage = {
     },
 
     _gmsBoardCatalogByKind(kind) {
-        return kind === 'industry' ? this.gmsIndustryBoardCatalog : this.gmsConceptBoardCatalog;
+        if (kind === 'index') return this.gmsIndexBoardCatalog;
+        if (kind === 'concept') return this.gmsConceptBoardCatalog;
+        return this.gmsIndustryBoardCatalog;
     },
 
     _gmsBoardSourceValue(board) {
@@ -3093,7 +3116,9 @@ const ScreeningPage = {
             ? selectedCodes
             : (kind === 'industry'
                 ? this.getGmsSelectedIndustryBoardCodes()
-                : this.getGmsSelectedConceptBoardCodes());
+                : kind === 'index'
+                    ? this.getRpeSelectedIndexBoardCodes()
+                    : this.getGmsSelectedConceptBoardCodes());
         const catalog = this._gmsBoardCatalogByKind(kind) || [];
         const byCode = new Map(catalog.map((b) => [String(b.board_code || '').trim(), b]));
         let hasThs = false;
@@ -3311,6 +3336,7 @@ const ScreeningPage = {
     async openGmsBoardPickerModal(kind, owner = 'gms') {
         // 强制重拉，避免后端升级后仍用缺来源字段的旧缓存（会导致「同花顺」筛空）
         if (kind === 'industry') await this.loadGmsIndustryBoardOptions(true);
+        else if (kind === 'index') await this.loadGmsIndexBoardOptions(true);
         else await this.loadGmsConceptBoardOptions(true);
 
         this._gmsBoardPickerKind = kind;
@@ -3327,9 +3353,9 @@ const ScreeningPage = {
                 : this.getUrtSelectedConceptBoardCodes();
             this._gmsBoardPickerDraft = new Set(selected);
         } else if (this._gmsBoardPickerOwner === 'rpe') {
-            selected = kind === 'industry'
-                ? this.getRpeSelectedIndustryBoardCodes()
-                : this.getRpeSelectedConceptBoardCodes();
+            if (kind === 'industry') selected = this.getRpeSelectedIndustryBoardCodes();
+            else if (kind === 'index') selected = this.getRpeSelectedIndexBoardCodes();
+            else selected = this.getRpeSelectedConceptBoardCodes();
             this._gmsBoardPickerDraft = new Set(selected);
         } else if (this._gmsBoardPickerOwner === 'sbbr') {
             selected = kind === 'industry'
@@ -3350,7 +3376,10 @@ const ScreeningPage = {
 
         const titleEl = document.getElementById('gmsBoardPickerTitle');
         if (titleEl) {
-            titleEl.textContent = kind === 'industry' ? '选择行业板块' : '选择概念板块';
+            titleEl.textContent =
+                kind === 'industry' ? '选择行业板块'
+                    : kind === 'index' ? '选择指数板块'
+                        : '选择概念板块';
         }
         const searchEl = document.getElementById('gmsBoardPickerSearch');
         if (searchEl) searchEl.value = '';
@@ -3433,7 +3462,7 @@ const ScreeningPage = {
 
         const btn = document.getElementById('gmsBoardPickerRefresh');
         const listEl = document.getElementById('gmsBoardPickerList');
-        const kindLabel = kind === 'industry' ? '行业' : '概念';
+        const kindLabel = kind === 'industry' ? '行业' : (kind === 'index' ? '指数' : '概念');
         const preserved = new Set(
             Array.from(this._gmsBoardPickerDraft || []).map((c) => String(c || '').trim()).filter(Boolean),
         );
@@ -3451,7 +3480,9 @@ const ScreeningPage = {
         try {
             const ok = kind === 'industry'
                 ? await this.loadGmsIndustryBoardOptions(true)
-                : await this.loadGmsConceptBoardOptions(true);
+                : kind === 'index'
+                    ? await this.loadGmsIndexBoardOptions(true)
+                    : await this.loadGmsConceptBoardOptions(true);
             if (!ok) {
                 throw new Error(`刷新${kindLabel}板块选项失败`);
             }
@@ -3507,6 +3538,9 @@ const ScreeningPage = {
             if (kind === 'industry') {
                 this.rpeSelectedIndustryBoardCodes = codes;
                 this.updateRpeIndustryBoardSummary();
+            } else if (kind === 'index') {
+                this.rpeSelectedIndexBoardCodes = codes;
+                this.updateRpeIndexBoardSummary();
             } else if (kind === 'concept') {
                 this.rpeSelectedConceptBoardCodes = codes;
                 this.updateRpeConceptBoardSummary();
@@ -3575,7 +3609,8 @@ const ScreeningPage = {
 
         const isIndustry = scope === 'industry_board';
         const isConcept = scope === 'concept_board';
-        if (!isIndustry && !isConcept) {
+        const isIndex = scope === 'index_board';
+        if (!isIndustry && !isConcept && !isIndex) {
             void panelApi.refresh({
                 panelId,
                 boardType: 'industry',
@@ -3585,16 +3620,16 @@ const ScreeningPage = {
             return;
         }
 
-        const kind = isIndustry ? 'industry' : 'concept';
+        const kind = isIndustry ? 'industry' : (isIndex ? 'index' : 'concept');
         let codes = [];
         if (key === 'urt') {
             codes = isIndustry
                 ? this.getUrtSelectedIndustryBoardCodes()
                 : this.getUrtSelectedConceptBoardCodes();
         } else if (key === 'rpe') {
-            codes = isIndustry
-                ? this.getRpeSelectedIndustryBoardCodes()
-                : this.getRpeSelectedConceptBoardCodes();
+            if (isIndustry) codes = this.getRpeSelectedIndustryBoardCodes();
+            else if (isIndex) codes = this.getRpeSelectedIndexBoardCodes();
+            else codes = this.getRpeSelectedConceptBoardCodes();
         } else if (key === 'sbbr') {
             codes = isIndustry
                 ? this.getSbbrSelectedIndustryBoardCodes()
@@ -3630,6 +3665,12 @@ const ScreeningPage = {
             : [];
     },
 
+    getRpeSelectedIndexBoardCodes() {
+        return Array.isArray(this.rpeSelectedIndexBoardCodes)
+            ? this.rpeSelectedIndexBoardCodes.filter(Boolean)
+            : [];
+    },
+
     updateRpeIndustryBoardSummary() {
         const el = document.getElementById('rpeIndustryBoardSummary');
         if (!el) return;
@@ -3657,6 +3698,23 @@ const ScreeningPage = {
         }
         const names = codes.map((code) => {
             const b = this.gmsConceptBoardCatalog.find((x) => String(x.board_code) === code);
+            return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
+        });
+        el.textContent = names.length <= 3
+            ? `已选 ${codes.length} 个：${names.join('、')}`
+            : `已选 ${codes.length} 个：${names.slice(0, 3).join('、')} 等`;
+    },
+
+    updateRpeIndexBoardSummary() {
+        const el = document.getElementById('rpeIndexBoardSummary');
+        if (!el) return;
+        const codes = this.getRpeSelectedIndexBoardCodes();
+        if (!codes.length) {
+            el.textContent = '未选择板块，点击「选择板块」';
+            return;
+        }
+        const names = codes.map((code) => {
+            const b = this.gmsIndexBoardCatalog.find((x) => String(x.board_code) === code);
             return b ? this._gmsBoardNameWithCount(b, { withSource: true }) : code;
         });
         el.textContent = names.length <= 3
@@ -3963,6 +4021,45 @@ const ScreeningPage = {
             this.gmsConceptBoardCatalog = [];
             this._gmsConceptBoardsLoaded = false;
             const summary = document.getElementById('gmsConceptBoardSummary');
+            if (summary) summary.textContent = '加载失败，请刷新页面';
+            return false;
+        }
+    },
+
+    /**
+     * 加载指数板块选项
+     * @param {boolean} [force] 强制重新拉取
+     * @returns {Promise<boolean>} 是否加载成功
+     */
+    async loadGmsIndexBoardOptions(force = false) {
+        if (!force && this._gmsIndexBoardsLoaded && this.gmsIndexBoardCatalog.length) return true;
+        try {
+            const res = await fetch(`${this.API_BASE_URL}/api/market/index_board`);
+            const data = await res.json();
+            if (!res.ok || data.success === false) {
+                throw new Error(data.message || `HTTP ${res.status}`);
+            }
+            const boards = Array.isArray(data.data) ? data.data : [];
+            const mapped = boards.map((b) => {
+                const source = this._gmsBoardSourceValue(b);
+                const count = this._gmsBoardMemberCount(b) ?? 0;
+                return {
+                    ...b,
+                    board_code_source: source,
+                    board_code_source_label: b.board_code_source_label || this._gmsBoardSourceLabel({ board_code_source: source }),
+                    stock_count: count,
+                    member_count: count,
+                };
+            });
+            // 指数板一般不需行业式同名去重，直接按代码保留
+            this.gmsIndexBoardCatalog = mapped;
+            this._gmsIndexBoardsLoaded = true;
+            return true;
+        } catch (e) {
+            console.warn('[GMS] 加载指数板块列表失败', e);
+            this.gmsIndexBoardCatalog = [];
+            this._gmsIndexBoardsLoaded = false;
+            const summary = document.getElementById('rpeIndexBoardSummary');
             if (summary) summary.textContent = '加载失败，请刷新页面';
             return false;
         }

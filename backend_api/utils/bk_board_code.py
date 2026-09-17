@@ -36,6 +36,12 @@ _BK_USAGE_SQL = """
     UNION
     SELECT DISTINCT board_code FROM industry_board_constituents
     WHERE UPPER(board_code) LIKE 'BK%%' OR board_code ~ '^[0-9]+$'
+    UNION
+    SELECT board_code FROM index_board_basic_info
+    WHERE UPPER(board_code) LIKE 'BK%%' OR board_code ~ '^[0-9]+$'
+    UNION
+    SELECT DISTINCT board_code FROM index_board_constituents
+    WHERE UPPER(board_code) LIKE 'BK%%' OR board_code ~ '^[0-9]+$'
 """
 
 
@@ -113,6 +119,15 @@ def is_valid_concept_board_code(code: object) -> bool:
     return bool(normalize_concept_board_code(code))
 
 
+def normalize_index_board_code(raw: object) -> str:
+    """指数板块代码：BK+数字，或纯数字（如 000300 / 399001）。"""
+    return normalize_concept_board_code(raw)
+
+
+def is_valid_index_board_code(code: object) -> bool:
+    return bool(normalize_index_board_code(code))
+
+
 def parse_bk_num(code: object) -> Optional[int]:
     s = str(code or "").strip()
     m = BOARD_NUM_CODE_RE.match(s)
@@ -171,7 +186,7 @@ def generate_next_bk_board_code(
     after_code: Optional[str] = None,
     exclude_codes: Optional[Iterable[str]] = None,
 ) -> str:
-    """生成全局未占用的数字编码（不加 BK；行业/概念均计入）。"""
+    """生成全局未占用的数字编码（不加 BK；行业/概念/指数均计入）。"""
     used = collect_used_bk_numbers(db)
     for raw in exclude_codes or []:
         n = parse_bk_num(raw)
@@ -211,46 +226,40 @@ def assert_bk_available_for_board_type(
     *,
     exclude_codes: Optional[Iterable[str]] = None,
 ) -> None:
-    """保存前校验数字型编码（BK 或纯数字）不与对侧板块类型冲突。"""
+    """保存前校验数字型编码（BK 或纯数字）不与其它板块类型冲突。"""
     from fastapi import HTTPException
 
     bcode = normalize_bk_board_code(code)
     if not bcode:
         raise HTTPException(status_code=400, detail="板块代码须为数字或 BK+数字 格式")
     excludes = {normalize_bk_board_code(c) for c in (exclude_codes or []) if normalize_bk_board_code(c)}
-    if board_type == "industry":
-        in_concept = db.execute(
+    if bcode in excludes:
+        return
+
+    peers: List[tuple[str, str, str]] = [
+        ("industry", "industry_board_basic_info", "industry_board_constituents"),
+        ("concept", "concept_board_basic_info", "concept_board_constituents"),
+        ("index", "index_board_basic_info", "index_board_constituents"),
+    ]
+    labels = {"industry": "行业", "concept": "概念", "index": "指数"}
+    for peer_type, basic_table, cons_table in peers:
+        if peer_type == board_type:
+            continue
+        hit = db.execute(
             text(
-                """
-                SELECT 1 FROM concept_board_basic_info WHERE board_code = :code
+                f"""
+                SELECT 1 FROM {basic_table} WHERE board_code = :code
                 UNION ALL
-                SELECT 1 FROM concept_board_constituents WHERE board_code = :code
+                SELECT 1 FROM {cons_table} WHERE board_code = :code
                 LIMIT 1
                 """
             ),
             {"code": bcode},
         ).scalar()
-        if in_concept and bcode not in excludes:
+        if hit:
             raise HTTPException(
                 status_code=400,
-                detail=f"板块代码「{bcode}」已被概念板块占用，请使用其它编码",
-            )
-    elif board_type == "concept":
-        in_industry = db.execute(
-            text(
-                """
-                SELECT 1 FROM industry_board_basic_info WHERE board_code = :code
-                UNION ALL
-                SELECT 1 FROM industry_board_constituents WHERE board_code = :code
-                LIMIT 1
-                """
-            ),
-            {"code": bcode},
-        ).scalar()
-        if in_industry and bcode not in excludes:
-            raise HTTPException(
-                status_code=400,
-                detail=f"板块代码「{bcode}」已被行业板块占用，请使用其它编码",
+                detail=f"板块代码「{bcode}」已被{labels.get(peer_type, peer_type)}板块占用，请使用其它编码",
             )
 
 
@@ -413,6 +422,49 @@ def resolve_concept_board_codes(db: Session, raw_codes: List[str]) -> List[str]:
             resolved = prefer_concept_board_with_constituents(
                 db, normalize_concept_board_code(row[0]) or str(row[0])
             )
+            if resolved and resolved not in out:
+                out.append(resolved)
+    return out
+
+
+def resolve_index_board_codes(db: Session, raw_codes: List[str]) -> List[str]:
+    """将 BK/纯数字或板块名称解析为 index_board_basic_info 中的 board_code。"""
+    out: List[str] = []
+    for raw in raw_codes:
+        s = str(raw or "").strip()
+        if not s:
+            continue
+        code = normalize_index_board_code(s)
+        if code:
+            hit = db.execute(
+                text(
+                    """
+                    SELECT board_code FROM index_board_basic_info WHERE board_code = :code
+                    UNION
+                    SELECT DISTINCT board_code FROM index_board_constituents
+                    WHERE board_code = :code LIMIT 1
+                    """
+                ),
+                {"code": code},
+            ).fetchone()
+            if hit:
+                resolved = normalize_index_board_code(hit[0]) or str(hit[0])
+                if resolved and resolved not in out:
+                    out.append(resolved)
+                continue
+        row = db.execute(
+            text(
+                """
+                SELECT board_code FROM index_board_basic_info
+                WHERE TRIM(board_name) = :name OR board_code = :name
+                ORDER BY board_code
+                LIMIT 1
+                """
+            ),
+            {"name": s},
+        ).fetchone()
+        if row:
+            resolved = normalize_index_board_code(row[0]) or str(row[0])
             if resolved and resolved not in out:
                 out.append(resolved)
     return out

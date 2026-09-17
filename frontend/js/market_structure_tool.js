@@ -39,7 +39,10 @@ const MarketStructureTool = {
         if (o.pattern_short_bias) params.set('pattern_short_bias', o.pattern_short_bias);
         if (o.use_realtime) params.set('use_realtime', 'true');
         const url = `${this.API_BASE_URL}/api/analysis/market-structure/${encodeURIComponent(code)}?${params}`;
-        const resp = await fetch(url, { credentials: 'include' });
+        const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
+        const fetchOpts = { credentials: 'include' };
+        if (o.signal) fetchOpts.signal = o.signal;
+        const resp = await fetchFn(url, fetchOpts);
         const data = await resp.json().catch(() => ({}));
         if (!resp.ok) {
             const detail = data.detail;
