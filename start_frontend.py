@@ -180,14 +180,16 @@ def find_available_port(start_port=8000, max_attempts=100):
 def start_server(port):
     _reconfigure_stdio_utf8()
     try:
-        server_cls = FrontendThreadingHTTPServer if is_production_env() else FrontendHTTPServer
+        # 始终使用多线程：analysis 等页会并发拉取大量 JS/CSS；
+        # 单线程 HTTPServer 在 Windows 上 listen backlog 满时会出现 net::ERR_CONNECTION_REFUSED。
+        server_cls = FrontendThreadingHTTPServer
         with server_cls(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
             _print_safe("[OK] frontend HTTP server started")
             _print_safe(f"[OK] URL: http://localhost:{port}")
             _print_safe(f"[OK] login: http://localhost:{port}/login.html")
             _print_safe(f"[OK] index: http://localhost:{port}/index.html")
             _print_safe(f"[OK] admin path: http://localhost:{port}/admin")
-            _print_safe(f"[OK] mode: {'production(threaded)' if is_production_env() else 'development'}")
+            _print_safe(f"[OK] mode: {'production' if is_production_env() else 'development'} (threaded)")
             _print_safe("-" * 60)
             _print_safe("Press Ctrl+C to stop")
             _print_safe("-" * 60)
