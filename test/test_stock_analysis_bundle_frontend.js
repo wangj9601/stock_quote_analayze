@@ -54,4 +54,13 @@ assert(
   'analysis.html 应加载 stock_multi_strategy.js'
 );
 
+const batchStart = js.indexOf('async analyzeWatchlistBatch');
+const batchEnd = js.indexOf('async _runAnalyzeCore');
+assert(batchStart >= 0 && batchEnd > batchStart, 'analyzeWatchlistBatch 应存在');
+const batchFn = js.slice(batchStart, batchEnd);
+assert(batchFn.includes('_resolveBatchConcurrency'), '批量应解析并行度');
+assert(batchFn.includes('queueMaterialize') || batchFn.includes('_materializeFetchedSession'), '批量应边完成边渲染');
+assert(!/detailConcurrency/.test(batchFn), '批量不应再传无效的 detailConcurrency');
+assert(/Math\.min\(3/.test(js.slice(js.indexOf('_resolveBatchConcurrency'), js.indexOf('_materializeFetchedSession'))), '并行度应硬顶 3');
+
 console.log('test_stock_analysis_bundle_frontend.js: OK');

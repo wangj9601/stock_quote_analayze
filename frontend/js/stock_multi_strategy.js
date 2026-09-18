@@ -25,9 +25,14 @@ const StockMultiStrategy = {
     WATCHLIST_BATCH_SOFT_LIMIT: 15,
     /** 批量单票完整分析超时（毫秒）；含策略+明细，超时后 Abort 释放后端连接 */
     BATCH_FETCH_TIMEOUT_MS: 90000,
-    /** 批量股票并行度：单进程 uvicorn 下过高会打满线程池导致全站无响应 */
-    BATCH_CONCURRENCY: 1,
-    /** 单票内明细接口并行度（相对强度/资金/阻力/形态/波段/江恩） */
+    /**
+     * 批量股票并行度（默认 2）。过高会打满单进程 uvicorn/DB 连接池。
+     * 可在页面加载前设 window.SSA_BATCH_CONCURRENCY（1–3）覆盖；解析时硬顶 3。
+     */
+    BATCH_CONCURRENCY: 2,
+    /**
+     * 历史字段：旧分块明细并行度。统一 bundle 后服务端自管 _DETAIL_WORKERS，前端不再传该参数。
+     */
     BATCH_DETAIL_CONCURRENCY: 2,
     stockSessions: {},
     activeSessionKey: null,
@@ -590,44 +595,80 @@ const StockMultiStrategy = {
         }).filter((item) => item.code);
     },
 
+    /**
+     * 合并 loadWatchlistOptions / ensureUserWatchlistCodes 的 /api/watchlist 请求，
+     * 同屏 init + 切 Tab 时共用一次拉取与同一 in-flight Promise。
+     */
+    async _ensureWatchlistData(force) {
+        if (!force && this._watchlistLoaded && this._userWatchlistCodes instanceof Set) {
+            return { stocks: this.watchlistStocks, codes: this._userWatchlistCodes };
+        }
+        if (!force && this._watchlistLoadPromise) {
+            return this._watchlistLoadPromise;
+        }
+        this._watchlistLoadPromise = (async () => {
+            // 软检查：未登录时静默跳过（批量分析可用 URL codes / localStorage，不应被踢去登录页）
+            try {
+                const userInfo = CommonUtils.auth && typeof CommonUtils.auth.getUserInfo === 'function'
+                    ? CommonUtils.auth.getUserInfo()
+                    : null;
+                if (!userInfo || !userInfo.id) {
+                    this.watchlistStocks = this.watchlistStocks || [];
+                    this._userWatchlistCodes = this._userWatchlistCodes instanceof Set
+                        ? this._userWatchlistCodes
+                        : new Set();
+                    return { stocks: this.watchlistStocks, codes: this._userWatchlistCodes };
+                }
+            } catch (e) {
+                this._userWatchlistCodes = this._userWatchlistCodes instanceof Set
+                    ? this._userWatchlistCodes
+                    : new Set();
+                return { stocks: this.watchlistStocks || [], codes: this._userWatchlistCodes };
+            }
+            try {
+                const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
+                if (!resp.ok) {
+                    if (!(this._userWatchlistCodes instanceof Set)) this._userWatchlistCodes = new Set();
+                    return { stocks: this.watchlistStocks || [], codes: this._userWatchlistCodes };
+                }
+                const payload = await resp.json().catch(() => ({}));
+                const raw = Array.isArray(payload)
+                    ? payload
+                    : (payload.data || payload.items || payload.stocks || []);
+                const seen = new Set();
+                const items = [];
+                const codes = new Set();
+                if (Array.isArray(raw)) {
+                    raw.forEach((item) => {
+                        const code = String(item.code || item.stock_code || '').trim();
+                        if (!code || seen.has(code)) return;
+                        seen.add(code);
+                        const name = String(item.name || item.stock_name || '').trim();
+                        items.push({ code, name });
+                        const norm = this._normalizeObserveCode(code);
+                        if (norm) codes.add(norm);
+                    });
+                }
+                this.watchlistStocks = items;
+                this._watchlistLoaded = true;
+                this._userWatchlistCodes = codes;
+                this.updateWatchlistSummary();
+                this.updateWatchlistBtn();
+                return { stocks: items, codes };
+            } catch (e) {
+                console.warn('加载自选股失败', e);
+                if (!(this._userWatchlistCodes instanceof Set)) this._userWatchlistCodes = new Set();
+                return { stocks: this.watchlistStocks || [], codes: this._userWatchlistCodes };
+            }
+        })().finally(() => {
+            this._watchlistLoadPromise = null;
+        });
+        return this._watchlistLoadPromise;
+    },
+
     async loadWatchlistOptions() {
         if (this._watchlistLoaded) return;
-        // 软检查：未登录时静默跳过（批量分析可用 URL codes / localStorage，不应被踢去登录页）
-        try {
-            const userInfo = CommonUtils.auth && typeof CommonUtils.auth.getUserInfo === 'function'
-                ? CommonUtils.auth.getUserInfo()
-                : null;
-            if (!userInfo || !userInfo.id) return;
-        } catch (e) {
-            return;
-        }
-        try {
-            const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
-            if (!resp.ok) return;
-            const payload = await resp.json();
-            const raw = Array.isArray(payload)
-                ? payload
-                : (payload.data || payload.items || payload.stocks || []);
-            if (!Array.isArray(raw)) return;
-            const seen = new Set();
-            const items = [];
-            raw.forEach((item) => {
-                const code = String(item.code || item.stock_code || '').trim();
-                if (!code || seen.has(code)) return;
-                seen.add(code);
-                const name = String(item.name || item.stock_name || '').trim();
-                items.push({ code, name });
-            });
-            this.watchlistStocks = items;
-            this._watchlistLoaded = true;
-            this._userWatchlistCodes = new Set(
-                items.map((s) => this._normalizeObserveCode(s.code)).filter(Boolean)
-            );
-            this.updateWatchlistSummary();
-            this.updateWatchlistBtn();
-        } catch (e) {
-            console.warn('加载自选股失败', e);
-        }
+        await this._ensureWatchlistData(false);
     },
 
 
@@ -1726,34 +1767,7 @@ const StockMultiStrategy = {
 
     async ensureUserWatchlistCodes(force) {
         if (!force && this._userWatchlistCodes instanceof Set) return;
-        const set = new Set();
-        try {
-            const userInfo = CommonUtils.auth && CommonUtils.auth.getUserInfo
-                ? CommonUtils.auth.getUserInfo()
-                : null;
-            if (!userInfo || !userInfo.id) {
-                this._userWatchlistCodes = set;
-                return;
-            }
-            const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
-            if (!resp.ok) {
-                this._userWatchlistCodes = set;
-                return;
-            }
-            const payload = await resp.json().catch(() => ({}));
-            const raw = Array.isArray(payload)
-                ? payload
-                : (payload.data || payload.items || payload.stocks || []);
-            if (Array.isArray(raw)) {
-                raw.forEach((item) => {
-                    const code = this._normalizeObserveCode(item.code || item.stock_code);
-                    if (code) set.add(code);
-                });
-            }
-        } catch (e) {
-            console.warn('加载自选股状态失败', e);
-        }
-        this._userWatchlistCodes = set;
+        await this._ensureWatchlistData(!!force);
     },
 
     _isCurrentInWatchlist(code) {
@@ -2252,6 +2266,61 @@ const StockMultiStrategy = {
         if (this.lastStock && this.lastStock.code) session.code = this.lastStock.code;
         if (this.lastStock && this.lastStock.name) session.name = this.lastStock.name;
         this.activeSessionKey = prevActive;
+    },
+
+    /**
+     * 解析批量股票并行度：默认 BATCH_CONCURRENCY，可用 window.SSA_BATCH_CONCURRENCY 覆盖，硬顶 3。
+     */
+    _resolveBatchConcurrency(listLength) {
+        let n = Number(this.BATCH_CONCURRENCY);
+        try {
+            if (typeof window !== 'undefined' && window.SSA_BATCH_CONCURRENCY != null && window.SSA_BATCH_CONCURRENCY !== '') {
+                const override = Number(window.SSA_BATCH_CONCURRENCY);
+                if (Number.isFinite(override)) n = override;
+            }
+        } catch (e) { /* ignore */ }
+        if (!Number.isFinite(n) || n < 1) n = 2;
+        n = Math.min(3, Math.max(1, Math.floor(n)));
+        const len = Math.max(1, Number(listLength) || 1);
+        return Math.min(n, len);
+    },
+
+    /**
+     * 将已 fetch 成功的 session 立刻应用到面板并缓存 DOM（供批量边完成边渲染）。
+     * keepViewingKey：已有展示中的 Tab 时，物化后恢复该 Tab，避免抢走用户视线。
+     */
+    _materializeFetchedSession(key, opts) {
+        const options = opts || {};
+        const session = this.stockSessions && this.stockSessions[key];
+        if (!session || session.status !== 'fetched' || !session.bundle) return false;
+        const keepViewingKey = options.keepViewingKey || null;
+
+        if (this.activeSessionKey && this.activeSessionKey !== key) {
+            const active = this.stockSessions[this.activeSessionKey];
+            if (active && active.status === 'ready') {
+                this._persistActiveSession();
+            }
+        }
+
+        this.activeSessionKey = key;
+        this.hideResultBlocks();
+        this._applyAnalysisBundle(session.bundle);
+        this._persistSessionKey(key);
+        session.status = 'ready';
+        session.bundle = null;
+
+        if (
+            keepViewingKey
+            && keepViewingKey !== key
+            && this.stockSessions[keepViewingKey]
+            && this.stockSessions[keepViewingKey].status === 'ready'
+            && this.stockSessions[keepViewingKey].dom
+        ) {
+            this.activeSessionKey = keepViewingKey;
+            this._restoreSession(this.stockSessions[keepViewingKey]);
+        }
+        this._renderStockTabs();
+        return true;
     },
 
     async _mapPool(items, concurrency, worker) {
@@ -2793,11 +2862,12 @@ const StockMultiStrategy = {
         this.activeSessionKey = null;
         this._renderStockTabs();
         this.hideResultBlocks();
+        const concurrency = this._resolveBatchConcurrency(list.length);
         if (empty) {
             empty.hidden = false;
             empty.textContent = useRealtime
-                ? `准备实时分析 0/${list.length}（逐只进行，避免后端过载）…`
-                : `准备分析 0/${list.length}（逐只进行，避免后端过载）…`;
+                ? `准备实时分析 0/${list.length}（并发 ${concurrency}）…`
+                : `准备分析 0/${list.length}（并发 ${concurrency}）…`;
         }
 
         const dateEl = document.getElementById('ssaTradeDate');
@@ -2805,21 +2875,49 @@ const StockMultiStrategy = {
         let doneCount = 0;
         let okCount = 0;
         let lastTabRenderAt = 0;
-        const concurrency = Math.min(this.BATCH_CONCURRENCY || 1, list.length);
-        const detailConcurrency = Math.max(1, this.BATCH_DETAIL_CONCURRENCY || 2);
+        let viewingKey = null;
+        let renderChain = Promise.resolve();
         const timeoutSec = Math.round((this.BATCH_FETCH_TIMEOUT_MS || 90000) / 1000);
 
         const updateProgress = (current) => {
             const label = current
-                ? `正在分析 ${current.code}${current.name ? ' ' + current.name : ''}（${doneCount}/${list.length}，超时 ${timeoutSec}s）…`
-                : `正在分析 ${doneCount}/${list.length}…`;
-            if (empty) {
+                ? `正在分析 ${current.code}${current.name ? ' ' + current.name : ''}（${doneCount}/${list.length}，并发 ${concurrency}，超时 ${timeoutSec}s）…`
+                : `正在分析 ${doneCount}/${list.length}（并发 ${concurrency}）…`;
+            // 已有首只结果落盘展示时，不再用 empty 盖住面板；进度改写按钮文案即可
+            if (empty && !viewingKey) {
                 empty.hidden = false;
                 empty.textContent = useRealtime
                     ? label.replace('正在分析', '正在实时分析')
                     : label;
             }
             if (btn) btn.textContent = `分析中 ${doneCount}/${list.length}`;
+        };
+
+        const queueMaterialize = (key) => {
+            renderChain = renderChain
+                .then(() => {
+                    const session = this.stockSessions[key];
+                    if (!session || session.status !== 'fetched' || !session.bundle) return;
+                    try {
+                        const isFirst = !viewingKey;
+                        this._materializeFetchedSession(key, { keepViewingKey: viewingKey });
+                        if (isFirst && session.status === 'ready') {
+                            viewingKey = key;
+                            if (empty) empty.hidden = true;
+                        }
+                    } catch (err) {
+                        console.warn('批量渲染失败', err);
+                        session.status = 'error';
+                        session.bundle = null;
+                        session.errorMessage = (err && err.message) || '渲染失败';
+                        if (okCount > 0) okCount -= 1;
+                        this._renderStockTabs();
+                    }
+                })
+                .catch((err) => {
+                    console.warn('批量渲染队列异常', err);
+                });
+            return renderChain;
         };
 
         await this._mapPool(list, concurrency, async ({ code, name }) => {
@@ -2830,7 +2928,6 @@ const StockMultiStrategy = {
                 const bundle = await this._fetchAnalysisBundle(code, name, asof, {
                     useRealtime,
                     timeoutMs: this.BATCH_FETCH_TIMEOUT_MS,
-                    detailConcurrency,
                 });
                 if (session) {
                     session.bundle = bundle;
@@ -2840,6 +2937,7 @@ const StockMultiStrategy = {
                     session.errorMessage = '';
                 }
                 okCount += 1;
+                await queueMaterialize(key);
             } catch (e) {
                 if (session) {
                     session.status = 'error';
@@ -2857,19 +2955,7 @@ const StockMultiStrategy = {
             }
         });
 
-        // 全部请求完成后，依次渲染并缓存 DOM；综合计划就绪后 Tab 即可显示偏多星号
-        const keys = list.map(({ code }) => this._sessionKey(code)).filter(Boolean);
-        for (const key of keys) {
-            const session = this.stockSessions[key];
-            if (!session || session.status !== 'fetched' || !session.bundle) continue;
-            this.activeSessionKey = key;
-            this.hideResultBlocks();
-            this._applyAnalysisBundle(session.bundle);
-            this._persistSessionKey(key);
-            session.status = 'ready';
-            session.bundle = null;
-            this._renderStockTabs();
-        }
+        await renderChain;
 
         this._batchAnalyzing = false;
         this.running = false;
@@ -2882,7 +2968,9 @@ const StockMultiStrategy = {
             rtBtn.textContent = '实时分析';
         }
 
-        const firstReady = keys.find((k) => this.stockSessions[k] && this.stockSessions[k].status === 'ready');
+        const keys = list.map(({ code }) => this._sessionKey(code)).filter(Boolean);
+        const firstReady = viewingKey
+            || keys.find((k) => this.stockSessions[k] && this.stockSessions[k].status === 'ready');
         if (firstReady) {
             this._switchStockTab(firstReady, { persistPrevious: false });
             if (empty) empty.hidden = true;
