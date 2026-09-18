@@ -7,6 +7,7 @@ from sqlalchemy import text, func, desc, cast, Date as SQLDate
 from fastapi import Depends
 import traceback
 import numpy as np
+import os
 import time
 from threading import Lock
 import datetime
@@ -64,6 +65,32 @@ class DataFrameCache:
 
 # 创建一个全局缓存实例
 stock_spot_cache = DataFrameCache(expire_seconds=600)
+
+# 个股实时价短 TTL（与 realtime_bars 对齐，秒）
+_REALTIME_QUOTE_TTL_SEC = max(1, int(os.getenv("REALTIME_QUOTE_TTL_SEC", "10")))
+_realtime_quote_api_cache: Dict[str, tuple] = {}
+_realtime_quote_api_lock = Lock()
+
+# 新浪交易日历缓存（分时接口用，默认 6 小时）
+_TRADE_DATES_TTL_SEC = max(60, int(os.getenv("TRADE_DATES_TTL_SEC", str(6 * 3600))))
+_trade_dates_cache: Dict[str, Any] = {"ts": 0.0, "dates": None}
+_trade_dates_lock = Lock()
+
+
+def _get_cached_sina_trade_dates() -> list:
+    """缓存 ak.tool_trade_date_hist_sina 结果，避免每次分时都外呼。"""
+    now = time.time()
+    with _trade_dates_lock:
+        cached = _trade_dates_cache.get("dates")
+        ts = float(_trade_dates_cache.get("ts") or 0)
+        if cached is not None and (now - ts) < _TRADE_DATES_TTL_SEC:
+            return list(cached)
+    dates = ak.tool_trade_date_hist_sina()["trade_date"].tolist()
+    with _trade_dates_lock:
+        _trade_dates_cache["dates"] = dates
+        _trade_dates_cache["ts"] = time.time()
+    return list(dates)
+
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
 
@@ -1070,6 +1097,14 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
     if not code:
         print("[realtime_quote_by_code] 缺少参数")
         return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
+
+    cache_key = str(code).strip()
+    with _realtime_quote_api_lock:
+        hit = _realtime_quote_api_cache.get(cache_key)
+        if hit and (time.time() - float(hit[0])) < _REALTIME_QUOTE_TTL_SEC:
+            print(f"[realtime_quote_by_code] 命中短缓存 code={cache_key}")
+            return JSONResponse({"success": True, "data": hit[1], "cached": True})
+
     try:
         # 先判断股票类型
         if is_hk_stock(code, db):
@@ -1094,6 +1129,8 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                     fuyao_quote["name"] = stock_name
                 result = _format_realtime_quote_result(fuyao_quote)
                 print(f"[realtime_quote_by_code] 从fuyao输出数据: {result}")
+                with _realtime_quote_api_lock:
+                    _realtime_quote_api_cache[cache_key] = (time.time(), result)
                 return JSONResponse({"success": True, "data": result})
         except Exception as exc:
             print(f"[realtime_quote_by_code] Fuyao 访问异常，回退东财: {exc}")
@@ -1104,6 +1141,8 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
             if em_quote and em_quote.get("current_price") is not None:
                 result = _format_realtime_quote_result(em_quote)
                 print(f"[realtime_quote_by_code] 从akshare_em输出数据: {result}")
+                with _realtime_quote_api_lock:
+                    _realtime_quote_api_cache[cache_key] = (time.time(), result)
                 return JSONResponse({"success": True, "data": result})
         except Exception as exc:
             print(f"[realtime_quote_by_code] 东财访问异常，回退新浪: {exc}")
@@ -1116,6 +1155,8 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                     sina_quote["name"] = stock_name
                 result = _format_realtime_quote_result(sina_quote)
                 print(f"[realtime_quote_by_code] 从sina输出数据: {result}")
+                with _realtime_quote_api_lock:
+                    _realtime_quote_api_cache[cache_key] = (time.time(), result)
                 return JSONResponse({"success": True, "data": result})
         except Exception as exc:
             print(f"[realtime_quote_by_code] 新浪访问异常，回退 BaoStock: {exc}")
@@ -1128,6 +1169,8 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                     bs_quote["name"] = stock_name
                 result = _format_realtime_quote_result(bs_quote)
                 print(f"[realtime_quote_by_code] 从baostock输出数据: {result}")
+                with _realtime_quote_api_lock:
+                    _realtime_quote_api_cache[cache_key] = (time.time(), result)
                 return JSONResponse({"success": True, "data": result})
         except Exception as exc:
             print(f"[realtime_quote_by_code] BaoStock 访问异常，回退本地表: {exc}")
@@ -1210,6 +1253,8 @@ async def get_realtime_quote_by_code(code: str = Query(None, description="股票
                 result["average_price"] = _fmt_quote_num(avg)
 
         print(f"[realtime_quote_by_code] 从{source}输出数据: {result}")
+        with _realtime_quote_api_lock:
+            _realtime_quote_api_cache[cache_key] = (time.time(), result)
         return JSONResponse({"success": True, "data": result})
     except Exception as e:
         print(f"[realtime_quote_by_code] 异常: {e}")
@@ -1253,7 +1298,7 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
         print(f"[minute_data_by_code] 缺少参数code")
         return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
     try:
-        trade_dates = ak.tool_trade_date_hist_sina()['trade_date'].tolist()
+        trade_dates = _get_cached_sina_trade_dates()
         trade_dates_str = [d.strftime('%Y-%m-%d') for d in trade_dates]
         print(f"[minute_data_by_code] 交易日历: {trade_dates_str[:10]} ... 共{len(trade_dates_str)}天")
         today = datetime.date.today()
@@ -1379,14 +1424,12 @@ async def get_kline_hist(
         if period == "daily":
             result = []
             
-            # 1. 查询历史数据（除当天外）
-            # 注意：数据库中的date字段可能是TEXT类型，需要使用cast转换
-            # 使用PostgreSQL的::date语法进行类型转换
+            # A 股 historical_quotes.date 为 Date 主键，直接比较以利用 (code, date) 索引
             historical_query = db.query(HistoricalQuotes).filter(
                 HistoricalQuotes.code == code,
-                func.cast(HistoricalQuotes.date, SQLDate) >= start_date_obj,
-                func.cast(HistoricalQuotes.date, SQLDate) < today_date
-            ).order_by(func.cast(HistoricalQuotes.date, SQLDate).asc())
+                HistoricalQuotes.date >= start_date_obj,
+                HistoricalQuotes.date < today_date
+            ).order_by(HistoricalQuotes.date.asc())
             
             historical_quotes = historical_query.all()
             
@@ -1672,14 +1715,12 @@ async def get_kline_hist(
             # Fallback: 从日线数据实时聚合
             print(f"[kline_hist] 从日线数据实时聚合{period}周期数据")
             
-            # 获取日线数据（包括当天）
-            # 注意：数据库中的date字段可能是TEXT类型，需要使用cast转换
-            # 使用PostgreSQL的::date语法进行类型转换
+            # A 股 historical_quotes.date 为 Date，直接比较
             daily_query = db.query(HistoricalQuotes).filter(
                 HistoricalQuotes.code == code,
-                func.cast(HistoricalQuotes.date, SQLDate) >= start_date_obj,
-                func.cast(HistoricalQuotes.date, SQLDate) < today_date
-            ).order_by(func.cast(HistoricalQuotes.date, SQLDate).asc())
+                HistoricalQuotes.date >= start_date_obj,
+                HistoricalQuotes.date < today_date
+            ).order_by(HistoricalQuotes.date.asc())
             
             daily_quotes = daily_query.all()
             

@@ -4,7 +4,10 @@
 from __future__ import annotations
 
 import logging
+import os
+import time
 from datetime import datetime
+from threading import Lock
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy import desc
@@ -30,6 +33,40 @@ def _norm_code(code: str) -> str:
     if s.isdigit() and len(s) < 6:
         return s.zfill(6)
     return s
+
+
+# 进程内短 TTL：减轻 Fuyao/东财等外呼重复（秒，可用 REALTIME_QUOTE_TTL_SEC 覆盖）
+_QUOTE_TTL_SEC = max(1, int(os.getenv("REALTIME_QUOTE_TTL_SEC", "10")))
+_quote_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_quote_cache_lock = Lock()
+
+
+def _quote_cache_get(code: str) -> Optional[Dict[str, Any]]:
+    key = _norm_code(code)
+    with _quote_cache_lock:
+        hit = _quote_cache.get(key)
+        if not hit:
+            return None
+        ts, data = hit
+        if (time.monotonic() - ts) > _QUOTE_TTL_SEC:
+            _quote_cache.pop(key, None)
+            return None
+        return dict(data)
+
+
+def _quote_cache_set(code: str, data: Dict[str, Any]) -> None:
+    key = _norm_code(code)
+    with _quote_cache_lock:
+        _quote_cache[key] = (time.monotonic(), dict(data))
+
+
+def clear_realtime_quote_cache(code: Optional[str] = None) -> None:
+    """测试或强制刷新时清空缓存。"""
+    with _quote_cache_lock:
+        if code is None:
+            _quote_cache.clear()
+        else:
+            _quote_cache.pop(_norm_code(code), None)
 
 
 def _is_hk(code: str) -> bool:
@@ -128,8 +165,14 @@ def fetch_live_realtime_quote(db: Session, code: str) -> Optional[Dict[str, Any]
     code_n = _norm_code(code)
     if not code_n:
         return None
+    cached = _quote_cache_get(code_n)
+    if cached is not None:
+        return cached
     if _is_hk(code_n):
-        return fetch_db_realtime_quote(db, code_n)
+        q = fetch_db_realtime_quote(db, code_n)
+        if q:
+            _quote_cache_set(code_n, q)
+        return q
 
     name = ""
     free_float = None
@@ -164,6 +207,7 @@ def fetch_live_realtime_quote(db: Session, code: str) -> Optional[Dict[str, Any]
             "source": q.get("source") or default_source,
         }
 
+    result: Optional[Dict[str, Any]] = None
     # 1. Fuyao
     try:
         from backend_api.utils.fuyao_client import fetch_realtime_quote_by_code as fetch_fuyao
@@ -171,44 +215,51 @@ def fetch_live_realtime_quote(db: Session, code: str) -> Optional[Dict[str, Any]
         q = fetch_fuyao(code_n, name=name, free_float_shares=free_float)
         norm = _normalize_external(q or {}, default_source="fuyao")
         if norm:
-            return norm
+            result = norm
     except Exception as e:
         logger.debug("fuyao live quote skip code=%s: %s", code_n, e)
 
     # 2. AkShare 东财
-    try:
-        from backend_api.stock.stock_manage import _quote_from_akshare_em
+    if result is None:
+        try:
+            from backend_api.stock.stock_manage import _quote_from_akshare_em
 
-        q = _quote_from_akshare_em(code_n, name=name)
-        norm = _normalize_external(q or {}, default_source="akshare_em")
-        if norm:
-            return norm
-    except Exception as e:
-        logger.debug("akshare_em live quote skip code=%s: %s", code_n, e)
+            q = _quote_from_akshare_em(code_n, name=name)
+            norm = _normalize_external(q or {}, default_source="akshare_em")
+            if norm:
+                result = norm
+        except Exception as e:
+            logger.debug("akshare_em live quote skip code=%s: %s", code_n, e)
 
     # 3. 新浪财经
-    try:
-        from backend_api.stock.stock_manage import _quote_from_sina
+    if result is None:
+        try:
+            from backend_api.stock.stock_manage import _quote_from_sina
 
-        q = _quote_from_sina(code_n, name=name)
-        norm = _normalize_external(q or {}, default_source="sina")
-        if norm:
-            return norm
-    except Exception as e:
-        logger.debug("sina live quote skip code=%s: %s", code_n, e)
+            q = _quote_from_sina(code_n, name=name)
+            norm = _normalize_external(q or {}, default_source="sina")
+            if norm:
+                result = norm
+        except Exception as e:
+            logger.debug("sina live quote skip code=%s: %s", code_n, e)
 
     # 4. BaoStock
-    try:
-        from backend_api.stock.stock_manage import _quote_from_baostock
+    if result is None:
+        try:
+            from backend_api.stock.stock_manage import _quote_from_baostock
 
-        q = _quote_from_baostock(code_n, name=name)
-        norm = _normalize_external(q or {}, default_source="baostock")
-        if norm:
-            return norm
-    except Exception as e:
-        logger.debug("baostock live quote skip code=%s: %s", code_n, e)
+            q = _quote_from_baostock(code_n, name=name)
+            norm = _normalize_external(q or {}, default_source="baostock")
+            if norm:
+                result = norm
+        except Exception as e:
+            logger.debug("baostock live quote skip code=%s: %s", code_n, e)
 
-    return fetch_db_realtime_quote(db, code_n)
+    if result is None:
+        result = fetch_db_realtime_quote(db, code_n)
+    if result:
+        _quote_cache_set(code_n, result)
+    return result
 
 
 def quote_to_ohlc_bar(quote: Dict[str, Any]) -> Optional[Dict[str, Any]]:

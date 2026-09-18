@@ -158,8 +158,15 @@ def _compute_levels_payload(
     kde_from_date: Optional[str] = None,
     anchor_price: Optional[float] = None,
     use_realtime: bool = False,
+    historical_data: Optional[List[Dict[str, Any]]] = None,
+    adj_meta: Optional[Dict[str, Any]] = None,
+    skip_external_quote: bool = False,
 ) -> Tuple[int, Dict[str, Any]]:
-    """计算单股 KDE 关键价位，返回 (http_status, body)。"""
+    """计算单股 KDE 关键价位，返回 (http_status, body)。
+
+    historical_data: 可选，已按 adjust 口径准备好的升序 bars（bundle 共享用）。
+    skip_external_quote: 为 True 时不在本函数内再拉实时价（由调用方传入 anchor）。
+    """
     try:
         from backend_api.utils.adj_quotes import (
             AdjQuotesError,
@@ -179,7 +186,7 @@ def _compute_levels_payload(
 
     resolved_anchor = None
     realtime_meta = None
-    if use_realtime or (anchor_price is not None):
+    if (use_realtime or (anchor_price is not None)) and not skip_external_quote:
         try:
             from backend_core.analysis.realtime_bars import fetch_live_realtime_quote
 
@@ -201,6 +208,11 @@ def _compute_levels_payload(
                 resolved_anchor = float(anchor_price)
             except (TypeError, ValueError):
                 resolved_anchor = None
+    elif anchor_price is not None:
+        try:
+            resolved_anchor = float(anchor_price)
+        except (TypeError, ValueError):
+            resolved_anchor = None
 
     # 实时分析默认用不复权 + 实时锚定价，避免前复权末收盖住现价
     if use_realtime and resolved_anchor is not None:
@@ -208,9 +220,9 @@ def _compute_levels_payload(
 
     # 复用请求 Session，避免 next(get_db) 泄漏
     with StockAnalysisService(db) as analysis_service:
-        historical_data = None
-        adj_meta = None
-        if adjust_n == "qfq":
+        shared_hist = historical_data
+        shared_adj_meta = adj_meta
+        if shared_hist is None and adjust_n == "qfq":
             try:
                 from .stock_analysis import KeyLevels
 
@@ -230,8 +242,8 @@ def _compute_levels_payload(
                     list(raw_bars or []),
                     key=lambda b: str((b or {}).get("date") or ""),
                 )
-                historical_data = apply_qfq_to_bars(raw_sorted, ensured["factors"])
-                adj_meta = {
+                shared_hist = apply_qfq_to_bars(raw_sorted, ensured["factors"])
+                shared_adj_meta = {
                     "source": ensured.get("source"),
                     "adj_factor_asof": ensured.get("adj_factor_asof"),
                     "factor_fetched": ensured.get("factor_fetched"),
@@ -246,9 +258,9 @@ def _compute_levels_payload(
         result = analysis_service.get_key_levels_only(
             code,
             max_levels=max_levels,
-            historical_data=historical_data,
+            historical_data=shared_hist,
             price_adjust=adjust_n,
-            adj_meta=adj_meta,
+            adj_meta=shared_adj_meta,
             vp_lookback=vp_lookback,
             vp_from_date=vp_from_date,
             kde_lookback=kde_lookback,
