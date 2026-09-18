@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-_DETAIL_WORKERS = 5
+_DETAIL_WORKERS = 6
 
 
 def _session_local():
@@ -708,46 +708,17 @@ def build_stock_analysis_bundle(
     name_n = (resolved.get("name") or name or "").strip()
     market = (resolved.get("market") or resolved.get("market_type") or "CN").upper()
     strat_list = strategies or ["gms", "urt", "sbbr", "rpe"]
+    asof_for_details = None if use_realtime else ((str(date).strip()[:10] if date else None) or None)
 
-    strategy_data: Optional[Dict[str, Any]] = None
-    strategy_error: Optional[str] = None
-    try:
-        strategy_data = collect_stock_multi_strategy_check(
-            db,
+    def job_strategy(s: Session) -> Dict[str, Any]:
+        return collect_stock_multi_strategy_check(
+            s,
             code=code_n,
             name=name_n,
             date=date,
             strategies=strat_list,
             use_realtime=bool(use_realtime),
         )
-    except Exception as e:
-        logger.exception("stock-analysis-bundle strategy failed code=%s", code_n)
-        try:
-            db.rollback()
-        except Exception:
-            pass
-        strategy_error = f"个股多策略分析失败: {e}"
-
-    trade_date = ""
-    if use_realtime and isinstance(strategy_data, dict):
-        trade_date = (
-            strategy_data.get("realtime_trade_date")
-            or ((strategy_data.get("realtime") or {}).get("trade_date"))
-            or strategy_data.get("trade_date")
-            or (date or "")
-        )
-    elif isinstance(strategy_data, dict):
-        trade_date = strategy_data.get("trade_date") or (date or "")
-    else:
-        trade_date = date or ""
-    trade_date = str(trade_date or "")[:10]
-    asof_for_details = None if use_realtime else (trade_date or None)
-
-    stock = (
-        (strategy_data or {}).get("stock")
-        if isinstance(strategy_data, dict)
-        else None
-    ) or {"code": code_n, "name": name_n}
 
     def job_rs(s: Session) -> Dict[str, Any]:
         return _compute_rs(s, code_n, name_n, asof_for_details, market)
@@ -776,8 +747,9 @@ def build_stock_analysis_bundle(
             use_realtime=bool(use_realtime),
         )
 
-    # 先并行：RS / 资金 / levels / pattern / gann；swing 等 pattern 拿 bias 后再算
+    # 策略与明细并行：四策略（含 URT 现算）不再挡住阻力/形态/江恩
     parallel_specs: List[Tuple[str, Callable[[Session], Dict[str, Any]]]] = [
+        ("strategy", job_strategy),
         ("rs", job_rs),
         ("fund_flow", job_ff),
         ("levels", job_levels),
@@ -802,6 +774,35 @@ def build_stock_analysis_bundle(
     levels = results.get("levels") or _err_section("阻力支撑计算失败")
     pattern = results.get("pattern") or _err_section("形态识别失败")
     gann = results.get("gann") or _err_section("江恩趋势分析失败")
+
+    strategy_raw = results.get("strategy") or {}
+    strategy_data: Optional[Dict[str, Any]] = None
+    strategy_error: Optional[str] = None
+    if isinstance(strategy_raw, dict) and strategy_raw.get("ok") is False and "results" not in strategy_raw:
+        strategy_error = str(strategy_raw.get("error") or "个股多策略分析失败")
+    elif isinstance(strategy_raw, dict):
+        strategy_data = strategy_raw
+    else:
+        strategy_error = "个股多策略分析失败"
+
+    trade_date = ""
+    if use_realtime and isinstance(strategy_data, dict):
+        trade_date = (
+            strategy_data.get("realtime_trade_date")
+            or ((strategy_data.get("realtime") or {}).get("trade_date"))
+            or strategy_data.get("trade_date")
+            or (date or "")
+        )
+    elif isinstance(strategy_data, dict):
+        trade_date = strategy_data.get("trade_date") or (date or "")
+    else:
+        trade_date = date or ""
+    trade_date = str(trade_date or "")[:10]
+    stock = (
+        (strategy_data or {}).get("stock")
+        if isinstance(strategy_data, dict)
+        else None
+    ) or {"code": code_n, "name": name_n}
 
     # 补齐 pattern 失败时的结构字段，供前端渲染
     if not pattern.get("ok"):

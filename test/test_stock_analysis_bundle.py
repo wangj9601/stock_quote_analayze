@@ -90,6 +90,8 @@ def test_build_bundle_partial_detail_errors():
                 "error": None,
                 "payload": {"items": [], "tactical": {"short_bias": "neutral"}},
             }
+        if label == "strategy":
+            return strategy
         if label == "gann":
             return _err_section("gann down")
         if label == "swing":

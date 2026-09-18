@@ -72,12 +72,12 @@ def run_urt_precompute_for_config(
     limit: Optional[int] = None,
     market: str = "CN",
 ) -> dict:
-    """对单个参数版本做全市场硬筛+得分并落库（只写 buy_signal=True）。"""
+    """对单个参数版本做全市场扫描并落库（含未买点，对齐 GMS 预计算）。"""
     from backend_api.database import SessionLocal
     from backend_core.strategies.urt.config import URTConfigManager
     from backend_core.strategies.urt.data_loader import URTDataLoader
     from backend_core.strategies.urt.strategy_engine import URTStrategyEngine
-    from backend_core.strategies.urt.trace_store import upsert_trace_rows
+    from backend_core.strategies.urt.trace_store import mark_date_scanned, upsert_trace_rows
 
     mkt = str(market or "CN").strip().upper()
     db = SessionLocal()
@@ -102,16 +102,34 @@ def run_urt_precompute_for_config(
         else:
             stocks = loader.list_a_share_candidates(limit=limit)
         engine = URTStrategyEngine(loader, cfg)
-        hits = engine.screen_universe(stocks, as_of_end_date=date_s)
-        written = upsert_trace_rows(db, config_id=config_id, rows=hits)
+        # 对齐 GMS 预计算：全市场都落库，不只写正式买点。
+        rows = engine.screen_universe(
+            stocks,
+            as_of_end_date=date_s,
+            require_pass=False,
+        )
+        written = upsert_trace_rows(db, config_id=config_id, rows=rows)
+        buy_n = sum(1 for r in rows if r.get("buy_signal"))
+        mark_date_scanned(
+            db,
+            config_id=config_id,
+            trade_date=date_s,
+            extra={
+                "hits": buy_n,
+                "candidates": len(stocks),
+                "written": written,
+                "scope": "pool" if limit else "full_market",
+            },
+        )
         elapsed = (datetime.now() - started).total_seconds()
         logger.info(
-            "URT 预计算完成 config_id=%s market=%s date=%s candidates=%s hits=%s written=%s elapsed=%.1fs",
+            "URT 预计算完成 config_id=%s market=%s date=%s candidates=%s rows=%s buys=%s written=%s elapsed=%.1fs",
             config_id,
             mkt,
             date_s,
             len(stocks),
-            len(hits),
+            len(rows),
+            buy_n,
             written,
             elapsed,
         )
@@ -121,7 +139,8 @@ def run_urt_precompute_for_config(
             "market": mkt,
             "trade_date": date_s,
             "candidates": len(stocks),
-            "hits": len(hits),
+            "hits": buy_n,
+            "rows": len(rows),
             "written": written,
             "elapsed_sec": elapsed,
         }

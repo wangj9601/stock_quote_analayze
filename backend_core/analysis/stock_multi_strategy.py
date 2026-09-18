@@ -325,10 +325,21 @@ def _fetch_gms_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str
     return None
 
 
-def _fetch_urt_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+def _fetch_urt_raw(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    use_realtime: bool = False,
+) -> Optional[Dict[str, Any]]:
     from backend_core.strategies.urt.frontend_interface import URTFrontendInterface
 
     market = "HK" if (code.isdigit() and len(code) <= 5) else "CN"
+    if not use_realtime:
+        cached = _lookup_urt_precompute(db, code, trade_date, market)
+        if cached is not _URT_NEED_REALTIME:
+            return cached
+
     result = URTFrontendInterface.screen(
         db,
         scope="watchlist",
@@ -347,6 +358,97 @@ def _fetch_urt_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str
     if rows:
         return dict(list(rows)[0])
     return None
+
+
+class _UrtNeedRealtime:
+    """预计算未覆盖，调用方应现算。"""
+
+
+_URT_NEED_REALTIME = _UrtNeedRealtime()
+
+
+def _lookup_urt_precompute(
+    db: Session,
+    code: str,
+    trade_date: str,
+    market: str,
+) -> Any:
+    """
+    个股分析优先读 urt_signal_trace。
+
+    返回：
+      - dict：当日该股预计算行（含未买点）
+      - None：当日已全市场覆盖且无该股记录，视为未命中
+      - _URT_NEED_REALTIME：无可用预计算，应现算
+    """
+    date_s = str(trade_date or "")[:10]
+    if not date_s:
+        return _URT_NEED_REALTIME
+    try:
+        from backend_core.strategies.urt.config import URTConfigManager
+        from backend_core.strategies.urt.frontend_interface import URTFrontendInterface
+        from backend_core.strategies.urt.signal_detector import hydrate_detail_from_score_detail
+        from backend_core.strategies.urt.trace_store import (
+            URT_TRACE_SCANNED_MARKER,
+            dates_ready_for_universe_backtest,
+            get_trace_freshness,
+            query_trace_by_code,
+        )
+
+        cm = URTConfigManager()
+        config_id = URTFrontendInterface._resolve_config_id(db, None, cm)
+        if config_id is None:
+            return _URT_NEED_REALTIME
+
+        code_n = str(code or "").strip()
+        if code_n.isdigit():
+            code_n = code_n.zfill(5) if market == "HK" else code_n.zfill(6)
+
+        traces = query_trace_by_code(
+            db,
+            code=code_n,
+            config_id=int(config_id),
+            start_date=date_s,
+            end_date=date_s,
+            limit=5,
+        )
+        hit = None
+        for row in traces or []:
+            if str(row.get("code") or "") == URT_TRACE_SCANNED_MARKER:
+                continue
+            if str(row.get("date") or "")[:10] == date_s:
+                hit = dict(row)
+                break
+        if hit is not None:
+            fresh = get_trace_freshness(db, config_id=int(config_id), code=code_n)
+            if fresh.get("need_recompute"):
+                logger.info(
+                    "URT 预计算早于参数版本，改现算 code=%s date=%s",
+                    code_n,
+                    date_s,
+                )
+                return _URT_NEED_REALTIME
+            hit = hydrate_detail_from_score_detail(hit)
+            hit["from_cache"] = True
+            hit["data_source"] = "urt_signal_trace"
+            logger.info("URT 个股分析使用预计算 code=%s date=%s buy=%s", code_n, date_s, bool(hit.get("buy_signal")))
+            return hit
+
+        ready = date_s in dates_ready_for_universe_backtest(
+            db,
+            config_id=int(config_id),
+            dates=[date_s],
+        )
+        if ready:
+            logger.info("URT 当日已预计算且无该股记录，视为未命中 code=%s date=%s", code_n, date_s)
+            return None
+    except Exception as e:
+        logger.warning("URT 预计算读取失败，改现算 code=%s: %s", code, e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    return _URT_NEED_REALTIME
 
 
 def _fetch_sbbr_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
@@ -430,6 +532,7 @@ def collect_strategy_raw_rows(
     code: str,
     date: Optional[str] = None,
     strategies: Optional[Sequence[str]] = None,
+    use_realtime: bool = False,
 ) -> Dict[str, Any]:
     """返回四策略完整原始行（供 trade_advice / 综合交易策略合成）。"""
     code_n = _norm_code(code)
@@ -460,7 +563,12 @@ def collect_strategy_raw_rows(
     for key in wanted:
         fn = fetchers[key]
         try:
-            raw = fn(db, code_n, trade_date)
+            if key == "urt":
+                raw = _fetch_urt_raw(
+                    db, code_n, trade_date, use_realtime=bool(use_realtime)
+                )
+            else:
+                raw = fn(db, code_n, trade_date)
             rows[key] = raw
             summaries[key] = summarize_strategy_check(key, raw, stock_code=code_n)
         except Exception as e:
@@ -521,7 +629,7 @@ def collect_stock_multi_strategy_check(
     strategies: Optional[Sequence[str]] = None,
     use_realtime: bool = False,
 ) -> Dict[str, Any]:
-    """并行语义：顺序评估四策略（单股，耗时短），返回统一卡片列表。"""
+    """评估四策略并附带 strategy_pack，供综合计划复用，避免再扫一遍。"""
     code_n = _norm_code(code)
     if code_n.isdigit():
         if len(code_n) <= 5:
@@ -561,32 +669,20 @@ def collect_stock_multi_strategy_check(
         except Exception as e:
             logger.warning("multi-strategy realtime quote skip: %s", e)
 
-    trade_date = _resolve_trade_date(db, date_for_strategy)
     stock_name = (name or "").strip() or _lookup_stock_name(db, code_n)
-
-    evaluators = {
-        "gms": _eval_gms,
-        "urt": _eval_urt,
-        "sbbr": _eval_sbbr,
-        "rpe": _eval_rpe,
-    }
-    results: List[Dict[str, Any]] = []
-    errors: Dict[str, str] = {}
-    for key in wanted:
-        fn = evaluators[key]
-        try:
-            results.append(fn(db, code_n, trade_date))
-        except Exception as e:
-            logger.exception("multi-strategy %s failed for %s", key, code_n)
-            try:
-                db.rollback()
-            except Exception:
-                pass
-            err = str(e)
-            errors[key] = err
-            results.append(
-                summarize_strategy_check(key, None, stock_code=code_n, error=err)
-            )
+    pack = collect_strategy_raw_rows(
+        db,
+        code=code_n,
+        date=date_for_strategy,
+        strategies=wanted,
+        use_realtime=bool(use_realtime),
+    )
+    trade_date = str(pack.get("trade_date") or "")[:10] or _resolve_trade_date(
+        db, date_for_strategy
+    )
+    summaries = pack.get("summaries") if isinstance(pack.get("summaries"), dict) else {}
+    errors = dict(pack.get("errors") or {})
+    results = [summaries[key] for key in wanted if key in summaries]
 
     hit_count = sum(1 for r in results if r.get("hit"))
     out: Dict[str, Any] = {
@@ -600,6 +696,12 @@ def collect_stock_multi_strategy_check(
         "errors": errors,
         "asof": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "use_realtime": bool(use_realtime),
+        "strategy_pack": {
+            "summaries": summaries,
+            "rows": pack.get("rows") or {},
+            "trade_date": trade_date,
+            "stock": {"code": code_n, "name": stock_name},
+        },
     }
     if realtime_meta:
         out["realtime"] = realtime_meta
