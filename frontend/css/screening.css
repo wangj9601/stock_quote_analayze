@@ -816,13 +816,15 @@
     gap: 8px;
 }
 
-.rpe-col-check {
+.rpe-col-check,
+.sbbr-col-check {
     width: 36px;
     text-align: center;
     vertical-align: middle;
 }
 
-.rpe-col-check input[type="checkbox"] {
+.rpe-col-check input[type="checkbox"],
+.sbbr-col-check input[type="checkbox"] {
     width: 15px;
     height: 15px;
     margin: 0;
@@ -1882,9 +1884,9 @@ a.gms-stock-code-link:hover {
 /* SBBR 策略信号：操作列四按钮（明细/观察/储备/历史）与 GMS/URT 一致横向小按钮 */
 #sbbr-content .results-table th.gms-col-actions,
 #sbbr-content .results-table td.gms-col-actions {
-    min-width: 200px;
-    width: 200px;
-    max-width: 240px;
+    min-width: 228px;
+    width: 228px;
+    max-width: 280px;
     text-align: center;
 }
 #sbbrResultsBody .action-links {
@@ -1904,6 +1906,18 @@ a.gms-stock-code-link:hover {
     max-width: none;
     flex: 0 0 auto;
     box-sizing: border-box;
+}
+#sbbrResultsBody .gms-op-btn.sbbr-cancel-observe {
+    opacity: 1;
+    cursor: pointer;
+    background: #fff;
+    color: #475569;
+    border-color: #cbd5e1;
+}
+#sbbrResultsBody .gms-op-btn.sbbr-cancel-observe:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #94a3b8;
+    color: #334155;
 }
 
 .gms-op-btn {

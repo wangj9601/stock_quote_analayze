@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>选股 - 股票分析</title>
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/screening.css?v=20260918a">
 </head>
 
 <body data-channel="screening">
@@ -1793,11 +1793,23 @@
                 <div id="sbbrLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
                 <div id="sbbrError" class="error-message" style="display:none;"></div>
                 <div class="results-container">
-                    <div class="results-header"><span id="sbbrResultsCount">共 0 只</span></div>
+                    <div class="results-header rpe-results-header">
+                        <div class="rpe-results-header-left">
+                            <span id="sbbrResultsCount">共 0 只</span>
+                        </div>
+                        <div class="rpe-batch-actions">
+                            <button type="button" id="sbbrSelectAllBtn" class="gms-btn-outline" title="全选当前列表">全选</button>
+                            <button type="button" id="sbbrClearSelectBtn" class="gms-btn-outline" title="取消勾选">清空</button>
+                            <button type="button" id="sbbrBatchTradeBtn" class="refresh-btn" title="将勾选股票批量打开个股分析">批量个股分析</button>
+                        </div>
+                    </div>
                     <div class="results-table-wrapper">
                         <table class="results-table">
                             <thead>
                                 <tr>
+                                    <th class="sbbr-col-check">
+                                        <input type="checkbox" id="sbbrSelectAllCb" title="全选/取消全选">
+                                    </th>
                                     <th>代码</th><th>名称</th><th class="gms-col-industry">所属行业</th><th>总市值(亿)</th><th>流通股(亿股)</th>
                                     <th>筑底模式</th><th>入场</th><th>收盘</th>
                                     <th class="gms-col-price">箱体支撑</th><th class="gms-col-price">箱体阻力</th>
@@ -1806,7 +1818,7 @@
                                 </tr>
                             </thead>
                             <tbody id="sbbrResultsBody">
-                                <tr><td colspan="15" class="empty-state">点击「刷新筛选」开始</td></tr>
+                                <tr><td colspan="16" class="empty-state">点击「刷新筛选」开始</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -2388,7 +2400,7 @@
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_trade_link.js?v=20260917a"></script>
     <script src="js/screening.js?v=urt50220260907a"></script>
-    <script src="js/sbbr_screening.js"></script>
+    <script src="js/sbbr_screening.js?v=20260918a"></script>
     <script src="js/rpe_screening.js?v=20260917a"></script>
     <script src="js/csb_screening.js?v=20260915c"></script>
 

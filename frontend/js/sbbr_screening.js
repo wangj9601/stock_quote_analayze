@@ -74,6 +74,152 @@
       .replace(/"/g, '&quot;');
   }
 
+  function toast(msg, type) {
+    if (window.CommonUtils && typeof CommonUtils.showToast === 'function') {
+      CommonUtils.showToast(msg, type || 'info');
+      return;
+    }
+    showErr(msg);
+  }
+
+  function ensureLoggedIn() {
+    if (window.CommonUtils && typeof CommonUtils.checkLoginAndHandleExpiry === 'function') {
+      return CommonUtils.checkLoginAndHandleExpiry();
+    }
+    toast('请先登录后再操作', 'warning');
+    return false;
+  }
+
+  function stockLabel(code, name) {
+    const nm = String(name || '').trim();
+    const c = String(code || '').trim();
+    return nm || c || '该股票';
+  }
+
+  const SBBR_RESULT_COLSPAN = 16;
+  /** code -> observe id */
+  const observeIdByCode = new Map();
+
+  function normCode(code) {
+    const s = String(code || '').trim();
+    if (/^\d{1,6}$/.test(s)) return s.padStart(6, '0');
+    return s;
+  }
+
+  async function loadObserveMap() {
+    observeIdByCode.clear();
+    try {
+      const data = await api('/api/sbbr/trade-observe/list');
+      (data.items || []).forEach((it) => {
+        const c = normCode(it.code);
+        if (c && it.id != null) observeIdByCode.set(c, it.id);
+      });
+    } catch (_) {
+      // 未登录时忽略，按钮仍显示「观察」
+    }
+  }
+
+  function setObserveButtonState(btn, { observed, observeId, code }) {
+    if (!btn) return;
+    const c = normCode(code || btn.getAttribute('data-code'));
+    if (observed) {
+      btn.textContent = '取消观察';
+      btn.classList.remove('sbbr-add-observe', 'gms-op-btn--primary');
+      btn.classList.add('sbbr-cancel-observe');
+      btn.title = '移出交易观察';
+      if (observeId != null) btn.setAttribute('data-id', String(observeId));
+      else if (observeIdByCode.has(c)) btn.setAttribute('data-id', String(observeIdByCode.get(c)));
+    } else {
+      btn.textContent = '观察';
+      btn.classList.remove('sbbr-cancel-observe');
+      btn.classList.add('sbbr-add-observe', 'gms-op-btn--primary');
+      btn.title = '加入交易观察';
+      btn.removeAttribute('data-id');
+    }
+    btn.disabled = false;
+  }
+
+  function syncSignalObserveButtons() {
+    document.querySelectorAll('#sbbrResultsBody .sbbr-cancel-observe, #sbbrResultsBody .sbbr-add-observe').forEach((btn) => {
+      const c = normCode(btn.getAttribute('data-code'));
+      const oid = observeIdByCode.get(c);
+      setObserveButtonState(btn, { observed: oid != null, observeId: oid, code: c });
+    });
+  }
+
+  function renderObserveButtonHtml(r) {
+    const snap = encodeURIComponent(JSON.stringify(r));
+    const nm = esc(r.name || '');
+    const codeAttr = esc(r.code || '');
+    const dateAttr = esc(r.date || '');
+    const oid = observeIdByCode.get(normCode(r.code));
+    if (oid != null) {
+      return `<button type="button" class="gms-op-btn sbbr-cancel-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${codeAttr}" data-name="${nm}" data-date="${dateAttr}" data-id="${oid}" data-snap="${snap}" title="移出交易观察">取消观察</button>`;
+    }
+    return `<button type="button" class="gms-op-btn gms-op-btn--primary sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${codeAttr}" data-name="${nm}" data-date="${dateAttr}" data-snap="${snap}" title="加入交易观察">观察</button>`;
+  }
+
+  function setAllResultChecks(checked) {
+    const body = document.getElementById('sbbrResultsBody');
+    if (!body) return;
+    body.querySelectorAll('.sbbr-row-cb').forEach((el) => {
+      el.checked = !!checked;
+    });
+    const headerCb = document.getElementById('sbbrSelectAllCb');
+    if (headerCb) {
+      headerCb.checked = !!checked;
+      headerCb.indeterminate = false;
+    }
+  }
+
+  function syncHeaderSelectAll() {
+    const body = document.getElementById('sbbrResultsBody');
+    const headerCb = document.getElementById('sbbrSelectAllCb');
+    if (!body || !headerCb) return;
+    const boxes = body.querySelectorAll('.sbbr-row-cb');
+    if (!boxes.length) {
+      headerCb.checked = false;
+      headerCb.indeterminate = false;
+      return;
+    }
+    let checked = 0;
+    boxes.forEach((el) => {
+      if (el.checked) checked += 1;
+    });
+    headerCb.checked = checked === boxes.length;
+    headerCb.indeterminate = checked > 0 && checked < boxes.length;
+  }
+
+  function collectCheckedResultStocks() {
+    const body = document.getElementById('sbbrResultsBody');
+    if (!body) return [];
+    const stocks = [];
+    const seen = new Set();
+    body.querySelectorAll('.sbbr-row-cb:checked').forEach((el) => {
+      const code = String(el.getAttribute('data-code') || el.value || '').trim();
+      if (!code || seen.has(code)) return;
+      seen.add(code);
+      stocks.push({
+        code,
+        name: String(el.getAttribute('data-name') || '').trim(),
+      });
+    });
+    return stocks;
+  }
+
+  function openBatchStockAnalysis() {
+    const stocks = collectCheckedResultStocks();
+    if (!stocks.length) {
+      toast('请先勾选至少一只股票', 'warning');
+      return;
+    }
+    if (window.StockTradeLink && typeof window.StockTradeLink.openBatchAnalysis === 'function') {
+      window.StockTradeLink.openBatchAnalysis(stocks, { toastPrefix: '已打开个股分析' });
+      return;
+    }
+    toast('个股分析组件未加载，请刷新页面后重试', 'error');
+  }
+
   /** 代码列 → 个股详情「交易分析」Tab */
   function stockAnalysisHref(code, name) {
     if (window.StockTradeLink && typeof window.StockTradeLink.buildHref === 'function') {
@@ -95,24 +241,22 @@
     lastSignalRows = rows || [];
     document.getElementById('sbbrResultsCount').textContent = `共 ${lastSignalRows.length} 只`;
     if (!lastSignalRows.length) {
-      body.innerHTML = '<tr><td colspan="15" class="empty-state">无符合条件的结果</td></tr>';
+      body.innerHTML = `<tr><td colspan="${SBBR_RESULT_COLSPAN}" class="empty-state">无符合条件的结果</td></tr>`;
+      setAllResultChecks(false);
       return;
     }
     body.innerHTML = lastSignalRows
       .map((r, index) => {
-        const snap = encodeURIComponent(JSON.stringify(r));
         const ops = [];
         ops.push(
           `<button type="button" class="gms-op-btn sbbr-score-detail-toggle" data-row="${index}" title="展开/收起策略明细">明细</button>`
         );
         if (canPerm('channel.screening.tab.sbbr.btn.add_observe')) {
-          ops.push(
-            `<button type="button" class="gms-op-btn gms-op-btn--primary sbbr-add-observe" data-perm="channel.screening.tab.sbbr.btn.add_observe" data-code="${r.code}" data-name="${r.name || ''}" data-date="${r.date || ''}" data-snap="${snap}" title="加入交易观察">观察</button>`
-          );
+          ops.push(renderObserveButtonHtml(r));
         }
         if (canPerm('channel.screening.tab.sbbr.btn.add_reserve')) {
           ops.push(
-            `<button type="button" class="gms-op-btn sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${r.code}" data-name="${r.name || ''}" title="加入储备箱">储备</button>`
+            `<button type="button" class="gms-op-btn sbbr-add-reserve" data-perm="channel.screening.tab.sbbr.btn.add_reserve" data-code="${esc(r.code)}" data-name="${esc(r.name || '')}" title="加入储备箱">储备</button>`
           );
         }
         const histHref = `stock_sbbr_trace.html?code=${encodeURIComponent(r.code || '')}&name=${encodeURIComponent(r.name || '')}`;
@@ -133,9 +277,13 @@
           ? `<a class="stock-code gms-stock-code-link" href="${esc(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${esc(r.code)}</a>`
           : '';
         const industryName = r.industry_board_name || r.sector_name || '-';
+        const nm = r.name || '';
         return `<tr data-sbbr-row="${index}">
+            <td class="sbbr-col-check">
+              <input type="checkbox" class="sbbr-row-cb" data-code="${esc(r.code || '')}" data-name="${esc(nm)}" value="${esc(r.code || '')}" title="勾选后可批量个股分析">
+            </td>
             <td class="gms-col-code">${codeCell}</td>
-            <td>${r.name || ''}${roleHtml ? ` ${roleHtml}` : ''}${sizeTag ? ` ${sizeTag}` : ''}</td>
+            <td>${esc(nm)}${roleHtml ? ` ${roleHtml}` : ''}${sizeTag ? ` ${sizeTag}` : ''}</td>
             <td class="gms-col-industry" title="同花顺行业板块">${esc(industryName)}</td>
             <td>${fmt(r.total_mv)}</td>
             <td>${fmt(r.circ_shares_yi)}</td>
@@ -151,10 +299,15 @@
             <td class="gms-col-actions"><div class="action-links">${ops.join('')}</div></td>
           </tr>
           <tr class="gms-score-detail-row sbbr-score-detail-row" data-detail-for="${index}" style="display:none;">
-            <td colspan="15" class="gms-score-detail-cell">${detailHtml}</td>
+            <td colspan="${SBBR_RESULT_COLSPAN}" class="gms-score-detail-cell">${detailHtml}</td>
           </tr>`;
       })
       .join('');
+    const headerCb = document.getElementById('sbbrSelectAllCb');
+    if (headerCb) {
+      headerCb.checked = false;
+      headerCb.indeterminate = false;
+    }
   }
 
   function getScreeningApp() {
@@ -250,6 +403,7 @@
     showErr('');
     if (loading) loading.style.display = 'flex';
     try {
+      await loadObserveMap();
       const scope = document.getElementById('sbbrScope').value || 'market';
       const date = document.getElementById('sbbrDate').value || '';
       const entryOnly = document.getElementById('sbbrEntryOnly').checked;
@@ -352,7 +506,7 @@
     } catch (e) {
       showErr(e.message || String(e));
       lastSignalRows = [];
-      body.innerHTML = '<tr><td colspan="15" class="empty-state">加载失败</td></tr>';
+      body.innerHTML = `<tr><td colspan="${SBBR_RESULT_COLSPAN}" class="empty-state">加载失败</td></tr>`;
     } finally {
       if (loading) loading.style.display = 'none';
     }
@@ -562,6 +716,17 @@
       refreshSignals();
     });
     document.getElementById('sbbrQfqLevelsBtn')?.addEventListener('click', () => refreshQfqLevels());
+    document.getElementById('sbbrSelectAllBtn')?.addEventListener('click', () => setAllResultChecks(true));
+    document.getElementById('sbbrClearSelectBtn')?.addEventListener('click', () => setAllResultChecks(false));
+    document.getElementById('sbbrBatchTradeBtn')?.addEventListener('click', () => openBatchStockAnalysis());
+    document.getElementById('sbbrSelectAllCb')?.addEventListener('change', (e) => {
+      setAllResultChecks(!!e.target.checked);
+    });
+    document.getElementById('sbbrResultsBody')?.addEventListener('change', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('sbbr-row-cb')) {
+        syncHeaderSelectAll();
+      }
+    });
     document.getElementById('sbbrObserveRefreshBtn')?.addEventListener('click', () => refreshObserve());
     document.getElementById('sbbrFormalRefreshBtn')?.addEventListener('click', () => refreshFormal());
     document.getElementById('sbbrReserveRefreshBtn')?.addEventListener('click', () => refreshReserve());
@@ -594,25 +759,57 @@
         }
         return;
       }
+      const cancelObs = e.target.closest('.sbbr-cancel-observe');
+      if (cancelObs) {
+        if (!ensureLoggedIn()) return;
+        const code = cancelObs.getAttribute('data-code');
+        const name = cancelObs.getAttribute('data-name');
+        const oid = cancelObs.getAttribute('data-id') || observeIdByCode.get(normCode(code));
+        if (!oid) {
+          toast('找不到观察记录，请刷新后重试', 'warning');
+          return;
+        }
+        try {
+          cancelObs.disabled = true;
+          cancelObs.textContent = '取消中...';
+          await api(`/api/sbbr/trade-observe/${oid}`, { method: 'DELETE' });
+          observeIdByCode.delete(normCode(code));
+          setObserveButtonState(cancelObs, { observed: false, code });
+          toast(`已从交易观察中移除 ${stockLabel(code, name)}`, 'info');
+        } catch (err) {
+          toast(err.message || '取消观察失败', 'error');
+          setObserveButtonState(cancelObs, { observed: true, observeId: oid, code });
+        }
+        return;
+      }
       const obs = e.target.closest('.sbbr-add-observe');
       if (obs) {
+        if (!ensureLoggedIn()) return;
         let snap = null;
         try {
           snap = JSON.parse(decodeURIComponent(obs.getAttribute('data-snap') || '%7B%7D'));
         } catch (_) {}
+        const code = obs.getAttribute('data-code');
+        const name = obs.getAttribute('data-name');
         try {
-          await api('/api/sbbr/trade-observe/add', {
+          obs.disabled = true;
+          obs.textContent = '加入中...';
+          const res = await api('/api/sbbr/trade-observe/add', {
             method: 'POST',
             body: JSON.stringify({
-              code: obs.getAttribute('data-code'),
-              name: obs.getAttribute('data-name'),
+              code,
+              name,
               signal_date: obs.getAttribute('data-date'),
               signal_snapshot: snap,
             }),
           });
-          alert('已加入交易观察');
+          const oid = res.id;
+          if (oid != null) observeIdByCode.set(normCode(code), oid);
+          setObserveButtonState(obs, { observed: true, observeId: oid, code });
+          toast(`已添加 ${stockLabel(code, name)} 到交易观察`, 'success');
         } catch (err) {
-          alert(err.message);
+          toast(err.message || '加入交易观察失败', 'error');
+          setObserveButtonState(obs, { observed: observeIdByCode.has(normCode(code)), code });
         }
         return;
       }
@@ -626,9 +823,9 @@
               stock_name: resv.getAttribute('data-name'),
             }),
           });
-          alert('已加入储备箱');
+          toast('已加入储备箱', 'success');
         } catch (err) {
-          alert(err.message);
+          toast(err.message || '加入储备箱失败', 'error');
         }
       }
     });
@@ -653,8 +850,11 @@
       }
       const del = e.target.closest('.sbbr-del-observe');
       if (del) {
-        await api(`/api/sbbr/trade-observe/${del.getAttribute('data-id')}`, { method: 'DELETE' });
+        const oid = del.getAttribute('data-id');
+        await api(`/api/sbbr/trade-observe/${oid}`, { method: 'DELETE' });
+        await loadObserveMap();
         refreshObserve();
+        syncSignalObserveButtons();
       }
     });
 
