@@ -306,52 +306,122 @@ def _resolve_trade_date(db: Session, raw: Optional[str]) -> str:
     return datetime.now().strftime("%Y-%m-%d")
 
 
-def _fetch_gms_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+def _pick_row_for_code(rows: Any, code: str) -> Optional[Dict[str, Any]]:
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        sym = _norm_code(r.get("symbol") or r.get("code") or r.get("stock_code"))
+        if sym == code or (sym and code and sym.lstrip("0") == code.lstrip("0")):
+            return dict(r)
+    if rows:
+        first = list(rows)[0]
+        return dict(first) if isinstance(first, dict) else None
+    return None
+
+
+def _fetch_gms_raw(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Optional[Dict[str, Any]]:
     from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
 
     iface = GMSFrontendInterface(db)
     iface.set_selection_config(min_score=0, max_results=10)
-    rows = iface.get_selection_results(
-        date=trade_date, stock_pool=[code], market="all", trace_only=False
-    )
+    # 实时分析：跳过 trace，强制现算；否则先只读 trace，缺失再补算
+    if force_realtime:
+        iface.use_trace = False
+        rows = iface.get_selection_results(
+            date=trade_date, stock_pool=[code], market="all", trace_only=False
+        )
+    elif prefer_cache:
+        rows = iface.get_selection_results(
+            date=trade_date, stock_pool=[code], market="all", trace_only=True
+        )
+        if isinstance(rows, tuple):
+            rows = rows[0]
+        hit = _pick_row_for_code(rows, code)
+        if hit is not None:
+            return hit
+        rows = iface.get_selection_results(
+            date=trade_date, stock_pool=[code], market="all", trace_only=False
+        )
+    else:
+        rows = iface.get_selection_results(
+            date=trade_date, stock_pool=[code], market="all", trace_only=False
+        )
     if isinstance(rows, tuple):
         rows = rows[0]
-    for r in rows or []:
-        sym = _norm_code(r.get("symbol") or r.get("code"))
-        if sym == code or sym.lstrip("0") == code.lstrip("0"):
-            return dict(r)
-    if rows:
-        return dict(rows[0])
-    return None
+    return _pick_row_for_code(rows, code)
 
 
-def _fetch_urt_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+def _fetch_urt_raw(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Optional[Dict[str, Any]]:
     from backend_core.strategies.urt.frontend_interface import URTFrontendInterface
 
     market = "HK" if (code.isdigit() and len(code) <= 5) else "CN"
+    # 默认读 urt_signal_trace；仅「实时分析」强制现算
+    use_force = bool(force_realtime)
+    use_cache = bool(prefer_cache) and not use_force
     result = URTFrontendInterface.screen(
         db,
         scope="watchlist",
         stock_codes=[code],
         screening_date=trade_date,
         limit=5,
-        prefer_cache=False,
-        force_realtime=True,
+        prefer_cache=use_cache,
+        force_realtime=use_force,
         skip_screening_filters=True,
         market=market,
     )
     rows = (result or {}).get("data") if isinstance(result, dict) else result
-    for r in rows or []:
-        if _norm_code(r.get("code") or r.get("symbol")) == code:
-            return dict(r)
-    if rows:
-        return dict(list(rows)[0])
-    return None
+    return _pick_row_for_code(rows, code)
 
 
-def _fetch_sbbr_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+def _fetch_sbbr_raw(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Optional[Dict[str, Any]]:
     if not (code.isdigit() and len(code) == 6):
         return None
+    if prefer_cache and not force_realtime:
+        try:
+            from backend_core.strategies.sbbr.config import SBBRConfigManager
+            from backend_core.strategies.sbbr.signal_storage import query_traces_by_code
+
+            cid = SBBRConfigManager().get_default_config_id()
+            cached = query_traces_by_code(
+                db,
+                code=code,
+                config_id=cid,
+                start_date=trade_date,
+                end_date=trade_date,
+                entry_only=False,
+                limit=5,
+            )
+            hit = _pick_row_for_code(cached, code)
+            if hit is not None:
+                return hit
+        except Exception as e:
+            logger.debug("SBBR trace prefer skip %s: %s", code, e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
     from backend_core.strategies.sbbr.strategy_engine import SBBRStrategyEngine
 
     engine = SBBRStrategyEngine(db_session=db)
@@ -366,9 +436,80 @@ def _fetch_sbbr_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[st
     return dict(rows[0]) if rows else None
 
 
-def _fetch_rpe_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str, Any]]:
+def _fetch_rpe_raw(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Optional[Dict[str, Any]]:
     if not (code.isdigit() and len(code) == 6):
         return None
+    if prefer_cache and not force_realtime:
+        try:
+            from backend_core.strategies.rpe.config import RPEConfigManager
+            from backend_core.strategies.rpe.signal_storage import load_traces
+
+            cid = RPEConfigManager().get_default_config_id()
+            cached = load_traces(
+                db,
+                trade_date=trade_date,
+                config_id=cid,
+                entry_only=False,
+                include_no_signal=True,
+                limit=500,
+            )
+            hit = _pick_row_for_code(cached, code)
+            if hit is not None:
+                return hit
+            # 无全表命中时按 code 直查（避免 limit 截断）
+            from backend_api.models import RPESignalTrace
+            from datetime import datetime as _dt
+
+            d = _dt.strptime(str(trade_date)[:10], "%Y-%m-%d").date()
+            row = (
+                db.query(RPESignalTrace)
+                .filter(
+                    RPESignalTrace.code == code,
+                    RPESignalTrace.trade_date == d,
+                    RPESignalTrace.config_id == int(cid),
+                )
+                .first()
+            )
+            if row:
+                return {
+                    "code": row.code,
+                    "symbol": row.code,
+                    "name": row.name,
+                    "date": row.trade_date.isoformat() if row.trade_date else trade_date,
+                    "market_type": row.market_type,
+                    "sector_id": row.sector_id,
+                    "sector_name": row.sector_name,
+                    "z_score": row.z_score,
+                    "ratio": row.ratio,
+                    "signal_type": row.signal_type,
+                    "entry_signal": row.entry_signal,
+                    "watch_only": row.watch_only,
+                    "trend_veto": row.trend_veto,
+                    "sector_slope": row.sector_slope,
+                    "support_levels": row.support_levels or [],
+                    "resistance_levels": row.resistance_levels or [],
+                    "nearest_support": row.nearest_support,
+                    "nearest_resistance": row.nearest_resistance,
+                    "structure_valid": row.structure_valid,
+                    "liquidity_ok": row.liquidity_ok,
+                    "close": row.close_price,
+                    "detail": row.detail or {},
+                    "config_id": row.config_id,
+                }
+        except Exception as e:
+            logger.debug("RPE trace prefer skip %s: %s", code, e)
+            try:
+                db.rollback()
+            except Exception:
+                pass
+
     from backend_core.strategies.rpe.frontend_interface import RPEFrontendInterface
 
     result = RPEFrontendInterface.get_selection_results(
@@ -380,27 +521,48 @@ def _fetch_rpe_raw(db: Session, code: str, trade_date: str) -> Optional[Dict[str
         include_no_signal=True,
         max_results=20,
         adjust="none",
+        trace_only=False,
     )
     rows = (result or {}).get("data") if isinstance(result, dict) else result
-    for r in rows or []:
-        if _norm_code(r.get("code") or r.get("symbol")) == code:
-            return dict(r)
-    if rows:
-        return dict(list(rows)[0])
-    return None
+    return _pick_row_for_code(rows, code)
 
 
-def _eval_gms(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
-    row = _fetch_gms_raw(db, code, trade_date)
+def _eval_gms(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Dict[str, Any]:
+    row = _fetch_gms_raw(
+        db, code, trade_date, prefer_cache=prefer_cache, force_realtime=force_realtime
+    )
     return summarize_strategy_check("gms", row, stock_code=code)
 
 
-def _eval_urt(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
-    row = _fetch_urt_raw(db, code, trade_date)
+def _eval_urt(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Dict[str, Any]:
+    row = _fetch_urt_raw(
+        db, code, trade_date, prefer_cache=prefer_cache, force_realtime=force_realtime
+    )
     return summarize_strategy_check("urt", row, stock_code=code)
 
 
-def _eval_sbbr(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+def _eval_sbbr(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Dict[str, Any]:
     if not (code.isdigit() and len(code) == 6):
         return summarize_strategy_check(
             "sbbr",
@@ -408,11 +570,20 @@ def _eval_sbbr(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
             stock_code=code,
             message="SBBR 暂仅支持 A 股（6 位代码）",
         )
-    row = _fetch_sbbr_raw(db, code, trade_date)
+    row = _fetch_sbbr_raw(
+        db, code, trade_date, prefer_cache=prefer_cache, force_realtime=force_realtime
+    )
     return summarize_strategy_check("sbbr", row, stock_code=code)
 
 
-def _eval_rpe(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
+def _eval_rpe(
+    db: Session,
+    code: str,
+    trade_date: str,
+    *,
+    prefer_cache: bool = True,
+    force_realtime: bool = False,
+) -> Dict[str, Any]:
     if not (code.isdigit() and len(code) == 6):
         return summarize_strategy_check(
             "rpe",
@@ -420,7 +591,9 @@ def _eval_rpe(db: Session, code: str, trade_date: str) -> Dict[str, Any]:
             stock_code=code,
             message="RPE 暂仅支持 A 股（6 位代码）",
         )
-    row = _fetch_rpe_raw(db, code, trade_date)
+    row = _fetch_rpe_raw(
+        db, code, trade_date, prefer_cache=prefer_cache, force_realtime=force_realtime
+    )
     return summarize_strategy_check("rpe", row, stock_code=code)
 
 
@@ -448,6 +621,8 @@ def collect_strategy_raw_rows(
         wanted = list(STRATEGY_KEYS)
 
     trade_date = _resolve_trade_date(db, date)
+    prefer_cache = True
+    force_realtime = False
     fetchers = {
         "gms": _fetch_gms_raw,
         "urt": _fetch_urt_raw,
@@ -460,7 +635,13 @@ def collect_strategy_raw_rows(
     for key in wanted:
         fn = fetchers[key]
         try:
-            raw = fn(db, code_n, trade_date)
+            raw = fn(
+                db,
+                code_n,
+                trade_date,
+                prefer_cache=prefer_cache,
+                force_realtime=force_realtime,
+            )
             rows[key] = raw
             summaries[key] = summarize_strategy_check(key, raw, stock_code=code_n)
         except Exception as e:
@@ -564,6 +745,9 @@ def collect_stock_multi_strategy_check(
     trade_date = _resolve_trade_date(db, date_for_strategy)
     stock_name = (name or "").strip() or _lookup_stock_name(db, code_n)
 
+    # 默认优先读预计算 trace；「实时分析」强制现算
+    prefer_cache = not bool(use_realtime)
+    force_realtime = bool(use_realtime)
     evaluators = {
         "gms": _eval_gms,
         "urt": _eval_urt,
@@ -575,7 +759,15 @@ def collect_stock_multi_strategy_check(
     for key in wanted:
         fn = evaluators[key]
         try:
-            results.append(fn(db, code_n, trade_date))
+            results.append(
+                fn(
+                    db,
+                    code_n,
+                    trade_date,
+                    prefer_cache=prefer_cache,
+                    force_realtime=force_realtime,
+                )
+            )
         except Exception as e:
             logger.exception("multi-strategy %s failed for %s", key, code_n)
             try:

@@ -48,8 +48,13 @@ def _tactical_enrichment(
     bars: List[Dict[str, Any]],
     stock_code: str,
     asof: Optional[str],
+    strategy_snapshots: Optional[Dict[str, Any]] = None,
 ) -> tuple:
-    """尽量注入 VP / confluence / RPE / GMS / classic；失败则对应项为 None（grade=base）。"""
+    """尽量注入 VP / confluence / RPE / GMS / classic；失败则对应项为 None（grade=base）。
+
+    strategy_snapshots: 可选，来自个股 bundle 已算好的策略摘要（gms/rpe），
+    避免战术层再次 _eval_gms/_eval_rpe。
+    """
     vp = None
     confluence = None
     rpe = None
@@ -125,52 +130,69 @@ def _tactical_enrichment(
         logger.debug("tactical confluence skip code=%s: %s", stock_code, e)
         confluence = None
 
-    # RPE 快照：轻量、失败忽略（非硬依赖）
-    try:
-        code_n = str(stock_code or "").strip()
-        if code_n.isdigit() and len(code_n) == 6 and asof:
-            from backend_core.analysis.stock_multi_strategy import _eval_rpe
+    snaps = strategy_snapshots if isinstance(strategy_snapshots, dict) else {}
 
-            pack = _eval_rpe(db, code_n, str(asof)[:10])
-            if isinstance(pack, dict):
-                detail = pack.get("detail") if isinstance(pack.get("detail"), dict) else {}
-                z = pack.get("score")
-                if z is None:
-                    for k in ("z_score", "zscore", "relative_z"):
-                        if detail.get(k) is not None:
-                            z = detail.get(k)
-                            break
-                rpe = {
-                    "z_score": z,
-                    "signal_type": detail.get("signal_type") or pack.get("label"),
-                }
+    def _rpe_from_pack(pack: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not isinstance(pack, dict):
+            return None
+        detail = pack.get("detail") if isinstance(pack.get("detail"), dict) else {}
+        z = pack.get("score")
+        if z is None:
+            for k in ("z_score", "zscore", "relative_z"):
+                if detail.get(k) is not None:
+                    z = detail.get(k)
+                    break
+        return {
+            "z_score": z,
+            "signal_type": detail.get("signal_type") or pack.get("label"),
+        }
+
+    def _gms_from_pack(pack: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        if not isinstance(pack, dict):
+            return None
+        detail = pack.get("detail") if isinstance(pack.get("detail"), dict) else {}
+        sc = pack.get("score")
+        if sc is None and isinstance(detail, dict):
+            for k in ("score_total", "total_score", "score"):
+                if detail.get(k) is not None:
+                    sc = detail.get(k)
+                    break
+        if sc is None:
+            return None
+        return {
+            "score": sc,
+            "score_total": sc,
+            "hit": bool(pack.get("hit")),
+            "label": pack.get("label"),
+            "detail": detail or None,
+        }
+
+    # RPE：优先用 bundle 已有摘要，避免重复评估
+    try:
+        if snaps.get("rpe"):
+            rpe = _rpe_from_pack(snaps["rpe"])
+        else:
+            code_n = str(stock_code or "").strip()
+            if code_n.isdigit() and len(code_n) == 6 and asof:
+                from backend_core.analysis.stock_multi_strategy import _eval_rpe
+
+                pack = _eval_rpe(db, code_n, str(asof)[:10])
+                rpe = _rpe_from_pack(pack) if isinstance(pack, dict) else None
     except Exception as e:
         logger.debug("tactical RPE skip code=%s: %s", stock_code, e)
         rpe = None
 
-    # GMS 分数快照：取总分即可（与选股命中解耦）；失败则字段可选
+    # GMS：优先用 bundle 已有摘要
     try:
-        code_n = str(stock_code or "").strip()
-        if code_n.isdigit() and len(code_n) == 6 and asof:
-            from backend_core.analysis.stock_multi_strategy import _eval_gms
+        if snaps.get("gms"):
+            gms = _gms_from_pack(snaps["gms"])
+        else:
+            code_n = str(stock_code or "").strip()
+            if code_n.isdigit() and len(code_n) == 6 and asof:
+                from backend_core.analysis.stock_multi_strategy import _eval_gms
 
-            pack = _eval_gms(db, code_n, str(asof)[:10])
-            if isinstance(pack, dict):
-                detail = pack.get("detail") if isinstance(pack.get("detail"), dict) else {}
-                sc = pack.get("score")
-                if sc is None and isinstance(detail, dict):
-                    for k in ("score_total", "total_score", "score"):
-                        if detail.get(k) is not None:
-                            sc = detail.get(k)
-                            break
-                if sc is not None:
-                    gms = {
-                        "score": sc,
-                        "score_total": sc,
-                        "hit": bool(pack.get("hit")),
-                        "label": pack.get("label"),
-                        "detail": detail or None,
-                    }
+                pack = _eval_gms(db, code_n, str(asof)[:10])
+                gms = _gms_from_pack(pack) if isinstance(pack, dict) else None
     except Exception as e:
         logger.debug("tactical GMS skip code=%s: %s", stock_code, e)
         gms = None

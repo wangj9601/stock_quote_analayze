@@ -15,6 +15,8 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger(__name__)
 
 _DETAIL_WORKERS = 5
+# levels KDE 上限 750；pattern/swing/gann 取末段切片
+_SHARED_BARS_LOOKBACK = 750
 
 
 def _session_local():
@@ -25,6 +27,121 @@ def _session_local():
 
 def _err_section(message: str) -> Dict[str, Any]:
     return {"ok": False, "error": message or "失败", "payload": None}
+
+
+def _strategy_snapshots_from_data(strategy_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """从 collect_stock_multi_strategy_check 结果提取 gms/rpe 摘要，供形态战术层复用。"""
+    out: Dict[str, Any] = {}
+    if not isinstance(strategy_data, dict):
+        return out
+    results = strategy_data.get("results")
+    if isinstance(results, list):
+        for r in results:
+            if not isinstance(r, dict):
+                continue
+            key = str(r.get("strategy") or "").strip().lower()
+            if key in ("gms", "rpe"):
+                out[key] = r
+    summaries = strategy_data.get("summaries")
+    if isinstance(summaries, dict):
+        for key in ("gms", "rpe"):
+            if key not in out and isinstance(summaries.get(key), dict):
+                out[key] = summaries[key]
+    return out
+
+
+def _prepare_shared_bars(
+    db: Session,
+    code: str,
+    name: str = "",
+    *,
+    asof: Optional[str],
+    use_realtime: bool,
+    lookback: int = _SHARED_BARS_LOOKBACK,
+) -> Dict[str, Any]:
+    """一次加载 OHLC（+ 可选实时末根）并按需前复权，供 levels/pattern/swing/gann 复用。"""
+    from backend_core.analysis.chart_patterns.scanner import (
+        apply_qfq_to_code_bars,
+        normalize_price_adjust,
+    )
+    from backend_core.strategies.double_bottom.data_loader import (
+        batch_load_ohlc_asc,
+        load_names,
+        resolve_effective_trade_date,
+    )
+
+    try:
+        from backend_api.utils.adj_quotes import AdjQuotesError
+    except ImportError:
+        from utils.adj_quotes import AdjQuotesError  # type: ignore
+    try:
+        from backend_api.utils.equity_code import (
+            infer_market_type,
+            normalize_equity_code,
+        )
+    except ImportError:
+        from utils.equity_code import (  # type: ignore
+            infer_market_type,
+            normalize_equity_code,
+        )
+
+    adjust_n = normalize_price_adjust("none" if use_realtime else "qfq")
+    stock_code = normalize_equity_code(code) or str(code).strip()
+    market = infer_market_type(stock_code) or "CN"
+    lb = max(60, int(lookback))
+    realtime_meta: Optional[Dict[str, Any]] = None
+
+    if use_realtime and not asof:
+        from backend_core.analysis.realtime_bars import load_bars_with_realtime
+
+        bars_raw, realtime_meta, asof_s = load_bars_with_realtime(
+            db, stock_code, lookback=lb, asof=None, prefer_live=True
+        )
+    else:
+        asof_s = resolve_effective_trade_date(db, asof, market=market)
+        bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lb, asof=asof_s)
+        bars_raw = list(bars_map.get(stock_code) or [])
+        if use_realtime:
+            from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
+
+            bars_raw, realtime_meta = apply_realtime_to_code_bars(
+                db, stock_code, bars_raw, prefer_live=True
+            )
+            if realtime_meta and realtime_meta.get("trade_date"):
+                asof_s = str(realtime_meta["trade_date"])[:10]
+
+    bars_raw = list(bars_raw or [])
+    adj_meta: Optional[Dict[str, Any]] = None
+    bars_adj = list(bars_raw)
+    if adjust_n == "qfq" and bars_raw:
+        try:
+            bars_adj, adj_meta = apply_qfq_to_code_bars(
+                db,
+                stock_code,
+                bars_raw,
+                refresh_factor=False,
+                factor_source="auto",
+            )
+        except AdjQuotesError:
+            raise
+        except Exception as e:
+            logger.warning("shared bars qfq failed code=%s: %s", stock_code, e)
+            bars_adj = list(bars_raw)
+            adjust_n = "none"
+
+    names = load_names(db, [stock_code])
+    return {
+        "code": stock_code,
+        "name": names.get(stock_code) or name or "",
+        "asof": asof_s,
+        "market": market,
+        "adjust": adjust_n,
+        "bars_raw": bars_raw,
+        "bars": bars_adj,
+        "adj_meta": adj_meta,
+        "realtime_meta": realtime_meta,
+        "lookback": lb,
+    }
 
 
 def _compute_rs(db: Session, code: str, name: str, asof: Optional[str], market: str) -> Dict[str, Any]:
@@ -100,10 +217,31 @@ def _compute_fund_flow(db: Session, code: str) -> Dict[str, Any]:
     }
 
 
-def _compute_levels(db: Session, code: str, *, use_realtime: bool) -> Dict[str, Any]:
+def _compute_levels(
+    db: Session,
+    code: str,
+    *,
+    use_realtime: bool,
+    shared_bars: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     from backend_api.stock.stock_analysis_routes import _compute_levels_payload
 
     adjust = "none" if use_realtime else "qfq"
+    hist = None
+    adj_meta = None
+    anchor = None
+    skip_quote = False
+    if isinstance(shared_bars, dict) and shared_bars.get("bars"):
+        hist = list(shared_bars.get("bars") or [])
+        adj_meta = shared_bars.get("adj_meta")
+        adjust = str(shared_bars.get("adjust") or adjust)
+        rt = shared_bars.get("realtime_meta") or {}
+        if use_realtime and rt.get("current_price") is not None:
+            try:
+                anchor = float(rt["current_price"])
+                skip_quote = True
+            except (TypeError, ValueError):
+                anchor = None
     status, body = _compute_levels_payload(
         code,
         8,
@@ -111,6 +249,10 @@ def _compute_levels(db: Session, code: str, *, use_realtime: bool) -> Dict[str, 
         adjust=adjust,
         factor_source="auto",
         use_realtime=bool(use_realtime),
+        historical_data=hist,
+        adj_meta=adj_meta,
+        anchor_price=anchor,
+        skip_external_quote=skip_quote,
     )
     ok = bool(body.get("success") is not False and body.get("data"))
     fetched = {
@@ -136,6 +278,8 @@ def _compute_pattern(
     *,
     asof: Optional[str],
     use_realtime: bool,
+    shared_bars: Optional[Dict[str, Any]] = None,
+    strategy_snapshots: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     from backend_api.stock.pattern_routes import _parse_types, _tactical_enrichment
     from backend_core.analysis.chart_patterns.engine import detect_all_counted
@@ -164,44 +308,67 @@ def _compute_pattern(
             normalize_equity_code,
         )
 
-    adjust_n = normalize_price_adjust("none" if use_realtime else "qfq")
-    stock_code = normalize_equity_code(code) or str(code).strip()
-    market = infer_market_type(stock_code) or "CN"
     lookback = 160
+    stock_code = normalize_equity_code(code) or str(code).strip()
     realtime_meta: Optional[Dict[str, Any]] = None
-    if use_realtime and not asof:
-        from backend_core.analysis.realtime_bars import load_bars_with_realtime
-
-        bars, realtime_meta, asof_s = load_bars_with_realtime(
-            db, stock_code, lookback=lookback, asof=None, prefer_live=True
-        )
-    else:
-        asof_s = resolve_effective_trade_date(db, asof, market=market)
-        bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)
-        bars = bars_map.get(stock_code) or []
-        if use_realtime:
-            from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
-
-            bars, realtime_meta = apply_realtime_to_code_bars(
-                db, stock_code, bars, prefer_live=True
-            )
-            if realtime_meta and realtime_meta.get("trade_date"):
-                asof_s = str(realtime_meta["trade_date"])[:10]
-    bars_raw = list(bars)
     adj_meta: Optional[Dict[str, Any]] = None
-    if adjust_n == "qfq":
-        try:
-            bars, adj_meta = apply_qfq_to_code_bars(
-                db,
-                stock_code,
-                bars,
-                refresh_factor=False,
-                factor_source="auto",
-            )
-        except AdjQuotesError as e:
-            raise ValueError(e.message) from e
+    bars_raw: List[Dict[str, Any]] = []
+    bars: List[Dict[str, Any]] = []
+    asof_s: Optional[str] = None
+    adjust_n = normalize_price_adjust("none" if use_realtime else "qfq")
+    resolved_name = name or ""
 
-    names = load_names(db, [stock_code])
+    if isinstance(shared_bars, dict) and (
+        shared_bars.get("bars") or shared_bars.get("bars_raw")
+    ):
+        stock_code = str(shared_bars.get("code") or stock_code)
+        resolved_name = shared_bars.get("name") or resolved_name
+        asof_s = shared_bars.get("asof")
+        adjust_n = normalize_price_adjust(
+            shared_bars.get("adjust") or ("none" if use_realtime else "qfq")
+        )
+        bars_raw = list(shared_bars.get("bars_raw") or [])
+        bars_full = list(shared_bars.get("bars") or bars_raw)
+        bars = bars_full[-lookback:] if len(bars_full) > lookback else bars_full
+        if bars_raw and len(bars_raw) > lookback:
+            bars_raw = bars_raw[-lookback:]
+        adj_meta = shared_bars.get("adj_meta")
+        realtime_meta = shared_bars.get("realtime_meta")
+    else:
+        market = infer_market_type(stock_code) or "CN"
+        if use_realtime and not asof:
+            from backend_core.analysis.realtime_bars import load_bars_with_realtime
+
+            bars, realtime_meta, asof_s = load_bars_with_realtime(
+                db, stock_code, lookback=lookback, asof=None, prefer_live=True
+            )
+        else:
+            asof_s = resolve_effective_trade_date(db, asof, market=market)
+            bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=lookback, asof=asof_s)
+            bars = bars_map.get(stock_code) or []
+            if use_realtime:
+                from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
+
+                bars, realtime_meta = apply_realtime_to_code_bars(
+                    db, stock_code, bars, prefer_live=True
+                )
+                if realtime_meta and realtime_meta.get("trade_date"):
+                    asof_s = str(realtime_meta["trade_date"])[:10]
+        bars_raw = list(bars)
+        if adjust_n == "qfq":
+            try:
+                bars, adj_meta = apply_qfq_to_code_bars(
+                    db,
+                    stock_code,
+                    bars,
+                    refresh_factor=False,
+                    factor_source="auto",
+                )
+            except AdjQuotesError as e:
+                raise ValueError(e.message) from e
+        names = load_names(db, [stock_code])
+        resolved_name = names.get(stock_code) or resolved_name
+
     type_list = _parse_types(None)
     cup_ref_bars = bars_raw if adjust_n == "qfq" else None
     if len(bars) >= 30:
@@ -215,7 +382,13 @@ def _compute_pattern(
         hits_all, invalidated_count = [], 0
     hits = [h for h in hits_all if str(h.get("status") or "") != "invalidated"]
 
-    vp, confluence, rpe, gms, classic = _tactical_enrichment(db, bars, stock_code, asof_s)
+    vp, confluence, rpe, gms, classic = _tactical_enrichment(
+        db,
+        bars,
+        stock_code,
+        asof_s,
+        strategy_snapshots=strategy_snapshots,
+    )
     from backend_core.analysis.market_structure import (
         aggregate_daily_to_weekly,
         analyze_market_structure,
@@ -260,7 +433,7 @@ def _compute_pattern(
     payload: Dict[str, Any] = {
         "success": True,
         "code": stock_code,
-        "name": names.get(stock_code) or name or "",
+        "name": resolved_name or name or "",
         "asof": asof_s,
         "price_adjust": adjust_n,
         "bar_count": len(bars),
@@ -296,6 +469,7 @@ def _compute_swing(
     asof: Optional[str],
     use_realtime: bool,
     pattern_short_bias: Optional[str] = None,
+    shared_bars: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     from backend_core.analysis.chart_patterns.scanner import (
         apply_qfq_to_code_bars,
@@ -332,46 +506,64 @@ def _compute_swing(
             normalize_equity_code,
         )
 
-    adjust_n = normalize_price_adjust("none" if use_realtime else "qfq")
-    stock_code = normalize_equity_code(code) or str(code).strip()
-    market = infer_market_type(stock_code) or "CN"
     lookback = 180
     max_points = 12
+    stock_code = normalize_equity_code(code) or str(code).strip()
+    adjust_n = normalize_price_adjust("none" if use_realtime else "qfq")
     realtime_meta: Optional[Dict[str, Any]] = None
-    daily_fetch = max(int(lookback), min(400, int(lookback) * 5))
-    if use_realtime and not asof:
-        from backend_core.analysis.realtime_bars import load_bars_with_realtime
-
-        bars, realtime_meta, asof_s = load_bars_with_realtime(
-            db, stock_code, lookback=daily_fetch, asof=None, prefer_live=True
-        )
-    else:
-        asof_s = resolve_effective_trade_date(db, asof, market=market)
-        bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=daily_fetch, asof=asof_s)
-        bars = bars_map.get(stock_code) or []
-        if use_realtime:
-            from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
-
-            bars, realtime_meta = apply_realtime_to_code_bars(
-                db, stock_code, bars, prefer_live=True
-            )
-            if realtime_meta and realtime_meta.get("trade_date"):
-                asof_s = str(realtime_meta["trade_date"])[:10]
     adj_meta: Optional[Dict[str, Any]] = None
-    if adjust_n == "qfq":
-        try:
-            bars, adj_meta = apply_qfq_to_code_bars(
-                db,
-                stock_code,
-                bars,
-                refresh_factor=False,
-                factor_source="auto",
+    asof_s: Optional[str] = None
+    resolved_name = name or ""
+    bars: List[Dict[str, Any]] = []
+
+    if isinstance(shared_bars, dict) and (
+        shared_bars.get("bars") or shared_bars.get("bars_raw")
+    ):
+        stock_code = str(shared_bars.get("code") or stock_code)
+        resolved_name = shared_bars.get("name") or resolved_name
+        asof_s = shared_bars.get("asof")
+        adjust_n = normalize_price_adjust(
+            shared_bars.get("adjust") or ("none" if use_realtime else "qfq")
+        )
+        bars = list(shared_bars.get("bars") or shared_bars.get("bars_raw") or [])
+        adj_meta = shared_bars.get("adj_meta")
+        realtime_meta = shared_bars.get("realtime_meta")
+    else:
+        market = infer_market_type(stock_code) or "CN"
+        daily_fetch = max(int(lookback), min(400, int(lookback) * 5))
+        if use_realtime and not asof:
+            from backend_core.analysis.realtime_bars import load_bars_with_realtime
+
+            bars, realtime_meta, asof_s = load_bars_with_realtime(
+                db, stock_code, lookback=daily_fetch, asof=None, prefer_live=True
             )
-        except AdjQuotesError as e:
-            raise ValueError(e.message) from e
+        else:
+            asof_s = resolve_effective_trade_date(db, asof, market=market)
+            bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=daily_fetch, asof=asof_s)
+            bars = bars_map.get(stock_code) or []
+            if use_realtime:
+                from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
+
+                bars, realtime_meta = apply_realtime_to_code_bars(
+                    db, stock_code, bars, prefer_live=True
+                )
+                if realtime_meta and realtime_meta.get("trade_date"):
+                    asof_s = str(realtime_meta["trade_date"])[:10]
+        if adjust_n == "qfq":
+            try:
+                bars, adj_meta = apply_qfq_to_code_bars(
+                    db,
+                    stock_code,
+                    bars,
+                    refresh_factor=False,
+                    factor_source="auto",
+                )
+            except AdjQuotesError as e:
+                raise ValueError(e.message) from e
+        names = load_names(db, [stock_code])
+        resolved_name = names.get(stock_code) or resolved_name
 
     daily_bars = bars[-int(lookback) :] if len(bars) > int(lookback) else bars
-    names = load_names(db, [stock_code])
     ms = analyze_market_structure(
         daily_bars,
         max_bars=lookback,
@@ -431,7 +623,7 @@ def _compute_swing(
     out: Dict[str, Any] = {
         "success": True,
         "code": stock_code,
-        "name": names.get(stock_code) or name or "",
+        "name": resolved_name or name or "",
         "asof": ms.get("asof") or asof_s,
         "price_adjust": price_adjust,
         "market_structure": ms,
@@ -461,6 +653,7 @@ def _compute_gann(
     *,
     asof: Optional[str],
     use_realtime: bool,
+    shared_bars: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     from backend_core.analysis.chart_patterns.scanner import (
         apply_qfq_to_code_bars,
@@ -492,44 +685,62 @@ def _compute_gann(
             normalize_equity_code,
         )
 
-    adjust_n = normalize_price_adjust("none" if use_realtime else "qfq")
-    stock_code = normalize_equity_code(code) or str(code).strip()
-    market = infer_market_type(stock_code) or "CN"
     lookback = 180
+    stock_code = normalize_equity_code(code) or str(code).strip()
+    adjust_n = normalize_price_adjust("none" if use_realtime else "qfq")
     realtime_meta: Optional[Dict[str, Any]] = None
-    if use_realtime and not asof:
-        from backend_core.analysis.realtime_bars import load_bars_with_realtime
-
-        bars, realtime_meta, asof_s = load_bars_with_realtime(
-            db, stock_code, lookback=int(lookback), asof=None, prefer_live=True
-        )
-    else:
-        asof_s = resolve_effective_trade_date(db, asof, market=market)
-        bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=int(lookback), asof=asof_s)
-        bars = bars_map.get(stock_code) or []
-        if use_realtime:
-            from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
-
-            bars, realtime_meta = apply_realtime_to_code_bars(
-                db, stock_code, bars, prefer_live=True
-            )
-            if realtime_meta and realtime_meta.get("trade_date"):
-                asof_s = str(realtime_meta["trade_date"])[:10]
     adj_meta: Optional[Dict[str, Any]] = None
-    if adjust_n == "qfq":
-        try:
-            bars, adj_meta = apply_qfq_to_code_bars(
-                db,
-                stock_code,
-                bars,
-                refresh_factor=False,
-                factor_source="auto",
+    asof_s: Optional[str] = None
+    resolved_name = name or ""
+    bars: List[Dict[str, Any]] = []
+
+    if isinstance(shared_bars, dict) and (
+        shared_bars.get("bars") or shared_bars.get("bars_raw")
+    ):
+        stock_code = str(shared_bars.get("code") or stock_code)
+        resolved_name = shared_bars.get("name") or resolved_name
+        asof_s = shared_bars.get("asof")
+        adjust_n = normalize_price_adjust(
+            shared_bars.get("adjust") or ("none" if use_realtime else "qfq")
+        )
+        bars = list(shared_bars.get("bars") or shared_bars.get("bars_raw") or [])
+        adj_meta = shared_bars.get("adj_meta")
+        realtime_meta = shared_bars.get("realtime_meta")
+    else:
+        market = infer_market_type(stock_code) or "CN"
+        if use_realtime and not asof:
+            from backend_core.analysis.realtime_bars import load_bars_with_realtime
+
+            bars, realtime_meta, asof_s = load_bars_with_realtime(
+                db, stock_code, lookback=int(lookback), asof=None, prefer_live=True
             )
-        except AdjQuotesError as e:
-            raise ValueError(e.message) from e
+        else:
+            asof_s = resolve_effective_trade_date(db, asof, market=market)
+            bars_map = batch_load_ohlc_asc(db, [stock_code], lookback=int(lookback), asof=asof_s)
+            bars = bars_map.get(stock_code) or []
+            if use_realtime:
+                from backend_core.analysis.realtime_bars import apply_realtime_to_code_bars
+
+                bars, realtime_meta = apply_realtime_to_code_bars(
+                    db, stock_code, bars, prefer_live=True
+                )
+                if realtime_meta and realtime_meta.get("trade_date"):
+                    asof_s = str(realtime_meta["trade_date"])[:10]
+        if adjust_n == "qfq":
+            try:
+                bars, adj_meta = apply_qfq_to_code_bars(
+                    db,
+                    stock_code,
+                    bars,
+                    refresh_factor=False,
+                    factor_source="auto",
+                )
+            except AdjQuotesError as e:
+                raise ValueError(e.message) from e
+        names = load_names(db, [stock_code])
+        resolved_name = names.get(stock_code) or resolved_name
 
     daily_bars = bars[-int(lookback) :] if len(bars) > int(lookback) else bars
-    names = load_names(db, [stock_code])
     gann = analyze_gann_trend(
         daily_bars,
         max_bars=lookback,
@@ -548,7 +759,7 @@ def _compute_gann(
     out: Dict[str, Any] = {
         "success": True,
         "code": stock_code,
-        "name": names.get(stock_code) or name or "",
+        "name": resolved_name or name or "",
         "asof": gann.get("asof") or asof_s,
         "price_adjust": price_adjust,
         "gann_trend": gann,
@@ -603,15 +814,27 @@ def _build_trade_plan(
 
     strategy_pack = None
     if isinstance(strategy_data, dict):
-        # collect_stock_multi_strategy_check 返回已含 summaries；trade plan 期望 strategy_pack
+        # collect_stock_multi_strategy_check 返回 results 列表；trade plan 期望 summaries dict
         if strategy_data.get("summaries"):
             strategy_pack = {
                 "summaries": strategy_data.get("summaries"),
                 "trade_date": strategy_data.get("trade_date") or trade_date,
                 "stock": strategy_data.get("stock"),
+                "rows": strategy_data.get("rows"),
             }
         elif strategy_data.get("strategy_pack"):
             strategy_pack = strategy_data.get("strategy_pack")
+        elif isinstance(strategy_data.get("results"), list):
+            summaries: Dict[str, Any] = {}
+            for r in strategy_data["results"]:
+                if isinstance(r, dict) and r.get("strategy"):
+                    summaries[str(r["strategy"]).strip().lower()] = r
+            if summaries:
+                strategy_pack = {
+                    "summaries": summaries,
+                    "trade_date": strategy_data.get("trade_date") or trade_date,
+                    "stock": strategy_data.get("stock"),
+                }
     if not isinstance(strategy_pack, dict) or not strategy_pack.get("summaries"):
         strategy_pack = collect_strategy_raw_rows(db, code=code, date=trade_date)
 
@@ -749,6 +972,28 @@ def build_stock_analysis_bundle(
         else None
     ) or {"code": code_n, "name": name_n}
 
+    strategy_snapshots = _strategy_snapshots_from_data(strategy_data)
+    shared_bars: Optional[Dict[str, Any]] = None
+    try:
+        shared_bars = _prepare_shared_bars(
+            db,
+            code_n,
+            name_n,
+            asof=asof_for_details,
+            use_realtime=bool(use_realtime),
+            lookback=_SHARED_BARS_LOOKBACK,
+        )
+        if shared_bars.get("name") and not name_n:
+            name_n = str(shared_bars["name"])
+            stock["name"] = name_n
+    except Exception as e:
+        logger.warning("shared bars prepare failed code=%s: %s", code_n, e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        shared_bars = None
+
     def job_rs(s: Session) -> Dict[str, Any]:
         return _compute_rs(s, code_n, name_n, asof_for_details, market)
 
@@ -756,7 +1001,12 @@ def build_stock_analysis_bundle(
         return _compute_fund_flow(s, code_n)
 
     def job_levels(s: Session) -> Dict[str, Any]:
-        return _compute_levels(s, code_n, use_realtime=bool(use_realtime))
+        return _compute_levels(
+            s,
+            code_n,
+            use_realtime=bool(use_realtime),
+            shared_bars=shared_bars,
+        )
 
     def job_pattern(s: Session) -> Dict[str, Any]:
         return _compute_pattern(
@@ -765,6 +1015,8 @@ def build_stock_analysis_bundle(
             name_n,
             asof=asof_for_details,
             use_realtime=bool(use_realtime),
+            shared_bars=shared_bars,
+            strategy_snapshots=strategy_snapshots,
         )
 
     def job_gann(s: Session) -> Dict[str, Any]:
@@ -774,6 +1026,7 @@ def build_stock_analysis_bundle(
             name_n,
             asof=asof_for_details,
             use_realtime=bool(use_realtime),
+            shared_bars=shared_bars,
         )
 
     # 先并行：RS / 资金 / levels / pattern / gann；swing 等 pattern 拿 bias 后再算
@@ -825,6 +1078,7 @@ def build_stock_analysis_bundle(
             asof=asof_for_details,
             use_realtime=bool(use_realtime),
             pattern_short_bias=str(bias) if bias else None,
+            shared_bars=shared_bars,
         ),
         "swing",
     )
