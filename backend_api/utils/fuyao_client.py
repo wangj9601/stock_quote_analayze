@@ -21,7 +21,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_FUYAO_BASE_URL = "https://fuyao.aicubes.cn"
 SNAPSHOT_PATH = "/api/a-share/prices/snapshot"
+DRAGON_TIGER_PATH = "/api/a-share/special-data/dragon-tiger-list"
 DEFAULT_TIMEOUT = 8.0
+DRAGON_TIGER_TIMEOUT = 20.0
 A_SHARE_LOT_SIZE = 100  # A股1手=100股；Fuyao volume 为股，对外统一按手
 
 _api_key_cache: Optional[str] = None
@@ -279,6 +281,105 @@ def snapshot_item_to_quote(
         "average_price": average_price,
         "source": "fuyao",
     }
+
+
+def fetch_dragon_tiger_list(
+    board_type: str = "all",
+    trade_date: Optional[str] = None,
+    *,
+    timeout: float = DRAGON_TIGER_TIMEOUT,
+) -> Dict[str, Any]:
+    """
+    调用 GET /api/a-share/special-data/dragon-tiger-list。
+
+    board_type: all / org / hot_money。date 省略时由同花顺返回最新可用交易日。
+
+    Returns:
+        {"ok": True, "data": {...}} 或 {"ok": False, "error": "...", "code": ...}
+    """
+    api_key = get_fuyao_api_key()
+    if not api_key:
+        print("[fuyao_lhb] 缺少 API Key，跳过同花顺龙虎榜")
+        return {"ok": False, "error": "missing_api_key", "code": 2001}
+
+    bt = (board_type or "all").strip().lower()
+    if bt not in ("all", "org", "hot_money"):
+        bt = "all"
+    params: Dict[str, str] = {"board_type": bt}
+    day = (trade_date or "").strip()
+    if day:
+        params["date"] = day
+
+    url = f"{get_fuyao_base_url()}{DRAGON_TIGER_PATH}"
+    headers = {"X-api-key": api_key, "Accept": "application/json"}
+    print(
+        f"[fuyao_lhb] 请求 GET {url}?board_type={bt}"
+        + (f"&date={day}" if day else "")
+    )
+    try:
+        resp = requests.get(url, headers=headers, params=params, timeout=timeout)
+    except requests.RequestException as exc:
+        print(f"[fuyao_lhb] 请求失败: {type(exc).__name__}: {exc}")
+        logger.warning("Fuyao 龙虎榜请求失败: %s", type(exc).__name__)
+        return {"ok": False, "error": f"request_error:{type(exc).__name__}", "code": None}
+
+    print(f"[fuyao_lhb] HTTP status={resp.status_code}")
+    try:
+        payload = resp.json()
+    except ValueError:
+        body_preview = (resp.text or "")[:300]
+        print(f"[fuyao_lhb] 非 JSON 响应 body={body_preview!r}")
+        return {
+            "ok": False,
+            "error": f"invalid_json_http_{resp.status_code}",
+            "code": None,
+        }
+
+    if resp.status_code >= 400:
+        return {
+            "ok": False,
+            "error": f"http_{resp.status_code}",
+            "code": payload.get("code") if isinstance(payload, dict) else None,
+            "raw": payload,
+        }
+
+    if not isinstance(payload, dict):
+        return {"ok": False, "error": "invalid_payload", "code": None, "raw": payload}
+
+    biz_code = payload.get("code")
+    if biz_code not in (0, "0", None):
+        print(
+            f"[fuyao_lhb] 业务失败 code={biz_code} message={payload.get('message')}"
+        )
+        return {
+            "ok": False,
+            "error": payload.get("message") or f"biz_code_{biz_code}",
+            "code": biz_code,
+            "raw": payload,
+        }
+
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        alt = payload.get("result")
+        data = alt if isinstance(alt, dict) else {}
+
+    stock_items = data.get("stock_items")
+    hot_items = data.get("hot_money_items")
+    n_stock = len(stock_items) if isinstance(stock_items, list) else 0
+    n_hot = len(hot_items) if isinstance(hot_items, list) else 0
+    print(
+        f"[fuyao_lhb] 成功 trade_date={data.get('trade_date')} "
+        f"stock_items={n_stock} hot_money_items={n_hot} "
+        f"request_id={payload.get('request_id')}"
+    )
+    if n_stock == 0 and n_hot == 0:
+        return {
+            "ok": False,
+            "error": "empty_items",
+            "code": biz_code,
+            "raw": payload,
+        }
+    return {"ok": True, "data": data, "raw": payload}
 
 
 def fetch_realtime_quote_by_code(

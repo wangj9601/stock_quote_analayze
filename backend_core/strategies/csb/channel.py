@@ -120,6 +120,6 @@ def compute_channel_state(bars: List[Dict[str, Any]], config: Dict[str, Any]) ->
         "ma60": ch.get("ma60"),
         "ma250": ch.get("ma250"),
         "hh20": hh20,
-        "resistance": max(_f(ch.get("upper")) or 0.0, _f(hh20) or 0.0) or None,
+        "resistance": _f(ch.get("upper")),
         "close": closes[i],
     }

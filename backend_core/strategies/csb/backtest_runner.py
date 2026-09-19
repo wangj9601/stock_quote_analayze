@@ -80,6 +80,23 @@ def _trading_dates(db: Session, start: str, end: str) -> List[str]:
     return [str(r[0])[:10] for r in rows if r[0]]
 
 
+def _bars_from_rows(rows) -> List[Dict[str, Any]]:
+    out: List[Dict[str, Any]] = []
+    for r in rows:
+        out.append(
+            {
+                "date": str(r[0])[:10],
+                "open": float(r[1]) if r[1] is not None else None,
+                "high": float(r[2]) if r[2] is not None else None,
+                "low": float(r[3]) if r[3] is not None else None,
+                "close": float(r[4]) if r[4] is not None else None,
+                "volume": float(r[5]) if r[5] is not None else None,
+                "turnover_rate": float(r[6]) if r[6] is not None else None,
+            }
+        )
+    return out
+
+
 def _future_bars(db: Session, code: str, after_date: str, limit: int) -> List[Dict[str, Any]]:
     from backend_api.models import HistoricalQuotes
 
@@ -90,22 +107,37 @@ def _future_bars(db: Session, code: str, after_date: str, limit: int) -> List[Di
             HistoricalQuotes.high,
             HistoricalQuotes.low,
             HistoricalQuotes.close,
+            HistoricalQuotes.volume,
+            HistoricalQuotes.turnover_rate,
         )
         .filter(HistoricalQuotes.code == code, cast(HistoricalQuotes.date, String) > str(after_date)[:10])
         .order_by(HistoricalQuotes.date)
         .limit(int(limit))
         .all()
     )
-    return [
-        {
-            "date": str(r[0])[:10],
-            "open": float(r[1]) if r[1] is not None else None,
-            "high": float(r[2]) if r[2] is not None else None,
-            "low": float(r[3]) if r[3] is not None else None,
-            "close": float(r[4]) if r[4] is not None else None,
-        }
-        for r in rows
-    ]
+    return _bars_from_rows(rows)
+
+
+def _prior_bars(db: Session, code: str, end_date: str, limit: int = 40) -> List[Dict[str, Any]]:
+    """信号日及之前的 K 线，供 MA10/MA20 与派发量能比较。"""
+    from backend_api.models import HistoricalQuotes
+
+    rows = (
+        db.query(
+            HistoricalQuotes.date,
+            HistoricalQuotes.open,
+            HistoricalQuotes.high,
+            HistoricalQuotes.low,
+            HistoricalQuotes.close,
+            HistoricalQuotes.volume,
+            HistoricalQuotes.turnover_rate,
+        )
+        .filter(HistoricalQuotes.code == code, cast(HistoricalQuotes.date, String) <= str(end_date)[:10])
+        .order_by(HistoricalQuotes.date.desc())
+        .limit(int(limit))
+        .all()
+    )
+    return list(reversed(_bars_from_rows(rows)))
 
 
 def _ensure_trace_for_backtest_range(
@@ -190,7 +222,8 @@ def build_csb_trade_meta(
     if mode == "structure_exit":
         summary = (
             f"CSB 结构出场：次日开盘入场；观察 {hz} 日；"
-            f"假突破 {dcfg.get('false_break_days', 3)} 日 + 基准止损 + MA{dcfg.get('trail_ma', 20)} 跟踪；"
+            f"假突破 {dcfg.get('false_break_days', 3)} 日 + 无缓冲基准止损 + 派发减仓 + "
+            f"MA{dcfg.get('trail_ma_fast', 10)}/MA{dcfg.get('trail_ma', 20)} 阶梯跟踪；"
             f"同时统计 +{tp:.1f}% 命中；最低得分 {ms:.0f}。"
         )
     elif mode == "risk_exit":
@@ -203,7 +236,7 @@ def build_csb_trade_meta(
         "trade_logic": {
             "summary": summary,
             "rules": [
-                "信号：CSB BREAKOUT/PROBE 且得分 ≥ 门槛" + ("；读 csb_signal_trace。" if use_trace else "；实时扫描。"),
+                "信号：CSB BREAKOUT/LPS/PROBE 且得分 ≥ 门槛" + ("；读 csb_signal_trace。" if use_trace else "；实时扫描。"),
                 "入场：信号次日开盘价。",
                 f"观察期：{hz} 个交易日。",
             ],
@@ -395,6 +428,7 @@ def run_csb_backtest(
                     bars_after_entry=future,
                     signal_date=d,
                     config=cfg,
+                    prior_bars=_prior_bars(db, code, d, 40),
                 )
             else:
                 exit_info = evaluate_risk_exit_rules(
@@ -402,6 +436,7 @@ def run_csb_backtest(
                     entry_low=entry_low,
                     bars_after_entry=future,
                     config=cfg,
+                    signal_date=d,
                 )
 
             exit_price = float(exit_info.get("exit_price") or entry_price)

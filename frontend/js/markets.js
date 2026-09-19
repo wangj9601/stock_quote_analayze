@@ -23,6 +23,7 @@ const MarketsPage = {
 
     currentTab: 'rankings',
     currentRankingType: 'rise',
+    lhbBoardType: 'all',
 
     currentPage: 1,
     pageSize: 20,
@@ -171,6 +172,19 @@ const MarketsPage = {
             refreshConceptSlopeBtn.addEventListener('click', () => this.refreshSectorSlopes('concept'));
         }
 
+        document.querySelectorAll('[data-lhb-type]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.lhbBoardType = btn.dataset.lhbType || 'all';
+                document.querySelectorAll('[data-lhb-type]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.loadDragonTiger();
+            });
+        });
+        const lhbQueryBtn = document.getElementById('lhbQueryBtn');
+        if (lhbQueryBtn) {
+            lhbQueryBtn.addEventListener('click', () => this.loadDragonTiger());
+        }
+
         const closeSectorDetailBtn = document.getElementById('closeSectorDetailBtn');
         if (closeSectorDetailBtn) {
             closeSectorDetailBtn.addEventListener('click', () => this.hideSectorDetailModal());
@@ -260,6 +274,9 @@ const MarketsPage = {
                 break;
             case 'stats':
                 this.loadStatsData();
+                break;
+            case 'dragon-tiger':
+                this.loadDragonTiger();
                 break;
         }
     },
@@ -2596,6 +2613,138 @@ const MarketsPage = {
                 }
             };
         });
+    },
+
+    formatLhbYi(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '--';
+        const yi = Number(value) / 1e8;
+        const sign = yi > 0 ? '+' : '';
+        return sign + yi.toFixed(2);
+    },
+
+    formatLhbPct(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '--';
+        const n = Number(value);
+        const sign = n > 0 ? '+' : '';
+        return sign + n.toFixed(2) + '%';
+    },
+
+    lhbSignedClass(value) {
+        if (value == null || !Number.isFinite(Number(value)) || Number(value) === 0) return '';
+        return Number(value) > 0 ? 'positive' : 'negative';
+    },
+
+    async loadDragonTiger() {
+        const tbody = document.getElementById('lhbTableBody');
+        const meta = document.getElementById('lhbMeta');
+        const hint = document.getElementById('lhbHint');
+        const hotWrap = document.getElementById('lhbHotMoneyWrap');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#888;">加载中...</td></tr>';
+        if (hotWrap) hotWrap.style.display = 'none';
+        if (hint) hint.style.display = 'none';
+        const params = new URLSearchParams();
+        params.set('board_type', this.lhbBoardType || 'all');
+        const dateInput = document.getElementById('lhbDate');
+        const day = dateInput && dateInput.value ? String(dateInput.value).trim() : '';
+        if (day) params.set('date', day);
+        try {
+            const response = await fetch(`${this.API_BASE_URL}/api/market/dragon-tiger?${params.toString()}`);
+            const result = await response.json();
+            if (!result || !result.success || !result.data) {
+                const msg = (result && result.message) || '龙虎榜加载失败';
+                tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#c62828;">${this.escapeHtml(msg)}</td></tr>`;
+                if (meta) meta.textContent = '';
+                return;
+            }
+            this.renderDragonTiger(result.data);
+        } catch (error) {
+            console.error('龙虎榜加载失败:', error);
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#c62828;">龙虎榜请求异常</td></tr>';
+            if (meta) meta.textContent = '';
+        }
+    },
+
+    renderDragonTiger(data) {
+        const tbody = document.getElementById('lhbTableBody');
+        const meta = document.getElementById('lhbMeta');
+        const hint = document.getElementById('lhbHint');
+        const hotWrap = document.getElementById('lhbHotMoneyWrap');
+        const hotBody = document.getElementById('lhbHotMoneyBody');
+        if (!tbody) return;
+        const dateInput = document.getElementById('lhbDate');
+        if (dateInput && data.trade_date && !dateInput.value) {
+            dateInput.value = data.trade_date;
+        }
+        const source = data.source_label || '';
+        const count = data.stock_count != null ? data.stock_count : (data.items || []).length;
+        if (meta) {
+            meta.textContent = [data.trade_date || '', source ? `来源 ${source}` : '', `${count} 只`].filter(Boolean).join(' · ');
+        }
+        const note = data.fallback_reason || data.board_type_note || '';
+        if (hint) {
+            if (note) {
+                hint.style.display = 'block';
+                hint.textContent = note;
+            } else {
+                hint.style.display = 'none';
+                hint.textContent = '';
+            }
+        }
+        const items = Array.isArray(data.items) ? data.items : [];
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#888;">暂无龙虎榜数据</td></tr>';
+        } else {
+            tbody.innerHTML = items.map(row => {
+                const code = String(row.code || '');
+                const name = String(row.name || '');
+                const reason = row.reason || row.interpretation || '';
+                const closeText = row.close == null || !Number.isFinite(Number(row.close)) ? '--' : Number(row.close).toFixed(2);
+                return `<tr data-code="${this.escapeHtml(code)}" data-name="${this.escapeHtml(name)}" style="cursor:pointer;">
+                    <td>${this.escapeHtml(code)}</td>
+                    <td>${this.escapeHtml(name)}</td>
+                    <td class="${this.lhbSignedClass(row.change_percent)}">${this.formatLhbPct(row.change_percent)}</td>
+                    <td>${closeText}</td>
+                    <td>${this.formatLhbYi(row.buy_value)}</td>
+                    <td>${this.formatLhbYi(row.sell_value)}</td>
+                    <td class="${this.lhbSignedClass(row.net_value)}">${this.formatLhbYi(row.net_value)}</td>
+                    <td class="${this.lhbSignedClass(row.net_rate)}">${this.formatLhbPct(row.net_rate)}</td>
+                    <td class="${this.lhbSignedClass(row.org_net_value)}">${this.formatLhbYi(row.org_net_value)}</td>
+                    <td class="${this.lhbSignedClass(row.hot_money_net_value)}">${this.formatLhbYi(row.hot_money_net_value)}</td>
+                    <td title="${this.escapeHtml(reason)}">${this.escapeHtml(reason || '--')}</td>
+                </tr>`;
+            }).join('');
+            tbody.querySelectorAll('tr[data-code]').forEach(tr => {
+                tr.addEventListener('click', () => {
+                    const code = tr.dataset.code;
+                    const name = tr.dataset.name || '';
+                    if (code && typeof goToStock === 'function') goToStock(code, name);
+                });
+            });
+        }
+        const seats = Array.isArray(data.hot_money_items) ? data.hot_money_items : [];
+        if (!hotWrap || !hotBody) return;
+        if (!seats.length) {
+            hotWrap.style.display = 'none';
+            hotBody.innerHTML = '';
+            return;
+        }
+        hotWrap.style.display = 'block';
+        hotBody.innerHTML = seats.map(seat => {
+            const stocks = Array.isArray(seat.stocks) ? seat.stocks : [];
+            const stockText = stocks.map(s => {
+                const label = `${s.name || ''}${s.code ? '(' + s.code + ')' : ''}`.trim();
+                const net = this.formatLhbYi(s.net_value);
+                return net === '--' ? label : `${label} ${net}`;
+            }).filter(Boolean).join('、');
+            return `<tr>
+                <td>${this.escapeHtml(seat.name || '--')}</td>
+                <td>${this.formatLhbYi(seat.buy_value)}</td>
+                <td>${this.formatLhbYi(seat.sell_value)}</td>
+                <td class="${this.lhbSignedClass(seat.net_value)}">${this.formatLhbYi(seat.net_value)}</td>
+                <td>${this.escapeHtml(stockText || '--')}</td>
+            </tr>`;
+        }).join('');
     },
 
     // 更新所有自选股按钮的状态

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CSB SETUP：换手、年线、回踩、地量。"""
+"""CSB SETUP：换手、年线、独立回踩、Spring、地量。"""
 
 from __future__ import annotations
 
@@ -10,27 +10,147 @@ from .config import CSB_SETUP
 from .indicators import _f, avg_turnover, avg_volume, slope_norm, sma_series
 
 
-def _count_lower_touches(
+def _mean_volume(bars: Sequence[Dict[str, Any]], lookback: int = 20) -> Optional[float]:
+    if not bars:
+        return None
+    chunk = list(bars[-lookback:])
+    vals = [_f(b.get("volume")) or 0.0 for b in chunk]
+    vals = [v for v in vals if v > 0]
+    if len(vals) < 5:
+        return None
+    return sum(vals) / len(vals)
+
+
+def bar_is_spring(
+    bar: Dict[str, Any],
+    *,
+    lower: float,
+    pierce_min_pct: float,
+    pierce_max_pct: float,
+    vol_avg: Optional[float],
+    vol_ratio_max: float,
+) -> bool:
+    """盘中假跌破下轨后收回，且量能极小。"""
+    if lower <= 0:
+        return False
+    low = _f(bar.get("low"))
+    close = _f(bar.get("close"))
+    vol = _f(bar.get("volume"))
+    if low is None or close is None or vol is None:
+        return False
+    pierce = (lower - low) / lower
+    if pierce < pierce_min_pct or pierce > pierce_max_pct:
+        return False
+    if close < lower:
+        return False
+    if vol_avg is None or vol_avg <= 0:
+        return False
+    return vol <= vol_avg * vol_ratio_max
+
+
+def _spring_params(config: Dict[str, Any]) -> Dict[str, float]:
+    scfg = (config or {}).get("spring") or {}
+    return {
+        "pierce_min_pct": float(scfg.get("pierce_min_pct", 0.01)),
+        "pierce_max_pct": float(scfg.get("pierce_max_pct", 0.02)),
+        "vol_ratio_max": float(scfg.get("vol_ratio_max", 0.55)),
+    }
+
+
+def count_support_tests(
     bars: Sequence[Dict[str, Any]],
     *,
     lower: float,
     touch_tol_pct: float,
+    leave_pct: float = 0.03,
     lookback: int = 60,
+    config: Optional[Dict[str, Any]] = None,
 ) -> int:
-    """统计近 lookback 内触及通道下轨次数。"""
-    if lower <= 0:
+    """独立回踩次数：连续贴轨只计 1 次，离开下轨后再回来才计下一次。
+
+    收盘有效跌破（深于 Spring 上限）的触碰不计入支撑测试。
+    """
+    if lower <= 0 or not bars:
         return 0
-    window = list(bars[-lookback:])
-    touches = 0
-    tol = lower * touch_tol_pct
-    for b in window:
+    sp = _spring_params(config or {})
+    start = max(0, len(bars) - int(lookback))
+    tests = 0
+    armed = True
+    touch_line = lower * (1.0 + touch_tol_pct)
+    leave_line = lower * (1.0 + leave_pct)
+    reclaim_line = lower * (1.0 - 0.002)
+    for i in range(start, len(bars)):
+        b = bars[i]
         low = _f(b.get("low"))
         close = _f(b.get("close"))
-        if low is not None and low <= lower + tol:
-            touches += 1
-        elif close is not None and close <= lower + tol:
-            touches += 1
-    return touches
+        touching = (low is not None and low <= touch_line) or (close is not None and close <= touch_line)
+        left = close is not None and close >= leave_line and not touching
+        if touching and armed:
+            vol_avg = _mean_volume(bars[max(0, i - 20) : i], 20)
+            spring = bar_is_spring(
+                b,
+                lower=lower,
+                pierce_min_pct=sp["pierce_min_pct"],
+                pierce_max_pct=sp["pierce_max_pct"],
+                vol_avg=vol_avg,
+                vol_ratio_max=sp["vol_ratio_max"],
+            )
+            reclaimed = close is not None and close >= reclaim_line
+            if reclaimed or spring:
+                tests += 1
+            armed = False
+        if left:
+            armed = True
+    return tests
+
+
+def find_springs(
+    bars: Sequence[Dict[str, Any]],
+    *,
+    lower: float,
+    lookback: int = 60,
+    config: Optional[Dict[str, Any]] = None,
+) -> List[int]:
+    """返回 lookback 内 Spring K 线的下标（相对 bars）。"""
+    if lower <= 0 or not bars:
+        return []
+    sp = _spring_params(config or {})
+    start = max(0, len(bars) - int(lookback))
+    hits: List[int] = []
+    for i in range(start, len(bars)):
+        vol_avg = _mean_volume(bars[max(0, i - 20) : i], 20)
+        if bar_is_spring(
+            bars[i],
+            lower=lower,
+            pierce_min_pct=sp["pierce_min_pct"],
+            pierce_max_pct=sp["pierce_max_pct"],
+            vol_avg=vol_avg,
+            vol_ratio_max=sp["vol_ratio_max"],
+        ):
+            hits.append(i)
+    return hits
+
+
+def check_ma250_defense(bars: Sequence[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
+    mcfg = (config or {}).get("ma250") or {}
+    slope_min = float(mcfg.get("slope_min", -0.0005))
+    closes = [_f(b.get("close")) or 0.0 for b in bars]
+    ma250_series = sma_series(closes, 250)
+    ma250 = ma250_series[-1] if ma250_series else None
+    close = closes[-1] if closes else None
+    slope = slope_norm(ma250_series, 20)
+
+    above = bool(ma250 is not None and close is not None and close >= ma250)
+    # 年线本身走平或向上；收盘在年线之上不能替代斜率条件。
+    slope_ok = slope is not None and slope >= slope_min
+
+    return {
+        "ma250_ok": slope_ok,
+        "ma250": ma250,
+        "ma250_slope_norm": slope,
+        "close_above_ma250": above,
+        "slope_ok": slope_ok,
+    }
 
 
 def check_dry_volume(bars: Sequence[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
@@ -58,30 +178,9 @@ def check_dry_volume(bars: Sequence[Dict[str, Any]], config: Dict[str, Any]) -> 
     }
 
 
-def check_ma250_defense(bars: Sequence[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
-    mcfg = (config or {}).get("ma250") or {}
-    slope_min = float(mcfg.get("slope_min", -0.0005))
-    closes = [_f(b.get("close")) or 0.0 for b in bars]
-    ma250_series = sma_series(closes, 250)
-    ma250 = ma250_series[-1] if ma250_series else None
-    close = closes[-1] if closes else None
-    slope = slope_norm(ma250_series, 20)
-
-    above = bool(ma250 is not None and close is not None and close >= ma250)
-    slope_ok = slope is None or slope >= slope_min
-    ok = above or slope_ok
-
-    return {
-        "ma250_ok": ok,
-        "ma250": ma250,
-        "ma250_slope_norm": slope,
-        "close_above_ma250": above,
-    }
-
-
 def detect_setup(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
     """
-    SETUP 判定：通道粘合 + 年线 + 回踩次数 + 地量 + 换手初筛。
+    SETUP 判定：通道粘合 + 年线走平/向上 + 独立回踩 + 地量 + 换手初筛。
     bars 正序。
     """
     tcfg = (config or {}).get("turnover") or {}
@@ -89,6 +188,8 @@ def detect_setup(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str
     min_to = float(tcfg.get("min_avg_20", 1.0))
     min_touches = int(ccfg.get("min_touches", 2))
     touch_tol = float(ccfg.get("touch_tol_pct", 0.015))
+    leave_pct = float(ccfg.get("touch_leave_pct", 0.03))
+    lookback = int(ccfg.get("touch_lookback", 60))
 
     channel = compute_channel_state(bars, config)
     if not channel.get("ok"):
@@ -104,12 +205,25 @@ def detect_setup(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str
 
     ma250 = check_ma250_defense(bars, config)
     lower = _f(channel.get("lower"))
-    touches = _count_lower_touches(
-        bars,
-        lower=lower or 0.0,
-        touch_tol_pct=touch_tol,
-    ) if lower else 0
+    touches = (
+        count_support_tests(
+            bars,
+            lower=lower or 0.0,
+            touch_tol_pct=touch_tol,
+            leave_pct=leave_pct,
+            lookback=lookback,
+            config=config,
+        )
+        if lower
+        else 0
+    )
     touch_ok = touches >= min_touches
+    springs = find_springs(bars, lower=lower or 0.0, lookback=lookback, config=config) if lower else []
+    spring_low = None
+    if springs:
+        lows = [_f(bars[i].get("low")) for i in springs]
+        lows = [x for x in lows if x is not None]
+        spring_low = min(lows) if lows else None
 
     dry = check_dry_volume(bars, config)
 
@@ -130,6 +244,9 @@ def detect_setup(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str
         "turnover_ok": turnover_ok,
         "touch_count": touches,
         "touch_ok": touch_ok,
+        "spring_ok": bool(springs),
+        "spring_count": len(springs),
+        "spring_low": spring_low,
         "ma250": ma250,
         "dry_vol": dry,
     }

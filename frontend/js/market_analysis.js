@@ -16,7 +16,8 @@ const MarketAnalysis = {
   loadedOnce: false,
   _resizeBound: null,
   _boardClickBound: false,
-  boardConstituents: { items: [], meta: {}, board: null },
+  boardConstituents: { items: [], meta: {}, board: null, roleByCode: {}, limitByCode: {} },
+  _constituentsToken: 0,
 
   init() {
     this.bindEvents();
@@ -75,6 +76,35 @@ const MarketAnalysis = {
 
     const closeBtn = document.getElementById('maBoardConstituentsClose');
     if (closeBtn) closeBtn.addEventListener('click', () => this.closeBoardConstituents());
+    const selectAllBtn = document.getElementById('maConstituentsSelectAll');
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener('click', () => this.setConstituentsChecked(true));
+    }
+    const clearBtn = document.getElementById('maConstituentsClear');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => this.setConstituentsChecked(false));
+    }
+    const headerCb = document.getElementById('maConstituentsSelectAllCb');
+    if (headerCb) {
+      headerCb.addEventListener('change', () => this.setConstituentsChecked(!!headerCb.checked));
+    }
+    const batchBtn = document.getElementById('maConstituentsBatchTrade');
+    if (batchBtn) {
+      batchBtn.addEventListener('click', () => this.openConstituentsBatchTrade());
+    }
+    const rpeBtn = document.getElementById('maConstituentsRpe');
+    if (rpeBtn) {
+      rpeBtn.addEventListener('click', () => this.goToRpeFromConstituents());
+    }
+    const consTbody = document.getElementById('maBoardConstituentsTbody');
+    if (consTbody) {
+      consTbody.addEventListener('change', (ev) => {
+        const t = ev.target;
+        if (t && t.classList && t.classList.contains('ma-constituent-cb')) {
+          this.syncConstituentsHeaderCheckbox();
+        }
+      });
+    }
     const modal = document.getElementById('maBoardConstituentsModal');
     if (modal) {
       modal.addEventListener('click', (ev) => {
@@ -540,10 +570,19 @@ const MarketAnalysis = {
     const kind = this.radioValue('maBoardKind', 'industry');
     const period = this.radioValue('maBoardPeriod', 'day');
     const statusId = 'maBoardConstituentsStatus';
+    const token = ++this._constituentsToken;
+    this.boardConstituents = {
+      items: [],
+      meta: {},
+      board: { code: boardCode, name: boardName, kind },
+      roleByCode: {},
+      limitByCode: {},
+    };
     this.setStatus(statusId, '加载中…', false);
     this.setMeta('maBoardConstituentsMeta', '');
     const tbody = document.getElementById('maBoardConstituentsTbody');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="ma-empty">加载中…</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="ma-empty">加载中…</td></tr>';
+    this.loadBoardConstituentMarks(boardCode, boardName, kind, token);
     try {
       const q = new URLSearchParams({
         board_kind: kind,
@@ -578,7 +617,10 @@ const MarketAnalysis = {
           name: displayName,
           kind,
         },
+        roleByCode: (this.boardConstituents && this.boardConstituents.roleByCode) || {},
+        limitByCode: (this.boardConstituents && this.boardConstituents.limitByCode) || {},
       };
+      if (token !== this._constituentsToken) return;
       const title = document.getElementById('maBoardConstituentsTitle');
       if (title) title.textContent = `${displayName} · 成分股资金流向`;
       const kindLabel = kind === 'concept' ? '概念' : '行业';
@@ -600,7 +642,14 @@ const MarketAnalysis = {
         (items.length ? '' : '暂无成分股资金流（请先同步成分股并日采同花顺资金流向）');
       this.setStatus(statusId, emptyMsg, false);
     } catch (e) {
-      this.boardConstituents = { items: [], meta: {}, board: { code: boardCode, name: boardName, kind } };
+      if (token !== this._constituentsToken) return;
+      this.boardConstituents = {
+        items: [],
+        meta: {},
+        board: { code: boardCode, name: boardName, kind },
+        roleByCode: (this.boardConstituents && this.boardConstituents.roleByCode) || {},
+        limitByCode: (this.boardConstituents && this.boardConstituents.limitByCode) || {},
+      };
       this.renderBoardConstituentsTable();
       if (this.charts.boardConstituents) this.charts.boardConstituents.clear();
       this.setStatus(statusId, e.message || '加载失败', true);
@@ -646,12 +695,186 @@ const MarketAnalysis = {
     chart.resize();
   },
 
+  normStockCode(code) {
+    const s = String(code || '').trim();
+    if (/^\d+$/.test(s) && s.length < 6) return s.padStart(6, '0');
+    return s;
+  },
+
+  async loadBoardConstituentMarks(boardCode, boardName, kind, token) {
+    const prefix = kind === 'concept' ? 'concept_board' : 'industry_board';
+    const baseQ = new URLSearchParams({
+      board_code_source: this.BOARD_CODE_SOURCE || 'tonghuashun',
+    });
+    const name = String(boardName || '').trim();
+    if (name) baseQ.set('board_name', name);
+    const encoded = encodeURIComponent(boardCode);
+    const rolesUrl = `${this.API_BASE_URL}/api/market/${prefix}/${encoded}/roles?${baseQ.toString()}`;
+    const luQ = new URLSearchParams(baseQ);
+    luQ.set('days', '60');
+    luQ.set('wave_start_mode', 'board_start');
+    const luUrl = `${this.API_BASE_URL}/api/market/${prefix}/${encoded}/limit_up_stocks?${luQ.toString()}`;
+    const [rolesBody, luBody] = await Promise.all([
+      this.fetchJson(rolesUrl).catch(() => null),
+      this.fetchJson(luUrl).catch(() => null),
+    ]);
+    if (token !== this._constituentsToken) return;
+    const roleByCode = {};
+    const roles = (rolesBody && rolesBody.data) || {};
+    (roles.leaders || []).forEach((s) => {
+      const c = this.normStockCode(s.code || s.stock_code);
+      if (c) roleByCode[c] = 'leader';
+    });
+    (roles.mids || []).forEach((s) => {
+      const c = this.normStockCode(s.code || s.stock_code);
+      if (c && !roleByCode[c]) roleByCode[c] = 'mid';
+    });
+    const limitByCode = {};
+    const stocks = ((luBody && luBody.data && luBody.data.stocks) || []);
+    stocks.forEach((s) => {
+      const c = this.normStockCode(s.code);
+      const n = Number(s.limit_up_count);
+      if (!c || !Number.isFinite(n) || n <= 0) return;
+      limitByCode[c] = {
+        count: n,
+        consecutive: Number(s.max_consecutive) || 0,
+      };
+    });
+    if (!this.boardConstituents) this.boardConstituents = { items: [], meta: {}, board: null };
+    this.boardConstituents.roleByCode = roleByCode;
+    this.boardConstituents.limitByCode = limitByCode;
+    if ((this.boardConstituents.items || []).length) {
+      this.renderBoardConstituentsTable();
+    }
+  },
+
+  constituentCodeMarks(code) {
+    const key = this.normStockCode(code);
+    const role = (this.boardConstituents.roleByCode || {})[key];
+    const lu = (this.boardConstituents.limitByCode || {})[key];
+    const bits = [];
+    if (role === 'leader') {
+      bits.push('<span class="ba-role-pill ba-role-pill--leader ba-role-pill--sm" title="板块龙头">龙头</span>');
+    } else if (role === 'mid') {
+      bits.push('<span class="ba-role-pill ba-role-pill--mid ba-role-pill--sm" title="板块中军">中军</span>');
+    }
+    if (lu && lu.count > 0) {
+      const consec = lu.consecutive > 1 ? `，最高连板 ${lu.consecutive}` : '';
+      bits.push(
+        `<span class="ma-limit-badge" title="本轮起涨后涨停 ${lu.count} 次${consec}">${lu.count}板</span>`
+      );
+    }
+    return bits.join('');
+  },
+  stockAnalysisHref(code, name) {
+    const c = String(code || '').trim();
+    if (!c) return '';
+    if (window.StockTradeLink && typeof StockTradeLink.buildHref === 'function') {
+      return StockTradeLink.buildHref(c, name, { tab: 'analysis' });
+    }
+    const q = new URLSearchParams({ code: c, tab: 'analysis' });
+    const n = String(name || '').trim();
+    if (n) q.set('name', n);
+    return `stock.html?${q.toString()}`;
+  },
+
+  setConstituentsChecked(checked) {
+    const tbody = document.getElementById('maBoardConstituentsTbody');
+    if (tbody) {
+      tbody.querySelectorAll('.ma-constituent-cb').forEach((el) => {
+        el.checked = !!checked;
+      });
+    }
+    this.syncConstituentsHeaderCheckbox();
+  },
+
+  syncConstituentsHeaderCheckbox() {
+    const headerCb = document.getElementById('maConstituentsSelectAllCb');
+    const tbody = document.getElementById('maBoardConstituentsTbody');
+    if (!headerCb || !tbody) return;
+    const boxes = tbody.querySelectorAll('.ma-constituent-cb');
+    if (!boxes.length) {
+      headerCb.checked = false;
+      headerCb.indeterminate = false;
+      return;
+    }
+    let n = 0;
+    boxes.forEach((el) => {
+      if (el.checked) n += 1;
+    });
+    headerCb.checked = n === boxes.length;
+    headerCb.indeterminate = n > 0 && n < boxes.length;
+  },
+
+  collectCheckedConstituents() {
+    const tbody = document.getElementById('maBoardConstituentsTbody');
+    if (!tbody) return [];
+    const stocks = [];
+    const seen = new Set();
+    tbody.querySelectorAll('.ma-constituent-cb:checked').forEach((el) => {
+      const code = String(el.getAttribute('data-code') || el.value || '').trim();
+      if (!code || seen.has(code)) return;
+      seen.add(code);
+      stocks.push({
+        code,
+        name: String(el.getAttribute('data-name') || '').trim(),
+      });
+    });
+    return stocks;
+  },
+
+  openConstituentsBatchTrade() {
+    const stocks = this.collectCheckedConstituents();
+    if (!stocks.length) {
+      if (window.CommonUtils && CommonUtils.showToast) {
+        CommonUtils.showToast('请先勾选至少一只股票', 'warning');
+      } else {
+        window.alert('请先勾选至少一只股票');
+      }
+      return;
+    }
+    if (window.StockTradeLink && typeof StockTradeLink.openBatchAnalysis === 'function') {
+      StockTradeLink.openBatchAnalysis(stocks, { toastPrefix: '已打开交易分析' });
+      return;
+    }
+    if (window.CommonUtils && CommonUtils.showToast) {
+      CommonUtils.showToast('交易分析组件未加载，请刷新页面后重试', 'error');
+    }
+  },
+
+  goToRpeFromConstituents() {
+    const board = (this.boardConstituents && this.boardConstituents.board) || {};
+    const kind = board.kind === 'concept' ? 'concept' : 'industry';
+    const code = String(board.code || '').trim();
+    if (!code) {
+      if (window.CommonUtils && CommonUtils.showToast) {
+        CommonUtils.showToast('缺少板块代码，无法进入比价选股', 'warning');
+      }
+      return;
+    }
+    const params = new URLSearchParams({
+      board_kind: kind,
+      board_code: code,
+      board_code_source: this.BOARD_CODE_SOURCE || 'tonghuashun',
+    });
+    const name = String(board.name || '').trim();
+    if (name) params.set('board_name', name);
+    const url = `screening.html?${params.toString()}#rpe`;
+    const win = window.open(url, '_blank');
+    if (win) {
+      try { win.opener = null; } catch (_) { /* ignore */ }
+    } else if (window.CommonUtils && CommonUtils.showToast) {
+      CommonUtils.showToast('无法打开新标签页，请检查浏览器弹窗拦截', 'warning');
+    }
+  },
+
   renderBoardConstituentsTable() {
     const tbody = document.getElementById('maBoardConstituentsTbody');
     if (!tbody) return;
     const items = this.boardConstituents.items || [];
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="ma-empty">暂无数据</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="ma-empty">暂无数据</td></tr>';
+      this.syncConstituentsHeaderCheckbox();
       return;
     }
     const rows = [...items].sort((a, b) => {
@@ -659,14 +882,29 @@ const MarketAnalysis = {
       const bv = b.net_amount == null ? Number.NEGATIVE_INFINITY : Number(b.net_amount);
       return bv - av;
     });
+    const checked = new Set(
+      this.collectCheckedConstituents().map((s) => this.normStockCode(s.code))
+    );
     tbody.innerHTML = rows
       .map((r, i) => {
         const net = r.net_amount == null ? null : Number(r.net_amount);
         const chg = r.change_percent;
+        const code = String(r.code || '').trim();
+        const name = String(r.name || '').trim();
+        const href = this.stockAnalysisHref(code, name);
+        const codeText = this.escapeHtml(code || '--');
+        const marks = this.constituentCodeMarks(code);
+        const codeCell = href
+          ? `<a class="ma-code-link" href="${this.escapeHtml(href)}" target="_blank" rel="noopener" title="打开交易分析">${codeText}</a>`
+          : codeText;
+        const checkedAttr = checked.has(this.normStockCode(code)) ? ' checked' : '';
         return `<tr>
+          <td class="ma-constituents-check">
+            <input type="checkbox" class="ma-constituent-cb" data-code="${this.escapeHtml(code)}" data-name="${this.escapeHtml(name)}" value="${this.escapeHtml(code)}" title="勾选后可批量交易分析" aria-label="选择 ${this.escapeHtml(code)}"${checkedAttr}>
+          </td>
           <td>${i + 1}</td>
-          <td><a class="ma-code-link" href="stock.html?code=${encodeURIComponent(r.code || '')}" target="_blank" rel="noopener">${this.escapeHtml(r.code || '--')}</a></td>
-          <td>${this.escapeHtml(r.name || '--')}</td>
+          <td><span class="ma-code-marks">${codeCell}${marks}</span></td>
+          <td>${this.escapeHtml(name || '--')}</td>
           <td class="ma-num ${this.colorClass(net)}">${this.fmtYi(r.net_amount)}</td>
           <td class="ma-num">${this.fmtYi(r.inflow_amount)}</td>
           <td class="ma-num">${this.fmtYi(r.outflow_amount)}</td>
@@ -675,6 +913,7 @@ const MarketAnalysis = {
         </tr>`;
       })
       .join('');
+    this.syncConstituentsHeaderCheckbox();
   },
 
   /* ---------- 板块斜率 ---------- */

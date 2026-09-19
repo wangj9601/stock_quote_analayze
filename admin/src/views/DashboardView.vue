@@ -363,6 +363,10 @@
       <el-tab-pane label="每日复盘" name="daily-review">
         <DailyReviewPanel />
       </el-tab-pane>
+
+      <el-tab-pane label="龙虎榜" name="dragon-tiger" lazy>
+        <DragonTigerPanel />
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -371,6 +375,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
 import DailyReviewPanel from '@/views/dashboard/DailyReviewPanel.vue'
+import DragonTigerPanel from '@/views/dashboard/DragonTigerPanel.vue'
 import boardFundFlowService, {
   BOARD_FUND_FLOW_RANK_PERIODS,
   type BoardConstituentFundFlowItem,

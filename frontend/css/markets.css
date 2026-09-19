@@ -1880,3 +1880,67 @@
 .sector-detail-actions .sector-detail-rpe-btn {
     border: none;
 }
+
+.lhb-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.lhb-types {
+    display: flex;
+    gap: 8px;
+}
+
+.lhb-type-btn {
+    padding: 8px 16px;
+    border: 1px solid var(--color-border);
+    background: #f8f9fa;
+    color: var(--color-text-secondary);
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.lhb-type-btn.active {
+    background: var(--color-primary);
+    color: #ffffff;
+    border-color: var(--color-primary);
+}
+
+.lhb-type-btn:hover:not(.active) {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.lhb-meta {
+    color: #666;
+    font-size: 13px;
+}
+
+.lhb-hint {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    background: #fff8e6;
+    border: 1px solid #ffe2a8;
+    border-radius: 6px;
+    color: #8a6d3b;
+    font-size: 13px;
+}
+
+.lhb-table-wrap {
+    overflow-x: auto;
+}
+
+.lhb-subhead {
+    margin: 1.25rem 0 0.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.lhb-hot-wrap {
+    margin-top: 8px;
+}

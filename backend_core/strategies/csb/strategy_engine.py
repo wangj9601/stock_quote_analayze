@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 from .config import (
     BUY_SIGNAL_TYPES,
     CSB_BREAKOUT,
+    CSB_LPS,
     CSBConfigManager,
     CSB_PROBE,
     CSB_SETUP,
@@ -22,12 +23,17 @@ logger = logging.getLogger(__name__)
 def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     SETUP/入场质量综合分（0～100）及分项明细。
-    分项：粘合天数≤25、粘合带宽≤15、回踩≤15、地量10、换手10、PROBE+12 / BREAKOUT+20(+量能≤10)。
+    分项：粘合天数≤25、≥30日加权、粘合带宽≤15、回踩≤15、地量10、换手10、Spring、PROBE+12 / LPS+16 / BREAKOUT+20。
     """
-    _ = config  # 预留：分项权重将来可配置
+    pcfg = (config or {}).get("premium") or {}
     ch = result.get("channel") or {}
     sq_days = float(ch.get("squeeze_days") or 0)
     squeeze_days_score = min(25.0, sq_days * 1.2)
+
+    prem_days = float(pcfg.get("squeeze_days_min", 30))
+    prem_pts = float(pcfg.get("squeeze_bonus", 8.0))
+    squeeze_premium = prem_pts if sq_days >= prem_days else 0.0
+    spring_pts = float(pcfg.get("spring_bonus", 6.0)) if result.get("spring_ok") else 0.0
 
     sq_pct = ch.get("squeeze_pct")
     if sq_pct is not None:
@@ -54,13 +60,17 @@ def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]
         entry_bonus = 20.0
         if vm is not None:
             vol_bonus = min(10.0, float(vm))
+    elif signal_type == CSB_LPS:
+        entry_bonus = 16.0
 
     raw = (
         squeeze_days_score
+        + squeeze_premium
         + squeeze_pct_score
         + touch_score
         + dry_score
         + turnover_score
+        + spring_pts
         + entry_bonus
         + vol_bonus
     )
@@ -74,6 +84,18 @@ def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]
                 "max": 25.0,
                 "value": sq_days,
                 "formula": "min(25, squeeze_days × 1.2)",
+            },
+            "squeeze_premium": {
+                "score": round(squeeze_premium, 2),
+                "max": prem_pts,
+                "value": sq_days,
+                "formula": f"粘合≥{prem_days:.0f}日 +{prem_pts:.0f}",
+            },
+            "spring": {
+                "score": round(spring_pts, 2),
+                "max": float(pcfg.get("spring_bonus", 6.0)),
+                "ok": bool(result.get("spring_ok")),
+                "formula": "近端出现 Spring +6",
             },
             "squeeze_pct": {
                 "score": round(squeeze_pct_score, 2),
@@ -103,13 +125,13 @@ def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]
                 "score": round(entry_bonus, 2),
                 "max": 20.0,
                 "signal_type": signal_type,
-                "formula": "PROBE +12 / BREAKOUT +20",
+                "formula": "PROBE +12 / LPS +16 / BREAKOUT +20",
             },
             "vol_expand": {
                 "score": round(vol_bonus, 2),
                 "max": 10.0,
                 "value": float(vm) if vm is not None else None,
-                "formula": "仅 BREAKOUT：min(10, vol_expand_mult)",
+                "formula": "仅 BREAKOUT：min(10, 当日换手/20日均换手)",
             },
         },
     }
@@ -150,11 +172,14 @@ def evaluate_one(
     setup_keys = (
         "reason", "turnover_avg_20", "turnover_ok", "touch_count",
         "touch_ok", "ma250", "dry_vol", "channel", "setup_ok",
+        "spring_ok", "spring_count", "spring_low",
     )
     entry_keys = (
-        "entry_kind", "vol_expand_mult", "vol_ratio_5_20", "break_line",
+        "entry_kind", "vol_expand_mult", "expand_basis", "vol_ratio_5_20", "break_line",
         "body_pct", "upper_shadow_ratio", "expand_ok", "shrink_ok",
         "pattern_ok", "body_ok", "shadow_ok", "resistance",
+        "near_lower_ok", "spring_today", "distribution_trap",
+        "lps_breakout_date", "lps_price", "pullback_ok", "hold_ok", "turn_ok",
         "probe_price", "breakout_price",
     )
     row: Dict[str, Any] = {
@@ -187,6 +212,13 @@ def evaluate_one(
     }
     row["score"] = float(score_detail.get("total") or 0.0)
     row["buy_signal"] = signal_type in BUY_SIGNAL_TYPES
+    pos = cfg.get("position") or {}
+    if signal_type == CSB_PROBE:
+        row["suggested_position"] = pos.get("probe_pct")
+    elif signal_type == CSB_BREAKOUT:
+        row["suggested_position"] = pos.get("breakout_add_pct")
+    elif signal_type == CSB_LPS:
+        row["suggested_position"] = pos.get("lps_add_pct")
     return row
 
 
@@ -282,6 +314,7 @@ class CSBStrategyEngine:
         results.sort(
             key=lambda r: (
                 1 if r.get("signal_type") == CSB_BREAKOUT else 0,
+                1 if r.get("signal_type") == CSB_LPS else 0,
                 1 if r.get("signal_type") == CSB_PROBE else 0,
                 1 if r.get("setup_ok") else 0,
                 float(r.get("score") or 0),

@@ -110,6 +110,7 @@
                     <button class="content-tab active" data-tab="rankings">涨跌排行</button>
                     <button class="content-tab" data-tab="sectors">行业板块</button>
                     <button class="content-tab" data-tab="concepts">概念板块</button>
+                    <button class="content-tab" data-tab="dragon-tiger">龙虎榜</button>
                     <button class="content-tab" data-tab="hot">热门关注</button>
                     <button class="content-tab" data-tab="stats">市场统计</button>
                 </div>
@@ -268,6 +269,61 @@
                                     <tr><td colspan="11" style="text-align:center;color:#888;">加载中...</td></tr>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- 龙虎榜 -->
+                    <div class="tab-panel" id="dragon-tiger">
+                        <div class="lhb-toolbar">
+                            <div class="lhb-types" id="lhbBoardTypes">
+                                <button type="button" class="lhb-type-btn active" data-lhb-type="all">全部</button>
+                                <button type="button" class="lhb-type-btn" data-lhb-type="org">机构</button>
+                                <button type="button" class="lhb-type-btn" data-lhb-type="hot_money">游资</button>
+                            </div>
+                            <label for="lhbDate">日期</label>
+                            <input type="date" id="lhbDate" title="留空为最新可用交易日">
+                            <button type="button" id="lhbQueryBtn" class="btn btn-sm btn-primary">查询</button>
+                            <span id="lhbMeta" class="lhb-meta"></span>
+                        </div>
+                        <div id="lhbHint" class="lhb-hint" style="display:none;"></div>
+                        <div class="rankings-content lhb-table-wrap">
+                            <table class="table rankings-table">
+                                <thead>
+                                    <tr>
+                                        <th>代码</th>
+                                        <th>名称</th>
+                                        <th>涨跌幅</th>
+                                        <th>收盘</th>
+                                        <th>买入(亿)</th>
+                                        <th>卖出(亿)</th>
+                                        <th>净额(亿)</th>
+                                        <th>净占比</th>
+                                        <th>机构净额(亿)</th>
+                                        <th>游资净额(亿)</th>
+                                        <th>上榜原因</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lhbTableBody">
+                                    <tr><td colspan="11" style="text-align:center;color:#888;">切换到本页后加载</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="lhbHotMoneyWrap" class="lhb-hot-wrap" style="display:none;">
+                            <h3 class="lhb-subhead">游资席位</h3>
+                            <div class="rankings-content lhb-table-wrap">
+                                <table class="table rankings-table">
+                                    <thead>
+                                        <tr>
+                                            <th>席位</th>
+                                            <th>买入(亿)</th>
+                                            <th>卖出(亿)</th>
+                                            <th>净额(亿)</th>
+                                            <th>关联股票</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lhbHotMoneyBody"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
@@ -624,7 +680,7 @@
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script src="js/stock_trade_link.js"></script>
-    <script src="js/markets.js?v=20260915b"></script>
+    <script src="js/markets.js?v=20260919a"></script>
     <script src="js/hk_markets.js"></script>
     <script>
         // 市场标签页切换逻辑

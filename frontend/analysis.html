@@ -556,7 +556,7 @@
                                 </div>
                             </div>
                             <div class="ma-body">
-                                <p class="ma-hint" id="maBoardFlowHint">点击板块柱形或列表行，可查看该板块成分股资金流向（同花顺）</p>
+                                <p class="ma-hint" id="maBoardFlowHint">点击板块柱形或列表行，可查看该板块成分股资金流向；详情内可批量交易分析、进入比价选股</p>
                                 <div class="ma-chart" id="maBoardFlowChart"></div>
                                 <div class="ma-table-wrap" id="maBoardFlowTableWrap" hidden>
                                     <table class="ma-table" id="maBoardFlowTable">
@@ -1246,12 +1246,21 @@
                 <button type="button" class="lm-modal-close" id="maBoardConstituentsClose" aria-label="关闭">×</button>
             </div>
             <div class="ma-constituents-meta" id="maBoardConstituentsMeta"></div>
+            <div class="ma-constituents-actions" id="maBoardConstituentsActions">
+                <button type="button" class="btn btn-secondary btn-sm" id="maConstituentsSelectAll" title="全选当前成分股">全选</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="maConstituentsClear" title="取消勾选">清空</button>
+                <button type="button" class="btn btn-primary btn-sm" id="maConstituentsBatchTrade" title="将勾选股票批量打开个股交易分析">批量交易分析</button>
+                <button type="button" class="btn btn-primary btn-sm" id="maConstituentsRpe" title="进入比价效应选股，并预选当前板块">比价选股</button>
+            </div>
             <div class="ma-constituents-body">
                 <div class="ma-chart ma-constituents-chart" id="maBoardConstituentsChart"></div>
                 <div class="ma-table-wrap ma-constituents-table-wrap">
                     <table class="ma-table" id="maBoardConstituentsTable">
                         <thead>
                             <tr>
+                                <th class="ma-constituents-check">
+                                    <input type="checkbox" id="maConstituentsSelectAllCb" title="全选 / 取消" aria-label="全选成分股">
+                                </th>
                                 <th>排名</th>
                                 <th>代码</th>
                                 <th>名称</th>
@@ -1263,7 +1272,7 @@
                             </tr>
                         </thead>
                         <tbody id="maBoardConstituentsTbody">
-                            <tr><td colspan="8" class="ma-empty">加载中…</td></tr>
+                            <tr><td colspan="9" class="ma-empty">加载中…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1412,7 +1421,7 @@
     <script src="js/stock_multi_strategy.js?v=20260917d"></script>
     <script src="js/trade_observe.js"></script>
     <script src="js/recommend.js?v=20260914a"></script>
-    <script src="js/market_analysis.js?v=20260915a"></script>
+    <script src="js/market_analysis.js?v=20260919b"></script>
     <script src="js/daily_review.js?v=20260916a"></script>
     <script src="js/analysis.js?v=20260917a"></script>
 </body>

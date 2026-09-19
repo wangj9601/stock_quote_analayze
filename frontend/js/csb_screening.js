@@ -68,9 +68,11 @@
       CSB_SETUP: 'SETUP',
       CSB_PROBE: 'PROBE',
       CSB_BREAKOUT: 'BREAKOUT',
+      CSB_LPS: 'LPS',
       CSB_FALSE_BREAK: '假突破',
       CSB_STOP: '止损',
       CSB_TRAIL: '跟踪',
+      CSB_DISTRIBUTE: '派发',
     };
     return map[s] || s || '-';
   }

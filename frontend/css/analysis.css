@@ -332,10 +332,22 @@
 }
 
 .ma-constituents-meta {
-    padding: 0.55rem 1.1rem;
+    padding: 0.55rem 1.1rem 0.25rem;
     font-size: 0.85rem;
     color: #64748b;
+}
+
+.ma-constituents-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0.35rem 1.1rem 0.55rem;
     border-bottom: 1px solid #f1f5f9;
+}
+
+.ma-constituents-check {
+    width: 36px;
+    text-align: center;
 }
 
 .ma-constituents-body {
@@ -368,6 +380,27 @@ a.ma-code-link {
 
 a.ma-code-link:hover {
     text-decoration: underline;
+}
+
+.ma-code-marks {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ma-limit-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: #b91c1c;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    white-space: nowrap;
+    vertical-align: middle;
 }
 
 /* 旧市场分析网格（保留兼容） */

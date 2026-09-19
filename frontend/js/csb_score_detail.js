@@ -42,9 +42,11 @@ const CsbScoreDetail = {
       CSB_SETUP: 'SETUP（观察）',
       CSB_PROBE: 'PROBE（试探入场）',
       CSB_BREAKOUT: 'BREAKOUT（突破入场）',
+      CSB_LPS: 'LPS（回踩加仓）',
       CSB_FALSE_BREAK: '假突破',
       CSB_STOP: '止损',
       CSB_TRAIL: '跟踪出场',
+      CSB_DISTRIBUTE: '派发离场',
     };
     const s = String(t || '').trim();
     return map[s] || s || '--';
@@ -94,6 +96,7 @@ const CsbScoreDetail = {
     let entryBonus = 0;
     let volBonus = 0;
     if (signalType === 'CSB_PROBE') entryBonus = 12;
+    else if (signalType === 'CSB_LPS') entryBonus = 16;
     else if (signalType === 'CSB_BREAKOUT') {
       entryBonus = 20;
       if (vm != null) volBonus = Math.min(10, Number(vm));
@@ -110,8 +113,8 @@ const CsbScoreDetail = {
         touches: { score: +touchScore.toFixed(2), max: 15, value: touches, formula: 'min(15, touch_count × 4)' },
         dry_vol: { score: dryScore, max: 10, ok: dryOk, formula: '地量成立 +10' },
         turnover: { score: turnoverScore, max: 10, ok: turnoverOk, formula: '20日均换手达标 +10' },
-        entry_type: { score: entryBonus, max: 20, signal_type: signalType, formula: 'PROBE +12 / BREAKOUT +20' },
-        vol_expand: { score: +volBonus.toFixed(2), max: 10, value: vm != null ? Number(vm) : null, formula: '仅 BREAKOUT：min(10, vol_expand_mult)' },
+        entry_type: { score: entryBonus, max: 20, signal_type: signalType, formula: 'PROBE +12 / LPS +16 / BREAKOUT +20' },
+        vol_expand: { score: +volBonus.toFixed(2), max: 10, value: vm != null ? Number(vm) : null, formula: '仅 BREAKOUT：min(10, 当日换手/20日均换手)' },
       },
       reconstructed: true,
     };
@@ -161,13 +164,14 @@ const CsbScoreDetail = {
 
     // 【判定链路】
     html += '<div class="gms-score-detail-section"><strong>【判定链路】</strong>';
-    html += '<p class="urt-buy-logic-formula">MA5/10/20/60 粘合通道 → SETUP（换手+年线+回踩+地量）→ BREAKOUT 优先，否则 PROBE</p>';
+    html += '<p class="urt-buy-logic-formula">MA5/10/20/60 粘合通道 → SETUP（换手+年线走平+独立回踩+地量）→ BREAKOUT 优先，其次 LPS，再次 PROBE</p>';
     html += '<p class="urt-buy-logic-detail">通道下轨 = min(MA5,10,20,60)；上轨 = max(...)；粘合带宽 = (上轨−下轨)/收盘；默认带宽≤4% 且连续≥15 日。</p>';
     html += '<table class="gms-weight-table"><thead><tr><th>阶段</th><th>规则摘要</th><th>结果</th></tr></thead><tbody>';
     html += `<tr><td>通道粘合</td><td>带宽 ≤4% 且连续粘合 ≥15 日</td><td>${this._passLabel(channel.squeeze_ok)}</td></tr>`;
     html += `<tr><td>SETUP</td><td>粘合 + 换手 + 年线 + 回踩≥2 + 地量</td><td>${this._passLabel(setupOk)}</td></tr>`;
-    html += `<tr><td>BREAKOUT</td><td>放量≥2× + 实体≥3% + 上影≤0.3 + 收盘≥阻力×1.02</td><td>${this._yn(entryKind === 'breakout')}</td></tr>`;
-    html += `<tr><td>PROBE</td><td>量比≤0.8 + 缩量止跌形态</td><td>${this._yn(entryKind === 'probe')}</td></tr>`;
+    html += `<tr><td>BREAKOUT</td><td>换手≥2× + 实体≥3% + 上影≤0.2 + 收盘≥上轨×1.02</td><td>${this._yn(entryKind === 'breakout')}</td></tr>`;
+    html += `<tr><td>LPS</td><td>突破后3日内缩量回踩上轨不破并转强</td><td>${this._yn(entryKind === 'lps')}</td></tr>`;
+    html += `<tr><td>PROBE</td><td>贴近下轨 + 缩量高下影或 Spring</td><td>${this._yn(entryKind === 'probe')}</td></tr>`;
     html += '</tbody></table></div>';
 
     // 【通道与阻力】
@@ -180,7 +184,7 @@ const CsbScoreDetail = {
     html += `<tr><td>粘合天数</td><td>${squeezeDays != null ? String(squeezeDays) : '--'}</td><td>从尾部向前连续满足带宽阈值</td></tr>`;
     html += `<tr><td>MA5 / 10 / 20 / 60</td><td>${this._fmt(channel.ma5, 2)} / ${this._fmt(channel.ma10, 2)} / ${this._fmt(channel.ma20, 2)} / ${this._fmt(channel.ma60, 2)}</td><td>构成通道的四条均线</td></tr>`;
     html += `<tr><td>HH20</td><td>${this._fmt(hh20, 2)}</td><td>近20日最高价（不含当日）</td></tr>`;
-    html += `<tr><td>阻力线</td><td>${this._fmt(resistance, 2)}</td><td>max(上轨, HH20)</td></tr>`;
+    html += `<tr><td>阻力线</td><td>${this._fmt(resistance, 2)}</td><td>通道上轨</td></tr>`;
     if (entryD.break_line != null) {
       html += `<tr><td>突破线</td><td>${this._fmt(entryD.break_line, 2)}</td><td>阻力 × (1 + break_pct)，默认 +2%</td></tr>`;
     }
@@ -190,32 +194,41 @@ const CsbScoreDetail = {
     html += '<div class="gms-score-detail-section"><strong>【SETUP 条件】</strong>';
     html += '<table class="gms-weight-table"><thead><tr><th>条件</th><th>实际值</th><th>结果</th></tr></thead><tbody>';
     html += `<tr><td>20日均换手 ≥1.0%</td><td>${this._fmt(setup.turnover_avg_20, 2)}%</td><td>${this._passLabel(setup.turnover_ok)}</td></tr>`;
-    html += `<tr><td>年线防守</td><td>MA250 ${this._fmt(ma250.ma250, 2)} · 斜率 ${this._fmt(ma250.ma250_slope_norm, 6)} · 收≥年线 ${this._yn(ma250.close_above_ma250)}</td><td>${this._passLabel(ma250.ma250_ok)}</td></tr>`;
-    html += `<tr><td>近60日回踩下轨 ≥2</td><td>${touchCount != null ? String(touchCount) : '--'} 次</td><td>${this._passLabel(setup.touch_ok)}</td></tr>`;
+    html += `<tr><td>年线防守</td><td>MA250 ${this._fmt(ma250.ma250, 2)} · 斜率 ${this._fmt(ma250.ma250_slope_norm, 6)}（走平或向上）</td><td>${this._passLabel(ma250.ma250_ok)}</td></tr>`;
+    html += `<tr><td>独立回踩下轨 ≥2</td><td>${touchCount != null ? String(touchCount) : '--'} 次</td><td>${this._passLabel(setup.touch_ok)}</td></tr>`;
+    html += `<tr><td>Spring</td><td>${setup.spring_count != null ? String(setup.spring_count) : '--'} 次</td><td>${this._yn(setup.spring_ok)}</td></tr>`;
     html += `<tr><td>地量（5日量/60日量 ≤0.55）</td><td>量比 ${this._fmt(dry.vol_ratio_short_long, 3)} · 换手比 ${this._fmt(dry.turnover_ratio_short_long, 3)}</td><td>${this._passLabel(dry.dry_ok)}</td></tr>`;
     html += '</tbody></table></div>';
 
     // 【入场条件】
     html += '<div class="gms-score-detail-section"><strong>【入场条件】</strong>';
     if (!setupOk) {
-      html += '<p class="urt-buy-logic-detail">SETUP 未成立，不评估 PROBE / BREAKOUT。</p>';
+    html += '<p class="urt-buy-logic-detail">SETUP 未成立，不评估 PROBE / BREAKOUT；LPS 仍看突破后 3 日。</p>';
     } else if (entryKind === 'breakout') {
       html += '<p class="urt-buy-logic-formula">当前命中：BREAKOUT（优先于 PROBE）</p>';
       html += '<table class="gms-weight-table"><thead><tr><th>条件</th><th>实际值</th><th>结果</th></tr></thead><tbody>';
-      html += `<tr><td>放量倍数 ≥2.0</td><td>${this._fmt(this._pick(src.vol_expand_mult, entryD.vol_expand_mult), 2)}</td><td>${this._passLabel(entryD.expand_ok)}</td></tr>`;
+      html += `<tr><td>换手倍数 ≥2.0</td><td>${this._fmt(this._pick(src.vol_expand_mult, entryD.vol_expand_mult), 2)}</td><td>${this._passLabel(entryD.expand_ok)}</td></tr>`;
       html += `<tr><td>阳线实体 ≥3%</td><td>${this._pct(entryD.body_pct, 2)}</td><td>${this._passLabel(entryD.body_ok)}</td></tr>`;
-      html += `<tr><td>上影/实体 ≤0.30</td><td>${this._fmt(entryD.upper_shadow_ratio, 2)}</td><td>${this._passLabel(entryD.shadow_ok)}</td></tr>`;
+      html += `<tr><td>上影/实体 ≤0.20</td><td>${this._fmt(entryD.upper_shadow_ratio, 2)}</td><td>${this._passLabel(entryD.shadow_ok)}</td></tr>`;
       html += `<tr><td>收盘 ≥ 突破线</td><td>收 ${this._fmt(close, 2)} / 线 ${this._fmt(entryD.break_line, 2)}</td><td>${this._passLabel(close != null && entryD.break_line != null && Number(close) >= Number(entryD.break_line))}</td></tr>`;
+      html += '</tbody></table>';
+    } else if (entryKind === 'lps') {
+      html += '<p class="urt-buy-logic-formula">当前命中：LPS（回踩加仓）</p>';
+      html += '<table class="gms-weight-table"><thead><tr><th>条件</th><th>实际值</th><th>结果</th></tr></thead><tbody>';
+      html += `<tr><td>突破日</td><td>${this._esc(entryD.lps_breakout_date || '--')}</td><td>${this._passLabel(true)}</td></tr>`;
+      html += `<tr><td>缩量回踩</td><td>上轨 ${this._fmt(entryD.lps_support_upper, 2)}</td><td>${this._passLabel(entryD.pullback_ok)}</td></tr>`;
+      html += `<tr><td>收盘不破上轨并转强</td><td>${this._fmt(entryD.lps_price, 2)}</td><td>${this._passLabel(entryD.hold_ok && entryD.turn_ok)}</td></tr>`;
       html += '</tbody></table>';
     } else if (entryKind === 'probe') {
       html += '<p class="urt-buy-logic-formula">当前命中：PROBE（试探）</p>';
       html += '<table class="gms-weight-table"><thead><tr><th>条件</th><th>实际值</th><th>结果</th></tr></thead><tbody>';
+      html += `<tr><td>贴近下轨</td><td>${this._fmt(lower, 2)}</td><td>${this._passLabel(entryD.near_lower_ok)}</td></tr>`;
       html += `<tr><td>5日均量/20日均量 ≤0.8</td><td>${this._fmt(this._pick(src.vol_ratio_5_20, entryD.vol_ratio_5_20), 3)}</td><td>${this._passLabel(entryD.shrink_ok)}</td></tr>`;
-      html += `<tr><td>缩量止跌形态</td><td>收阴跌幅≤2% 或 下影≥实体 或 阳线</td><td>${this._passLabel(entryD.pattern_ok)}</td></tr>`;
+      html += `<tr><td>高下影或 Spring</td><td>Spring ${this._yn(entryD.spring_today)}</td><td>${this._passLabel(entryD.pattern_ok || entryD.spring_today)}</td></tr>`;
       html += `<tr><td>入场下沿</td><td>${this._fmt(src.entry_low, 2)}</td><td>当日最低价</td></tr>`;
       html += '</tbody></table>';
     } else {
-      html += '<p class="urt-buy-logic-detail">SETUP 成立但未触发 PROBE / BREAKOUT。</p>';
+      html += '<p class="urt-buy-logic-detail">SETUP 成立但未触发 BREAKOUT / LPS / PROBE。</p>';
       html += '<table class="gms-weight-table"><thead><tr><th>字段</th><th>取值</th></tr></thead><tbody>';
       html += `<tr><td>量比 5/20</td><td>${this._fmt(this._pick(src.vol_ratio_5_20, entryD.vol_ratio_5_20), 3)}</td></tr>`;
       html += `<tr><td>放量倍数</td><td>${this._fmt(this._pick(src.vol_expand_mult, entryD.vol_expand_mult), 2)}</td></tr>`;
@@ -234,6 +247,16 @@ const CsbScoreDetail = {
         name: '粘合天数',
         p: parts.squeeze_days,
         note: (p) => `天数 ${p && p.value != null ? p.value : '--'} · ${p && p.formula ? p.formula : ''}`,
+      },
+      {
+        name: '粘合加权',
+        p: parts.squeeze_premium,
+        note: (p) => `${p && p.formula ? p.formula : '≥30日加分'}`,
+      },
+      {
+        name: 'Spring',
+        p: parts.spring,
+        note: (p) => `${p && p.ok ? '出现' : '未出现'} · ${p && p.formula ? p.formula : ''}`,
       },
       {
         name: '粘合带宽',

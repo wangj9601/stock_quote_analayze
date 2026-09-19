@@ -65,3 +65,24 @@ def avg_volume(bars: Sequence[Dict[str, Any]], lookback: int) -> Optional[float]
     if not vals or all(v <= 0 for v in vals):
         return None
     return sum(vals) / len(vals)
+
+
+def bar_body_pct(bar: Dict[str, Any]) -> Optional[float]:
+    o = _f(bar.get("open"))
+    c = _f(bar.get("close"))
+    if o is None or c is None or o <= 0:
+        return None
+    return (c - o) / o
+
+
+def upper_shadow_ratio(bar: Dict[str, Any]) -> Optional[float]:
+    o = _f(bar.get("open"))
+    h = _f(bar.get("high"))
+    c = _f(bar.get("close"))
+    if o is None or h is None or c is None:
+        return None
+    body = abs(c - o)
+    upper = h - max(o, c)
+    if body <= 1e-9:
+        return 0.0 if upper <= 0 else 999.0
+    return upper / body

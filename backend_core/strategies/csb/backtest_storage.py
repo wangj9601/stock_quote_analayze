@@ -66,8 +66,9 @@ _CSB_EXIT_REASON_ZH: Dict[str, str] = {
     "horizon_end": "到期平仓",
     "false_break": "假突破",
     "baseline_stop": "基准止损",
-    "ma_trail": "MA跟踪止损",
+    "ma_trail": "阶梯跟踪止损",
     "price_stop": "价格止损",
+    "distribution": "派发离场",
 }
 
 _EXCEL_TEXT_PREFIX = "\u2060"
