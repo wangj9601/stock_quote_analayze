@@ -244,6 +244,78 @@ const KdeLevelsTool = {
         );
     },
 
+    _boardNames(list) {
+        const seen = new Set();
+        const names = [];
+        (list || []).forEach((b) => {
+            const name = String((b && (b.board_name || b.board_code)) || '').trim();
+            if (!name) return;
+            const key = name.toLowerCase();
+            if (seen.has(key)) return;
+            seen.add(key);
+            names.push(name);
+        });
+        return names;
+    },
+
+    _boardLineHtml(label, names) {
+        const body = (names && names.length)
+            ? names.map((n) => `<span class="kde-levels-board-tag">${this._esc(n)}</span>`).join('')
+            : '<span class="muted">--</span>';
+        return (
+            `<div class="kde-levels-board-line">` +
+            `<span class="kde-levels-board-label">${this._esc(label)}</span>` +
+            `<span class="kde-levels-board-tags">${body}</span>` +
+            `</div>`
+        );
+    },
+
+    _boardsPlaceholderHtml() {
+        return (
+            `<div class="kde-levels-boards" data-source="tonghuashun">` +
+            `<div class="kde-levels-board-line"><span class="kde-levels-board-label">行业板块（同花顺）</span><span class="muted">加载中…</span></div>` +
+            `<div class="kde-levels-board-line"><span class="kde-levels-board-label">概念板块（同花顺）</span><span class="muted">加载中…</span></div>` +
+            `</div>`
+        );
+    },
+
+    async _fillEmbeddedBoards(container, code) {
+        if (!container) return;
+        const host = container.querySelector('.kde-levels-boards');
+        if (!host) return;
+        const stock = String(code || container.dataset.stockCode || '').trim();
+        const token = `${Date.now()}-${Math.random()}`;
+        container.dataset.boardReq = token;
+        const render = (industry, concept) => {
+            if (container.dataset.boardReq !== token) return;
+            host.innerHTML =
+                this._boardLineHtml('行业板块（同花顺）', this._boardNames(industry)) +
+                this._boardLineHtml('概念板块（同花顺）', this._boardNames(concept));
+        };
+        if (!stock) {
+            render([], []);
+            return;
+        }
+        try {
+            const url =
+                `${API_BASE_URL}/api/market/stock/${encodeURIComponent(stock)}/industry_boards` +
+                `?board_code_source=tonghuashun`;
+            const resp = await authFetch(url);
+            const data = await resp.json();
+            const payload = (data && data.success && data.data) ? data.data : null;
+            let industry = (payload && payload.industry_boards) || [];
+            let concept = (payload && payload.concept_boards) || [];
+            if (!industry.length && !concept.length && payload && Array.isArray(payload.boards)) {
+                industry = payload.boards.filter((b) => String(b.board_type || '') === 'industry');
+                concept = payload.boards.filter((b) => String(b.board_type || '') === 'concept');
+            }
+            render(industry, concept);
+        } catch (e) {
+            console.warn('个股分析·所属板块加载失败', e);
+            render([], []);
+        }
+    },
+
     /** 空价位时优先展示语义说明（如已突破 VAH） */
     _fmtPriceOrNote(price, note) {
         if (price != null && Number.isFinite(Number(price))) return this._fmtPrice(price);
@@ -542,6 +614,7 @@ const KdeLevelsTool = {
                             <div>KDE 最近支撑：<strong>${fmt(d.nearest_support)}</strong></div>
                             <div>KDE 最近压力：<strong>${fmt(d.nearest_resistance)}</strong></div>
                         </div>
+                        ${this._boardsPlaceholderHtml()}
                     </div>
                 </details>
                 <details class="kde-algo-details" open>
@@ -724,6 +797,7 @@ const KdeLevelsTool = {
         this._bindEmbeddedVpControls(container, bindCtx);
         this._bindEmbeddedKdeControls(container, bindCtx);
         this._bindEmbeddedSyncLookback(container, bindCtx);
+        void this._fillEmbeddedBoards(container, code);
     },
 
     /**
@@ -760,6 +834,11 @@ const KdeLevelsTool = {
         this._bindEmbeddedVpControls(container, bindCtx);
         this._bindEmbeddedKdeControls(container, bindCtx);
         this._bindEmbeddedSyncLookback(container, bindCtx);
+        if (!container.querySelector('.kde-levels-boards')) {
+            const near = container.querySelector('.kde-levels-card--inline .kde-levels-near');
+            if (near) near.insertAdjacentHTML('afterend', this._boardsPlaceholderHtml());
+        }
+        void this._fillEmbeddedBoards(container, code);
     },
 
     _readEmbeddedVpParams(container) {

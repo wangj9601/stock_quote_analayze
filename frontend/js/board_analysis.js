@@ -835,10 +835,20 @@ const BoardAnalysis = {
       return 'SBBR';
     }
     if (strategy === 'rpe') {
-      const t = row.signal_type || '';
-      if (row.watch_only || t === 'lead') return '领涨观察';
-      if (row.entry_signal || t === 'catch_up') return '补涨';
-      return t || 'RPE';
+      const raw = String(row.signal_type || '').trim();
+      const t = raw.toLowerCase();
+      const isLead = raw.includes('领涨') || t === 'lead' || t === 'leading' || t === 'rpe_lead';
+      const isCatch =
+        raw.includes('补涨') || t === 'catch_up' || t === 'catchup' || t === 'rpe_catch_up';
+      if (isLead) return '领涨观察';
+      if (isCatch) return row.watch_only && !row.entry_signal ? '补涨观察' : '补涨';
+      if (row.watch_only) {
+        const z = this.asFloat(row.z_score ?? row.zscore ?? row.relative_z);
+        if (z != null && z < 0) return '补涨观察';
+        return '领涨观察';
+      }
+      if (row.entry_signal) return '补涨';
+      return raw || 'RPE';
     }
     return strategy;
   },

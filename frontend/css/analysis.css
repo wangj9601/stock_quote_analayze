@@ -3018,6 +3018,58 @@ body.ssa-png-capturing .ms-zigzag-svg,
     border-top: none;
     box-shadow: none;
     padding: 0.25rem 0;
+    text-align: center;
+}
+
+.kde-levels-card--inline .kde-levels-price-row {
+    justify-content: center;
+}
+
+.kde-levels-card--inline .kde-levels-near {
+    text-align: center;
+}
+
+.kde-levels-boards {
+    margin-top: 0.55rem;
+}
+
+.kde-levels-board-line {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.3rem 0.45rem;
+    margin-top: 0.2rem;
+    font-size: 0.9rem;
+    color: #4b5563;
+    line-height: 1.7;
+}
+
+.kde-levels-board-label {
+    color: #64748b;
+    white-space: nowrap;
+}
+
+.kde-levels-board-label::after {
+    content: "\FF1A";
+}
+
+.kde-levels-board-tags {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.3rem;
+}
+
+.kde-levels-board-tag {
+    display: inline-block;
+    padding: 0.05rem 0.5rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    color: #334155;
+    font-size: 0.85rem;
+    line-height: 1.5;
 }
 
 @media (max-width: 720px) {

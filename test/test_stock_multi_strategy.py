@@ -84,6 +84,26 @@ def test_summarize_rpe_lead_and_miss():
     assert miss["hit"] is False
 
 
+def test_summarize_rpe_catch_up_watch_not_labeled_lead():
+    """Z≤补涨阈值且仅观察时，不能因 watch_only 误标为领涨。"""
+    out = summarize_strategy_check(
+        "rpe",
+        {
+            "code": "002709",
+            "signal_type": "catch_up",
+            "watch_only": True,
+            "entry_signal": False,
+            "z_score": -1.54,
+        },
+        stock_code="002709",
+    )
+    assert out["hit"] is True
+    assert out["label"] == "补涨观察"
+    assert "领涨" not in out["label"]
+    assert out["score"] == -1.54
+    assert "补涨" in out["reason"]
+
+
 def test_summarize_error_and_message():
     err = summarize_strategy_check("gms", None, stock_code="1", error="timeout")
     assert err["hit"] is False

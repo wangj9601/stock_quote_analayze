@@ -1023,18 +1023,24 @@ def build_trade_advice(
             summary_bits.append(pa_text)
 
     elif kind == "rpe":
-        sig = (row.get("signal_type") or "").strip().lower()
+        raw = str(row.get("signal_type") or "").strip()
+        sig = raw.lower()
         entry = bool(row.get("entry_signal"))
         watch_only = bool(row.get("watch_only"))
         veto = bool(row.get("trend_veto"))
+        is_lead = ("领涨" in raw) or sig in ("lead", "leading", "rpe_lead")
+        is_catch = ("补涨" in raw) or sig in ("catch_up", "catchup", "rpe_catch_up")
         if veto:
             action = "avoid"
             confidence = "low"
             summary_bits.append("板块斜率趋势否决，避免开仓")
-        elif sig == "lead" or watch_only:
+        elif is_lead or (watch_only and not is_catch):
             action = "watch"
             summary_bits.append("领涨/仅观察：不追高，等待回踩或补涨确认")
-        elif entry or sig == "catch_up":
+        elif watch_only and is_catch:
+            action = "watch"
+            summary_bits.append("补涨仅观察：结构或流动性未过，等待确认后再低吸")
+        elif entry or is_catch:
             action = "buy"
             buy_zone = _zone(
                 price=kde_s or close,

@@ -842,6 +842,53 @@ def _levels_for_codes(
     return out
 
 
+def _rpe_z_score(row: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not row:
+        return None
+    for k in ("z_score", "zscore", "relative_z"):
+        v = row.get(k)
+        if v is None or v == "":
+            continue
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _rpe_signal_flags(row: Optional[Dict[str, Any]]) -> Tuple[bool, bool]:
+    """解析 RPE 领涨/补涨。返回 (is_lead, is_catch_up)。"""
+    raw = str((row or {}).get("signal_type") or "").strip()
+    sig = raw.lower()
+    is_lead = ("领涨" in raw) or sig in ("lead", "leading", "rpe_lead")
+    is_catch = ("补涨" in raw) or sig in ("catch_up", "catchup", "rpe_catch_up")
+    return is_lead, is_catch
+
+
+def _rpe_hit_label(row: Dict[str, Any]) -> str:
+    """RPE 展示标签：按 signal_type 区分领涨/补涨。
+
+    watch_only 只表示「仅观察」（补涨被结构/流动性过滤，或领涨默认不交易），
+    不能单独当成领涨。Z≤z_catch_up 的补涨观察曾被误标为「领涨观察」。
+    """
+    raw = str(row.get("signal_type") or "").strip()
+    is_lead, is_catch = _rpe_signal_flags(row)
+    watch = bool(row.get("watch_only"))
+    entry = bool(row.get("entry_signal"))
+    if is_lead:
+        return "领涨观察"
+    if is_catch:
+        return "补涨观察" if watch and not entry else "补涨"
+    if watch:
+        z = _rpe_z_score(row)
+        if z is not None and z < 0:
+            return "补涨观察"
+        return "领涨观察"
+    if entry:
+        return "补涨"
+    return raw or "RPE"
+
+
 def _strategy_hit_cell(
     strategy: str,
     row: Optional[Dict[str, Any]],
@@ -877,12 +924,7 @@ def _strategy_hit_cell(
         return {"hit": True, "kind": "buy", "label": "买点", "detail": row}
     if kind == "rpe":
         sig = str(row.get("signal_type") or "").lower()
-        if row.get("watch_only") or sig == "lead":
-            label = "领涨观察"
-        elif row.get("entry_signal") or sig == "catch_up":
-            label = "补涨"
-        else:
-            label = sig or "RPE"
+        label = _rpe_hit_label(row)
         return {"hit": True, "kind": sig or "signal", "label": label, "detail": row}
     return {"hit": True, "kind": "signal", "label": kind.upper(), "detail": row}
 

@@ -57,6 +57,21 @@ def test_rpe_trend_veto_avoid():
     assert adv["action"] == "avoid"
 
 
+def test_rpe_catch_up_watch_only_not_treated_as_lead():
+    adv = build_trade_advice(
+        "rpe",
+        {
+            "signal_type": "catch_up",
+            "watch_only": True,
+            "entry_signal": False,
+            "z_score": -1.54,
+        },
+    )
+    assert adv["action"] == "watch"
+    assert "补涨" in adv["summary"]
+    assert "领涨" not in adv["summary"]
+
+
 def test_reference_levels_appended():
     ref = {
         "ok": True,

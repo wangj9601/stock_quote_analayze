@@ -112,6 +112,24 @@ def test_strategy_hit_cell_labels():
         "sbbr", None, watch_row={"bottom_matched": True, "code": "1"}
     )
     assert s["hit"] and s["label"] == "筑底"
+    lead = _strategy_hit_cell(
+        "rpe", {"signal_type": "lead", "watch_only": True, "z_score": 2.1}
+    )
+    assert lead["hit"] and lead["label"] == "领涨观察"
+    catch_watch = _strategy_hit_cell(
+        "rpe",
+        {
+            "signal_type": "catch_up",
+            "watch_only": True,
+            "entry_signal": False,
+            "z_score": -1.54,
+        },
+    )
+    assert catch_watch["hit"] and catch_watch["label"] == "补涨观察"
+    catch_entry = _strategy_hit_cell(
+        "rpe", {"signal_type": "catch_up", "entry_signal": True, "z_score": -2.0}
+    )
+    assert catch_entry["hit"] and catch_entry["label"] == "补涨"
 
 
 def test_collect_leader_mid_strategy_hits_matrix(monkeypatch):

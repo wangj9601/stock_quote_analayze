@@ -5,6 +5,15 @@ const MarketAnalysis = {
   API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
   BOARD_CODE_SOURCE: 'tonghuashun',
   STOCK_SIDES: 40,
+  /** ln(I_t) 日斜率走强门槛，与后端 DEFAULT_SLOPE_STRONG_THRESHOLD 一致 */
+  SLOPE_STRONG_DAILY: 0.001,
+  SLOPE_CHART_VISIBLE: 18,
+  SLOPE_ENV_COLOR: {
+    strong: '#dc2626',
+    neutral: '#64748b',
+    weak: '#16a34a',
+    unknown: '#94a3b8',
+  },
 
   views: { stock: 'chart', board: 'chart', slope: 'chart' },
   cache: {
@@ -197,6 +206,41 @@ const MarketAnalysis = {
     const digits = abs >= 0.01 ? 4 : abs >= 0.001 ? 5 : 6;
     const sign = n > 0 ? '+' : '';
     return `${sign}${n.toFixed(digits)}`;
+  },
+
+  /**
+   * ln(I_t) 日斜率 × 窗口 → 约合涨跌幅。
+   * 例如 60 日斜率 0.0062 ≈ e^(0.0062×60)−1 ≈ +45%。
+   */
+  slopeWindowReturn(slope, windowDays) {
+    if (slope == null || slope === '' || windowDays == null || windowDays === '') return null;
+    const s = Number(slope);
+    const w = Number(windowDays);
+    if (!Number.isFinite(s) || !Number.isFinite(w) || w <= 0) return null;
+    const r = Math.exp(s * w) - 1;
+    return Number.isFinite(r) ? r : null;
+  },
+
+  fmtWindowPct(v) {
+    if (v == null || !Number.isFinite(Number(v))) return '--';
+    const pct = Number(v) * 100;
+    const sign = pct > 0 ? '+' : '';
+    const digits = Math.abs(pct) >= 10 ? 1 : 2;
+    return `${sign}${pct.toFixed(digits)}%`;
+  },
+
+  slopeEnvKey(item) {
+    const row = item || {};
+    const env = String(row.board_env || '').trim().toLowerCase();
+    if (env === 'strong' || env === 'weak' || env === 'neutral') return env;
+    const label = String(row.board_env_label || '').trim();
+    if (label === '走强') return 'strong';
+    if (label === '走弱') return 'weak';
+    if (label === '正常') return 'neutral';
+    const s = Number(row.sector_slope);
+    if (!Number.isFinite(s)) return 'unknown';
+    if (s < 0) return 'weak';
+    return 'neutral';
   },
 
   fmtRange(start, end) {
@@ -1051,36 +1095,142 @@ const MarketAnalysis = {
     const el = document.getElementById('maSlopeChart');
     const chart = this.ensureChart('slope', el);
     if (!chart) return;
-    const items = this.cache.slope.items || [];
-    const window = this.cache.slope.meta.window || this.currentSlopeWindow();
-    if (!items.length) {
+    const rawItems = this.cache.slope.items || [];
+    const windowDays = this.cache.slope.meta.window || this.currentSlopeWindow();
+    if (!rawItems.length) {
       chart.clear();
       return;
     }
+    const items = [...rawItems].sort(
+      (a, b) => Number(b.sector_slope || 0) - Number(a.sector_slope || 0)
+    );
     const names = items.map((r) => String(r.board_name || r.board_code || '--'));
-    const values = items.map((r) => Number(r.sector_slope));
-    const meta = items.map((r) => ({
-      source: r.slope_source || '--',
-      r2: r.slope_r2,
-      env: r.board_env_label || r.board_env || '--',
-      window: r.sector_slope_window || window,
-    }));
-    const option = this.buildBarOption(names, values, `${window}日斜率`, (params) => {
-      const list = Array.isArray(params) ? params : [params];
-      const p = list[0] || {};
-      const idx = Number(p.dataIndex);
-      const m = Number.isFinite(idx) ? meta[idx] : undefined;
-      const v = Number(p.value);
-      const r2Text =
-        m?.r2 != null && Number.isFinite(Number(m.r2)) ? Number(m.r2).toFixed(3) : '--';
-      return [
-        `${p.name || ''}`,
-        `斜率(${m?.window || window}日)：${this.fmtSlope(v)}`,
-        `R²：${r2Text}`,
-        `来源：${m?.source || '--'}`,
-        `环境：${m?.env || '--'}`,
-      ].join('<br/>');
+    const returns = items.map((r) => this.slopeWindowReturn(r.sector_slope, r.sector_slope_window || windowDays));
+    const strongRet = this.slopeWindowReturn(this.SLOPE_STRONG_DAILY, windowDays);
+    const envKeys = items.map((r) => this.slopeEnvKey(r));
+    let minV = 0;
+    let maxV = strongRet != null ? strongRet : 0;
+    returns.forEach((v) => {
+      if (v == null) return;
+      if (v < minV) minV = v;
+      if (v > maxV) maxV = v;
     });
+    const span = Math.max(maxV - minV, 0.02);
+    const pad = span * 0.08;
+    minV -= pad;
+    maxV += pad;
+
+    const visible = this.SLOPE_CHART_VISIBLE;
+    const useZoom = names.length > visible;
+    const endPct = useZoom ? (visible / names.length) * 100 : 100;
+    const strongLabel = strongRet != null ? `走强 ${this.fmtWindowPct(strongRet)}` : '走强';
+
+    const option = {
+      title: {
+        text: '红走强 · 灰正常 · 绿走弱    虚线 = 走强门槛',
+        left: 108,
+        top: 0,
+        textStyle: { fontSize: 12, fontWeight: 'normal', color: '#64748b' },
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params) => {
+          const list = Array.isArray(params) ? params : [params];
+          const p = list[0] || {};
+          const idx = Number(p.dataIndex);
+          const row = Number.isFinite(idx) ? items[idx] : null;
+          const win = row && row.sector_slope_window ? row.sector_slope_window : windowDays;
+          const r2 = row && row.slope_r2 != null && Number.isFinite(Number(row.slope_r2))
+            ? Number(row.slope_r2).toFixed(3)
+            : '--';
+          const env = (row && (row.board_env_label || row.board_env)) || '--';
+          return [
+            `${p.name || ''}`,
+            `约合${win}日涨跌幅：${this.fmtWindowPct(p.value)}`,
+            `斜率：${row ? this.fmtSlope(row.sector_slope) : '--'}`,
+            `R²：${r2}`,
+            `环境：${env}`,
+            `走强门槛：${this.fmtWindowPct(strongRet)}（日斜率 ${this.SLOPE_STRONG_DAILY}）`,
+          ].join('<br/>');
+        },
+      },
+      grid: {
+        left: 108,
+        right: useZoom ? 48 : 28,
+        top: 28,
+        bottom: 36,
+      },
+      dataZoom: useZoom
+        ? [
+            {
+              type: 'slider',
+              yAxisIndex: 0,
+              width: 14,
+              right: 4,
+              start: 0,
+              end: endPct,
+              brushSelect: false,
+            },
+            { type: 'inside', yAxisIndex: 0, start: 0, end: endPct },
+          ]
+        : [],
+      xAxis: {
+        type: 'value',
+        min: minV,
+        max: maxV,
+        name: `约合${windowDays}日涨跌幅`,
+        nameLocation: 'middle',
+        nameGap: 24,
+        axisLabel: {
+          fontSize: 11,
+          formatter: (v) => {
+            const pct = Number(v) * 100;
+            if (!Number.isFinite(pct)) return '';
+            const digits = Math.abs(pct) >= 10 ? 0 : 1;
+            return `${pct.toFixed(digits)}%`;
+          },
+        },
+        splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
+      },
+      yAxis: {
+        type: 'category',
+        inverse: true,
+        data: names,
+        axisLabel: { fontSize: 11, width: 96, overflow: 'truncate' },
+      },
+      series: [
+        {
+          type: 'bar',
+          data: returns.map((v, i) => ({
+            value: v,
+            itemStyle: {
+              color: this.SLOPE_ENV_COLOR[envKeys[i]] || this.SLOPE_ENV_COLOR.unknown,
+              borderRadius: v != null && v < 0 ? [3, 0, 0, 3] : [0, 3, 3, 0],
+            },
+          })),
+          barMaxWidth: 14,
+          markLine: strongRet == null
+            ? undefined
+            : {
+                symbol: 'none',
+                silent: true,
+                data: [
+                  {
+                    xAxis: strongRet,
+                    label: {
+                      formatter: strongLabel,
+                      color: '#dc2626',
+                      fontSize: 11,
+                      position: 'insideEndTop',
+                    },
+                    lineStyle: { color: '#dc2626', type: 'dashed', width: 1.5 },
+                  },
+                ],
+              },
+        },
+      ],
+    };
     chart.setOption(option, true);
     chart.resize();
   },

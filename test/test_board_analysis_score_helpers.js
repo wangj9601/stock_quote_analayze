@@ -66,6 +66,41 @@ assertEq(
 assertEq(scoreDisplay('rpe', { z_score: 1.234 }), 'Z=1.23', 'rpe');
 assertEq(scoreDisplay('gms', {}), '--', 'gms empty');
 
+function hitLabel(strategy, row) {
+  if (strategy === 'rpe') {
+    const raw = String(row.signal_type || '').trim();
+    const t = raw.toLowerCase();
+    const isLead = raw.includes('领涨') || t === 'lead' || t === 'leading' || t === 'rpe_lead';
+    const isCatch =
+      raw.includes('补涨') || t === 'catch_up' || t === 'catchup' || t === 'rpe_catch_up';
+    if (isLead) return '领涨观察';
+    if (isCatch) return row.watch_only && !row.entry_signal ? '补涨观察' : '补涨';
+    if (row.watch_only) {
+      const z = asFloat(row.z_score ?? row.zscore ?? row.relative_z);
+      if (z != null && z < 0) return '补涨观察';
+      return '领涨观察';
+    }
+    if (row.entry_signal) return '补涨';
+    return raw || 'RPE';
+  }
+  return strategy;
+}
+assertEq(
+  hitLabel('rpe', { signal_type: 'lead', watch_only: true, z_score: 2.1 }),
+  '领涨观察',
+  'rpe lead'
+);
+assertEq(
+  hitLabel('rpe', { signal_type: 'catch_up', watch_only: true, z_score: -1.54 }),
+  '补涨观察',
+  'rpe catch_up watch'
+);
+assertEq(
+  hitLabel('rpe', { signal_type: 'catch_up', entry_signal: true, z_score: -2 }),
+  '补涨',
+  'rpe catch_up entry'
+);
+
 /** 与 board_analysis.js GMS_HIT_MIN_SCORE / applyGmsHitScoreFloor 口径对齐 */
 const GMS_HIT_MIN_SCORE = 70;
 function isGmsLeftOrRightBuy(row) {
