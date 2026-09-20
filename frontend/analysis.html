@@ -7,7 +7,7 @@
     <title>智能分析 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/analysis.css?v=20260919a">
+    <link rel="stylesheet" href="css/analysis.css?v=20260920g">
     <link rel="stylesheet" href="css/recommend.css?v=20260913d">
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
@@ -654,6 +654,16 @@
                             <span class="dr-status" id="drStatus"></span>
                         </div>
                         <div class="dr-metrics" id="drMetrics"></div>
+                        <section class="dr-section" id="drEnvSection">
+                            <h3>大盘环境</h3>
+                            <p class="dr-summary" id="drEnvSummary"></p>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>指数</th><th class="num">收盘</th><th class="num">涨跌幅%</th><th class="num">成交额(亿)</th><th class="num">距20日高点</th><th>备注</th></tr></thead>
+                                    <tbody id="drIndexBody"><tr><td colspan="6">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                        </section>
                         <section class="dr-section">
                             <h3>趋势摘要</h3>
                             <p id="drTrendSummary" class="dr-summary"></p>
@@ -665,6 +675,74 @@
                                     <thead><tr><th>序号</th><th>门槛</th><th>标准</th><th>今日</th><th>结果</th></tr></thead>
                                     <tbody id="drGatesBody"><tr><td colspan="5">加载中…</td></tr></tbody>
                                 </table>
+                            </div>
+                        </section>
+                        <section class="dr-section" id="drStructureSection">
+                            <h3>当日结构</h3>
+                            <p class="dr-summary" id="drMainSide"></p>
+                            <div class="dr-pair">
+                                <div>
+                                    <h3 class="dr-subhead">领涨行业</h3>
+                                    <div class="dr-table-wrap">
+                                        <table class="dr-table">
+                                            <thead><tr><th>板块</th><th class="num">涨跌幅%</th><th class="num">净流入(亿)</th><th class="num">上涨/下跌</th></tr></thead>
+                                            <tbody id="drLeadersBody"><tr><td colspan="4">加载中…</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 class="dr-subhead">领跌行业</h3>
+                                    <div class="dr-table-wrap">
+                                        <table class="dr-table">
+                                            <thead><tr><th>板块</th><th class="num">涨跌幅%</th><th class="num">净流入(亿)</th><th class="num">上涨/下跌</th></tr></thead>
+                                            <tbody id="drLaggardsBody"><tr><td colspan="4">加载中…</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <h3 class="dr-subhead">轮动</h3>
+                            <p class="dr-summary" id="drRotation"></p>
+                            <div class="dr-pair">
+                                <div>
+                                    <h3 class="dr-subhead">行业净流入前五</h3>
+                                    <div class="dr-table-wrap">
+                                        <table class="dr-table">
+                                            <thead><tr><th>板块</th><th class="num">净流入(亿)</th></tr></thead>
+                                            <tbody id="drCapitalInBody"><tr><td colspan="2">加载中…</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h3 class="dr-subhead">行业净流出前三</h3>
+                                    <div class="dr-table-wrap">
+                                        <table class="dr-table">
+                                            <thead><tr><th>板块</th><th class="num">净流入(亿)</th></tr></thead>
+                                            <tbody id="drCapitalOutBody"><tr><td colspan="2">加载中…</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <h3 class="dr-subhead">连板梯队与吸金</h3>
+                            <div class="dr-ladder" id="drLadder"></div>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>主线涨停</th><th class="num">涨幅%</th><th class="num">封单(亿)</th><th class="num">连板</th></tr></thead>
+                                    <tbody id="drSealBody"><tr><td colspan="4">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div class="dr-pair">
+                                <div class="dr-table-wrap">
+                                    <table class="dr-table">
+                                        <thead><tr><th>个股主力净流入前五</th><th class="num">净流入(亿)</th></tr></thead>
+                                        <tbody id="drFlowBody"><tr><td colspan="2">加载中…</td></tr></tbody>
+                                    </table>
+                                </div>
+                                <div class="dr-table-wrap">
+                                    <table class="dr-table">
+                                        <thead><tr><th>主线内吸金前三</th><th class="num">净流入(亿)</th></tr></thead>
+                                        <tbody id="drMainFlowBody"><tr><td colspan="2">加载中…</td></tr></tbody>
+                                    </table>
+                                </div>
                             </div>
                         </section>
                         <section class="dr-section">
@@ -680,8 +758,49 @@
                             <p class="dr-summary" id="drIndustryConfirmSummary"></p>
                             <div class="dr-table-wrap">
                                 <table class="dr-table">
-                                    <thead><tr><th>行业板块</th><th>上榜原因</th><th>涨跌幅%</th><th>净流入</th></tr></thead>
+                                    <thead><tr><th>行业板块</th><th>上榜原因</th><th class="num">涨跌幅%</th><th class="num">净流入(亿)</th></tr></thead>
                                     <tbody id="drIndustryConfirmBody"><tr><td colspan="4">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                        </section>
+                        <section class="dr-section" id="drSentimentSection">
+                            <h3>情绪与次日观察</h3>
+                            <p class="dr-summary" id="drCurveNote"></p>
+                            <h3 class="dr-subhead">当日事实</h3>
+                            <ol class="dr-summary" id="drSentimentFacts"></ol>
+                            <h3 class="dr-subhead">次日观察</h3>
+                            <ol class="dr-summary" id="drSentimentWatch"></ol>
+                        </section>
+                        <section class="dr-section" id="drPicksSection">
+                            <h3>明日个股</h3>
+                            <p class="dr-summary" id="drPicksDisclaimer"></p>
+                            <p class="dr-summary" id="drPicksNote"></p>
+                            <h3 class="dr-subhead">不追</h3>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>个股</th><th>连板</th><th>封单(亿)</th><th>炸板</th><th>涨跌停</th><th>立场</th><th>次日</th></tr></thead>
+                                    <tbody id="drNoChaseBody"><tr><td colspan="7">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                            <h3 class="dr-subhead">可跟踪</h3>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>个股</th><th>策略</th><th>立场</th><th>支撑</th><th>压力</th><th>明日触发</th><th>形态</th><th>MACD</th><th>RSI</th><th>KDJ</th><th>趋势</th></tr></thead>
+                                    <tbody id="drTrackBody"><tr><td colspan="11">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                            <h3 class="dr-subhead">支线只观察</h3>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>个股</th><th>行业</th><th class="num">涨幅%</th><th>立场</th></tr></thead>
+                                    <tbody id="drSidelineBody"><tr><td colspan="4">加载中…</td></tr></tbody>
+                                </table>
+                            </div>
+                            <h3 class="dr-subhead">回避</h3>
+                            <div class="dr-table-wrap">
+                                <table class="dr-table">
+                                    <thead><tr><th>个股</th><th>原因</th><th>立场</th></tr></thead>
+                                    <tbody id="drAvoidBody"><tr><td colspan="3">加载中…</td></tr></tbody>
                                 </table>
                             </div>
                         </section>
@@ -695,9 +814,11 @@
                                 <textarea id="drAdvice" rows="5" placeholder="可编辑后保存"></textarea>
                             </div>
                         </section>
-                        <section class="dr-section">
-                            <h3>Markdown 预览</h3>
-                            <pre class="dr-md-preview" id="drMarkdownPreview"></pre>
+                        <section class="dr-section dr-md-fold">
+                            <details>
+                                <summary>Markdown 预览</summary>
+                                <div class="dr-md-preview" id="drMarkdownPreview"></div>
+                            </details>
                         </section>
                     </div>
                 </div>
@@ -1423,7 +1544,7 @@
     <script src="js/trade_observe.js"></script>
     <script src="js/recommend.js?v=20260914a"></script>
     <script src="js/market_analysis.js?v=20260919c"></script>
-    <script src="js/daily_review.js?v=20260916a"></script>
+    <script src="js/daily_review.js?v=20260920f"></script>
     <script src="js/analysis.js?v=20260917a"></script>
 </body>
 

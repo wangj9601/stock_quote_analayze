@@ -39,7 +39,7 @@ export async function computeDailyReview(tradeDate: string, collectZt = true) {
   const q = new URLSearchParams({
     trade_date: tradeDate,
     collect_zt: collectZt ? 'true' : 'false',
-    export_md: 'true',
+    export_md: 'false',
     sync: 'true',
   })
   const res = await fetch(`/api/market_review/compute?${q}`, {
@@ -71,20 +71,31 @@ export async function saveDailyReviewText(
   return parseJson<{ success: boolean; data?: any; message?: string }>(res)
 }
 
-export async function exportDailyReviewMd(tradeDate: string) {
-  const q = new URLSearchParams({ trade_date: tradeDate, save: 'true' })
+export async function exportDailyReviewMd(tradeDate: string): Promise<{
+  ok: boolean
+  filename?: string
+  message?: string
+}> {
+  const q = new URLSearchParams({ trade_date: tradeDate })
   const res = await fetch(`/api/market_review/export.md?${q}`, { headers: authHeaders() })
-  return parseJson<{ success: boolean; path?: string; markdown?: string; message?: string }>(res)
+  const ct = (res.headers.get('Content-Type') || '').toLowerCase()
+  if (!res.ok || ct.includes('application/json')) {
+    const body = await parseJson<{ success?: boolean; message?: string }>(res)
+    return { ok: false, message: body.message || `Markdown 导出失败(${res.status})` }
+  }
+  const blob = await res.blob()
+  const filename = filenameFromDisposition(res, `daily_review_${tradeDate}.md`)
+  triggerDownload(blob, filename)
+  return { ok: true, filename }
 }
 
-/** 下载复盘 PDF（同时服务端写入 exported_docs）；失败时抛错或返回 message */
+/** 下载复盘 PDF 到浏览器默认下载目录，不写入工程目录。 */
 export async function exportDailyReviewPdf(tradeDate: string): Promise<{
   ok: boolean
   filename?: string
-  path?: string | null
   message?: string
 }> {
-  const q = new URLSearchParams({ trade_date: tradeDate, save: 'true' })
+  const q = new URLSearchParams({ trade_date: tradeDate })
   const res = await fetch(`/api/market_review/export.pdf?${q}`, { headers: authHeaders() })
   const ct = (res.headers.get('Content-Type') || '').toLowerCase()
   if (!res.ok || ct.includes('application/json')) {
@@ -92,31 +103,30 @@ export async function exportDailyReviewPdf(tradeDate: string): Promise<{
     return { ok: false, message: body.message || `PDF 导出失败(${res.status})` }
   }
   const blob = await res.blob()
+  const filename = filenameFromDisposition(res, `daily_review_${tradeDate}.pdf`)
+  triggerDownload(blob, filename)
+  return { ok: true, filename }
+}
+
+function filenameFromDisposition(res: Response, fallback: string): string {
   const cd = res.headers.get('Content-Disposition') || ''
   const mStar = /filename\*=UTF-8''([^;]+)/i.exec(cd)
   const m = /filename="?([^";]+)"?/i.exec(cd)
-  let filename = `daily_review_${tradeDate}.pdf`
   if (mStar) {
     try {
-      filename = decodeURIComponent(mStar[1])
+      return decodeURIComponent(mStar[1])
     } catch {
-      filename = mStar[1]
+      return mStar[1]
     }
-  } else if (m) {
-    filename = m[1]
   }
+  if (m) return m[1]
+  return fallback
+}
+
+function triggerDownload(blob: Blob, filename: string) {
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
-  let path = res.headers.get('X-Export-Path')
-  if (path) {
-    try {
-      path = decodeURIComponent(path)
-    } catch {
-      /* keep raw */
-    }
-  }
-  return { ok: true, filename, path }
 }

@@ -19,10 +19,9 @@ from backend_core.market_review.compute import (
     get_review_snapshot,
     update_review_text,
 )
-from backend_core.market_review.render import export_markdown_file, render_markdown
+from backend_core.market_review.render import render_markdown
 from backend_core.market_review.pdf_export import (
     build_daily_review_pdf_bytes,
-    export_pdf_file,
 )
 
 router = APIRouter(prefix="/api/market_review", tags=["market_review"])
@@ -162,9 +161,9 @@ async def api_put_daily(
 @router.get("/export.md")
 async def api_export_md(
     trade_date: Optional[str] = Query(None),
-    save: bool = Query(True, description="是否写入 exported_docs"),
     db: Session = Depends(get_db),
 ):
+    """下载 Markdown 到浏览器默认下载目录，不写入工程目录。"""
     d = _norm_date(trade_date)
     snap = get_review_snapshot(db, d)
     if not snap:
@@ -172,20 +171,20 @@ async def api_export_md(
             {"success": False, "message": f"无 {d} 快照"}, status_code=404
         )
     md = render_markdown(snap)
-    path = None
-    if save:
-        path = str(export_markdown_file(snap))
-    if save:
-        return {"success": True, "path": path, "markdown": md}
-    return PlainTextResponse(md, media_type="text/markdown; charset=utf-8")
+    fname, ascii_name = _review_download_names(d, "md")
+    return PlainTextResponse(
+        md,
+        media_type="text/markdown; charset=utf-8",
+        headers=_attachment_headers(fname, ascii_name),
+    )
 
 
 @router.get("/export.pdf")
 async def api_export_pdf(
     trade_date: Optional[str] = Query(None),
-    save: bool = Query(True, description="是否同时写入 exported_docs"),
     db: Session = Depends(get_db),
 ):
+    """下载 PDF 到浏览器默认下载目录，不写入工程目录。"""
     d = _norm_date(trade_date)
     snap = get_review_snapshot(db, d)
     if not snap:
@@ -194,28 +193,32 @@ async def api_export_pdf(
         )
     try:
         pdf_bytes = build_daily_review_pdf_bytes(snap)
-        saved_path = None
-        if save:
-            saved_path = str(export_pdf_file(snap, pdf_bytes=pdf_bytes))
     except Exception as e:
         return JSONResponse(
             {"success": False, "message": f"PDF 导出失败: {e}"}, status_code=500
         )
 
-    parts = d.split("-")
+    fname, ascii_name = _review_download_names(d, "pdf")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers=_attachment_headers(fname, ascii_name),
+    )
+
+
+def _review_download_names(trade_date: str, ext: str) -> tuple:
+    parts = trade_date.split("-")
     if len(parts) == 3:
-        fname = f"{parts[0]}年{parts[1]}月{parts[2]}日 股市复盘报告.pdf"
+        fname = f"{parts[0]}年{parts[1]}月{parts[2]}日 股市复盘报告.{ext}"
     else:
-        fname = f"{d} 股市复盘报告.pdf"
-    # 浏览器下载文件名：ASCII fallback + RFC5987 filename*
-    ascii_name = f"daily_review_{d}.pdf"
-    headers = {
+        fname = f"{trade_date} 股市复盘报告.{ext}"
+    return fname, f"daily_review_{trade_date}.{ext}"
+
+
+def _attachment_headers(fname: str, ascii_name: str) -> dict:
+    return {
         "Content-Disposition": (
             f"attachment; filename=\"{ascii_name}\"; "
             f"filename*=UTF-8''{quote(fname)}"
         ),
     }
-    if saved_path:
-        # HTTP 头须为 latin-1：路径含中文时用 percent-encoding
-        headers["X-Export-Path"] = quote(saved_path, safe="/:\\")
-    return Response(content=pdf_bytes, media_type="application/pdf", headers=headers)
