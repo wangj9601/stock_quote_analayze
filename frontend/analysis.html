@@ -7,7 +7,7 @@
     <title>智能分析 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/analysis.css?v=20260920g">
+    <link rel="stylesheet" href="css/analysis.css?v=20260921b">
     <link rel="stylesheet" href="css/recommend.css?v=20260913d">
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
@@ -40,7 +40,7 @@
                     <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
                     <button type="button" class="analysis-tab" data-tab="recommend" data-perm="channel.analyze.tab.recommend">策略推荐</button>
                     <button class="analysis-tab" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
-                    <button class="analysis-tab" data-tab="daily-review" data-perm="channel.analyze.tab.market">每日复盘</button>
+                    <button class="analysis-tab" data-tab="market-review" data-perm="channel.analyze.tab.market">复盘</button>
                     <button class="analysis-tab" data-tab="technical-tools" data-perm="channel.analyze.tab.technical">技术工具</button>
                     <button type="button" class="analysis-tab" data-tab="strategy" hidden aria-hidden="true" data-perm-hidden-by-other="1" style="display:none!important">投资策略</button>
                     <button class="analysis-tab" data-tab="reports" data-perm="channel.analyze.tab.report">分析报告</button>
@@ -640,8 +640,14 @@
                     </div>
                 </div>
 
-                <!-- 每日复盘 -->
-                <div class="tab-panel" id="daily-review">
+                <!-- 复盘：每日 / 每周 / 每月 -->
+                <div class="tab-panel" id="market-review">
+                    <div class="dr-subnav" role="tablist">
+                        <button type="button" class="dr-subtab active" data-review="daily-review">每日复盘</button>
+                        <button type="button" class="dr-subtab" data-review="weekly-review">每周复盘</button>
+                        <button type="button" class="dr-subtab" data-review="monthly-review">每月复盘</button>
+                    </div>
+                <div class="dr-subpanel active" id="daily-review">
                     <div class="dr-workbench" data-perm="channel.analyze.tab.market">
                         <p class="dr-desc">日终情绪复盘：量能 / 连板高度 / Lo·Hi·Sp / 硬门槛 / 主线（同花顺<strong>概念</strong>；行业仅当日赛道确认）；涨停连板优先东财涨停池，失败则回退日终涨幅代理。</p>
                         <div class="dr-toolbar">
@@ -821,6 +827,39 @@
                             </details>
                         </section>
                     </div>
+                </div>
+
+                <div class="dr-subpanel" id="weekly-review">
+                    <div class="dr-workbench" data-perm="channel.analyze.tab.market">
+                        <p class="dr-desc">按自然周汇总已有每日复盘。个股是下周计划，不是把每日「明日个股」拼在一起，也不是按周五收盘价买入。</p>
+                        <div class="dr-toolbar">
+                            <label>周内日期 <input type="date" id="wrTradeDate"></label>
+                            <button type="button" class="btn btn-secondary" id="wrLoadBtn">加载</button>
+                            <button type="button" class="btn btn-primary" id="wrComputeBtn">重算</button>
+                            <button type="button" class="btn btn-secondary" id="wrSaveBtn">保存观点/建议</button>
+                            <button type="button" class="btn btn-secondary" id="wrExportBtn">导出 MD</button>
+                            <button type="button" class="btn btn-secondary" id="wrExportPdfBtn">导出 PDF</button>
+                            <span class="dr-status" id="wrStatus"></span>
+                        </div>
+                        <div id="wrBody"></div>
+                    </div>
+                </div>
+
+                <div class="dr-subpanel" id="monthly-review">
+                    <div class="dr-workbench" data-perm="channel.analyze.tab.market">
+                        <p class="dr-desc">按自然月汇总已有每日复盘。个股是下月计划，不是按月末收盘价买入。区间里没有日复盘的日期会列出来，不会自动逐日补算。</p>
+                        <div class="dr-toolbar">
+                            <label>月内日期 <input type="date" id="mrTradeDate"></label>
+                            <button type="button" class="btn btn-secondary" id="mrLoadBtn">加载</button>
+                            <button type="button" class="btn btn-primary" id="mrComputeBtn">重算</button>
+                            <button type="button" class="btn btn-secondary" id="mrSaveBtn">保存观点/建议</button>
+                            <button type="button" class="btn btn-secondary" id="mrExportBtn">导出 MD</button>
+                            <button type="button" class="btn btn-secondary" id="mrExportPdfBtn">导出 PDF</button>
+                            <span class="dr-status" id="mrStatus"></span>
+                        </div>
+                        <div id="mrBody"></div>
+                    </div>
+                </div>
                 </div>
 
                 <!-- 技术工具 -->
@@ -1545,7 +1584,8 @@
     <script src="js/recommend.js?v=20260914a"></script>
     <script src="js/market_analysis.js?v=20260919c"></script>
     <script src="js/daily_review.js?v=20260920f"></script>
-    <script src="js/analysis.js?v=20260917a"></script>
+    <script src="js/period_review.js?v=20260921c"></script>
+    <script src="js/analysis.js?v=20260921b"></script>
 </body>
 
 </html>

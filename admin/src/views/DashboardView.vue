@@ -360,8 +360,18 @@
     </div>
       </el-tab-pane>
 
-      <el-tab-pane label="每日复盘" name="daily-review">
-        <DailyReviewPanel />
+      <el-tab-pane label="复盘" name="market-review">
+        <el-tabs v-model="reviewSubTab">
+          <el-tab-pane label="每日复盘" name="daily">
+            <DailyReviewPanel />
+          </el-tab-pane>
+          <el-tab-pane label="每周复盘" name="weekly" lazy>
+            <PeriodReviewPanel period-type="week" />
+          </el-tab-pane>
+          <el-tab-pane label="每月复盘" name="monthly" lazy>
+            <PeriodReviewPanel period-type="month" />
+          </el-tab-pane>
+        </el-tabs>
       </el-tab-pane>
 
       <el-tab-pane label="龙虎榜" name="dragon-tiger" lazy>
@@ -375,6 +385,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import * as echarts from 'echarts'
 import DailyReviewPanel from '@/views/dashboard/DailyReviewPanel.vue'
+import PeriodReviewPanel from '@/views/dashboard/PeriodReviewPanel.vue'
 import DragonTigerPanel from '@/views/dashboard/DragonTigerPanel.vue'
 import boardFundFlowService, {
   BOARD_FUND_FLOW_RANK_PERIODS,
@@ -392,6 +403,7 @@ import stockFundFlowRankService, {
 } from '@/services/stockFundFlowRank.service'
 
 const dashboardTab = ref('fund-flow')
+const reviewSubTab = ref('daily')
 type FundFlowViewMode = 'chart' | 'list'
 const boardFlowView = ref<FundFlowViewMode>('chart')
 const stockFlowView = ref<FundFlowViewMode>('chart')

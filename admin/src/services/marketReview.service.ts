@@ -89,7 +89,6 @@ export async function exportDailyReviewMd(tradeDate: string): Promise<{
   return { ok: true, filename }
 }
 
-/** 下载复盘 PDF 到浏览器默认下载目录，不写入工程目录。 */
 export async function exportDailyReviewPdf(tradeDate: string): Promise<{
   ok: boolean
   filename?: string
@@ -129,4 +128,52 @@ function triggerDownload(blob: Blob, filename: string) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+function periodQuery(periodType: string, anchor: string) {
+  return new URLSearchParams({ type: periodType, date: anchor })
+}
+
+export async function getPeriodReview(periodType: string, anchor: string) {
+  const res = await fetch(`/api/market_review/period?${periodQuery(periodType, anchor)}`, {
+    headers: authHeaders(),
+  })
+  return parseJson<{ success: boolean; data?: any; message?: string }>(res)
+}
+
+export async function computePeriodReview(periodType: string, anchor: string) {
+  const res = await fetch(`/api/market_review/period?${periodQuery(periodType, anchor)}`, {
+    method: 'POST',
+    headers: authHeaders(),
+  })
+  return parseJson<{ success: boolean; data?: any; message?: string }>(res)
+}
+
+export async function savePeriodReviewText(
+  periodType: string,
+  anchor: string,
+  body: { viewpoint_md?: string; advice_md?: string }
+) {
+  const res = await fetch(`/api/market_review/period?${periodQuery(periodType, anchor)}`, {
+    method: 'PUT',
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  })
+  return parseJson<{ success: boolean; data?: any; message?: string }>(res)
+}
+
+export async function exportPeriodReview(periodType: string, anchor: string, ext: 'md' | 'pdf') {
+  const path = ext === 'pdf' ? 'period/export.pdf' : 'period/export.md'
+  const res = await fetch(`/api/market_review/${path}?${periodQuery(periodType, anchor)}`, {
+    headers: authHeaders(),
+  })
+  const ct = (res.headers.get('Content-Type') || '').toLowerCase()
+  if (!res.ok || ct.includes('application/json')) {
+    const body = await parseJson<{ success?: boolean; message?: string }>(res)
+    return { ok: false, message: body.message || '导出失败' }
+  }
+  const blob = await res.blob()
+  const filename = filenameFromDisposition(res, `period_review_${anchor}.${ext}`)
+  triggerDownload(blob, filename)
+  return { ok: true, filename }
 }

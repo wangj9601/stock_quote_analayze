@@ -4,8 +4,9 @@
 约定：
 - Base URL: https://fuyao.aicubes.cn（可用 FUYAO_BASE_URL 覆盖）
 - Header: X-api-key
-- API Key 优先环境变量 HITHINK_FINANCE_API_KEY / FUYAO_API_KEY，
-  其次 %APPDATA%/hithink-finance/credentials.env
+- API Key 优先级：进程环境变量 HITHINK_FINANCE_API_KEY / FUYAO_API_KEY
+  → 项目根目录 .env 同名项
+  → %APPDATA%/hithink-finance/credentials.env
 """
 
 from __future__ import annotations
@@ -62,6 +63,11 @@ def calc_turnover_rate_pct(
         return None
 
 
+def _project_dotenv_path() -> Path:
+    """项目根目录 .env（backend_api/utils 向上两级）。"""
+    return Path(__file__).resolve().parents[2] / ".env"
+
+
 def _credentials_env_path() -> Path:
     appdata = os.environ.get("APPDATA") or ""
     if appdata:
@@ -101,6 +107,12 @@ def get_fuyao_api_key(*, force_reload: bool = False) -> Optional[str]:
         (os.getenv("HITHINK_FINANCE_API_KEY") or "").strip()
         or (os.getenv("FUYAO_API_KEY") or "").strip()
     )
+    if not key:
+        project_env = _parse_env_file(_project_dotenv_path())
+        key = (
+            (project_env.get("HITHINK_FINANCE_API_KEY") or "").strip()
+            or (project_env.get("FUYAO_API_KEY") or "").strip()
+        )
     if not key:
         env_map = _parse_env_file(_credentials_env_path())
         key = (

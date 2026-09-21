@@ -23,6 +23,16 @@ from backend_core.market_review.render import render_markdown
 from backend_core.market_review.pdf_export import (
     build_daily_review_pdf_bytes,
 )
+from backend_core.market_review.period import (
+    build_period_snapshot,
+    get_period_snapshot,
+    update_period_text,
+)
+from backend_core.market_review.period_render import (
+    build_period_review_pdf_bytes,
+    period_title,
+    render_period_markdown,
+)
 
 router = APIRouter(prefix="/api/market_review", tags=["market_review"])
 
@@ -213,6 +223,130 @@ def _review_download_names(trade_date: str, ext: str) -> tuple:
     else:
         fname = f"{trade_date} 股市复盘报告.{ext}"
     return fname, f"daily_review_{trade_date}.{ext}"
+
+
+def _norm_kind(kind: Optional[str]) -> str:
+    return "month" if str(kind or "").strip().lower() == "month" else "week"
+
+
+@router.get("/period")
+async def api_get_period(
+    type: str = Query("week", description="week 或 month"),
+    date: Optional[str] = Query(None, description="区间内任一日期 YYYY-MM-DD"),
+    db: Session = Depends(get_db),
+):
+    kind = _norm_kind(type)
+    anchor = _norm_date(date)
+    snap = get_period_snapshot(db, kind, anchor)
+    if not snap:
+        label = "月" if kind == "month" else "周"
+        return JSONResponse(
+            {"success": False, "message": f"无该{label}复盘，请先重算"},
+            status_code=404,
+        )
+    return {"success": True, "data": snap}
+
+
+@router.post("/period")
+async def api_compute_period(
+    type: str = Query("week"),
+    date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    kind = _norm_kind(type)
+    anchor = _norm_date(date)
+    try:
+        snap = build_period_snapshot(db, kind, anchor)
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"复盘计算失败: {e}"},
+            status_code=500,
+        )
+    return {"success": True, "data": snap}
+
+
+@router.put("/period")
+async def api_put_period(
+    body: ReviewTextBody,
+    type: str = Query("week"),
+    date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    kind = _norm_kind(type)
+    anchor = _norm_date(date)
+    if body.viewpoint_md is None and body.advice_md is None:
+        return JSONResponse(
+            {"success": False, "message": "请提供 viewpoint_md 或 advice_md"},
+            status_code=400,
+        )
+    snap = update_period_text(
+        db,
+        kind,
+        anchor,
+        viewpoint_md=body.viewpoint_md,
+        advice_md=body.advice_md,
+    )
+    if not snap:
+        label = "月" if kind == "month" else "周"
+        return JSONResponse(
+            {"success": False, "message": f"无该{label}复盘，请先重算"},
+            status_code=404,
+        )
+    return {"success": True, "data": snap}
+
+
+@router.get("/period/export.md")
+async def api_export_period_md(
+    type: str = Query("week"),
+    date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    kind = _norm_kind(type)
+    anchor = _norm_date(date)
+    snap = get_period_snapshot(db, kind, anchor)
+    if not snap:
+        return JSONResponse(
+            {"success": False, "message": "无该区间快照，请先重算"},
+            status_code=404,
+        )
+    md = render_period_markdown(snap)
+    fname = f"{period_title(snap)}.md"
+    ascii_name = f"period_review_{snap.get('period_key') or anchor}.md"
+    return PlainTextResponse(
+        md,
+        media_type="text/markdown; charset=utf-8",
+        headers=_attachment_headers(fname, ascii_name),
+    )
+
+
+@router.get("/period/export.pdf")
+async def api_export_period_pdf(
+    type: str = Query("week"),
+    date: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    kind = _norm_kind(type)
+    anchor = _norm_date(date)
+    snap = get_period_snapshot(db, kind, anchor)
+    if not snap:
+        return JSONResponse(
+            {"success": False, "message": "无该区间快照，请先重算"},
+            status_code=404,
+        )
+    try:
+        pdf_bytes = build_period_review_pdf_bytes(snap)
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"PDF 导出失败: {e}"},
+            status_code=500,
+        )
+    fname = f"{period_title(snap)}.pdf"
+    ascii_name = f"period_review_{snap.get('period_key') or anchor}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers=_attachment_headers(fname, ascii_name),
+    )
 
 
 def _attachment_headers(fname: str, ascii_name: str) -> dict:

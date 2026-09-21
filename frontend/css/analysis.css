@@ -4127,6 +4127,31 @@ html.analysis-popup-window .analysis-tabs {
 }
 
 /* ===== 每日复盘 ===== */
+.dr-subnav {
+    display: flex;
+    gap: 0.25rem;
+    margin: 0 0 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    background: #fff;
+    border-radius: 10px 10px 0 0;
+    padding: 0 0.5rem;
+}
+.dr-subtab {
+    padding: 0.65rem 1.1rem;
+    border: none;
+    background: transparent;
+    color: #6b7280;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-weight: 600;
+}
+.dr-subtab.active {
+    color: #2563eb;
+    border-bottom-color: #2563eb;
+}
+.dr-subtab:hover:not(.active) { color: #374151; }
+.dr-subpanel { display: none; }
+.dr-subpanel.active { display: block; }
 .dr-workbench { padding: 0.75rem; margin: 0 -0.25rem; background: #f4f6f8; border-radius: 12px; }
 .dr-desc { color: #64748b; margin: 0 0 0.75rem; font-size: 0.88rem; line-height: 1.5; }
 .dr-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; margin-bottom: 0.85rem; padding: 0.65rem 0.75rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; }

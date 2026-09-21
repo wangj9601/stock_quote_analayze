@@ -63,11 +63,28 @@ def test_volume_shares_to_hands_and_turnover():
     assert calc_turnover_rate_pct(None, 20000000) is None
 
 
+def test_get_fuyao_api_key_from_project_dotenv(tmp_path, monkeypatch):
+    from backend_api.utils import fuyao_client as mod
+
+    monkeypatch.delenv("HITHINK_FINANCE_API_KEY", raising=False)
+    monkeypatch.delenv("FUYAO_API_KEY", raising=False)
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("HITHINK_FINANCE_API_KEY=from-project-env\n", encoding="utf-8")
+    monkeypatch.setattr(mod, "_project_dotenv_path", lambda: dotenv)
+    monkeypatch.setattr(mod, "_credentials_env_path", lambda: tmp_path / "missing.env")
+
+    mod._api_key_loaded = False
+    mod._api_key_cache = None
+    key = mod.get_fuyao_api_key(force_reload=True)
+    assert key == "from-project-env"
+
+
 def test_get_fuyao_api_key_from_credentials_file(tmp_path, monkeypatch):
     from backend_api.utils import fuyao_client as mod
 
     monkeypatch.delenv("HITHINK_FINANCE_API_KEY", raising=False)
     monkeypatch.delenv("FUYAO_API_KEY", raising=False)
+    monkeypatch.setattr(mod, "_project_dotenv_path", lambda: tmp_path / "missing.env")
     cred = tmp_path / "credentials.env"
     cred.write_text("HITHINK_FINANCE_API_KEY=test-key-abc\n", encoding="utf-8")
     monkeypatch.setenv("APPDATA", str(tmp_path.parent))

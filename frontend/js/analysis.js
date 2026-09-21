@@ -107,6 +107,17 @@ const AnalysisPage = {
             });
         });
 
+        const reviewRoot = document.getElementById('market-review');
+        if (reviewRoot && !reviewRoot.dataset.subBound) {
+            reviewRoot.dataset.subBound = '1';
+            reviewRoot.addEventListener('click', (e) => {
+                const btn = e.target && e.target.closest ? e.target.closest('.dr-subtab') : null;
+                if (!btn || !reviewRoot.contains(btn)) return;
+                e.preventDefault();
+                this.showReviewSub(btn.dataset.review);
+            });
+        }
+
         // 报告过滤器
         document.querySelectorAll('.filter-select').forEach(select => {
             select.addEventListener('change', () => {
@@ -125,6 +136,12 @@ const AnalysisPage = {
 
     // 切换标签
     switchTab(tabId) {
+        if (tabId === 'daily-review' || tabId === 'weekly-review' || tabId === 'monthly-review') {
+            this._reviewSub = tabId;
+            tabId = 'market-review';
+            const reviewBtn = document.querySelector('.analysis-tab[data-tab="market-review"]');
+            if (reviewBtn) this.updateActiveTab(reviewBtn);
+        }
         this.currentTab = tabId;
 
         // 隐藏所有面板
@@ -171,6 +188,21 @@ const AnalysisPage = {
             tab.classList.remove('active');
         });
         activeTab.classList.add('active');
+    },
+
+    showReviewSub(panelId) {
+        const root = document.getElementById('market-review');
+        if (!root || !panelId) return;
+        this._reviewSub = panelId;
+        root.querySelectorAll('.dr-subtab').forEach((btn) => {
+            btn.classList.toggle('active', btn.dataset.review === panelId);
+        });
+        root.querySelectorAll('.dr-subpanel').forEach((panel) => {
+            panel.classList.toggle('active', panel.id === panelId);
+        });
+        if (panelId === 'daily-review' && window.DailyReviewPage) DailyReviewPage.init();
+        if (panelId === 'weekly-review' && window.PeriodReviewWeek) PeriodReviewWeek.init();
+        if (panelId === 'monthly-review' && window.PeriodReviewMonth) PeriodReviewMonth.init();
     },
 
     // 加载标签数据
@@ -242,8 +274,8 @@ const AnalysisPage = {
                 if (window.MarketAnalysis) MarketAnalysis.load();
                 else this.loadMarketAnalysis();
                 break;
-            case 'daily-review':
-                if (window.DailyReviewPage) DailyReviewPage.init();
+            case 'market-review':
+                this.showReviewSub(this._reviewSub || 'daily-review');
                 break;
             case 'technical-tools':
                 this.loadTechnicalTools();
