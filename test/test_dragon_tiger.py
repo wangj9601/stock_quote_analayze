@@ -7,6 +7,7 @@ from backend_api.stock.dragon_tiger import (
     normalize_fuyao_data,
     records_to_em_payload,
 )
+from backend_api.stock.dragon_tiger_store import should_replace_snapshot
 
 
 def test_norm_code_zfill_and_suffix():
@@ -64,6 +65,10 @@ def test_normalize_fuyao_sorts_by_net_and_keeps_hot_money():
     assert data["hot_money_items"][0]["name"] == "赵老哥"
     assert data["hot_money_items"][0]["net_value"] == 1e7
     assert data["hot_money_items"][0]["stocks"][0]["code"] == "000001"
+    assert data["items"][1]["org_net_value"] == -1e7
+    assert data["items"][1]["hot_money_net_value"] == 3e6
+    assert data["items"][0]["org_net_value"] is None
+    assert data["items"][0]["hot_money_net_value"] is None
 
 
 def test_em_payload_picks_latest_day_and_zfills_code():
@@ -172,3 +177,12 @@ def test_load_both_empty_is_success_with_message():
 def test_load_rejects_bad_date():
     out = load_dragon_tiger("all", "20260918")
     assert out["success"] is False
+
+
+def test_fuyao_snapshot_not_replaced_by_eastmoney():
+    assert should_replace_snapshot(None, "fuyao") is True
+    assert should_replace_snapshot(None, "akshare_em") is True
+    assert should_replace_snapshot("akshare_em", "fuyao") is True
+    assert should_replace_snapshot("fuyao", "akshare_em") is False
+    assert should_replace_snapshot("fuyao", "none") is False
+    assert should_replace_snapshot(None, "none") is False

@@ -374,8 +374,16 @@ async def get_dragon_tiger(
     board_type: str = Query("all", description="all | org | hot_money"),
     date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD，省略为最新可用交易日"),
 ):
-    """龙虎榜。优先同花顺 Fuyao，失败再走 akshare 东方财富详情。金额单位：元。"""
+    """龙虎榜。优先同花顺 Fuyao，失败再走 akshare 东方财富详情。金额单位：元。
+
+    成功结果写入 dragon_tiger_*。同花顺含机构净额、游资净额；东方财富这两列为 NULL，
+    且不会覆盖已落库的同花顺快照。
+    """
     out = load_dragon_tiger(board_type, date)
+    if out.get("success") and isinstance(out.get("data"), dict):
+        from backend_api.stock.dragon_tiger_store import persist_dragon_tiger
+
+        persist_dragon_tiger(out["data"])
     if not out.get("success"):
         status = 400 if "格式" in str(out.get("message") or "") or "board_type" in str(out.get("message") or "") else 502
         return JSONResponse(out, status_code=status)
