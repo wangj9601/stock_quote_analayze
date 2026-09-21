@@ -2408,14 +2408,25 @@ const StockMultiStrategy = {
 
         const ptRaw = data.pattern || {};
         const patternFetched = ptRaw.payload || null;
+        const patternCode = ptRaw.code || (patternFetched && patternFetched.code) || resolvedCode;
+        const patternName = ptRaw.name
+            || (patternFetched && patternFetched.name)
+            || (stock && stock.name)
+            || options.name
+            || '';
+        const patternItems = (ptRaw.items || (patternFetched && patternFetched.items) || []).map((h) => ({
+            ...(h || {}),
+            code: (h && (h.code || h.stock_code)) || patternCode,
+            name: (h && (h.name || h.stock_name)) || patternName,
+        }));
         const pattern = {
             ok: !!ptRaw.ok,
-            items: ptRaw.items || (patternFetched && patternFetched.items) || [],
+            items: patternItems,
             invalidated_count: ptRaw.invalidated_count
                 || (patternFetched && patternFetched.invalidated_count)
                 || 0,
-            code: ptRaw.code || (patternFetched && patternFetched.code) || resolvedCode,
-            name: ptRaw.name || (patternFetched && patternFetched.name) || '',
+            code: patternCode,
+            name: patternName,
             asof: ptRaw.asof || (patternFetched && patternFetched.asof) || tradeDate || '',
             price_adjust: ptRaw.price_adjust
                 || (patternFetched && patternFetched.price_adjust)
@@ -2637,7 +2648,9 @@ const StockMultiStrategy = {
                 const levelsData = (this.lastLevels && this.lastLevels.data) || {};
                 const classic = levelsData.classic_levels || levelsData.classic || {};
                 const confluence = classic.confluence_zones || levelsData.confluence_zones || null;
-                PT.renderEmbedded(patternHost, fetched.items || [], meta, fetched.price_adjust, {
+                PT.renderEmbedded(patternHost, bundle.pattern.items || fetched.items || [], meta, fetched.price_adjust, {
+                    code: bundle.pattern.code || fetched.code || '',
+                    name: bundle.pattern.name || fetched.name || '',
                     asof: fetched.asof || '',
                     confluenceZones: confluence,
                     classicLevels: classic,
@@ -3468,6 +3481,8 @@ const StockMultiStrategy = {
             const confluence =
                 classic.confluence_zones || levelsData.confluence_zones || null;
             PatternTool.renderEmbedded(host, fetched.items, meta, fetched.price_adjust, {
+                code: fetched.code || code,
+                name: fetched.name || '',
                 asof: fetched.asof || asof || '',
                 confluenceZones: confluence,
                 classicLevels: classic,

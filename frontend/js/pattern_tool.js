@@ -209,8 +209,8 @@ const PatternTool = {
     }
     const rows = visible
       .map((r) => {
-        const code = r.code || '';
-        const name = r.name || '';
+        const code = r.code || opts.code || '';
+        const name = r.name || opts.name || '';
         const href = code
           ? `stock.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}`
           : '#';
