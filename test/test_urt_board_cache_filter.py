@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""URT：板块筛选可读缓存 + 空缓存命中 + 全市场无预计算快速失败。"""
+"""URT：板块筛选可读缓存 + 空缓存命中 + 全市场无预计算可实时计算。"""
 
 import sys
 from pathlib import Path
@@ -139,9 +139,46 @@ def test_full_market_no_precompute_failfast():
     assert "预计算" in (out.get("message") or "")
 
 
+def test_full_market_no_precompute_allows_realtime():
+    """无预计算时默认允许全市场实时计算。"""
+    db = MagicMock()
+    fake_stocks = [(f"{i:06d}", f"n{i}") for i in range(3)]
+    hit = {"code": "600519", "name": "茅台", "buy_signal": True, "score": 80}
+    with patch.object(URTFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.urt.frontend_interface.URTConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.urt.frontend_interface.URTDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.urt.frontend_interface.query_buy_signals_for_date",
+        return_value=[],
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.dates_ready_for_universe_backtest",
+        return_value=set(),
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.get_trace_freshness",
+        return_value={"stale": False, "need_recompute": False, "config_updated_at": None, "trace_computed_at": None},
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.URTStrategyEngine"
+    ) as Eng, patch.dict("os.environ", {"URT_ALLOW_FULL_MARKET_REALTIME": "1"}, clear=False):
+        cm = CM.return_value
+        cm.get_config.return_value = CFG
+        cm.merge_overrides.return_value = CFG
+        Loader.resolve_effective_history_end_date.return_value = "2026-09-21"
+        loader = MagicMock()
+        loader.list_a_share_candidates.return_value = fake_stocks
+        Loader.return_value = loader
+        Eng.return_value.screen_universe.return_value = [hit]
+        out = URTFrontendInterface.screen(db, scope="all", config_id=1, prefer_cache=True, market="CN")
+    assert out["success"] is True
+    assert out["data_source"] == "realtime"
+    assert out["data"] and out["data"][0]["code"] == "600519"
+    Eng.return_value.screen_universe.assert_called_once()
+
+
 if __name__ == "__main__":
     test_code_matches_urt_boards()
     test_screen_uses_cache_when_boards_set()
     test_empty_buy_signals_but_date_ready_uses_cache()
     test_full_market_no_precompute_failfast()
+    test_full_market_no_precompute_allows_realtime()
     print("test_urt_board_cache_filter.py: all passed")

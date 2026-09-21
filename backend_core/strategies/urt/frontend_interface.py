@@ -301,16 +301,16 @@ class URTFrontendInterface:
         if not cache_served and not data:
             pool_codes = stock_codes if stock_codes is not None else None
 
-            # 全市场且无预计算：禁止默认同步实时扫（生产 Nginx/Gunicorn 易 502）。
-            # 设 URT_ALLOW_FULL_MARKET_REALTIME=1 可恢复旧行为。
-            allow_full_rt = (os.getenv("URT_ALLOW_FULL_MARKET_REALTIME") or "").strip().lower() in (
-                "1",
-                "true",
-                "yes",
-                "on",
+            # 全市场且无预计算：默认同步实时计算。
+            # 设 URT_ALLOW_FULL_MARKET_REALTIME=0 可恢复快速失败（避免生产网关 502）。
+            deny_full_rt = (os.getenv("URT_ALLOW_FULL_MARKET_REALTIME") or "1").strip().lower() in (
+                "0",
+                "false",
+                "no",
+                "off",
             )
             full_market = pool_codes is None and not limit
-            if full_market and not allow_full_rt and mkt != "HK":
+            if full_market and deny_full_rt and mkt != "HK":
                 msg = (
                     f"全市场暂无可用预计算（基准日 {effective}，config_id={resolved_id}）。"
                     "请先在管理端执行 URT 预计算，或改用自选股/缩小范围；"
