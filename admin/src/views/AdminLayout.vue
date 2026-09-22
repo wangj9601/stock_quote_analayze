@@ -154,6 +154,7 @@ const menuItems: MenuItem[] = [
       { path: '/sbbr-management', name: '做小做底 SBBR' },
       { path: '/dblb-management', name: '双底策略 DBLB' },
       { path: '/cupb-management', name: '杯底形态 CUPB' },
+      { path: '/kgt-management', name: '袋鼠尾 KGT' },
       { path: '/rpe-management', name: '比价效应 RPE' },
     ],
   },

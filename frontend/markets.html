@@ -111,6 +111,7 @@
                     <button class="content-tab" data-tab="sectors">行业板块</button>
                     <button class="content-tab" data-tab="concepts">概念板块</button>
                     <button class="content-tab" data-tab="dragon-tiger">龙虎榜</button>
+                    <button class="content-tab" data-tab="auction">集合竞价</button>
                     <button class="content-tab" data-tab="hot">热门关注</button>
                     <button class="content-tab" data-tab="stats">市场统计</button>
                 </div>
@@ -325,6 +326,54 @@
                                 </table>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- 集合竞价 -->
+                    <div class="tab-panel" id="auction">
+                        <div class="lhb-toolbar auction-toolbar">
+                            <label for="auctionDate">日期</label>
+                            <input type="date" id="auctionDate" title="留空为最新交易日">
+                            <label for="auctionStage">阶段</label>
+                            <select id="auctionStage">
+                                <option value="final" selected>终态 final</option>
+                                <option value="live">实时 live</option>
+                            </select>
+                            <input type="text" id="auctionKeyword" placeholder="代码/名称关键字" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;">
+                            <button type="button" id="auctionQueryBtn" class="btn btn-sm btn-primary">查询</button>
+                            <button type="button" id="auctionCollectBtn" class="btn btn-sm btn-secondary" title="从同花顺 Fuyao 采集并落库">采集</button>
+                            <span id="auctionMeta" class="lhb-meta"></span>
+                        </div>
+                        <div id="auctionHint" class="lhb-hint" style="display:none;"></div>
+                        <div class="auction-benchmark-wrap">
+                            <h3 class="lhb-subhead">短线风向标 · 竞价基准</h3>
+                            <div id="auctionBenchmarkCards" class="auction-benchmark-cards">
+                                <div class="auction-empty">切换到本页后加载</div>
+                            </div>
+                        </div>
+                        <div class="rankings-content lhb-table-wrap">
+                            <table class="table rankings-table">
+                                <thead>
+                                    <tr>
+                                        <th>代码</th>
+                                        <th>名称</th>
+                                        <th>竞价价</th>
+                                        <th>竞价涨幅</th>
+                                        <th>竞价量</th>
+                                        <th>竞价额</th>
+                                        <th>未匹配</th>
+                                        <th>竞价换手%</th>
+                                        <th>昨量比%</th>
+                                        <th>竞价量比</th>
+                                        <th>前收</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="auctionTableBody">
+                                    <tr><td colspan="12" style="text-align:center;color:#888;">切换到本页后加载</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="auctionPagination" class="pagination"></div>
                     </div>
 
                     <!-- 热门关注 -->

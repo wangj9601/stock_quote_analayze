@@ -596,11 +596,11 @@ async function saveEditing(andRun = false) {
     if (!editing.value.id) {
       const res: any = await collectionWorkflowService.createWorkflow(payload)
       editing.value = res.data
-      ElMessage.success('已创建流程（节点立即生效；定时配置约 30 秒内空闲热同步到 core）')
+      ElMessage.success('已创建流程（节点立即生效；定时配置约 5 分钟内空闲热同步到 core）')
     } else {
       await collectionWorkflowService.updateWorkflow(editing.value.id, payload)
       await collectionWorkflowService.saveNodes(editing.value.id, payload.nodes as WorkflowNodeConfig[])
-      ElMessage.success('已保存（节点立即生效；定时配置约 30 秒内空闲热同步到 core）')
+      ElMessage.success('已保存（节点立即生效；定时配置约 5 分钟内空闲热同步到 core）')
     }
     await loadWorkflows()
     const saved = editing.value

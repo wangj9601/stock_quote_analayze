@@ -187,6 +187,15 @@ const StockPage = {
 
         // 搜索功能
         this.bindSearchEvents();
+
+        const stockAuctionRefreshBtn = document.getElementById('stockAuctionRefreshBtn');
+        if (stockAuctionRefreshBtn) {
+            stockAuctionRefreshBtn.addEventListener('click', () => this.loadAuctionData(true));
+        }
+        const stockAuctionCollectBtn = document.getElementById('stockAuctionCollectBtn');
+        if (stockAuctionCollectBtn) {
+            stockAuctionCollectBtn.addEventListener('click', () => this.collectAuctionData());
+        }
     },
 
     // 绑定搜索事件
@@ -414,7 +423,7 @@ const StockPage = {
     // 从 URL ?tab= 打开指定内容标签（如 finance、analysis）
     bootstrapTabFromUrl() {
         const tab = (getQueryParam('tab') || '').trim();
-        const allowed = ['analysis', 'finance', 'news', 'research', 'flow'];
+        const allowed = ['analysis', 'finance', 'news', 'research', 'flow', 'auction'];
         if (!tab || !allowed.includes(tab)) return;
         const btn = document.querySelector(`.content-tab[data-tab="${tab}"]`);
         if (!btn) return;
@@ -1372,6 +1381,9 @@ const StockPage = {
                 break;
             case 'flow':
                 this.loadFlowData();
+                break;
+            case 'auction':
+                this.loadAuctionData(false);
                 break;
         }
     },
@@ -2599,6 +2611,182 @@ const StockPage = {
             // 最终回退策略：直接在新窗口打开
             CommonUtils.showToast('下载失败，已在新窗口打开PDF', 'warning');
             this.openPDFInNewWindow(url, title);
+        }
+    },
+
+    formatAuctionPct(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '-';
+        const n = Number(value);
+        const sign = n > 0 ? '+' : '';
+        return sign + n.toFixed(2) + '%';
+    },
+
+    formatAuctionNum(value, digits = 2) {
+        if (value == null || !Number.isFinite(Number(value))) return '-';
+        return Number(value).toFixed(digits);
+    },
+
+    /** 竞价量/未匹配：库存为手，展示万手/亿手（与行情成交量口径一致） */
+    formatAuctionVolume(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '-';
+        const n = Number(value);
+        const abs = Math.abs(n);
+        if (abs >= 1e8) return (n / 1e8).toFixed(2) + '亿手';
+        if (abs >= 1e4) return (n / 1e4).toFixed(2) + '万手';
+        return n.toFixed(0) + '手';
+    },
+
+    formatAuctionAmount(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '-';
+        const n = Number(value);
+        if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + ' 亿';
+        if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(2) + ' 万';
+        return n.toFixed(0) + ' 元';
+    },
+
+    renderAuctionDetail(data) {
+        const map = {
+            auction_price: (v) => this.formatAuctionNum(v),
+            auction_pct: (v) => this.formatAuctionPct(v),
+            auction_volume: (v) => this.formatAuctionVolume(v),
+            auction_amount: (v) => this.formatAuctionAmount(v),
+            auction_unmatched: (v) => this.formatAuctionVolume(v),
+            auction_turnover_pct: (v) => this.formatAuctionPct(v),
+            auction_yesterday_ratio_pct: (v) => this.formatAuctionPct(v),
+            auction_volume_ratio: (v) => this.formatAuctionNum(v),
+            pre_close_price: (v) => this.formatAuctionNum(v),
+            open_price: (v) => this.formatAuctionNum(v),
+            last_price: (v) => this.formatAuctionNum(v),
+            float_market_cap: (v) => this.formatAuctionAmount(v),
+            data_status: (v) => (v == null || v === '' ? '-' : String(v)),
+            source_mode: (v) => (v == null || v === '' ? '-' : String(v)),
+        };
+        Object.keys(map).forEach((key) => {
+            const el = document.querySelector(`#stockAuctionDetail [data-auction="${key}"]`);
+            if (!el) return;
+            const raw = data ? data[key] : null;
+            el.textContent = map[key](raw);
+            if (key === 'auction_pct') {
+                el.className = '';
+                if (raw != null && Number.isFinite(Number(raw))) {
+                    el.classList.add(Number(raw) >= 0 ? 'positive' : 'negative');
+                }
+            }
+        });
+    },
+
+    async loadAuctionData(live) {
+        const meta = document.getElementById('stockAuctionMeta');
+        const hint = document.getElementById('stockAuctionHint');
+        const dateInput = document.getElementById('stockAuctionDate');
+        const stageInput = document.getElementById('stockAuctionStage');
+        const day = dateInput && dateInput.value ? String(dateInput.value).trim() : '';
+        const stage = stageInput && stageInput.value ? String(stageInput.value).trim() : 'final';
+        const params = new URLSearchParams();
+        if (day) params.set('date', day);
+        params.set('stage', stage);
+        if (live) params.set('live', '1');
+        try {
+            const resp = await fetch(`${API_BASE_URL}/api/market/auction/stock/${encodeURIComponent(this.stockCode)}?${params.toString()}`);
+            const result = await resp.json();
+            if (!result || !result.success || !result.data) {
+                this.renderAuctionDetail(null);
+                if (hint) {
+                    hint.style.display = 'block';
+                    hint.textContent = (result && result.message) || '暂无集合竞价数据';
+                }
+                if (meta) meta.textContent = '';
+                return;
+            }
+            const data = result.data;
+            if (dateInput && data.trade_date && !dateInput.value) {
+                dateInput.value = data.trade_date;
+            }
+            this.renderAuctionDetail(data);
+            if (meta) {
+                meta.textContent = [
+                    data.trade_date || '',
+                    data.auction_phase ? `阶段 ${data.auction_phase}` : '',
+                    data.source_mode ? `来源 ${data.source_mode}` : '',
+                    data.data_status ? `状态 ${data.data_status}` : '',
+                ].filter(Boolean).join(' · ');
+            }
+            if (hint) {
+                if (data.live_error) {
+                    hint.style.display = 'block';
+                    hint.textContent = '实时拉取失败，已展示本地缓存：' + data.live_error;
+                } else {
+                    hint.style.display = 'none';
+                    hint.textContent = '';
+                }
+            }
+        } catch (error) {
+            console.error('[loadAuctionData] 失败:', error);
+            this.renderAuctionDetail(null);
+            if (hint) {
+                hint.style.display = 'block';
+                hint.textContent = '集合竞价请求异常';
+            }
+        }
+    },
+
+    async collectAuctionData() {
+        const btn = document.getElementById('stockAuctionCollectBtn');
+        const hint = document.getElementById('stockAuctionHint');
+        const dateInput = document.getElementById('stockAuctionDate');
+        const stageInput = document.getElementById('stockAuctionStage');
+        const day = dateInput && dateInput.value ? String(dateInput.value).trim() : '';
+        const stage = stageInput && stageInput.value ? String(stageInput.value).trim() : 'final';
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '采集中...';
+        }
+        if (hint) {
+            hint.style.display = 'block';
+            hint.textContent = '正在采集当前股票集合竞价...';
+        }
+        try {
+            const resp = await fetch(`${API_BASE_URL}/api/market/auction/collect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stage,
+                    trade_date: day || null,
+                    stock_codes: [this.stockCode],
+                    refresh_benchmark: true,
+                }),
+            });
+            const result = await resp.json();
+            if (!result || !result.success || !result.task_id) {
+                throw new Error((result && result.message) || '采集启动失败');
+            }
+            for (let i = 0; i < 60; i++) {
+                await new Promise((r) => setTimeout(r, 1500));
+                const st = await fetch(`${API_BASE_URL}/api/market/auction/collect/status/${encodeURIComponent(result.task_id)}`);
+                const statusResult = await st.json();
+                if (statusResult && statusResult.success && (statusResult.status === 'completed' || statusResult.status === 'failed')) {
+                    if (statusResult.status === 'failed') {
+                        throw new Error(statusResult.message || '采集失败');
+                    }
+                    break;
+                }
+            }
+            await this.loadAuctionData(false);
+            if (hint) {
+                hint.style.display = 'block';
+                hint.textContent = '采集完成。';
+            }
+        } catch (error) {
+            console.error('[collectAuctionData] 失败:', error);
+            if (hint) {
+                hint.style.display = 'block';
+                hint.textContent = '采集失败：' + (error.message || error);
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '采集并保存';
+            }
         }
     },
 

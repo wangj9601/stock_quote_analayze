@@ -23,8 +23,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_FUYAO_BASE_URL = "https://fuyao.aicubes.cn"
 SNAPSHOT_PATH = "/api/a-share/prices/snapshot"
 DRAGON_TIGER_PATH = "/api/a-share/special-data/dragon-tiger-list"
+AUCTION_SNAPSHOT_PATH = "/api/a-share/auction/snapshot"
+AUCTION_BENCHMARK_PATH = "/api/a-share/auction/short-term-benchmark"
 DEFAULT_TIMEOUT = 8.0
 DRAGON_TIGER_TIMEOUT = 20.0
+AUCTION_TIMEOUT = 20.0
+AUCTION_BATCH_SIZE = 100
 A_SHARE_LOT_SIZE = 100  # A股1手=100股；Fuyao volume 为股，对外统一按手
 
 _api_key_cache: Optional[str] = None
@@ -415,3 +419,257 @@ def fetch_realtime_quote_by_code(
         name=name,
         free_float_shares=free_float_shares,
     )
+
+
+def _fuyao_get_json(
+    path: str,
+    *,
+    params: Optional[Dict[str, str]] = None,
+    timeout: float = DEFAULT_TIMEOUT,
+    log_prefix: str = "fuyao",
+) -> Dict[str, Any]:
+    """通用 Fuyao GET 请求。"""
+    api_key = get_fuyao_api_key()
+    if not api_key:
+        return {"ok": False, "error": "missing_api_key", "code": 2001}
+
+    url = f"{get_fuyao_base_url()}{path}"
+    headers = {"X-api-key": api_key, "Accept": "application/json"}
+    try:
+        resp = requests.get(url, headers=headers, params=params or {}, timeout=timeout)
+    except requests.RequestException as exc:
+        logger.warning("%s 请求失败: %s", log_prefix, type(exc).__name__)
+        return {"ok": False, "error": f"request_error:{type(exc).__name__}", "code": None}
+
+    try:
+        payload = resp.json()
+    except ValueError:
+        return {
+            "ok": False,
+            "error": f"invalid_json_http_{resp.status_code}",
+            "code": None,
+        }
+
+    if resp.status_code >= 400:
+        return {
+            "ok": False,
+            "error": f"http_{resp.status_code}",
+            "code": payload.get("code") if isinstance(payload, dict) else None,
+            "raw": payload,
+        }
+
+    if not isinstance(payload, dict):
+        return {"ok": False, "error": "invalid_payload", "code": None, "raw": payload}
+
+    biz_code = payload.get("code")
+    if biz_code not in (0, "0", None):
+        return {
+            "ok": False,
+            "error": payload.get("message") or f"biz_code_{biz_code}",
+            "code": biz_code,
+            "raw": payload,
+        }
+
+    data = payload.get("data")
+    if not isinstance(data, dict):
+        alt = payload.get("result")
+        data = alt if isinstance(alt, dict) else {}
+
+    return {
+        "ok": True,
+        "data": data,
+        "raw": payload,
+    }
+
+
+def fetch_a_share_auction_snapshot(
+    codes: List[str],
+    *,
+    stage: str = "final",
+    timeout: float = AUCTION_TIMEOUT,
+) -> Dict[str, Any]:
+    """
+    GET /api/a-share/auction/snapshot
+
+    stage: live | final
+    """
+    stage_norm = (stage or "final").strip().lower()
+    if stage_norm not in ("live", "final"):
+        stage_norm = "final"
+
+    thscodes: List[str] = []
+    for c in codes:
+        tc = code_to_thscode(c)
+        if tc:
+            thscodes.append(tc)
+    if not thscodes:
+        return {"ok": False, "error": "invalid_code", "code": None}
+    if len(thscodes) > AUCTION_BATCH_SIZE:
+        return {
+            "ok": False,
+            "error": f"too_many_codes_max_{AUCTION_BATCH_SIZE}",
+            "code": None,
+        }
+
+    result = _fuyao_get_json(
+        AUCTION_SNAPSHOT_PATH,
+        params={"thscodes": ",".join(thscodes), "stage": stage_norm},
+        timeout=timeout,
+        log_prefix="fuyao_auction_snapshot",
+    )
+    if not result.get("ok"):
+        return result
+
+    data = result.get("data") or {}
+    items = data.get("item") or data.get("items") or []
+    if not isinstance(items, list):
+        items = []
+    data_status = data.get("data_status")
+    if not items:
+        status_l = str(data_status or "").strip().lower()
+        if status_l in ("not_ready", "preparing", "pending"):
+            return {
+                "ok": False,
+                "error": "集合竞价数据尚未就绪(not_ready)，请稍后重试",
+                "code": 0,
+                "data_status": data_status,
+                "auction_phase": data.get("auction_phase") or stage_norm,
+                "timestamp": data.get("timestamp"),
+                "raw": result.get("raw"),
+                "data": data,
+            }
+        return {
+            "ok": False,
+            "error": "empty_items",
+            "code": 0,
+            "data_status": data_status,
+            "raw": result.get("raw"),
+            "data": data,
+        }
+    return {
+        "ok": True,
+        "items": items,
+        "auction_phase": data.get("auction_phase") or stage_norm,
+        "data_status": data_status,
+        "timestamp": data.get("timestamp"),
+        "total": data.get("total"),
+        "raw": result.get("raw"),
+    }
+
+
+def fetch_a_share_auction_short_term_benchmark(
+    trade_date: Optional[str] = None,
+    *,
+    timeout: float = AUCTION_TIMEOUT,
+) -> Dict[str, Any]:
+    """GET /api/a-share/auction/short-term-benchmark"""
+    params: Dict[str, str] = {}
+    day = (trade_date or "").strip()
+    if day:
+        params["date"] = day
+
+    result = _fuyao_get_json(
+        AUCTION_BENCHMARK_PATH,
+        params=params,
+        timeout=timeout,
+        log_prefix="fuyao_auction_benchmark",
+    )
+    if not result.get("ok"):
+        return result
+
+    data = result.get("data") or {}
+    items = data.get("item") or data.get("items") or []
+    if not isinstance(items, list):
+        items = []
+    data_status = data.get("data_status")
+    if not items:
+        status_l = str(data_status or "").strip().lower()
+        if status_l in ("not_ready", "preparing", "pending"):
+            return {
+                "ok": False,
+                "error": "短线风向标数据尚未就绪(not_ready)，请稍后重试",
+                "code": 0,
+                "data_status": data_status,
+                "timestamp": data.get("timestamp"),
+                "raw": result.get("raw"),
+                "data": data,
+            }
+        return {
+            "ok": False,
+            "error": "empty_items",
+            "code": 0,
+            "data_status": data_status,
+            "raw": result.get("raw"),
+            "data": data,
+        }
+    return {
+        "ok": True,
+        "items": items,
+        "date": data.get("date"),
+        "date_ms": data.get("date_ms"),
+        "timestamp": data.get("timestamp"),
+        "data_status": data_status,
+        "raw": result.get("raw"),
+    }
+
+
+def auction_item_to_record(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Fuyao 集合竞价 item → 系统统一字段。
+
+    单位约定（与成交额交叉验证）：
+    - Fuyao ``auction_volume`` / ``auction_unmatched`` 已是「手」，不是股
+      （amount ≈ price × volume_hands × 100）
+    - 系统 ``auction_volume`` / ``auction_unmatched`` 对外仍为手
+    - ``*_shares`` 存股数 = 手 × 100
+
+    ``ticker`` 缺失时从 ``thscode``（如 600519.SH）回退解析 6 位代码。
+    """
+    ticker = str(item.get("ticker") or item.get("code") or "").strip()
+    if ticker.isdigit():
+        ticker = ticker.zfill(6)
+    else:
+        ths = str(item.get("thscode") or "").strip().upper()
+        left = ths.split(".", 1)[0] if ths else ""
+        if left.isdigit():
+            ticker = left.zfill(6)
+        else:
+            digits = "".join(ch for ch in (ticker or ths) if ch.isdigit())
+            ticker = (digits.zfill(6) if len(digits) <= 6 else digits[-6:]) if digits else ""
+
+    volume_hands = item.get("auction_volume")
+    unmatched_hands = item.get("auction_unmatched")
+    try:
+        volume_shares = (
+            float(volume_hands) * A_SHARE_LOT_SIZE if volume_hands is not None else None
+        )
+    except (TypeError, ValueError):
+        volume_shares = None
+    try:
+        unmatched_shares = (
+            float(unmatched_hands) * A_SHARE_LOT_SIZE
+            if unmatched_hands is not None
+            else None
+        )
+    except (TypeError, ValueError):
+        unmatched_shares = None
+
+    return {
+        "code": ticker,
+        "thscode": item.get("thscode"),
+        "name": item.get("name"),
+        "auction_price": item.get("auction_price"),
+        "auction_pct": item.get("auction_pct"),
+        "auction_volume": volume_hands,
+        "auction_volume_shares": volume_shares,
+        "auction_amount": item.get("auction_amount"),
+        "auction_unmatched": unmatched_hands,
+        "auction_unmatched_shares": unmatched_shares,
+        "auction_turnover_pct": item.get("auction_turnover_pct"),
+        "auction_yesterday_ratio_pct": item.get("auction_yesterday_ratio_pct"),
+        "auction_volume_ratio": item.get("auction_volume_ratio"),
+        "pre_close_price": item.get("pre_close_price"),
+        "open_price": item.get("open_price"),
+        "last_price": item.get("last_price"),
+        "float_market_cap": item.get("float_market_cap"),
+        "source": "fuyao",
+    }

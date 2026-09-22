@@ -1415,6 +1415,7 @@ const StockMultiStrategy = {
             lastLevels: this.lastLevels,
             lastRs: this.lastRs,
             lastFundFlow: this.lastFundFlow,
+            lastAuction: this.lastAuction,
             lastPattern: this.lastPattern,
             lastSwing: this.lastSwing,
             lastGann: this.lastGann,
@@ -1431,6 +1432,7 @@ const StockMultiStrategy = {
         this.lastLevels = state.lastLevels;
         this.lastRs = state.lastRs;
         this.lastFundFlow = state.lastFundFlow;
+        this.lastAuction = state.lastAuction;
         this.lastPattern = state.lastPattern;
         this.lastSwing = state.lastSwing;
         this.lastGann = state.lastGann;
@@ -1458,6 +1460,9 @@ const StockMultiStrategy = {
             fundFlowHost: pick('ssaFundFlowHost'),
             fundFlowBlock: pick('ssaFundFlowBlock'),
             fundFlowStatus: pick('ssaFundFlowStatus'),
+            auctionHost: pick('ssaAuctionHost'),
+            auctionBlock: pick('ssaAuctionBlock'),
+            auctionStatus: pick('ssaAuctionStatus'),
             levelsHost: pick('ssaLevelsHost'),
             levelsBlock: pick('ssaLevelsBlock'),
             levelsStatus: pick('ssaLevelsStatus'),
@@ -1494,6 +1499,9 @@ const StockMultiStrategy = {
         apply('ssaFundFlowHost', dom.fundFlowHost);
         apply('ssaFundFlowBlock', dom.fundFlowBlock);
         apply('ssaFundFlowStatus', dom.fundFlowStatus);
+        apply('ssaAuctionHost', dom.auctionHost);
+        apply('ssaAuctionBlock', dom.auctionBlock);
+        apply('ssaAuctionStatus', dom.auctionStatus);
         apply('ssaLevelsHost', dom.levelsHost);
         apply('ssaLevelsBlock', dom.levelsBlock);
         apply('ssaLevelsStatus', dom.levelsStatus);
@@ -1589,6 +1597,7 @@ const StockMultiStrategy = {
         this.lastLevels = null;
         this.lastRs = null;
         this.lastFundFlow = null;
+        this.lastAuction = null;
         this.lastPattern = null;
         this.lastSwing = null;
         this.lastGann = null;
@@ -1612,6 +1621,7 @@ const StockMultiStrategy = {
             this.lastLevels ||
             this.lastRs ||
             this.lastFundFlow ||
+            this.lastAuction ||
             this.lastPattern ||
             this.lastSwing ||
             this.lastGann ||
@@ -2397,6 +2407,13 @@ const StockMultiStrategy = {
             error: ffRaw.error || (ffRaw.ok ? null : '资金流向加载失败'),
         };
 
+        const aqRaw = data.auction || {};
+        const auction = {
+            ok: !!aqRaw.ok,
+            data: aqRaw.data || null,
+            error: aqRaw.error || (aqRaw.ok ? null : '集合竞价加载失败'),
+        };
+
         const lvRaw = data.levels || {};
         const levelsFetched = lvRaw.payload || null;
         const levels = {
@@ -2480,6 +2497,7 @@ const StockMultiStrategy = {
             tradeDate,
             rs,
             fundFlow,
+            auction,
             levels,
             pattern,
             swing,
@@ -2511,6 +2529,13 @@ const StockMultiStrategy = {
                 ok: bundle.fundFlow.ok,
                 data: bundle.fundFlow.data,
                 error: bundle.fundFlow.error,
+            }
+            : null;
+        this.lastAuction = bundle.auction
+            ? {
+                ok: bundle.auction.ok,
+                data: bundle.auction.data,
+                error: bundle.auction.error,
             }
             : null;
         this.lastLevels = bundle.levels
@@ -2597,6 +2622,22 @@ const StockMultiStrategy = {
             } else {
                 fundFlowHost.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc((bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用')}</p>`;
                 this.setBlockError('ssaFundFlowStatus', (bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用');
+            }
+        }
+
+        // 集合竞价
+        const auctionBlock = document.getElementById('ssaAuctionBlock');
+        const auctionHost = document.getElementById('ssaAuctionHost');
+        if (auctionBlock && auctionHost) {
+            auctionBlock.hidden = false;
+            if (bundle.auction && bundle.auction.ok && bundle.auction.data) {
+                this.renderAuction(auctionHost, bundle.auction.data);
+                this.setBlockOk('ssaAuctionStatus', '');
+                const st = document.getElementById('ssaAuctionStatus');
+                if (st) st.hidden = true;
+            } else {
+                auctionHost.innerHTML = `<p class="ssa-auction-empty">${this.esc((bundle.auction && bundle.auction.error) || '集合竞价暂不可用')}</p>`;
+                this.setBlockError('ssaAuctionStatus', (bundle.auction && bundle.auction.error) || '集合竞价暂不可用');
             }
         }
 
@@ -3220,6 +3261,103 @@ const StockMultiStrategy = {
                 </table>
               </div>
               <p class="ssa-fund-flow-hint">口径：同花顺/文件采集入库的流入、流出、净额（元）。「区间净流入合计」= 区间内每日净流入代数和（含正负）。详情页「资金流向」Tab 可查看近 20 日图表。</p>
+            </div>`;
+    },
+
+    renderAuction(host, data) {
+        if (!host) return;
+        const d = data || {};
+        const fmtPct = (v) => {
+            if (v == null || !Number.isFinite(Number(v))) return '--';
+            const n = Number(v);
+            const sign = n > 0 ? '+' : '';
+            return `${sign}${n.toFixed(2)}%`;
+        };
+        const fmtNum = (v, digits = 2) => {
+            if (v == null || !Number.isFinite(Number(v))) return '--';
+            return Number(v).toFixed(digits);
+        };
+        const fmtAmt = (v) => {
+            if (v == null || !Number.isFinite(Number(v))) return '--';
+            const n = Number(v);
+            if (Math.abs(n) >= 1e8) return `${(n / 1e8).toFixed(2)}亿`;
+            if (Math.abs(n) >= 1e4) return `${(n / 1e4).toFixed(2)}万`;
+            return `${n.toFixed(0)}元`;
+        };
+        const fmtVol = (v) => {
+            if (v == null || !Number.isFinite(Number(v))) return '--';
+            const n = Number(v);
+            const abs = Math.abs(n);
+            if (abs >= 1e8) return `${(n / 1e8).toFixed(2)}亿手`;
+            if (abs >= 1e4) return `${(n / 1e4).toFixed(2)}万手`;
+            return `${n.toFixed(0)}手`;
+        };
+        const clsPct = (v) => {
+            if (v == null || !Number.isFinite(Number(v))) return '';
+            return Number(v) >= 0 ? 'is-up' : 'is-down';
+        };
+        const sourceLabel = d.source_mode === 'fuyao'
+            ? '同花顺实时'
+            : (d.source_mode === 'db' ? '本地入库' : (d.source || 'fuyao'));
+        host.innerHTML = `
+            <div class="ssa-auction-card">
+              <div class="ssa-auction-meta">
+                <span>交易日 ${this.esc(d.trade_date || '--')}</span>
+                <span>阶段 ${this.esc(d.auction_phase || 'final')}</span>
+                <span>状态 ${this.esc(d.data_status || '--')}</span>
+                <span>来源 ${this.esc(sourceLabel)}</span>
+              </div>
+              <div class="ssa-auction-summary">
+                <div class="ssa-auction-metric">
+                  <span>竞价价格</span>
+                  <strong>${fmtNum(d.auction_price)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>竞价涨幅</span>
+                  <strong class="${clsPct(d.auction_pct)}">${fmtPct(d.auction_pct)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>竞价量</span>
+                  <strong>${fmtVol(d.auction_volume)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>竞价额</span>
+                  <strong>${fmtAmt(d.auction_amount)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>未匹配</span>
+                  <strong>${fmtVol(d.auction_unmatched)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>竞价换手</span>
+                  <strong>${fmtPct(d.auction_turnover_pct)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>昨量比</span>
+                  <strong>${fmtPct(d.auction_yesterday_ratio_pct)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>竞价量比</span>
+                  <strong>${fmtNum(d.auction_volume_ratio)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>前收</span>
+                  <strong>${fmtNum(d.pre_close_price)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>开盘价</span>
+                  <strong>${fmtNum(d.open_price)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>最新价</span>
+                  <strong>${fmtNum(d.last_price)}</strong>
+                </div>
+                <div class="ssa-auction-metric">
+                  <span>流通市值</span>
+                  <strong>${fmtAmt(d.float_market_cap)}</strong>
+                </div>
+              </div>
+              <p class="ssa-auction-hint">数据来自同花顺 Fuyao 集合竞价接口；成交量按手入库，展示为万手/亿手。可在行情中心「集合竞价」Tab 采集全市场数据。</p>
             </div>`;
     },
 

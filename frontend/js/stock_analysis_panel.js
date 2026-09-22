@@ -76,6 +76,11 @@
       <div class="ssa-block-status" id="ssaFundFlowStatus"></div>
       <div class="ssa-fund-flow-host" id="ssaFundFlowHost"></div>
     </section>
+    <section class="ssa-block" id="ssaAuctionBlock" hidden>
+      <h4 class="ssa-block-title">集合竞价</h4>
+      <div class="ssa-block-status" id="ssaAuctionStatus"></div>
+      <div class="ssa-auction-host" id="ssaAuctionHost"></div>
+    </section>
     <section class="ssa-block" id="ssaLevelsBlock" hidden>
       <h4 class="ssa-block-title">阻力支撑位</h4>
       <div class="ssa-block-status" id="ssaLevelsStatus"></div>

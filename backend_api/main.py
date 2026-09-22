@@ -220,6 +220,13 @@ except ImportError as e:
     dragon_tiger_router = None
 
 try:
+    from .stock.auction import router as auction_router
+    print("auction_router 导入成功")
+except ImportError as e:
+    print(f"auction_router 导入失败: {e}")
+    auction_router = None
+
+try:
     from .triple_volume_observe_routes import router as triple_volume_observe_router, admin_router as triple_volume_observe_admin_router
     print("triple_volume_observe_router 导入成功")
 except ImportError as e:
@@ -730,6 +737,7 @@ _include_router(app, stock_fund_flow_router, "stock_fund_flow")
 _include_router(app, market_review_router, "market_review")
 _include_router(app, board_fund_flow_router, "board_fund_flow")
 _include_router(app, dragon_tiger_router, "dragon_tiger")
+_include_router(app, auction_router, "auction")
 _include_router(app, triple_volume_observe_router, "triple_volume_observe")
 _include_router(app, triple_volume_observe_admin_router, "triple_volume_observe_admin")
 _include_router(app, vsb_observe_stocks_router, "vsb_observe_stocks")
@@ -1061,6 +1069,19 @@ if dblb_admin_router is not None:
     print("DBLB admin 路由注册成功 (/api/admin/dblb)")
 else:
     print("DBLB admin 路由未注册")
+
+try:
+    from backend_api.admin.kgt_admin_routes import router as kgt_admin_router
+    print("kgt_admin_router 导入成功")
+except Exception as e:
+    print(f"kgt_admin_router 导入失败: {e}")
+    kgt_admin_router = None
+
+if kgt_admin_router is not None:
+    app.include_router(kgt_admin_router)
+    print("KGT admin 路由注册成功 (/api/admin/kgt)")
+else:
+    print("KGT admin 路由未注册")
 
 try:
     from backend_api.admin.cupb_admin_routes import router as cupb_admin_router

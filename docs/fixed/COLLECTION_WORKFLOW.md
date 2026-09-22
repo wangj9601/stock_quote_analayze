@@ -25,7 +25,7 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 ### 修改后是否要重启 core？
 
 - **节点增删改 / 失败策略 / 重试**：无需重启。每次运行（手动或定时触发）都会从 DB 重新加载节点。
-- **启用开关、触发方式、cron 时间**：无需重启。core 每 30 秒检测流程配置签名；**仅当没有 pending/running 流程**时自动热同步 APScheduler。
+- **启用开关、触发方式、cron 时间**：无需重启。core 每 5 分钟检测流程配置签名；**仅当没有 pending/running 流程**时自动热同步 APScheduler。
 - 若当时有流程在跑，会暂缓同步，待空闲后下一轮自动生效。
 
 旧说明「cron 变更须重启 core」已废弃。

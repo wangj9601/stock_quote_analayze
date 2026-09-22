@@ -152,6 +152,7 @@
                     <button class="content-tab" data-tab="news">新闻公告</button>
                     <button class="content-tab" data-tab="research">研报</button>
                     <button class="content-tab" data-tab="flow">资金流向</button>
+                    <button class="content-tab" data-tab="auction">集合竞价</button>
                 </div>
 
                 <div class="tab-content">
@@ -343,6 +344,39 @@
                         <div class="flow-chart">
                             <div id="flowChart" style="height: 400px;"></div>
                         </div>
+                    </div>
+
+                    <!-- 集合竞价（同花顺 Fuyao） -->
+                    <div class="tab-panel" id="auction">
+                        <div class="auction-stock-toolbar">
+                            <label for="stockAuctionDate">日期</label>
+                            <input type="date" id="stockAuctionDate" title="留空为最新交易日">
+                            <label for="stockAuctionStage">阶段</label>
+                            <select id="stockAuctionStage">
+                                <option value="final" selected>终态 final</option>
+                                <option value="live">实时 live</option>
+                            </select>
+                            <button type="button" id="stockAuctionRefreshBtn" class="btn btn-sm btn-primary">刷新</button>
+                            <button type="button" id="stockAuctionCollectBtn" class="btn btn-sm btn-secondary">采集并保存</button>
+                            <span id="stockAuctionMeta" class="auction-meta"></span>
+                        </div>
+                        <div id="stockAuctionHint" class="auction-hint" style="display:none;"></div>
+                        <dl class="auction-detail-grid" id="stockAuctionDetail">
+                            <div><dt>竞价价格</dt><dd data-auction="auction_price">-</dd></div>
+                            <div><dt>竞价涨幅</dt><dd data-auction="auction_pct">-</dd></div>
+                            <div><dt>竞价成交量</dt><dd data-auction="auction_volume">-</dd></div>
+                            <div><dt>竞价成交额</dt><dd data-auction="auction_amount">-</dd></div>
+                            <div><dt>未匹配量</dt><dd data-auction="auction_unmatched">-</dd></div>
+                            <div><dt>竞价换手率</dt><dd data-auction="auction_turnover_pct">-</dd></div>
+                            <div><dt>相对昨成交%</dt><dd data-auction="auction_yesterday_ratio_pct">-</dd></div>
+                            <div><dt>竞价量比</dt><dd data-auction="auction_volume_ratio">-</dd></div>
+                            <div><dt>前收盘价</dt><dd data-auction="pre_close_price">-</dd></div>
+                            <div><dt>开盘价</dt><dd data-auction="open_price">-</dd></div>
+                            <div><dt>最新价</dt><dd data-auction="last_price">-</dd></div>
+                            <div><dt>流通市值</dt><dd data-auction="float_market_cap">-</dd></div>
+                            <div><dt>数据状态</dt><dd data-auction="data_status">-</dd></div>
+                            <div><dt>数据来源</dt><dd data-auction="source_mode">-</dd></div>
+                        </dl>
                     </div>
                 </div>
             </div>

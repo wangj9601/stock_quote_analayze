@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-_DETAIL_WORKERS = 6
+_DETAIL_WORKERS = 7
 
 
 def _session_local():
@@ -98,6 +98,63 @@ def _compute_fund_flow(db: Session, code: str) -> Dict[str, Any]:
         "error": None,
         "payload": body,
     }
+
+
+def _compute_auction(
+    db: Session,
+    code: str,
+    *,
+    trade_date: Optional[str] = None,
+) -> Dict[str, Any]:
+    """优先读本地落库的当日集合竞价；仅库中无该股时再尝试 Fuyao（失败不掩盖库优先语义）。"""
+    from backend_api.services.auction_service import query_auction_stock, sh_today
+
+    day = (str(trade_date).strip()[:10] if trade_date else None) or sh_today()
+    try:
+        body = query_auction_stock(
+            db,
+            code,
+            trade_date=day,
+            auction_phase="final",
+            live=False,
+        )
+        if body.get("success") and body.get("data"):
+            return {
+                "ok": True,
+                "data": body.get("data") or {},
+                "error": None,
+                "payload": body,
+            }
+
+        # 库中无当日该股：再尝试实时（可能 429）
+        body = query_auction_stock(
+            db,
+            code,
+            trade_date=day,
+            auction_phase="final",
+            live=True,
+        )
+        if body.get("success") and body.get("data"):
+            return {
+                "ok": True,
+                "data": body.get("data") or {},
+                "error": None,
+                "payload": body,
+            }
+        err = body.get("message") or "集合竞价暂无数据"
+        return {
+            "ok": False,
+            "data": None,
+            "error": err,
+            "payload": body,
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "data": None,
+            "error": str(e) or "集合竞价加载失败",
+            "payload": None,
+        }
 
 
 def _compute_levels(db: Session, code: str, *, use_realtime: bool) -> Dict[str, Any]:
@@ -726,6 +783,9 @@ def build_stock_analysis_bundle(
     def job_ff(s: Session) -> Dict[str, Any]:
         return _compute_fund_flow(s, code_n)
 
+    def job_auction(s: Session) -> Dict[str, Any]:
+        return _compute_auction(s, code_n, trade_date=asof_for_details)
+
     def job_levels(s: Session) -> Dict[str, Any]:
         return _compute_levels(s, code_n, use_realtime=bool(use_realtime))
 
@@ -752,6 +812,7 @@ def build_stock_analysis_bundle(
         ("strategy", job_strategy),
         ("rs", job_rs),
         ("fund_flow", job_ff),
+        ("auction", job_auction),
         ("levels", job_levels),
         ("pattern", job_pattern),
         ("gann", job_gann),
@@ -771,6 +832,7 @@ def build_stock_analysis_bundle(
 
     rs = results.get("rs") or _err_section("相对强度加载失败")
     fund_flow = results.get("fund_flow") or _err_section("资金流向加载失败")
+    auction = results.get("auction") or _err_section("集合竞价加载失败")
     levels = results.get("levels") or _err_section("阻力支撑计算失败")
     pattern = results.get("pattern") or _err_section("形态识别失败")
     gann = results.get("gann") or _err_section("江恩趋势分析失败")
@@ -872,6 +934,7 @@ def build_stock_analysis_bundle(
         "realtime": (strategy_data or {}).get("realtime") if strategy_data else None,
         "rs": rs,
         "fund_flow": fund_flow,
+        "auction": auction,
         "levels": levels,
         "pattern": pattern,
         "swing": swing,

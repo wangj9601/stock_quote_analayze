@@ -137,6 +137,7 @@
           <span v-if="trialMeta.force"> · 强制</span>
           <span v-if="trialMeta.price_adjust"> · {{ trialMeta.price_adjust === 'qfq' ? '前复权' : '不复权' }}</span>
           <span v-if="trialMeta.scope_meta"> · 模式 {{ trialMeta.scope_meta.stock_pool_mode }}</span>
+          <span> · 列表为摘要，点「明细」看完整字段</span>
         </div>
         <CupbGradeVolumeRulesPanel />
         <div class="cupb-table-wrap">
@@ -151,22 +152,15 @@
             table-layout="fixed"
           >
             <el-table-column prop="code" label="代码" width="88" />
-            <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="104">
+            <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
                 <el-tag :type="row.status === 'confirmed' ? 'success' : 'warning'" size="small">
-                  {{ row.status }}
+                  {{ statusLabel(row.status) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="曾确认" width="80" align="center">
-              <template #default="{ row }">
-                <el-tag v-if="row.ever_confirmed" type="success" size="small">是</el-tag>
-                <el-tag v-else type="info" size="small">否</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="first_confirm_date" label="历史确认日" width="112" />
-            <el-table-column prop="grade" width="88" align="center">
+            <el-table-column prop="grade" width="72" align="center">
               <template #header>
                 <span class="col-header">
                   等级
@@ -183,47 +177,31 @@
                 <span v-else>—</span>
               </template>
             </el-table-column>
-            <el-table-column prop="volume_score" width="88" align="center">
+            <el-table-column prop="volume_score" width="72" align="center">
               <template #header>
                 <span class="col-header">
                   量价
                   <el-tooltip placement="top" effect="light" :show-after="200">
                     <template #content>
-                      <div class="col-tip">0～4：四项量价检查通过数<br />悬停单元格可看各项明细</div>
+                      <div class="col-tip">0～4：四项量价检查通过数<br />完整明细见右侧抽屉</div>
                     </template>
                     <el-icon class="col-help"><QuestionFilled /></el-icon>
                   </el-tooltip>
                 </span>
               </template>
               <template #default="{ row }">
-                <el-tooltip
-                  v-if="volumeFlagSummary(row)"
-                  placement="top"
-                  effect="light"
-                  :show-after="200"
-                >
-                  <template #content>
-                    <div class="col-tip col-tip-pre">{{ volumeFlagSummary(row) }}</div>
-                  </template>
-                  <span class="metric-val">{{ formatVolumeScore(row.volume_score) }}</span>
-                </el-tooltip>
-                <span v-else>{{ formatVolumeScore(row.volume_score) }}</span>
+                {{ formatVolumeScore(row.volume_score) }}
               </template>
             </el-table-column>
-            <el-table-column prop="board_labels" label="所属板块" width="108" show-overflow-tooltip />
+            <el-table-column prop="board_labels" label="所属板块" min-width="100" show-overflow-tooltip />
             <el-table-column prop="last_close" label="收盘" width="80" align="right" />
-            <el-table-column prop="left_rim_price" label="左沿" width="80" align="right" />
-            <el-table-column prop="cup_bottom_price" label="杯底" width="80" align="right" />
-            <el-table-column prop="right_rim_price" label="右沿" width="80" align="right" />
-            <el-table-column prop="handle_low_price" label="柄低" width="80" align="right" />
-            <el-table-column prop="rim" label="杯口" width="80" align="right" />
             <el-table-column prop="cup_depth_pct" label="杯深%" width="80" align="right" />
-            <el-table-column prop="handle_retrace_pct" label="柄回撤%" width="88" align="right" />
-            <el-table-column prop="left_rim_date" label="左沿日" width="112" />
-            <el-table-column prop="cup_bottom_date" label="杯底日" width="112" />
-            <el-table-column prop="right_rim_date" label="右沿日" width="112" />
-            <el-table-column prop="handle_low_date" label="柄低日" width="112" />
-            <el-table-column prop="confirm_date" label="确认日" min-width="112" />
+            <el-table-column prop="confirm_date" label="确认日" width="112" />
+            <el-table-column label="操作" width="80" fixed="right" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openSignalDetail(row)">明细</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
         <div class="toolbar" style="margin-top: 8px">
@@ -255,7 +233,7 @@
           <el-button type="primary" :loading="loadingSignals" @click="loadSignals">查询</el-button>
           <el-button :disabled="!signalItems.length" @click="exportSignalsCsv">导出信号表</el-button>
         </div>
-        <div class="meta-line">共 {{ signalTotal }} 条</div>
+        <div class="meta-line">共 {{ signalTotal }} 条 · 列表为摘要，点「明细」查看完整字段</div>
         <CupbGradeVolumeRulesPanel />
         <div class="cupb-table-wrap">
           <el-table
@@ -269,16 +247,15 @@
             table-layout="fixed"
           >
             <el-table-column prop="code" label="代码" width="88" />
-            <el-table-column prop="name" label="名称" min-width="120" show-overflow-tooltip />
-            <el-table-column prop="status" label="状态" width="104" />
-            <el-table-column label="曾确认" width="80" align="center">
+            <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip />
+            <el-table-column prop="status" label="状态" width="100">
               <template #default="{ row }">
-                <el-tag v-if="row.ever_confirmed" type="success" size="small">是</el-tag>
-                <el-tag v-else type="info" size="small">否</el-tag>
+                <el-tag :type="row.status === 'confirmed' ? 'success' : 'warning'" size="small">
+                  {{ statusLabel(row.status) }}
+                </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="first_confirm_date" label="历史确认日" width="112" />
-            <el-table-column prop="grade" width="88" align="center">
+            <el-table-column prop="grade" width="72" align="center">
               <template #header>
                 <span class="col-header">
                   等级
@@ -295,51 +272,103 @@
                 <span v-else>—</span>
               </template>
             </el-table-column>
-            <el-table-column prop="volume_score" width="88" align="center">
+            <el-table-column prop="volume_score" width="72" align="center">
               <template #header>
                 <span class="col-header">
                   量价
                   <el-tooltip placement="top" effect="light" :show-after="200">
                     <template #content>
-                      <div class="col-tip">0～4：四项量价检查通过数<br />悬停单元格可看各项明细</div>
+                      <div class="col-tip">0～4：四项量价检查通过数<br />完整明细见右侧抽屉</div>
                     </template>
                     <el-icon class="col-help"><QuestionFilled /></el-icon>
                   </el-tooltip>
                 </span>
               </template>
               <template #default="{ row }">
-                <el-tooltip
-                  v-if="volumeFlagSummary(row)"
-                  placement="top"
-                  effect="light"
-                  :show-after="200"
-                >
-                  <template #content>
-                    <div class="col-tip col-tip-pre">{{ volumeFlagSummary(row) }}</div>
-                  </template>
-                  <span class="metric-val">{{ formatVolumeScore(row.volume_score) }}</span>
-                </el-tooltip>
-                <span v-else>{{ formatVolumeScore(row.volume_score) }}</span>
+                {{ formatVolumeScore(row.volume_score) }}
               </template>
             </el-table-column>
-            <el-table-column prop="board_labels" label="所属板块" width="108" show-overflow-tooltip />
+            <el-table-column prop="board_labels" label="所属板块" min-width="100" show-overflow-tooltip />
             <el-table-column prop="last_close" label="收盘" width="80" align="right" />
-            <el-table-column prop="left_rim_price" label="左沿" width="80" align="right" />
-            <el-table-column prop="cup_bottom_price" label="杯底" width="80" align="right" />
-            <el-table-column prop="right_rim_price" label="右沿" width="80" align="right" />
-            <el-table-column prop="handle_low_price" label="柄低" width="80" align="right" />
-            <el-table-column prop="rim" label="杯口" width="80" align="right" />
             <el-table-column prop="cup_depth_pct" label="杯深%" width="80" align="right" />
-            <el-table-column prop="handle_retrace_pct" label="柄回撤%" width="88" align="right" />
-            <el-table-column prop="left_rim_date" label="左沿日" width="112" />
-            <el-table-column prop="cup_bottom_date" label="杯底日" width="112" />
-            <el-table-column prop="right_rim_date" label="右沿日" width="112" />
-            <el-table-column prop="handle_low_date" label="柄低日" width="112" />
-            <el-table-column prop="confirm_date" label="确认日" min-width="112" />
+            <el-table-column prop="confirm_date" label="确认日" width="112" />
+            <el-table-column label="操作" width="80" fixed="right" align="center">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openSignalDetail(row)">明细</el-button>
+              </template>
+            </el-table-column>
           </el-table>
         </div>
       </el-tab-pane>
     </el-tabs>
+
+    <el-drawer
+      v-model="detailVisible"
+      :title="detailTitle"
+      size="440px"
+      direction="rtl"
+      destroy-on-close
+    >
+      <template v-if="detailRow">
+        <h4 class="detail-section-title">基本信息</h4>
+        <el-descriptions :column="1" border size="small" class="detail-desc">
+          <el-descriptions-item label="代码">{{ detailRow.code || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="名称">{{ detailRow.name || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="detailRow.status === 'confirmed' ? 'success' : 'warning'" size="small">
+              {{ statusLabel(detailRow.status) }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="曾确认">
+            {{ detailRow.ever_confirmed ? '是' : '否' }}
+          </el-descriptions-item>
+          <el-descriptions-item label="历史确认日">{{ detailRow.first_confirm_date || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="等级">
+            <el-tag v-if="detailRow.grade" :type="gradeTagType(detailRow.grade)" size="small">{{ detailRow.grade }}</el-tag>
+            <span v-else>—</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="量价得分">{{ formatVolumeScore(detailRow.volume_score) }}</el-descriptions-item>
+          <el-descriptions-item label="所属板块">{{ formatBoardLabels(detailRow.board_labels) }}</el-descriptions-item>
+          <el-descriptions-item label="复权方式">{{ priceAdjustLabel(detailRow.price_adjust) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <h4 class="detail-section-title">量价检查</h4>
+        <el-descriptions :column="1" border size="small" class="detail-desc">
+          <el-descriptions-item
+            v-for="item in volumeFlagRows(detailRow)"
+            :key="item.key"
+            :label="item.label"
+          >
+            <el-tag :type="item.ok ? 'success' : 'info'" size="small">{{ item.ok ? '通过' : '未过' }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item v-if="!volumeFlagRows(detailRow).length" label="—">暂无量价明细</el-descriptions-item>
+        </el-descriptions>
+
+        <h4 class="detail-section-title">形态价位</h4>
+        <el-descriptions :column="1" border size="small" class="detail-desc">
+          <el-descriptions-item label="收盘">{{ fmtNum(detailRow.last_close) }}</el-descriptions-item>
+          <el-descriptions-item label="左沿">{{ fmtNum(detailRow.left_rim_price) }}</el-descriptions-item>
+          <el-descriptions-item label="杯底">{{ fmtNum(detailRow.cup_bottom_price) }}</el-descriptions-item>
+          <el-descriptions-item label="右沿">{{ fmtNum(detailRow.right_rim_price) }}</el-descriptions-item>
+          <el-descriptions-item label="柄低">{{ fmtNum(detailRow.handle_low_price) }}</el-descriptions-item>
+          <el-descriptions-item label="杯口">{{ fmtNum(detailRow.rim) }}</el-descriptions-item>
+          <el-descriptions-item label="杯深%">{{ fmtNum(detailRow.cup_depth_pct) }}</el-descriptions-item>
+          <el-descriptions-item label="柄回撤%">{{ fmtNum(detailRow.handle_retrace_pct) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <h4 class="detail-section-title">关键日期</h4>
+        <el-descriptions :column="1" border size="small" class="detail-desc">
+          <el-descriptions-item label="左沿日">{{ detailRow.left_rim_date || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="杯底日">{{ detailRow.cup_bottom_date || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="右沿日">{{ detailRow.right_rim_date || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="柄低日">{{ detailRow.handle_low_date || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="确认日">{{ detailRow.confirm_date || '—' }}</el-descriptions-item>
+        </el-descriptions>
+
+        <h4 v-if="qualityFlagText(detailRow)" class="detail-section-title">质量标记</h4>
+        <p v-if="qualityFlagText(detailRow)" class="detail-quality">{{ qualityFlagText(detailRow) }}</p>
+      </template>
+    </el-drawer>
 
     <el-dialog v-model="showCreate" title="新建配置版本" width="640px">
       <el-form label-width="100px">
@@ -387,17 +416,70 @@ function gradeTagType(grade: string): 'success' | 'primary' | 'warning' | 'info'
   return 'info'
 }
 
+function statusLabel(status: unknown): string {
+  const s = String(status || '')
+  if (s === 'confirmed') return '已确认'
+  if (s === 'forming') return '形成中'
+  return s || '—'
+}
+
 function formatVolumeScore(v: unknown): string {
   if (v === null || v === undefined || v === '') return '—'
   return String(v)
 }
 
-function volumeFlagSummary(row: any): string {
-  const flags = row?.detail?.volume_flags
-  if (!flags || typeof flags !== 'object') return ''
-  return Object.entries(VOLUME_FLAG_LABELS)
-    .map(([key, label]) => `${label}：${flags[key] ? '通过' : '未过'}`)
-    .join('\n')
+function fmtNum(v: unknown): string {
+  if (v === null || v === undefined || v === '') return '—'
+  return String(v)
+}
+
+function formatBoardLabels(raw: unknown): string {
+  if (raw == null || raw === '') return '—'
+  if (Array.isArray(raw)) return raw.map((x) => String(x)).filter(Boolean).join('、') || '—'
+  return String(raw)
+}
+
+function priceAdjustLabel(raw: unknown): string {
+  const p = String(raw || '')
+  if (p === 'qfq') return '前复权'
+  if (p === 'none' || p === 'raw') return '不复权'
+  return p || '—'
+}
+
+function volumeFlagRows(row: any): { key: string; label: string; ok: boolean }[] {
+  const flags = row?.detail?.volume_flags ?? row?.volume_flags
+  if (!flags || typeof flags !== 'object') return []
+  return Object.entries(VOLUME_FLAG_LABELS).map(([key, label]) => ({
+    key,
+    label,
+    ok: Boolean(flags[key]),
+  }))
+}
+
+function qualityFlagText(row: any): string {
+  const qf = row?.detail?.quality_flags ?? row?.quality_flags
+  if (!qf) return ''
+  if (Array.isArray(qf)) return qf.map((x) => String(x)).filter(Boolean).join('、')
+  if (typeof qf === 'object') {
+    return Object.entries(qf)
+      .filter(([, v]) => Boolean(v))
+      .map(([k]) => String(k))
+      .join('、')
+  }
+  return String(qf)
+}
+
+const detailVisible = ref(false)
+const detailRow = ref<any>(null)
+const detailTitle = computed(() => {
+  const r = detailRow.value
+  if (!r) return '信号明细'
+  return `信号明细 · ${r.code || ''} ${r.name || ''}`.trim()
+})
+
+function openSignalDetail(row: any) {
+  detailRow.value = row
+  detailVisible.value = true
 }
 
 const activeTab = ref('config')
@@ -759,5 +841,23 @@ onMounted(() => {
 .metric-val {
   cursor: help;
   border-bottom: 1px dashed #cbd5e1;
+}
+.detail-section-title {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+.detail-section-title:first-child {
+  margin-top: 0;
+}
+.detail-desc {
+  width: 100%;
+}
+.detail-quality {
+  margin: 0;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.5;
 }
 </style>

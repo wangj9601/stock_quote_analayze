@@ -1944,3 +1944,63 @@
 .lhb-hot-wrap {
     margin-top: 8px;
 }
+
+.auction-toolbar {
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.auction-benchmark-wrap {
+    margin: 12px 0 16px;
+}
+
+.auction-benchmark-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+}
+
+.auction-benchmark-card {
+    border: 1px solid #e5ebf2;
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: box-shadow .2s, transform .2s;
+}
+
+.auction-benchmark-card:hover {
+    box-shadow: 0 6px 18px rgba(31, 42, 55, 0.08);
+    transform: translateY(-1px);
+}
+
+.auction-benchmark-card .abc-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 13px;
+    color: #6b7a8c;
+}
+
+.auction-benchmark-card .abc-name {
+    font-weight: 600;
+    color: #1f2a37;
+}
+
+.auction-benchmark-card .abc-pct {
+    margin-top: 8px;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.auction-benchmark-card .abc-tags {
+    margin-top: 6px;
+    font-size: 12px;
+    color: #6b7a8c;
+}
+
+.auction-empty {
+    color: #888;
+    font-size: 14px;
+    padding: 8px 0;
+}

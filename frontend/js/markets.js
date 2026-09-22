@@ -24,6 +24,9 @@ const MarketsPage = {
     currentTab: 'rankings',
     currentRankingType: 'rise',
     lhbBoardType: 'all',
+    auctionPage: 1,
+    auctionPageSize: 20,
+    auctionTotal: 0,
 
     currentPage: 1,
     pageSize: 20,
@@ -185,6 +188,18 @@ const MarketsPage = {
             lhbQueryBtn.addEventListener('click', () => this.loadDragonTiger());
         }
 
+        const auctionQueryBtn = document.getElementById('auctionQueryBtn');
+        if (auctionQueryBtn) {
+            auctionQueryBtn.addEventListener('click', () => {
+                this.auctionPage = 1;
+                this.loadAuction();
+            });
+        }
+        const auctionCollectBtn = document.getElementById('auctionCollectBtn');
+        if (auctionCollectBtn) {
+            auctionCollectBtn.addEventListener('click', () => this.collectAuction());
+        }
+
         const closeSectorDetailBtn = document.getElementById('closeSectorDetailBtn');
         if (closeSectorDetailBtn) {
             closeSectorDetailBtn.addEventListener('click', () => this.hideSectorDetailModal());
@@ -277,6 +292,9 @@ const MarketsPage = {
                 break;
             case 'dragon-tiger':
                 this.loadDragonTiger();
+                break;
+            case 'auction':
+                this.loadAuction();
                 break;
         }
     },
@@ -2745,6 +2763,269 @@ const MarketsPage = {
                 <td>${this.escapeHtml(stockText || '--')}</td>
             </tr>`;
         }).join('');
+    },
+
+    formatAuctionPct(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '--';
+        const n = Number(value);
+        const sign = n > 0 ? '+' : '';
+        return sign + n.toFixed(2) + '%';
+    },
+
+    formatAuctionNum(value, digits = 2) {
+        if (value == null || !Number.isFinite(Number(value))) return '--';
+        return Number(value).toFixed(digits);
+    },
+
+    /** 竞价量/未匹配：库存为手 → 万手/亿手 */
+    formatAuctionVolume(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '--';
+        const n = Number(value);
+        const abs = Math.abs(n);
+        if (abs >= 1e8) return (n / 1e8).toFixed(2) + '亿手';
+        if (abs >= 1e4) return (n / 1e4).toFixed(2) + '万手';
+        return n.toFixed(0) + '手';
+    },
+
+    formatAuctionAmount(value) {
+        if (value == null || !Number.isFinite(Number(value))) return '--';
+        const n = Number(value);
+        if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(2) + '亿';
+        if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(2) + '万';
+        return n.toFixed(0);
+    },
+
+    async loadAuction(page) {
+        if (page) this.auctionPage = page;
+        const tbody = document.getElementById('auctionTableBody');
+        const meta = document.getElementById('auctionMeta');
+        const hint = document.getElementById('auctionHint');
+        const benchmarkWrap = document.getElementById('auctionBenchmarkCards');
+        if (!tbody) return;
+
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#888;">加载中...</td></tr>';
+        if (hint) hint.style.display = 'none';
+
+        const params = new URLSearchParams();
+        const dateInput = document.getElementById('auctionDate');
+        const stageInput = document.getElementById('auctionStage');
+        const keywordInput = document.getElementById('auctionKeyword');
+        const day = dateInput && dateInput.value ? String(dateInput.value).trim() : '';
+        const stage = stageInput && stageInput.value ? String(stageInput.value).trim() : 'final';
+        const keyword = keywordInput && keywordInput.value ? String(keywordInput.value).trim() : '';
+        if (day) params.set('date', day);
+        params.set('stage', stage);
+        if (keyword) params.set('keyword', keyword);
+        params.set('page', String(this.auctionPage || 1));
+        params.set('page_size', String(this.auctionPageSize || 20));
+
+        try {
+            const [listResp, benchResp] = await Promise.all([
+                fetch(`${this.API_BASE_URL}/api/market/auction/list?${params.toString()}`),
+                fetch(`${this.API_BASE_URL}/api/market/auction/benchmark?${day ? 'date=' + encodeURIComponent(day) : ''}`),
+            ]);
+            const listResult = await listResp.json();
+            const benchResult = await benchResp.json();
+            this.renderAuctionBenchmark(benchResult, benchmarkWrap, dateInput);
+            if (!listResult || !listResult.success) {
+                const msg = (listResult && listResult.message) || '集合竞价加载失败';
+                tbody.innerHTML = `<tr><td colspan="12" style="text-align:center;color:#c62828;">${this.escapeHtml(msg)}</td></tr>`;
+                if (meta) meta.textContent = '';
+                return;
+            }
+            this.renderAuctionList(listResult, meta, hint, tbody);
+        } catch (error) {
+            console.error('集合竞价加载失败:', error);
+            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#c62828;">集合竞价请求异常</td></tr>';
+            if (meta) meta.textContent = '';
+        }
+    },
+
+    renderAuctionBenchmark(result, wrap, dateInput) {
+        if (!wrap) return;
+        if (!result || !result.success || !Array.isArray(result.items) || !result.items.length) {
+            wrap.innerHTML = '<div class="auction-empty">暂无短线风向标基准数据</div>';
+            return;
+        }
+        if (dateInput && result.trade_date && !dateInput.value) {
+            dateInput.value = result.trade_date;
+        }
+        wrap.innerHTML = result.items.map(item => {
+            const tags = Array.isArray(item.tags) ? item.tags.join(' · ') : (item.tags || '');
+            return `<div class="auction-benchmark-card" data-code="${this.escapeHtml(item.code || '')}" data-name="${this.escapeHtml(item.name || '')}">
+                <div class="abc-head">
+                    <span class="abc-name">${this.escapeHtml(item.name || '--')}</span>
+                    <span class="abc-code">${this.escapeHtml(item.code || '')}</span>
+                </div>
+                <div class="abc-pct ${this.lhbSignedClass(item.auction_pct)}">${this.formatAuctionPct(item.auction_pct)}</div>
+                <div class="abc-tags">${this.escapeHtml(tags || '--')}</div>
+            </div>`;
+        }).join('');
+        wrap.querySelectorAll('.auction-benchmark-card[data-code]').forEach(card => {
+            card.addEventListener('click', () => {
+                const code = card.dataset.code;
+                const name = card.dataset.name || '';
+                if (code && typeof goToStock === 'function') goToStock(code, name);
+            });
+        });
+    },
+
+    renderAuctionList(result, meta, hint, tbody) {
+        const dateInput = document.getElementById('auctionDate');
+        if (dateInput && result.trade_date && !dateInput.value) {
+            dateInput.value = result.trade_date;
+        }
+        this.auctionTotal = Number(result.total || 0);
+        if (meta) {
+            meta.textContent = [
+                result.trade_date || '',
+                result.auction_phase ? `阶段 ${result.auction_phase}` : '',
+                `共 ${this.auctionTotal} 条`,
+            ].filter(Boolean).join(' · ');
+        }
+        if (hint) {
+            if (!this.auctionTotal) {
+                hint.style.display = 'block';
+                hint.textContent = '本地暂无数据，可点击「采集」从同花顺 Fuyao 拉取并落库。';
+            } else {
+                hint.style.display = 'none';
+                hint.textContent = '';
+            }
+        }
+        const items = Array.isArray(result.items) ? result.items : [];
+        if (!items.length) {
+            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#888;">暂无集合竞价数据</td></tr>';
+            this.renderAuctionPagination();
+            return;
+        }
+        tbody.innerHTML = items.map(row => {
+            const code = String(row.code || '');
+            const name = String(row.name || '');
+            return `<tr data-code="${this.escapeHtml(code)}" data-name="${this.escapeHtml(name)}" style="cursor:pointer;">
+                <td>${this.escapeHtml(code)}</td>
+                <td>${this.escapeHtml(name)}</td>
+                <td>${this.formatAuctionNum(row.auction_price)}</td>
+                <td class="${this.lhbSignedClass(row.auction_pct)}">${this.formatAuctionPct(row.auction_pct)}</td>
+                <td>${this.formatAuctionVolume(row.auction_volume)}</td>
+                <td>${this.formatAuctionAmount(row.auction_amount)}</td>
+                <td>${this.formatAuctionVolume(row.auction_unmatched)}</td>
+                <td>${this.formatAuctionPct(row.auction_turnover_pct)}</td>
+                <td>${this.formatAuctionPct(row.auction_yesterday_ratio_pct)}</td>
+                <td>${this.formatAuctionNum(row.auction_volume_ratio)}</td>
+                <td>${this.formatAuctionNum(row.pre_close_price)}</td>
+                <td><button type="button" class="link-btn auction-view-btn">详情</button></td>
+            </tr>`;
+        }).join('');
+        tbody.querySelectorAll('tr[data-code]').forEach(tr => {
+            const go = () => {
+                const code = tr.dataset.code;
+                const name = tr.dataset.name || '';
+                if (code) {
+                    window.location.href = `stock.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name || '')}&tab=auction`;
+                }
+            };
+            tr.addEventListener('click', (e) => {
+                if (e.target && e.target.classList.contains('auction-view-btn')) {
+                    e.stopPropagation();
+                }
+                go();
+            });
+        });
+        this.renderAuctionPagination();
+    },
+
+    renderAuctionPagination() {
+        const pagination = document.getElementById('auctionPagination');
+        if (!pagination) return;
+        const totalPages = Math.max(Math.ceil((this.auctionTotal || 0) / (this.auctionPageSize || 20)), 1);
+        if (totalPages <= 1) {
+            pagination.innerHTML = '';
+            return;
+        }
+        let html = '';
+        html += `<button class="page-btn" ${this.auctionPage <= 1 ? 'disabled' : ''} data-page="${this.auctionPage - 1}">上一页</button>`;
+        html += `<span class="page-info">${this.auctionPage} / ${totalPages}</span>`;
+        html += `<button class="page-btn" ${this.auctionPage >= totalPages ? 'disabled' : ''} data-page="${this.auctionPage + 1}">下一页</button>`;
+        pagination.innerHTML = html;
+        pagination.querySelectorAll('.page-btn').forEach(btn => {
+            btn.onclick = () => {
+                const page = parseInt(btn.dataset.page, 10);
+                if (!isNaN(page) && page >= 1 && page <= totalPages) {
+                    this.loadAuction(page);
+                }
+            };
+        });
+    },
+
+    async collectAuction() {
+        const btn = document.getElementById('auctionCollectBtn');
+        const hint = document.getElementById('auctionHint');
+        const dateInput = document.getElementById('auctionDate');
+        const stageInput = document.getElementById('auctionStage');
+        const day = dateInput && dateInput.value ? String(dateInput.value).trim() : '';
+        const stage = stageInput && stageInput.value ? String(stageInput.value).trim() : 'final';
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '采集中...';
+        }
+        if (hint) {
+            hint.style.display = 'block';
+            hint.textContent = '正在从同花顺 Fuyao 采集集合竞价，请稍候...';
+        }
+        try {
+            const resp = await fetch(`${this.API_BASE_URL}/api/market/auction/collect`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    stage,
+                    trade_date: day || null,
+                    refresh_benchmark: true,
+                }),
+            });
+            const result = await resp.json();
+            if (!result || !result.success || !result.task_id) {
+                throw new Error((result && result.message) || '采集启动失败');
+            }
+            await this.pollAuctionCollect(result.task_id, hint);
+            this.auctionPage = 1;
+            await this.loadAuction();
+        } catch (error) {
+            console.error('集合竞价采集失败:', error);
+            if (hint) {
+                hint.style.display = 'block';
+                hint.textContent = '采集失败：' + (error.message || error);
+            }
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '采集';
+            }
+        }
+    },
+
+    async pollAuctionCollect(taskId, hint) {
+        const maxTry = 120;
+        for (let i = 0; i < maxTry; i++) {
+            await new Promise(r => setTimeout(r, 2000));
+            const resp = await fetch(`${this.API_BASE_URL}/api/market/auction/collect/status/${encodeURIComponent(taskId)}`);
+            const result = await resp.json();
+            if (!result || !result.success) continue;
+            const status = result.status;
+            if (hint) {
+                hint.textContent = `采集任务 ${taskId}：${status}`;
+            }
+            if (status === 'completed' || status === 'failed') {
+                if (status === 'failed') {
+                    throw new Error(result.message || '采集任务失败');
+                }
+                const saved = result.result && result.result.saved;
+                if (hint) {
+                    hint.textContent = `采集完成，落库 ${saved != null ? saved : 0} 条。`;
+                }
+                return;
+            }
+        }
+        throw new Error('采集任务超时');
     },
 
     // 更新所有自选股按钮的状态

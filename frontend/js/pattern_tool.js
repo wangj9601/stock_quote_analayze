@@ -17,6 +17,8 @@ const PatternTool = {
     bull_flag: '上升旗形',
     bear_flag: '下降旗形',
     cup_with_handle: '带柄茶杯',
+    kangaroo_tail_bullish: '看涨袋鼠尾',
+    kangaroo_tail_bearish: '看跌袋鼠尾',
   },
 
   PIVOT_ROLE_LABELS: {
@@ -34,6 +36,7 @@ const PatternTool = {
     handle_low: '柄低',
     high: '高点',
     low: '低点',
+    tail: '袋鼠尾',
   },
 
   init() {
@@ -111,7 +114,14 @@ const PatternTool = {
   },
 
   /** 个股分析默认全选形态大类（与技术工具默认勾选一致） */
-  DEFAULT_TYPES: ['double_extremes', 'head_shoulders', 'triangle', 'wedge_flag', 'cup_handle'],
+  DEFAULT_TYPES: [
+    'double_extremes',
+    'head_shoulders',
+    'triangle',
+    'wedge_flag',
+    'cup_handle',
+    'kangaroo_tail',
+  ],
 
   /** 与 levels 一致：adjust=qfq|none；UI 默认勾选前复权 */
   selectedAdjust() {

@@ -1296,13 +1296,13 @@ def _register_workflow_cron_jobs():
     scheduler.add_job(
         _sync_job,
         "interval",
-        seconds=30,
+        minutes=5,
         id=SYNC_JOB_ID,
         replace_existing=True,
         max_instances=1,
         coalesce=True,
     )
-    logging.info("已启用采集流程 cron 热同步（每 30s，仅空闲时重载）")
+    logging.info("已启用采集流程 cron 热同步（每 5 分钟，仅空闲时重载）")
 
 
 _register_workflow_cron_jobs()

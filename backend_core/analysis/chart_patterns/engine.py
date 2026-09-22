@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List, Optional, Sequence, Set, Tuple
 from .cup_handle import detect_cup_with_handle
 from .double_extremes import detect_double_extremes
 from .head_shoulders import detect_head_shoulders
+from .kangaroo_tail import detect_kangaroo_tail_patterns
 from .lifecycle import apply_pattern_lifecycle
 from .pivots import extract_pivot_sequence
 from .rules import NMS_BOUND_REL_TOL
@@ -20,6 +21,7 @@ PATTERN_FAMILIES = (
     "triangle",
     "wedge_flag",
     "cup_handle",
+    "kangaroo_tail",
 )
 
 FAMILY_ALIASES = {
@@ -37,6 +39,10 @@ FAMILY_ALIASES = {
     "cup": "cup_handle",
     "cup_handle": "cup_handle",
     "cup_with_handle": "cup_handle",
+    "kangaroo": "kangaroo_tail",
+    "kangaroo_tail": "kangaroo_tail",
+    "kgt": "kangaroo_tail",
+    "pin_bar": "kangaroo_tail",
 }
 
 # 同源重叠对：同向巩固形态易同界/同枢轴误报双出
@@ -591,6 +597,8 @@ def detect_all_counted(
                 ref_bars=ref_bars,
             )
         )
+    if "kangaroo_tail" in families:
+        hits.extend(detect_kangaroo_tail_patterns(seq, pattern_cfg=pattern_cfg))
 
     hits = apply_pattern_lifecycle(hits, seq)
     hits = nms_overlapping_patterns(hits)

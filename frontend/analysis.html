@@ -7,7 +7,7 @@
     <title>智能分析 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/analysis.css?v=20260921b">
+    <link rel="stylesheet" href="css/analysis.css?v=20260922a">
     <link rel="stylesheet" href="css/recommend.css?v=20260913d">
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
@@ -131,6 +131,7 @@
                                 <strong>RPE / SBBR / GMS / URT</strong> 策略命中与得分、
                                 <strong>阻力支撑位</strong>（与技术工具同口径）、
                                 <strong>资金流向</strong>（本地入库日数据）、
+                                <strong>集合竞价</strong>（同花顺 Fuyao 当日竞价）、
                                 <strong>形态识别</strong>（与技术工具同口径）、
                                 <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
@@ -242,6 +243,12 @@
                                 <h4 class="ssa-block-title">资金流向</h4>
                                 <div class="ssa-block-status" id="ssaFundFlowStatus"></div>
                                 <div class="ssa-fund-flow-host" id="ssaFundFlowHost"></div>
+                            </section>
+
+                            <section class="ssa-block" id="ssaAuctionBlock" hidden>
+                                <h4 class="ssa-block-title">集合竞价</h4>
+                                <div class="ssa-block-status" id="ssaAuctionStatus"></div>
+                                <div class="ssa-auction-host" id="ssaAuctionHost"></div>
                             </section>
 
                             <section class="ssa-block" id="ssaLevelsBlock" hidden>
@@ -1199,6 +1206,7 @@
                                                 <label><input type="checkbox" value="triangle" checked> 三角形</label>
                                                 <label><input type="checkbox" value="wedge_flag" checked> 楔形旗形</label>
                                                 <label><input type="checkbox" value="cup_handle" checked> 杯底/带柄茶杯</label>
+                                                <label><input type="checkbox" value="kangaroo_tail" checked> 袋鼠尾</label>
                                             </div>
                                         </div>
                                     </div>
@@ -1579,7 +1587,7 @@
     <script src="js/stock_analysis_png.js"></script>
     <script src="js/stock_trade_plan.js"></script>
     <script src="js/page_scroll_fab.js"></script>
-    <script src="js/stock_multi_strategy.js?v=20260921d"></script>
+    <script src="js/stock_multi_strategy.js?v=20260922a"></script>
     <script src="js/trade_observe.js"></script>
     <script src="js/recommend.js?v=20260914a"></script>
     <script src="js/market_analysis.js?v=20260919c"></script>
