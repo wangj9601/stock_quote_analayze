@@ -20,6 +20,8 @@ from backend_api.models import (
     SBBRStrategyConfig,
     URTSignalTrace,
     URTStrategyConfig,
+    ZhabSignalTrace,
+    ZhabStrategyConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -158,6 +160,30 @@ def _row_to_dict_csb(r: CSBSignalTrace) -> Dict[str, Any]:
     }
 
 
+def _row_to_dict_zhab(r: ZhabSignalTrace) -> Dict[str, Any]:
+    detail = r.detail if isinstance(r.detail, dict) else {}
+    return {
+        "code": _norm_code(r.code),
+        "strategy": "zhab",
+        "date": _as_date_str(r.trade_date),
+        "name": r.name,
+        "score": float(r.score) if r.score is not None else None,
+        "signal_type": r.signal_type,
+        "setup_ok": bool(r.setup_ok) if r.setup_ok is not None else False,
+        "entry_signal": bool(r.entry_signal) if r.entry_signal is not None else False,
+        "zt_date": r.zt_date,
+        "consol_days": r.consol_days,
+        "zt_mid": float(r.zt_mid) if r.zt_mid is not None else None,
+        "box_low": float(r.box_low) if r.box_low is not None else None,
+        "box_high": float(r.box_high) if r.box_high is not None else None,
+        "close": float(r.close_price) if r.close_price is not None else None,
+        "close_price": float(r.close_price) if r.close_price is not None else None,
+        "detail": detail,
+        "config_id": int(r.config_id) if r.config_id is not None else None,
+        "watch_only": not bool(r.entry_signal),
+    }
+
+
 def collect_strategy_buy_candidates(
     db: Session,
     asof_date: str,
@@ -167,6 +193,7 @@ def collect_strategy_buy_candidates(
     sbbr_config_id: Optional[int] = None,
     rpe_config_id: Optional[int] = None,
     csb_config_id: Optional[int] = None,
+    zhab_config_id: Optional[int] = None,
     limit_per_strategy: int = 500,
 ) -> Dict[str, List[Dict[str, Any]]]:
     """返回 {strategy: [row_dict, ...]}，仅含买点/入场信号。"""
@@ -177,6 +204,7 @@ def collect_strategy_buy_candidates(
         "sbbr": [],
         "rpe": [],
         "csb": [],
+        "zhab": [],
     }
 
     gms_cid = gms_config_id or _default_config_id(db, GMSStrategyConfig)
@@ -184,6 +212,7 @@ def collect_strategy_buy_candidates(
     sbbr_cid = sbbr_config_id or _default_config_id(db, SBBRStrategyConfig)
     rpe_cid = rpe_config_id or _default_config_id(db, RPEStrategyConfig)
     csb_cid = csb_config_id or _default_config_id(db, CSBStrategyConfig)
+    zhab_cid = zhab_config_id or _default_config_id(db, ZhabStrategyConfig)
 
     if urt_cid is not None:
         try:
@@ -297,14 +326,48 @@ def collect_strategy_buy_candidates(
                 except Exception:
                     pass
 
+    if zhab_cid is not None:
+        try:
+            from datetime import date as _date
+
+            td = _date.fromisoformat(d)
+        except ValueError:
+            td = None
+        if td is not None:
+            try:
+                rows = (
+                    db.query(ZhabSignalTrace)
+                    .filter(
+                        ZhabSignalTrace.trade_date == td,
+                        ZhabSignalTrace.config_id == int(zhab_cid),
+                        ZhabSignalTrace.setup_ok.is_(True),
+                        or_(
+                            ZhabSignalTrace.entry_signal.is_(True),
+                            ZhabSignalTrace.signal_type == "setup",
+                            ZhabSignalTrace.signal_type == "breakout",
+                        ),
+                    )
+                    .order_by(ZhabSignalTrace.score.desc().nullslast())
+                    .limit(limit_per_strategy)
+                    .all()
+                )
+                out["zhab"] = [_row_to_dict_zhab(r) for r in rows]
+            except Exception as e:
+                logger.warning("collect ZHAB candidates failed: %s", e)
+                try:
+                    db.rollback()
+                except Exception:
+                    pass
+
     logger.info(
-        "recommend candidates asof=%s urt=%s gms=%s sbbr=%s rpe=%s csb=%s",
+        "recommend candidates asof=%s urt=%s gms=%s sbbr=%s rpe=%s csb=%s zhab=%s",
         d,
         len(out["urt"]),
         len(out["gms"]),
         len(out["sbbr"]),
         len(out["rpe"]),
         len(out["csb"]),
+        len(out["zhab"]),
     )
     return out
 

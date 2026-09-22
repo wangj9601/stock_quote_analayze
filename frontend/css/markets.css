@@ -1518,15 +1518,15 @@
 }
 
 .ba-role-pill--mid {
-    color: #e6a23c;
+    color: #8a6116;
     background: #fdf6ec;
-    border: 1px solid #f3d19e;
+    border: 1px solid #e6a23c;
 }
 
 .ba-role-pill--mid:hover {
-    color: #cf9236;
+    color: #6d4c10;
     background: #faecd8;
-    border-color: #e6a23c;
+    border-color: #cf9236;
     text-decoration: none;
 }
 

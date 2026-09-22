@@ -289,6 +289,29 @@
           <template #default>回避</template>
         </el-table-column>
       </el-table>
+      <p>涨停后高位蓄势（ZHAB）</p>
+      <p class="muted">涨停后 1–6 日高位缩量蓄势；突破确认才可执行，蓄势阶段仅观察回踩支撑。</p>
+      <el-table :data="zhabRows" size="small" empty-text="无">
+        <el-table-column label="个股" min-width="140">
+          <template #default="{ row }">{{ row.name }}({{ row.code }})</template>
+        </el-table-column>
+        <el-table-column label="阶段" width="100">
+          <template #default="{ row }">{{ row.signal_type === 'breakout' ? '突破确认' : '蓄势观察' }}</template>
+        </el-table-column>
+        <el-table-column prop="zt_date" label="涨停日" width="110" />
+        <el-table-column prop="consol_days" label="整理日" width="80" />
+        <el-table-column label="支撑" width="90">
+          <template #default="{ row }">{{ fmt(row.box_low != null ? row.box_low : row.zt_mid) }}</template>
+        </el-table-column>
+        <el-table-column label="上沿" width="90">
+          <template #default="{ row }">{{ fmt(row.box_high) }}</template>
+        </el-table-column>
+        <el-table-column prop="stance" label="立场" width="90" />
+        <el-table-column prop="trigger" label="触发" min-width="180" />
+        <el-table-column label="得分" width="80">
+          <template #default="{ row }">{{ fmt(row.score) }}</template>
+        </el-table-column>
+      </el-table>
     </el-card>
 
     <el-row :gutter="16" v-if="data">
@@ -359,6 +382,10 @@ const industryConfirmSummary = computed(
 const sector = computed(() => data.value?.mainline_json?.sector || {})
 const sentiment = computed(() => data.value?.rules_json?.sentiment || {})
 const picks = computed(() => data.value?.rules_json?.picks || {})
+const zhabRows = computed(() => {
+  const z = picks.value?.zhab || {}
+  return [].concat(z.breakout || [], z.setup || [])
+})
 const indexRows = computed(() => data.value?.rules_json?.market_env?.indexes || [])
 
 const envSummary = computed(() => {

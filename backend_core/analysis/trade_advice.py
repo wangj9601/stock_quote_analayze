@@ -1056,6 +1056,52 @@ def build_trade_advice(
         if plan.get("note"):
             summary_bits.append(str(plan["note"]))
 
+    elif kind == "zhab":
+        signal_type = str(row.get("signal_type") or "").strip().lower()
+        entry = bool(row.get("entry_signal"))
+        box_low = _f(row.get("box_low") or row.get("zt_mid"))
+        box_high = _f(row.get("box_high"))
+        zt_mid = _f(row.get("zt_mid"))
+        support = box_low or zt_mid
+        if signal_type == "breakout" and entry:
+            action = "buy"
+            buy_zone = _zone(
+                price=box_high or close,
+                label="涨停后蓄势：放量突破整理上沿确认跟进",
+                basis="zhab_breakout",
+            )
+            summary_bits.append("ZHAB二阶买点：突破箱体上沿且量能确认")
+            if support is not None:
+                stop_zone = _zone(
+                    price=support,
+                    label="跌破蓄势箱体下沿/涨停日支撑离场",
+                    basis="zhab_box_low",
+                )
+        else:
+            action = "watch"
+            buy_zone = _zone(
+                price=support or close,
+                label="涨停后蓄势：回踩箱体下沿或涨停日中点试探",
+                basis="zhab_setup",
+            )
+            summary_bits.append("ZHAB一阶观察：高位缩量蓄势，等待放量突破确认")
+            if support is not None:
+                stop_zone = _zone(
+                    price=support,
+                    label="跌破蓄势支撑则形态失效",
+                    basis="zhab_box_low",
+                )
+        if box_high is not None:
+            take_profit = {
+                "label": "突破后看上方空间/压力减仓",
+                "basis": "zhab_box_high",
+                "prices": [round(float(box_high) * 1.05, 4)],
+            }
+        detail = row.get("detail") if isinstance(row.get("detail"), dict) else {}
+        if detail.get("env_note"):
+            summary_bits.append(str(detail["env_note"]))
+            confidence = "low"
+
     else:
         summary_bits.append(f"未知策略 {kind}")
         action = "watch"

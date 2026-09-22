@@ -1213,14 +1213,14 @@ a.ba-stock-code-link:focus {
   border-color: #f78989;
 }
 .ba-role-pill--mid {
-  color: #e6a23c;
+  color: #8a6116;
   background: #fdf6ec;
-  border: 1px solid #f3d19e;
+  border: 1px solid #e6a23c;
 }
 .ba-role-pill--mid:hover {
-  color: #cf9236;
+  color: #6d4c10;
   background: #faecd8;
-  border-color: #e6a23c;
+  border-color: #cf9236;
 }
 .ba-role-pill--other {
   color: #606266;
@@ -1239,12 +1239,29 @@ a.ba-stock-code-link:focus {
 }
 .ba-role-item--selectable {
   padding: 2px 4px 2px 2px;
-  border-radius: 4px;
+  border-radius: 6px;
   background: transparent;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
 }
+/* 勾选态：外框高亮；中军改为实心橙底白字，避免浅底浅字看不清 */
 .ba-role-item--selectable:has(.ba-role-select:checked) {
   background: #eff6ff;
-  outline: 1px solid #93c5fd;
+  box-shadow: inset 0 0 0 1px #93c5fd;
+}
+.ba-role-item--selectable:has(.ba-role-select:checked) .ba-role-pill--leader {
+  color: #fff;
+  background: #e85555;
+  border-color: #d94848;
+}
+.ba-role-item--selectable:has(.ba-role-select:checked) .ba-role-pill--mid {
+  color: #fff;
+  background: #e6a23c;
+  border-color: #cf9236;
+}
+.ba-role-item--selectable:has(.ba-role-select:checked) .ba-role-pill--mid:hover {
+  color: #fff;
+  background: #d4912c;
+  border-color: #b8821a;
 }
 .ba-role-select-wrap {
   display: inline-flex;

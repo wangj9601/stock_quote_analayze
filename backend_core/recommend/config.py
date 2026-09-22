@@ -26,9 +26,9 @@ ROLE_BONUS_LEADER = _env_float("RECOMMEND_ROLE_BONUS_LEADER", 3.0)
 ROLE_BONUS_MID = _env_float("RECOMMEND_ROLE_BONUS_MID", 2.0)
 
 # 默认主策略优先级（regime 可覆盖）
-STRATEGY_PRIORITY = ("csb", "urt", "gms", "sbbr", "rpe")
-STRATEGY_PRIORITY_RANGE = ("csb", "urt", "gms", "sbbr", "rpe")
-STRATEGY_PRIORITY_TREND = ("gms", "urt", "csb", "sbbr", "rpe")
+STRATEGY_PRIORITY = ("csb", "urt", "gms", "sbbr", "rpe", "zhab")
+STRATEGY_PRIORITY_RANGE = ("csb", "urt", "gms", "zhab", "sbbr", "rpe")
+STRATEGY_PRIORITY_TREND = ("gms", "urt", "csb", "zhab", "sbbr", "rpe")
 
 # 清单规模
 DAILY_TOP_EXECUTABLE = _env_int("RECOMMEND_DAILY_TOP_EXEC", 15)

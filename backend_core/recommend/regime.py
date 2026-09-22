@@ -47,8 +47,8 @@ def classify_regime(
 def regime_quality_weights(regime: str) -> Dict[str, float]:
     """质量加权：不删策略，仅倾斜 CSB/GMS。"""
     if regime == "trend":
-        return {"gms": 1.25, "csb": 0.75, "urt": 1.0, "sbbr": 1.0, "rpe": 1.0}
-    return {"csb": 1.25, "gms": 0.75, "urt": 1.0, "sbbr": 1.0, "rpe": 1.0}
+        return {"gms": 1.25, "csb": 0.75, "urt": 1.0, "sbbr": 1.0, "rpe": 1.0, "zhab": 1.15}
+    return {"csb": 1.25, "gms": 0.75, "urt": 1.0, "sbbr": 1.0, "rpe": 1.0, "zhab": 1.1}
 
 
 def pick_primary_strategy(strategies: list, regime: str) -> Optional[str]:

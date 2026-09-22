@@ -750,6 +750,24 @@ def build_review_picks(
     zt_rows = _load_zt(db, trade_date)
     prev_zt = {r["code"] for r in _load_zt(db, prev_date)} if prev_date else set()
     try:
+        from backend_core.strategies.zhab.strategy_engine import ensure_zhab_signals
+
+        ensure_zhab_signals(
+            db,
+            trade_date[:10],
+            sector=sector,
+            concept_board_codes=concept_board_codes,
+            season=season,
+            gates=gates,
+            persist=True,
+        )
+    except Exception:
+        logger.exception("ZHAB 复盘扫描失败")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    try:
         from backend_core.recommend.candidates import collect_strategy_buy_candidates
 
         grouped = collect_strategy_buy_candidates(db, trade_date[:10])
@@ -777,4 +795,60 @@ def build_review_picks(
     )
     if picks.get("mode") == "retreat":
         return picks
-    return enrich_picks(db, trade_date, picks)
+    picks = enrich_picks(db, trade_date, picks)
+    # 附加 ZHAB 专区（蓄势观察 / 突破确认），便于复盘展示
+    try:
+        from backend_api.models import ZhabSignalTrace, ZhabStrategyConfig
+        from datetime import date as _date
+
+        td = _date.fromisoformat(trade_date[:10])
+        cfg = (
+            db.query(ZhabStrategyConfig)
+            .filter(ZhabStrategyConfig.is_default.is_(True))
+            .order_by(ZhabStrategyConfig.id.asc())
+            .first()
+        )
+        q = db.query(ZhabSignalTrace).filter(ZhabSignalTrace.trade_date == td)
+        if cfg is not None:
+            q = q.filter(ZhabSignalTrace.config_id == int(cfg.id))
+        rows = (
+            q.filter(ZhabSignalTrace.setup_ok.is_(True))
+            .order_by(ZhabSignalTrace.score.desc().nullslast())
+            .limit(40)
+            .all()
+        )
+        zhab_rows = []
+        for r in rows:
+            zhab_rows.append(
+                {
+                    "code": r.code,
+                    "name": r.name,
+                    "strategy": "zhab",
+                    "signal_type": r.signal_type,
+                    "score": r.score,
+                    "entry_signal": bool(r.entry_signal),
+                    "zt_date": r.zt_date,
+                    "consol_days": r.consol_days,
+                    "box_low": r.box_low,
+                    "box_high": r.box_high,
+                    "zt_mid": r.zt_mid,
+                    "stance": "可执行" if r.entry_signal else "观察",
+                    "trigger": (
+                        f"放量突破箱体上沿 {r.box_high}"
+                        if r.signal_type == "breakout"
+                        else f"回踩支撑 {r.box_low or r.zt_mid} 试探"
+                    ),
+                }
+            )
+        picks["zhab"] = {
+            "setup": [x for x in zhab_rows if x.get("signal_type") == "setup"],
+            "breakout": [x for x in zhab_rows if x.get("signal_type") == "breakout"],
+        }
+    except Exception:
+        logger.exception("ZHAB 复盘专区组装失败")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        picks["zhab"] = {"setup": [], "breakout": []}
+    return picks

@@ -140,7 +140,28 @@ def _picks_markdown(picks: Dict[str, Any]) -> List[str]:
         for row in avoid:
             lines.append(f"| {_name_cell(row)} | {row.get('reason') or '--'} | 回避 |")
         lines.append("")
-    if not (no_chase or track or sideline or avoid) and not note:
+    zhab = picks.get("zhab") if isinstance(picks.get("zhab"), dict) else {}
+    zhab_setup = (zhab or {}).get("setup") or []
+    zhab_bo = (zhab or {}).get("breakout") or []
+    if zhab_setup or zhab_bo:
+        lines.extend(
+            [
+                "## **涨停后高位蓄势（ZHAB）**",
+                "",
+                "| 个股 | 阶段 | 涨停日 | 整理日 | 支撑 | 上沿 | 立场 | 触发 |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
+            ]
+        )
+        for row in list(zhab_bo) + list(zhab_setup):
+            stage = "突破确认" if row.get("signal_type") == "breakout" else "蓄势观察"
+            lines.append(
+                f"| {_name_cell(row)} | {stage} | {row.get('zt_date') or '--'} | "
+                f"{row.get('consol_days') if row.get('consol_days') is not None else '--'} | "
+                f"{_fmt(row.get('box_low') or row.get('zt_mid'))} | {_fmt(row.get('box_high'))} | "
+                f"{row.get('stance') or '--'} | {row.get('trigger') or '--'} |"
+            )
+        lines.append("")
+    if not (no_chase or track or sideline or avoid or zhab_setup or zhab_bo) and not note:
         lines.append("无新增跟踪")
         lines.append("")
     return lines

@@ -384,7 +384,32 @@ def build_daily_review_html(snapshot: Dict[str, Any]) -> str:
             ]
             parts.append("<h3>回避</h3>")
             parts.append(_table(["个股", "原因", "立场"], body, ["32%", "48%", "20%"]))
-        if not (no_chase or track or sideline or avoid) and not picks.get("note"):
+        zhab = picks.get("zhab") if isinstance(picks.get("zhab"), dict) else {}
+        zhab_rows = list(zhab.get("breakout") or []) + list(zhab.get("setup") or [])
+        if zhab_rows:
+            body = []
+            for r in zhab_rows:
+                stage = "突破确认" if r.get("signal_type") == "breakout" else "蓄势观察"
+                body.append(
+                    [
+                        _stock_line(r, with_trigger=True),
+                        stage,
+                        r.get("zt_date") or "—",
+                        r.get("consol_days") if r.get("consol_days") is not None else "—",
+                        _fmt(r.get("box_low") if r.get("box_low") is not None else r.get("zt_mid")),
+                        _fmt(r.get("box_high")),
+                        r.get("stance") or "—",
+                    ]
+                )
+            parts.append("<h3>涨停后高位蓄势（ZHAB）</h3>")
+            parts.append(
+                _table(
+                    ["个股与触发", "阶段", "涨停日", "整理日", "支撑", "上沿", "立场"],
+                    body,
+                    ["28%", "12%", "12%", "10%", "12%", "12%", "14%"],
+                )
+            )
+        if not (no_chase or track or sideline or avoid or zhab_rows) and not picks.get("note"):
             parts.append("<p>无新增跟踪</p>")
         picks_html = "".join(parts)
 

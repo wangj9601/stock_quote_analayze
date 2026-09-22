@@ -156,21 +156,38 @@ def apply_anti_chase(
     action: str,
     quote: Optional[Dict[str, Any]],
     advice: Optional[Dict[str, Any]],
+    strategies: Optional[List[str]] = None,
+    primary_strategy: Optional[str] = None,
+    signal_type: Optional[str] = None,
 ) -> Tuple[str, List[str]]:
     reasons: List[str] = []
     if action != "buy":
         return action, reasons
     q = quote or {}
+    # 涨停当日仍不追
     if q.get("is_limit_up"):
         reasons.append("limit_up")
         return "watch", reasons
+
+    strat_set = {str(s).lower() for s in (strategies or []) if s}
+    if primary_strategy:
+        strat_set.add(str(primary_strategy).lower())
+    # ZHAB 突破确认：豁免 N 日涨幅 / 远离买区（结构突破常伴随短线大涨）
+    zhab_breakout_exempt = "zhab" in strat_set and str(signal_type or "").lower() == "breakout"
+
     try:
         gain = q.get("n_day_gain_pct")
-        if gain is not None and float(gain) >= float(ANTI_CHASE_N_DAY_GAIN_PCT):
+        if (
+            not zhab_breakout_exempt
+            and gain is not None
+            and float(gain) >= float(ANTI_CHASE_N_DAY_GAIN_PCT)
+        ):
             reasons.append(f"n_day_gain>={ANTI_CHASE_N_DAY_GAIN_PCT}")
             return "watch", reasons
     except (TypeError, ValueError):
         pass
+    if zhab_breakout_exempt:
+        return action, reasons
     zone = (advice or {}).get("buy_zone") or {}
     try:
         close = float(q.get("close")) if q.get("close") is not None else None

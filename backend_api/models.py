@@ -2742,6 +2742,55 @@ class KgtSignalTrace(Base):
     )
 
 
+class ZhabStrategyConfig(Base):
+    """涨停后高位蓄势再突破（ZHAB）策略参数版本。"""
+
+    __tablename__ = "zhab_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class ZhabSignalTrace(Base):
+    """ZHAB 日终信号追溯。"""
+
+    __tablename__ = "zhab_signal_trace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    config_id = Column(
+        Integer,
+        ForeignKey("zhab_strategy_configs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String(200), nullable=True)
+    signal_type = Column(String(32), nullable=True, index=True)  # setup|breakout|invalid
+    setup_ok = Column(Boolean, nullable=True)
+    entry_signal = Column(Boolean, nullable=True)
+    score = Column(Float, nullable=True)
+    zt_date = Column(String(10), nullable=True)
+    consol_days = Column(Integer, nullable=True)
+    zt_mid = Column(Float, nullable=True)
+    box_low = Column(Float, nullable=True)
+    box_high = Column(Float, nullable=True)
+    close_price = Column(Float, nullable=True)
+    detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("code", "trade_date", "config_id", name="uq_zhab_signal_trace_code_date_cfg"),
+    )
+
+
 # ========== CUPB 杯底形态策略 ==========
 
 class CupbStrategyConfig(Base):

@@ -289,6 +289,32 @@ def generate_daily_brief(
     persist: bool = True,
 ) -> Dict[str, Any]:
     asof = resolve_asof_date(db, asof_date)
+    # 若当日尚无 ZHAB 信号（复盘未跑），兜底扫描近窗涨停池
+    try:
+        from backend_api.models import ZhabSignalTrace, ZhabStrategyConfig
+        from datetime import date as _date
+
+        td = _date.fromisoformat(asof[:10])
+        cfg = (
+            db.query(ZhabStrategyConfig)
+            .filter(ZhabStrategyConfig.is_default.is_(True))
+            .order_by(ZhabStrategyConfig.id.asc())
+            .first()
+        )
+        q = db.query(ZhabSignalTrace).filter(ZhabSignalTrace.trade_date == td)
+        if cfg is not None:
+            q = q.filter(ZhabSignalTrace.config_id == int(cfg.id))
+        if q.limit(1).first() is None:
+            from backend_core.strategies.zhab.strategy_engine import ensure_zhab_signals
+
+            ensure_zhab_signals(db, asof, persist=True)
+    except Exception:
+        logger.exception("ZHAB recommend 兜底扫描失败")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
     market = evaluate_market_stance(db, asof)
     market_stance = market.get("stance") or "neutral"
     index_slope = compute_index_slope_20(db, asof)
@@ -360,6 +386,16 @@ def generate_daily_brief(
         advice = merge_advice_with_sr(advice, sr)
         action = str(advice.get("action") or "watch")
 
+        # ZHAB 蓄势 / 环境未过门：强制观察
+        if primary == "zhab" and (
+            row.get("watch_only")
+            or str(row.get("signal_type") or "") == "setup"
+            or not row.get("entry_signal")
+        ):
+            action = "watch"
+            advice = dict(advice)
+            advice["action"] = "watch"
+
         if market_stance == "bear" and action == "buy":
             action = "watch"
             advice = dict(advice)
@@ -372,7 +408,12 @@ def generate_daily_brief(
             advice["summary"] = (advice.get("summary") or "") + "；板弱/E地板，降为观察"
 
         action, chase_reasons = apply_anti_chase(
-            action=action, quote=quote, advice=advice
+            action=action,
+            quote=quote,
+            advice=advice,
+            strategies=list(bucket.get("strategies") or []),
+            primary_strategy=primary,
+            signal_type=row.get("signal_type"),
         )
         if chase_reasons and action == "watch":
             advice = dict(advice)

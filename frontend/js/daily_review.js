@@ -215,6 +215,7 @@ const DailyReviewPage = {
         this.fillBody('drTrackBody', 11, []);
         this.fillBody('drSidelineBody', 4, []);
         this.fillBody('drAvoidBody', 3, []);
+        this.fillBody('drZhabBody', 9, []);
         ['drEnvSummary', 'drMainSide', 'drRotation', 'drLadder', 'drCurveNote'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = '';
@@ -457,6 +458,7 @@ const DailyReviewPage = {
             this.fillBody('drTrackBody', 11, []);
             this.fillBody('drSidelineBody', 4, []);
             this.fillBody('drAvoidBody', 3, []);
+            this.fillBody('drZhabBody', 9, []);
             return;
         }
         if (disclaimer) disclaimer.textContent = picks.disclaimer || '规则合成参考，非投资建议。';
@@ -519,6 +521,26 @@ const DailyReviewPage = {
                     <td>回避</td>
                 </tr>`
             )
+        );
+        const zhab = picks.zhab && typeof picks.zhab === 'object' ? picks.zhab : {};
+        const zhabRows = [].concat(zhab.breakout || [], zhab.setup || []);
+        this.fillBody(
+            'drZhabBody',
+            9,
+            zhabRows.map((r) => {
+                const stage = r.signal_type === 'breakout' ? '突破确认' : '蓄势观察';
+                return `<tr>
+                    <td>${this.stockCell(r)}</td>
+                    <td>${this.escapeHtml(stage)}</td>
+                    <td>${this.escapeHtml(r.zt_date || '--')}</td>
+                    <td>${r.consol_days == null ? '--' : r.consol_days}</td>
+                    <td>${this.fmt(r.box_low != null ? r.box_low : r.zt_mid)}</td>
+                    <td>${this.fmt(r.box_high)}</td>
+                    <td>${this.escapeHtml(r.stance || '--')}</td>
+                    <td>${this.escapeHtml(r.trigger || '--')}</td>
+                    <td>${this.fmt(r.score)}</td>
+                </tr>`;
+            })
         );
     },
 
