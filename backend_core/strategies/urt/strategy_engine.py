@@ -82,6 +82,11 @@ class URTStrategyEngine:
                 chunk_size=chunk_size,
             )
         except Exception as e:
+            # 批量失败（含 PG OOM）后会话常处于 aborted，必须 rollback 才能逐股回退
+            try:
+                self.loader.db.rollback()
+            except Exception:
+                pass
             logger.warning("URT 批量拉行情失败，回退逐股: %s", e)
             return None
 

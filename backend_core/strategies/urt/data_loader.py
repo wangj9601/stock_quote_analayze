@@ -193,15 +193,16 @@ class URTDataLoader:
         end_date: Optional[str] = None,
         chunk_size: Optional[int] = None,
     ) -> int:
-        """按日期跨度估算批量拉行情的 codes 分块大小，避免单次结果集撑爆客户端内存。
+        """按日期跨度估算批量拉行情的 codes 分块大小，避免单次结果集撑爆客户端/服务端内存。
 
-        生产曾出现：400 只 × ~3 年日 K → psycopg2「out of memory for query result」。
+        生产曾出现：数百只 × ~3 年日 K → PostgreSQL PortalHoldContext OOM，
+        以及 psycopg2「out of memory for query result」。
         """
         import os
 
         env_raw = (os.getenv("URT_HIST_BATCH_CODES") or "").strip()
         if env_raw.isdigit():
-            return max(10, min(200, int(env_raw)))
+            return max(1, min(120, int(env_raw)))
 
         if chunk_size is not None:
             try:
@@ -209,7 +210,7 @@ class URTDataLoader:
             except (TypeError, ValueError):
                 requested = 0
             if requested > 0:
-                return max(10, min(200, requested))
+                return max(1, min(120, requested))
 
         cal_days = 120
         try:
@@ -220,10 +221,10 @@ class URTDataLoader:
         except ValueError:
             pass
 
-        # 粗估：目标单批约 ≤ 4 万行（codes × 交易日≈日历日×0.7）
+        # 粗估交易日；目标单批约 ≤ 1.2 万行（生产长窗口下 4 万仍会 Portal OOM）
         approx_bars = max(30, int(cal_days * 0.7))
-        target_rows = 40_000
-        auto = max(10, min(80, target_rows // approx_bars))
+        target_rows = 12_000
+        auto = max(1, min(40, target_rows // approx_bars))
         return int(auto)
 
     def fetch_historical_desc_batch(
@@ -237,7 +238,7 @@ class URTDataLoader:
     ) -> Dict[str, List[Dict[str, Any]]]:
         """按代码批量拉取日 K（每只日期 DESC）。减少全市场扫描的逐股查询。
 
-        分块 + yield_per 流式取回，避免大结果集一次进客户端内存。
+        分块流式取回；服务端 OOM 时自动缩小分块，直至单票拉取。
         """
         from sqlalchemy import bindparam
 
@@ -258,7 +259,25 @@ class URTDataLoader:
         n = self.resolve_hist_batch_chunk_size(
             start_date=start_date, end_date=end_date, chunk_size=chunk_size
         )
-        yield_per = 2000
+        yield_per = 500
+        min_chunk = 1
+
+        def _rollback_quiet() -> None:
+            try:
+                self.db.rollback()
+            except Exception:
+                pass
+
+        def _is_oom_error(exc: Exception) -> bool:
+            msg = str(exc).lower()
+            name = type(exc).__name__.lower()
+            return (
+                "out of memory" in msg
+                or "memoryerror" in name
+                or "query result" in msg
+                or "portalholdcontext" in msg
+                or "内存用尽" in str(exc)
+            )
 
         def _fetch_chunk(chunk: List[str]) -> None:
             clauses = ["code IN :codes"]
@@ -269,26 +288,60 @@ class URTDataLoader:
             if end_date:
                 clauses.append("date <= :end_date")
                 params["end_date"] = str(end_date)[:10]
-            # 不选 name：结果集更小；名称由选股列表侧提供
+            # 不 ORDER BY：避免服务端为大结果集排序撑爆 PortalHoldContext；客户端按票排序。
+            # 不选 name：结果集更小；名称由选股列表侧提供。
             sql = text(
                 f"""
                 SELECT code, date, open, close, high, low,
                        change_percent, volume, amount, turnover_rate
                 FROM {table}
                 WHERE {' AND '.join(clauses)}
-                ORDER BY code ASC, date DESC
                 """
             ).bindparams(bindparam("codes", expanding=True))
             result = self.db.execute(
                 sql,
                 params,
-                execution_options={"yield_per": yield_per},
+                execution_options={"stream_results": True, "yield_per": yield_per},
             )
             for row in result:
                 bar = self._quote_row_to_bar_compact(row)
                 code = str(bar.get("code") or "")
                 if code in out:
                     out[code].append(bar)
+            for code in chunk:
+                bars = out.get(code) or []
+                if len(bars) > 1:
+                    bars.sort(key=lambda b: str(b.get("date") or ""), reverse=True)
+
+        def _fetch_codes_solo(solo_codes: List[str]) -> None:
+            for code in solo_codes:
+                try:
+                    bars = self.fetch_historical_desc(
+                        code,
+                        start_date=start_date,
+                        end_date=end_date,
+                    )
+                    # fetch_historical_desc 含 name；压成与 batch 一致即可
+                    out[code] = [
+                        {
+                            "code": b.get("code"),
+                            "name": b.get("name"),
+                            "date": b.get("date"),
+                            "open": b.get("open"),
+                            "close": b.get("close"),
+                            "high": b.get("high"),
+                            "low": b.get("low"),
+                            "change_percent": b.get("change_percent"),
+                            "volume": b.get("volume"),
+                            "amount": b.get("amount"),
+                            "turnover_rate": b.get("turnover_rate"),
+                        }
+                        for b in (bars or [])
+                    ]
+                except Exception as solo_e:
+                    _rollback_quiet()
+                    logger.warning("URT 单票拉行情失败 code=%s: %s", code, solo_e)
+                    out[code] = []
 
         i = 0
         while i < len(uniq):
@@ -297,14 +350,8 @@ class URTDataLoader:
                 _fetch_chunk(chunk)
                 i += len(chunk)
             except Exception as e:
-                msg = str(e).lower()
-                is_oom = (
-                    "out of memory" in msg
-                    or "memoryerror" in type(e).__name__.lower()
-                    or "query result" in msg
-                )
-                if is_oom and n > 10:
-                    new_n = max(10, n // 2)
+                if _is_oom_error(e) and n > min_chunk:
+                    new_n = max(min_chunk, n // 2)
                     logger.warning(
                         "URT 批量拉行情 OOM，缩小分块 %s→%s（本批 %s 只）: %s",
                         n,
@@ -312,12 +359,20 @@ class URTDataLoader:
                         len(chunk),
                         e,
                     )
-                    try:
-                        self.db.rollback()
-                    except Exception:
-                        pass
+                    _rollback_quiet()
                     n = new_n
                     continue
+                if _is_oom_error(e):
+                    logger.warning(
+                        "URT 批量拉行情 OOM（分块=%s），本批改逐票拉取: %s",
+                        n,
+                        e,
+                    )
+                    _rollback_quiet()
+                    _fetch_codes_solo(chunk)
+                    i += len(chunk)
+                    continue
+                _rollback_quiet()
                 raise
         return out
 
