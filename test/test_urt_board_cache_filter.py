@@ -175,10 +175,49 @@ def test_full_market_no_precompute_allows_realtime():
     Eng.return_value.screen_universe.assert_called_once()
 
 
+def test_trace_only_blocks_full_market_realtime_even_when_env_allows():
+    """页面勾选优先读预计算(trace_only)：无缓存时不回退全量现算。"""
+    db = MagicMock()
+    with patch.object(URTFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.urt.frontend_interface.URTConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.urt.frontend_interface.URTDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.urt.frontend_interface.query_buy_signals_for_date",
+        return_value=[],
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.dates_ready_for_universe_backtest",
+        return_value=set(),
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.get_trace_freshness",
+        return_value={"stale": False, "need_recompute": False, "config_updated_at": None, "trace_computed_at": None},
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.URTStrategyEngine"
+    ) as Eng, patch.dict("os.environ", {"URT_ALLOW_FULL_MARKET_REALTIME": "1"}, clear=False):
+        cm = CM.return_value
+        cm.get_config.return_value = CFG
+        cm.merge_overrides.return_value = CFG
+        Loader.resolve_effective_history_end_date.return_value = "2026-09-21"
+        Loader.return_value = MagicMock()
+        out = URTFrontendInterface.screen(
+            db,
+            scope="all",
+            config_id=1,
+            prefer_cache=True,
+            trace_only=True,
+            market="CN",
+        )
+    assert out["success"] is False
+    assert out.get("need_precompute") is True
+    assert out.get("trace_only") is True
+    Eng.assert_not_called()
+
+
 if __name__ == "__main__":
     test_code_matches_urt_boards()
     test_screen_uses_cache_when_boards_set()
     test_empty_buy_signals_but_date_ready_uses_cache()
     test_full_market_no_precompute_failfast()
     test_full_market_no_precompute_allows_realtime()
+    test_trace_only_blocks_full_market_realtime_even_when_env_allows()
     print("test_urt_board_cache_filter.py: all passed")

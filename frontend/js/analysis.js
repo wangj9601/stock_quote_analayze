@@ -233,6 +233,11 @@ const AnalysisPage = {
                     }
                 }
                 break;
+            case 'rs-rating':
+                if (window.RsRatingAnalysis) {
+                    RsRatingAnalysis.init();
+                }
+                break;
             case 'trade-observe':
                 if (window.UnifiedTradeObserve) {
                     UnifiedTradeObserve.refresh();

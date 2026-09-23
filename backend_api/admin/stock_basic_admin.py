@@ -731,13 +731,21 @@ async def list_rs_ratings(
     keyword: str = Query("", description="代码或名称关键字"),
     date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD；缺省取最新有数据日"),
     min_rating: Optional[int] = Query(None, ge=1, le=99, description="最低 RS 评级过滤"),
+    cn_board_segments: Optional[List[str]] = Query(
+        None,
+        description="A股板块多选：MAIN/CYB/SZ_SME/KCB/BJ；不传=不限",
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
     db: Session = Depends(get_db),
     _: Any = Depends(get_current_admin),
 ):
     """A 股股价相对强度列表：按 rs_rating 降序（最高在前），无评级排后。"""
+    from backend_api.utils.cn_listed_board_filter import normalize_multi_board_segments
     from backend_core.indicators.rs_rating.config import strength_label
+    from backend_core.strategies.volume_shrink_breakout.data_loader import (
+        VSB_BOARD_PREFIX_GROUPS,
+    )
 
     asof = (date or "").strip()[:10] or None
     if not asof:
@@ -763,6 +771,7 @@ async def list_rs_ratings(
             "page": page,
             "page_size": page_size,
             "asof": None,
+            "cn_board_segments": [],
             "message": "尚无 RS 预计算数据",
         }
 
@@ -775,6 +784,19 @@ async def list_rs_ratings(
     if min_rating is not None:
         where_parts.append("r.rs_rating >= :min_rating")
         params["min_rating"] = int(min_rating)
+
+    board_keys = normalize_multi_board_segments(cn_board_segments)
+    if board_keys:
+        prefix_conds: List[str] = []
+        pi = 0
+        for key in board_keys:
+            for pref in VSB_BOARD_PREFIX_GROUPS.get(key, ()):
+                pname = f"bp{pi}"
+                pi += 1
+                prefix_conds.append(f"r.code LIKE :{pname}")
+                params[pname] = f"{pref}%"
+        if prefix_conds:
+            where_parts.append("(" + " OR ".join(prefix_conds) + ")")
 
     where_sql = " AND ".join(where_parts)
     total = (
@@ -819,6 +841,16 @@ async def list_rs_ratings(
         params,
     ).mappings().all()
 
+    # 回传前端友好键（MAIN 合并沪深主板）
+    board_out: List[str] = []
+    if board_keys:
+        seen_b = set()
+        for k in board_keys:
+            label_key = "MAIN" if k in ("SH_MAIN", "SZ_MAIN") else k
+            if label_key not in seen_b:
+                seen_b.add(label_key)
+                board_out.append(label_key)
+
     data = []
     for r in rows:
         rating = r.get("rs_rating")
@@ -847,6 +879,7 @@ async def list_rs_ratings(
         "page": page,
         "page_size": page_size,
         "asof": asof,
+        "cn_board_segments": board_out,
     }
 
 

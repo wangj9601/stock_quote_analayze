@@ -321,7 +321,8 @@
     if (!c) return 'other';
     if (c.startsWith('68')) return 'star'; // 科创板
     if (c.startsWith('3')) return 'chinext'; // 创业板 300/301
-    if (c.startsWith('8') || c.startsWith('4')) return 'bse'; // 北交所为主
+    // 北交所/北证：8/4 段 + 9 段（如 92xxxx 新代码）
+    if (c.startsWith('8') || c.startsWith('4') || c.startsWith('9')) return 'bse';
     return 'main';
   }
 

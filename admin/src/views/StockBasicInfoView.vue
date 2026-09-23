@@ -264,6 +264,21 @@
             </el-col>
           </el-row>
           <el-row :gutter="12" class="mb-4">
+            <el-col :span="24">
+              <div class="rs-board-filter">
+                <span class="rs-board-label">A股板块</span>
+                <el-checkbox-group v-model="rsQuery.cn_board_segments" class="rs-board-group">
+                  <el-checkbox label="MAIN">主板</el-checkbox>
+                  <el-checkbox label="KCB">科创板</el-checkbox>
+                  <el-checkbox label="SZ_SME">中小板</el-checkbox>
+                  <el-checkbox label="CYB">创业板</el-checkbox>
+                  <el-checkbox label="BJ">北证</el-checkbox>
+                </el-checkbox-group>
+                <span class="rs-board-hint">可多选；不选=全部板块</span>
+              </div>
+            </el-col>
+          </el-row>
+          <el-row :gutter="12" class="mb-4">
             <el-col :xs="24" :sm="12" :md="10">
               <el-date-picker
                 v-model="rsForceRange"
@@ -755,6 +770,7 @@ const rsQuery = reactive({
   keyword: '',
   date: '' as string | '',
   min_rating: null as number | null,
+  cn_board_segments: [] as string[],
   page: 1,
   page_size: 20
 })
@@ -783,6 +799,9 @@ const loadRsList = async () => {
       keyword: rsQuery.keyword || undefined,
       date: rsQuery.date || undefined,
       min_rating: rsQuery.min_rating,
+      cn_board_segments: rsQuery.cn_board_segments?.length
+        ? [...rsQuery.cn_board_segments]
+        : undefined,
       page: rsQuery.page,
       page_size: rsQuery.page_size
     })
@@ -1015,5 +1034,25 @@ onMounted(() => {
 }
 .rs-force-status.inline {
   margin-left: 12px;
+}
+.rs-board-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.rs-board-label {
+  color: #475569;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.rs-board-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.rs-board-hint {
+  color: #94a3b8;
+  font-size: 12px;
 }
 </style>

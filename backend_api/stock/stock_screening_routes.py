@@ -3201,6 +3201,18 @@ async def get_urt_strategy(
         "standard",
         description="信号质量: standard=标准(排除均线多头分中段) | premium=精选(近支撑≤2%+排除弱项)",
     ),
+    prefer_cache: bool = Query(
+        True,
+        description="无参数覆盖时优先读 urt_signal_trace 预计算（全部A股/港股默认开启）",
+    ),
+    force_realtime: bool = Query(
+        False,
+        description="强制现算，跳过预计算缓存",
+    ),
+    trace_only: bool = Query(
+        False,
+        description="全市场仅读预计算：无 urt_signal_trace 时不回退全量现算（避免生产 502）",
+    ),
     boards: Optional[List[str]] = Query(
         None,
         description="板块过滤：CYB/KCB/SH_MAIN/SZ_MAIN/SZ_SME/BJ（兼容旧参数）",
@@ -3228,7 +3240,7 @@ async def get_urt_strategy(
     """
     上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
     支持 A 股与港股全市场；数据来源对齐 GMS：全部A股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
-    全部A股/全部港股：应用硬筛 + min_score（可被 Query 覆盖）。
+    全部A股/全部港股：应用硬筛 + min_score（可被 Query 覆盖）；默认优先读每日预计算 urt_signal_trace。
     自选/行业/概念/单股：对齐 GMS，不按硬筛与最低得分过滤列表，返回可算明细（含未买点），得分原样展示。
     """
     if not URT_AVAILABLE or URTFrontendInterface is None:
@@ -3415,6 +3427,12 @@ async def get_urt_strategy(
     if sqm not in ("standard", "premium"):
         sqm = "standard"
 
+    # 全市场：页面「优先读预计算」→ prefer_cache + trace_only（无缓存不回退全量现算）
+    # 取消勾选 → force_realtime。自选/板块/单股仍由 skip_filters 强制现算明细。
+    eff_prefer_cache = bool(prefer_cache) and not force_realtime and not skip_filters
+    eff_force_realtime = bool(force_realtime) and not skip_filters
+    eff_trace_only = bool(trace_only) and not skip_filters and scope_raw in ("cn", "hk")
+
     loop = asyncio.get_event_loop()
 
     def _run():
@@ -3432,6 +3450,9 @@ async def get_urt_strategy(
             use_volume_ratio=None if skip_filters else use_volume_ratio,
             min_turnover=None if skip_filters else min_turnover,
             min_volume_ratio=None if skip_filters else min_volume_ratio,
+            prefer_cache=eff_prefer_cache,
+            force_realtime=eff_force_realtime,
+            trace_only=eff_trace_only,
             skip_screening_filters=skip_filters,
             signal_quality_mode=sqm,
             market=urt_market,

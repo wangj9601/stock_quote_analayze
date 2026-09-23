@@ -63,6 +63,7 @@ class URTFrontendInterface:
         min_volume_ratio: Optional[float] = None,
         prefer_cache: bool = True,
         force_realtime: bool = False,
+        trace_only: bool = False,
         skip_screening_filters: bool = False,
         signal_quality_mode: Optional[str] = None,
         market: str = "CN",
@@ -71,6 +72,10 @@ class URTFrontendInterface:
         skip_screening_filters=True（单股 / 自选 / 行业 / 概念）：不按硬筛/最低得分过滤结果列表，
         实时计算信号明细（含未通过买点），得分原样返回；正式买点仍由 buy_signal 标识。
         全部A股/港股全量选股仍 require_pass（硬筛 + min_score）。
+
+        prefer_cache=True（默认）：无参数覆盖时优先读 urt_signal_trace。
+        force_realtime=True：跳过预计算，强制现算。
+        trace_only=True：全市场仅读预计算，无缓存时不回退全量现算（避免生产 502）。
         """
         cm = URTConfigManager()
         try:
@@ -88,6 +93,7 @@ class URTFrontendInterface:
             min_volume_ratio = None
             force_realtime = True
             prefer_cache = False
+            trace_only = False
 
         resolved_id = URTFrontendInterface._resolve_config_id(db, config_id, cm)
         base = cm.get_config(resolved_id, db=db)
@@ -303,6 +309,7 @@ class URTFrontendInterface:
 
             # 全市场且无预计算：默认同步实时计算。
             # 设 URT_ALLOW_FULL_MARKET_REALTIME=0 可恢复快速失败（避免生产网关 502）。
+            # 页面勾选「优先/仅读预计算」(trace_only) 时同样不回退全量现算。
             deny_full_rt = (os.getenv("URT_ALLOW_FULL_MARKET_REALTIME") or "1").strip().lower() in (
                 "0",
                 "false",
@@ -310,7 +317,12 @@ class URTFrontendInterface:
                 "off",
             )
             full_market = pool_codes is None and not limit
-            if full_market and deny_full_rt and mkt != "HK":
+            # deny_full_rt 默认仅拦 A 股全量；页面 trace_only 对 A/H 全市场均生效。
+            # 有 Query 参数覆盖时必须现算，忽略 trace_only。
+            if full_market and (
+                (deny_full_rt and mkt != "HK")
+                or (trace_only and not overrides_active)
+            ):
                 msg = (
                     f"全市场暂无可用预计算（基准日 {effective}，config_id={resolved_id}）。"
                     "请先在管理端执行 URT 预计算，或改用自选股/缩小范围；"
@@ -332,12 +344,16 @@ class URTFrontendInterface:
                         "data_source": "none",
                         "boards": board_keys,
                         "need_precompute": True,
+                        "prefer_cache": bool(prefer_cache),
+                        "trace_only": bool(trace_only),
                         "signal_quality_mode": quality_mode,
                         "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
                     },
                     "search_date": effective,
                     "data_source": "none",
                     "need_precompute": True,
+                    "prefer_cache": bool(prefer_cache),
+                    "trace_only": bool(trace_only),
                     "signal_quality_mode": quality_mode,
                     "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
                     "message": msg,
@@ -384,6 +400,8 @@ class URTFrontendInterface:
             "screening_date_requested": req_norm,
             "screening_date_effective": effective,
             "data_source": data_source,
+            "prefer_cache": bool(prefer_cache) and not force_realtime,
+            "trace_only": bool(trace_only),
             "skip_screening_filters": bool(skip_screening_filters),
             "signal_quality_mode": quality_mode,
             "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
@@ -397,6 +415,8 @@ class URTFrontendInterface:
             "parameters": parameters_out,
             "search_date": effective,
             "data_source": data_source,
+            "prefer_cache": bool(prefer_cache) and not force_realtime,
+            "trace_only": bool(trace_only),
             "skip_screening_filters": bool(skip_screening_filters),
             "signal_quality_mode": quality_mode,
             "signal_quality_mode_label": signal_quality_mode_label(quality_mode),

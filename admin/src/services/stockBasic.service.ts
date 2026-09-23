@@ -169,6 +169,7 @@ class StockBasicService {
     keyword?: string
     date?: string
     min_rating?: number | null
+    cn_board_segments?: string[]
     page: number
     page_size: number
   }): Promise<{
@@ -191,6 +192,7 @@ class StockBasicService {
     page: number
     page_size: number
     asof: string | null
+    cn_board_segments?: string[]
   }> {
     const q = new URLSearchParams()
     q.set('page', String(params.page))
@@ -198,6 +200,10 @@ class StockBasicService {
     if (params.keyword) q.set('keyword', params.keyword)
     if (params.date) q.set('date', params.date)
     if (params.min_rating != null) q.set('min_rating', String(params.min_rating))
+    for (const seg of params.cn_board_segments || []) {
+      const s = String(seg || '').trim()
+      if (s) q.append('cn_board_segments', s)
+    }
     return apiService.get(`/stock-basic/rs-ratings?${q.toString()}`)
   }
 

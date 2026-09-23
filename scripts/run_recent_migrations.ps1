@@ -1,7 +1,9 @@
-#Requires -Version 5.0
+#Requires -Version 4.0
 <#
 .SYNOPSIS
   执行 migrations 目录下最近 N 天内修改过的 .py 迁移脚本。
+  兼容 Windows PowerShell 4.0+（生产环境常见）。
+  推荐优先使用: python scripts/run_recent_migrations.py
 .PARAMETER Days
   回溯天数，默认 2。
 .PARAMETER Yes

@@ -157,6 +157,43 @@ def get_board_signals(
         )
 
 
+@router.get("/rs-ratings")
+def list_analysis_rs_ratings(
+    market: str = Query("CN", description="市场：CN=A股 / HK=港股"),
+    keyword: str = Query("", description="代码或名称关键字"),
+    date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD；缺省取最新有数据日"),
+    min_rating: Optional[int] = Query(None, ge=1, le=99, description="最低 RS 评级过滤"),
+    cn_board_segments: Optional[List[str]] = Query(
+        None,
+        description="A股板块多选：MAIN/CYB/SZ_SME/KCB/BJ；仅 market=CN 生效",
+    ),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.analyze.tab.rs")),
+):
+    """分析频道：A/H 股相对强度排行（读预计算表，按 RS 降序）。"""
+    try:
+        from backend_core.indicators.rs_rating.service import list_rs_ratings_page
+
+        return list_rs_ratings_page(
+            db,
+            market=market,
+            keyword=keyword,
+            date=date,
+            min_rating=min_rating,
+            cn_board_segments=cn_board_segments,
+            page=page,
+            page_size=page_size,
+        )
+    except Exception as e:
+        logger.exception("rs-ratings 列表失败: %s", e)
+        return JSONResponse(
+            {"success": False, "message": str(e), "data": []},
+            status_code=500,
+        )
+
+
 @router.get("/rs-rating")
 def get_rs_rating(
     code: Optional[str] = Query(None, description="股票代码或名称"),

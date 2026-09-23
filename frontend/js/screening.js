@@ -3916,6 +3916,10 @@ const ScreeningPage = {
             limEl.disabled = !applyOverride;
             limEl.title = applyOverride ? '' : 'limit 仅「全部A股 / 全部港股」可用';
         }
+        const preferWrap = document.getElementById('urtPreferPrecomputeWrap');
+        if (preferWrap) {
+            preferWrap.style.display = applyOverride ? '' : 'none';
+        }
         const hint = document.getElementById('urtSingleSkipFilterHint');
         if (hint) {
             if (isSingle) {
@@ -4723,6 +4727,21 @@ const ScreeningPage = {
         const sqmEl = document.getElementById('urtSignalQualityMode');
         const sqm = sqmEl && sqmEl.value ? String(sqmEl.value).trim().toLowerCase() : 'standard';
         params.set('signal_quality_mode', sqm === 'premium' ? 'premium' : 'standard');
+
+        // 全部 A/H：勾选「优先读预计算」→ prefer_cache + trace_only；取消 → force_realtime
+        if (scope === 'cn' || scope === 'hk') {
+            const preferEl = document.getElementById('urtPreferPrecompute');
+            const prefer = !preferEl || preferEl.checked;
+            if (prefer) {
+                params.set('prefer_cache', 'true');
+                params.set('trace_only', 'true');
+                params.set('force_realtime', 'false');
+            } else {
+                params.set('prefer_cache', 'false');
+                params.set('trace_only', 'false');
+                params.set('force_realtime', 'true');
+            }
+        }
         return params;
     },
 
@@ -5313,6 +5332,18 @@ const ScreeningPage = {
                     }
                     if (strategy === 'urt' && result.signal_quality_mode_label) {
                         dateText += ` · ${result.signal_quality_mode_label}`;
+                    }
+                    if (strategy === 'urt') {
+                        const ds = result.data_source
+                            || (result.parameters && result.parameters.data_source)
+                            || '';
+                        if (ds === 'urt_signal_trace') {
+                            dateText += ' · 预计算';
+                        } else if (ds === 'realtime' || ds === 'live') {
+                            dateText += ' · 现算';
+                        } else if (ds === 'none') {
+                            dateText += ' · 无预计算';
+                        }
                     }
                     if (result.data.length > 0 && result.message) dateText += `（${result.message}）`;
                     searchDate.textContent = dateText;

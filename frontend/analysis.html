@@ -7,7 +7,7 @@
     <title>智能分析 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/analysis.css?v=20260922a">
+    <link rel="stylesheet" href="css/analysis.css?v=20260923a">
     <link rel="stylesheet" href="css/recommend.css?v=20260913d">
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
@@ -37,6 +37,7 @@
                     <button class="analysis-tab active" data-tab="board-analysis" data-perm="channel.analyze.tab.board">板块分析</button>
                     <button class="analysis-tab" data-tab="leader-mid" data-perm="channel.analyze.tab.leader_mid">龙头中军</button>
                     <button class="analysis-tab" data-tab="stock-ai" data-perm="channel.analyze.tab.stock_ai">个股分析</button>
+                    <button class="analysis-tab" data-tab="rs-rating" data-perm="channel.analyze.tab.rs">个股相对强度分析</button>
                     <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
                     <button type="button" class="analysis-tab" data-tab="recommend" data-perm="channel.analyze.tab.recommend">策略推荐</button>
                     <button class="analysis-tab" data-tab="market-analysis" data-perm="channel.analyze.tab.market">市场分析</button>
@@ -297,6 +298,77 @@
                                 <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
                             </svg>
                         </button>
+                    </div>
+                </div>
+
+                <!-- 个股相对强度分析（A股 / 港股 RS Rating 排行） -->
+                <div class="tab-panel" id="rs-rating">
+                    <div class="rsa-workbench" data-perm="channel.analyze.tab.rs">
+                        <p class="rsa-desc">
+                            展示日终预计算的 IBD 风格股价相对强度（RS Rating，1–99）。支持 <strong>A 股</strong>与<strong>港股</strong>切换；
+                            勾选股票后可「批量个股分析」。数据来自采集流水线，非实时全市场现算。
+                        </p>
+                        <div class="rsa-toolbar">
+                            <div class="rsa-market">
+                                <label><input type="radio" name="rsaMarket" value="CN" checked> A股</label>
+                                <label><input type="radio" name="rsaMarket" value="HK"> 港股</label>
+                            </div>
+                            <input type="search" id="rsaKeyword" class="rsa-input" placeholder="代码/名称" autocomplete="off">
+                            <input type="date" id="rsaDate" class="rsa-input" title="留空=最新预计算日">
+                            <select id="rsaMinRating" class="rsa-input" title="最低 RS 评级">
+                                <option value="">最低评级（全部）</option>
+                                <option value="90">≥90 很强</option>
+                                <option value="70">≥70 偏强</option>
+                                <option value="50">≥50 中性+</option>
+                            </select>
+                            <div class="rsa-boards" id="rsaBoardWrap" title="可多选；不选=不限板型">
+                                <span class="rsa-boards-label">A股板块</span>
+                                <label><input type="checkbox" name="rsaCnBoard" value="MAIN"> 主板</label>
+                                <label><input type="checkbox" name="rsaCnBoard" value="CYB"> 创业板</label>
+                                <label><input type="checkbox" name="rsaCnBoard" value="SZ_SME"> 中小板</label>
+                                <label><input type="checkbox" name="rsaCnBoard" value="KCB"> 科创板</label>
+                                <label><input type="checkbox" name="rsaCnBoard" value="BJ"> 北证</label>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="rsaQueryBtn" data-perm="channel.analyze.tab.rs.btn.query">查询</button>
+                            <button type="button" class="btn btn-secondary" id="rsaSelectPageBtn" title="全选当前页">全选本页</button>
+                            <button type="button" class="btn btn-secondary" id="rsaClearSelectBtn" title="清空勾选">清空勾选</button>
+                            <button type="button" class="btn btn-primary" id="rsaBatchAnalyzeBtn" data-perm="channel.analyze.tab.rs.btn.batch" title="对新标签批量打开个股分析" disabled>批量个股分析</button>
+                            <span id="rsaMeta" class="rsa-meta">尚未查询</span>
+                        </div>
+                        <div class="rsa-table-wrap">
+                            <table class="rsa-table results-table">
+                                <thead>
+                                    <tr>
+                                        <th class="rsa-col-check"><input type="checkbox" id="rsaSelectAllCb" title="全选/取消全选本页"></th>
+                                        <th>RS</th>
+                                        <th>强弱</th>
+                                        <th>代码</th>
+                                        <th>名称</th>
+                                        <th>基准日</th>
+                                        <th>近63日</th>
+                                        <th>近126日</th>
+                                        <th>近189日</th>
+                                        <th>近252日</th>
+                                        <th>RS_Raw</th>
+                                        <th>宇宙</th>
+                                        <th>操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rsaResultsBody">
+                                    <tr><td colspan="13" class="empty-state">选择市场后点击「查询」</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="rsa-pager" id="rsaPager" hidden>
+                            <button type="button" class="btn btn-secondary btn-sm" id="rsaPrevBtn">上一页</button>
+                            <span id="rsaPageInfo" class="rsa-page-info"></span>
+                            <button type="button" class="btn btn-secondary btn-sm" id="rsaNextBtn">下一页</button>
+                            <select id="rsaPageSize" class="rsa-input rsa-page-size" title="每页条数">
+                                <option value="50">50条/页</option>
+                                <option value="100">100条/页</option>
+                                <option value="200">200条/页</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -1596,6 +1668,7 @@
     <script src="js/stock_trade_plan.js"></script>
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_multi_strategy.js?v=20260922a"></script>
+    <script src="js/rs_rating_analysis.js?v=20260923c"></script>
     <script src="js/trade_observe.js"></script>
     <script src="js/recommend.js?v=20260914a"></script>
     <script src="js/market_analysis.js?v=20260919c"></script>

@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 setlocal EnableExtensions
 
 REM ============================================================
@@ -10,38 +9,56 @@ REM  用法:
 REM    run_recent_migrations.bat
 REM    run_recent_migrations.bat 1
 REM    run_recent_migrations.bat 2
-REM    run_recent_migrations.bat 2 -Yes   （跳过确认）
+REM    run_recent_migrations.bat 2 -Yes   （跳过确认，适合生产/无人值守）
+REM
+REM  说明:
+REM    优先用 Python 执行 scripts\run_recent_migrations.py，
+REM    不依赖 Windows PowerShell 版本（生产常见 PS 4.0）。
 REM ============================================================
 
 cd /d "%~dp0"
+if errorlevel 1 (
+  echo [ERROR] cannot cd to script directory: %~dp0
+  exit /b 1
+)
 
 set "DAYS=%~1"
 if "%DAYS%"=="" set "DAYS=2"
 
 set "YES_FLAG="
-if /i "%~2"=="-Yes" set "YES_FLAG=-Yes"
-if /i "%~2"=="/Yes" set "YES_FLAG=-Yes"
+if /i "%~2"=="-Yes" set "YES_FLAG=1"
+if /i "%~2"=="/Yes" set "YES_FLAG=1"
 if /i "%~1"=="-Yes" (
   set "DAYS=2"
-  set "YES_FLAG=-Yes"
+  set "YES_FLAG=1"
+)
+if /i "%~1"=="/Yes" (
+  set "DAYS=2"
+  set "YES_FLAG=1"
 )
 
 where python >nul 2>&1
 if errorlevel 1 (
-  echo [错误] 未找到 python，请先加入 PATH。
-  pause
+  echo [ERROR] python not found in PATH.
+  if not defined YES_FLAG pause
   exit /b 1
 )
 
-if not exist "scripts\run_recent_migrations.ps1" (
-  echo [错误] 找不到 scripts\run_recent_migrations.ps1
-  pause
+if not exist "scripts\run_recent_migrations.py" (
+  echo [ERROR] missing scripts\run_recent_migrations.py
+  if not defined YES_FLAG pause
   exit /b 1
 )
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\run_recent_migrations.ps1" -Days %DAYS% %YES_FLAG%
+if defined YES_FLAG (
+  python "%~dp0scripts\run_recent_migrations.py" --days %DAYS% --yes
+) else (
+  python "%~dp0scripts\run_recent_migrations.py" --days %DAYS%
+)
 set "RC=%ERRORLEVEL%"
 
-echo.
-pause
+if not defined YES_FLAG (
+  echo.
+  pause
+)
 exit /b %RC%

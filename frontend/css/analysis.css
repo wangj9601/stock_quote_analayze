@@ -4376,3 +4376,29 @@ html.analysis-popup-window .analysis-tabs {
 @media (max-width: 900px) {
   .auction-detail-grid { grid-template-columns: 1fr; }
 }
+
+/* 个股相对强度分析 */
+.rsa-workbench { background: #fff; border-radius: 8px; padding: 1.25rem 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.rsa-desc { color: #64748b; font-size: .9rem; margin: 0 0 1rem; line-height: 1.5; }
+.rsa-toolbar { display: flex; flex-wrap: wrap; gap: .65rem .85rem; align-items: center; margin-bottom: 1rem; }
+.rsa-market label { margin-right: .75rem; font-size: .9rem; cursor: pointer; }
+.rsa-input { min-width: 120px; padding: .4rem .6rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: .9rem; }
+.rsa-boards { display: flex; flex-wrap: wrap; gap: .35rem .65rem; align-items: center; font-size: .88rem; }
+.rsa-boards-label { color: #64748b; margin-right: .15rem; }
+.rsa-boards label { cursor: pointer; }
+.rsa-meta { color: #64748b; font-size: .85rem; }
+.rsa-table-wrap { overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
+.rsa-table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+.rsa-table th, .rsa-table td { padding: .55rem .65rem; border-bottom: 1px solid #f1f5f9; text-align: left; white-space: nowrap; }
+.rsa-table thead th { background: #f8fafc; font-weight: 600; color: #334155; }
+.rsa-col-check { width: 36px; text-align: center !important; }
+.rsa-tone-strong { color: #b91c1c; }
+.rsa-tone-good { color: #c2410c; }
+.rsa-tone-mid { color: #0369a1; }
+.rsa-tone-weak { color: #64748b; }
+.rsa-pager { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin-top: .85rem; }
+.rsa-page-info { font-size: .88rem; color: #475569; }
+.rsa-page-size { min-width: 100px; }
+@media (max-width: 900px) {
+  .rsa-toolbar { align-items: flex-start; }
+}

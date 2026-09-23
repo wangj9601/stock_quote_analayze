@@ -1454,7 +1454,8 @@
                     <li><strong>资金确认：</strong>当日成交量 ≥ 近 20 日均量 × 倍数（缺省 3.0）</li>
                     <li><strong>结构 / 过热：</strong>支撑阻力硬闸 + 过热硬闸；得分默认最低 70 分</li>
                     <li><strong>数据来源：</strong>全部 A 股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票；A 股板块（主板/创业板/中小板/科创板/北证）可多选</li>
-                    <li class="condition-item">全市场扫描较慢，联调请先设置 limit；系统仅作量化初筛，介入需结合基本面终选</li>
+                    <li><strong>预计算：</strong>每日数据采集会写入 urt_signal_trace；全部 A/H 股默认「优先读预计算」，无缓存时不回退全市场现算（可取消勾选强制现算，或设 limit）</li>
+                    <li class="condition-item">全市场实时扫描较慢且易超时，联调请先确认预计算或设置 limit；系统仅作量化初筛，介入需结合基本面终选</li>
                 </ul>
             </div>
 
@@ -1554,6 +1555,12 @@
                             <option value="standard">标准（排除均线多头分中段）</option>
                             <option value="premium">精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）</option>
                         </select>
+                    </div>
+                    <div class="parameter-group" id="urtPreferPrecomputeWrap" title="仅全部A股/全部港股：读取 urt_signal_trace；无预计算时不回退全市场现算。取消勾选则强制现算。">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:22px;">
+                            <input type="checkbox" id="urtPreferPrecompute" checked>
+                            优先读预计算
+                        </label>
                     </div>
                 </div>
                 <p id="urtSingleSkipFilterHint" class="param-hint" style="display:none;margin:8px 0 0;color:#64748b;font-size:13px;">
@@ -1962,7 +1969,7 @@
                                 </label>
                                 <label class="rpe-board-filter-opt">
                                     <input type="checkbox" id="rpeExcludeBse">
-                                    排除北交所(8/4)
+                                    排除北交所(8/4/9)
                                 </label>
                             </div>
                         </div>
