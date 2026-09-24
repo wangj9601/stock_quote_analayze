@@ -1848,15 +1848,7 @@ const StockMultiStrategy = {
                 this.watchlistStocks.push({ code: stock.code, name: stock.name || '' });
             }
             CommonUtils.showToast(`已添加 ${stock.name || stock.code} 到自选股`, 'success');
-            authFetch(`${this.API_BASE_URL}/api/watchlist/collect-and-calculate-indicators`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ stock_code: stock.code }),
-            }).then((r) => r.json()).then((data) => {
-                if (data && data.success) {
-                    CommonUtils.showToast('行情与指标已更新', 'success');
-                }
-            }).catch(() => {});
+            // 加入自选仅写库，不再调用第三方接口拉取历史行情/指标
         } catch (e) {
             console.error('添加到自选股失败', e);
             CommonUtils.showToast(e.message || '添加自选失败', 'error');

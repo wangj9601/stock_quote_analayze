@@ -608,7 +608,7 @@ def _calculate_indicators_after_collect(db: Session, stock_code: str, market_typ
 def collect_one_stock_history_and_indicators(db: Session, stock_code: str):
     """
     对单只自选股采集历史行情并计算 MA、MACD、RSI、KDJ、BOLL、MAVOL、PVFRS 指标。
-    用于添加自选股成功后由前端触发的即时采集与指标计算。
+    供手动/任务按需触发（会请求第三方行情源）；加入自选股流程不再自动调用。
     不检查 has_collected，每次均拉取并覆盖该 code 的行情与指标。
 
     Returns:

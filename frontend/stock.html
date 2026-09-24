@@ -481,7 +481,7 @@
 
                     // 动态加载JS文件
                     const script = document.createElement('script');
-                    script.src = jsFile;
+                    script.src = jsFile + '?v=20260924-no-thirdparty';
                     script.onload = function () {
                         console.log(`${jsFile} 加载完成`);
                         // JS文件加载完成后，初始化StockPage
@@ -498,7 +498,7 @@
                     console.error('判断股票类型失败:', result.message);
                     // 默认加载A股JS
                     const script = document.createElement('script');
-                    script.src = 'js/stock.js?v=' + new Date().getTime();
+                    script.src = 'js/stock.js?v=20260924-no-thirdparty';
                     script.onload = function () {
                         if (typeof StockPage !== 'undefined' && StockPage.init) {
                             StockPage.init();
@@ -510,7 +510,7 @@
                 console.error('判断股票类型异常:', error);
                 // 异常时默认加载A股JS
                 const script = document.createElement('script');
-                script.src = 'js/stock.js';
+                script.src = 'js/stock.js?v=20260924-no-thirdparty';
                 script.onload = function () {
                     if (typeof StockPage !== 'undefined' && StockPage.init) {
                         StockPage.init();

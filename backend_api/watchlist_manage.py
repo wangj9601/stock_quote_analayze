@@ -410,7 +410,8 @@ class CollectIndicatorsRequest(BaseModel):
 
 def _collect_and_calculate_impl(stock_code: str) -> JSONResponse:
     """
-    实际执行单股历史行情采集与指标计算的内部函数，供多种HTTP方法复用。
+    加入自选后的采集入口已停用：不再请求第三方行情接口。
+    历史行情与指标由日常采集流水线写入本地库；本接口仅兼容旧前端调用，直接返回成功。
     """
     stock_code = (stock_code or "").strip()
     if not stock_code:
@@ -418,28 +419,12 @@ def _collect_and_calculate_impl(stock_code: str) -> JSONResponse:
             {'success': False, 'message': '股票代码不能为空'},
             status_code=400
         )
-    try:
-        from backend_core.database.db import get_db as get_core_db
-        from backend_core.data_collectors.akshare.watchlist_history_collector import (
-            collect_one_stock_history_and_indicators,
-        )
-        db = next(get_core_db())
-        try:
-            result = collect_one_stock_history_and_indicators(db, stock_code)
-        finally:
-            db.close()
-        if result.get("success"):
-            return JSONResponse({'success': True, 'message': result.get('message', '已触发采集与指标计算')})
-        return JSONResponse(
-            {'success': False, 'message': result.get('message', '采集或指标计算失败')},
-            status_code=422
-        )
-    except Exception as e:
-        print(f"[watchlist] 采集与指标计算异常: {e}")
-        return JSONResponse(
-            {'success': False, 'message': f'请求失败: {str(e)}'},
-            status_code=500
-        )
+    print(f"[watchlist] 已跳过第三方采集（接口停用）: {stock_code}")
+    return JSONResponse({
+        'success': True,
+        'message': f'已跳过第三方采集：{stock_code}（加入自选不再拉取外部行情）',
+        'skipped': True,
+    })
 
 
 @router.post("/collect-and-calculate-indicators", response_model=None)
@@ -448,8 +433,8 @@ async def collect_and_calculate_indicators(
     current_user: User = Depends(get_current_user),
 ):
     """
-    对单只自选股拉取历史行情并计算 MA、MACD、RSI、KDJ、BOLL、MAVOL、PVFRS 指标。
-    添加自选股成功后由前端调用，使用 backend_core 独立会话执行。
+    兼容旧前端：加入自选后可能仍会调用本接口。
+    已停用第三方采集，立即返回成功，不访问 akshare/新浪等外部源。
     （POST JSON 版本）
     """
     return _collect_and_calculate_impl(body.stock_code)
@@ -461,7 +446,7 @@ async def collect_and_calculate_indicators_get(
     current_user: User = Depends(get_current_user),
 ):
     """
-    同一功能的 GET 版本，便于调试或直接在浏览器调用：
+    同一功能的 GET 版本（同样已停用第三方采集）：
     /api/watchlist/collect-and-calculate-indicators?stock_code=000001
     """
     return _collect_and_calculate_impl(stock_code)

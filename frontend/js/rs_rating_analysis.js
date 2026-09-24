@@ -352,12 +352,7 @@
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success) {
-      // 后台补行情/指标，不阻塞
-      authFetch(apiUrl('/api/watchlist/collect-and-calculate-indicators'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stock_code: code }),
-      }).catch(() => {});
+      // 加入自选仅写库，不再调用第三方接口拉取历史行情/指标
       return 'ok';
     }
     const msg = String(data.message || '');

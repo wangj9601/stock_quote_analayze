@@ -660,16 +660,7 @@ const WatchlistPage = {
                 this.switchGroup(group_name);
                 this.updateStockCount();
                 this.renderStocks();
-                // 添加成功后触发历史行情采集与 MA/MACD/RSI/KDJ/BOLL/MAVOL/PVFRS 指标计算
-                authFetch(`${API_BASE_URL}/api/watchlist/collect-and-calculate-indicators`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ stock_code: stockInfo.code })
-                }).then(r => r.json()).then(data => {
-                    if (data.success) {
-                        CommonUtils.showToast('行情与指标已更新', 'success');
-                    }
-                }).catch(() => {});
+                // 加入自选仅写库，不再调用第三方接口拉取历史行情/指标
                 this._adding = false;
                 return;
             } else {
