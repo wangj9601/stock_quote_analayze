@@ -27,7 +27,8 @@
                         id="watchlistAnalyzeAllBtn"
                         title="新标签打开个股分析页，每只自选一个 Tab 做交易分析">全部交易分析</button>
                     <button class="btn btn-primary add-stock-btn" data-perm="channel.watchlist.tab.default.btn.add">+ 添加</button>
-                    <button class="btn btn-secondary import-btn" data-perm="channel.watchlist.tab.default.btn.import">导入</button>
+                    <button class="btn btn-secondary import-btn" data-perm="channel.watchlist.tab.default.btn.import"
+                        title="支持 TXT / CSV / Excel，以及华泰等券商导出的 Table.xls">导入</button>
                     <div class="export-dropdown">
                         <button class="btn btn-secondary export-dropdown-btn">导出</button>
                         <div class="export-menu">
@@ -36,7 +37,7 @@
                             <a href="#" class="export-item" data-format="txt">Text 格式</a>
                         </div>
                     </div>
-                    <input type="file" id="importFile" style="display: none;" accept=".txt,.csv,.xlsx,.xls">
+                    <input type="file" id="importFile" style="display: none;" accept=".txt,.csv,.xlsx,.xls" title="支持 TXT/CSV/Excel，以及华泰 Table.xls">
                     <div class="view-controls">
                         <button class="view-btn active" data-view="grid">⊞</button>
                         <button class="view-btn" data-view="list">☰</button>

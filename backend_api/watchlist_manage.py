@@ -22,6 +22,165 @@ from .permissions import require_permission
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
+# OLE Compound Document（真 .xls）/ ZIP（.xlsx）魔数
+_XLS_OLE_MAGIC = b"\xd0\xcf\x11\xe0"
+_XLSX_ZIP_MAGIC = b"PK"
+
+
+def _looks_like_binary_excel(content: bytes) -> bool:
+    head = content[:8]
+    return head.startswith(_XLS_OLE_MAGIC) or head.startswith(_XLSX_ZIP_MAGIC)
+
+
+def _normalize_record_keys(item: dict) -> dict:
+    """去掉券商导出表头前后空格（如华泰「    名称」）。"""
+    out = {}
+    for k, v in (item or {}).items():
+        key = str(k).strip() if k is not None else ""
+        if key:
+            out[key] = v
+    return out
+
+
+def normalize_import_stock_code(raw: object) -> Optional[str]:
+    """
+    归一化导入代码。
+    支持：600519 / 00700 / SH601811 / SZ002815 / BJ920527 / 600519.SH 等。
+    过滤常见指数：SH000xxx、SZ399xxx。
+    返回 A 股 6 位或港股 5 位数字串；无法识别返回 None。
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip().upper()
+    if not s or s in ("--", "NONE", "NULL", "NAN"):
+        return None
+
+    # 600519.SH / 00700.HK
+    m_dot = re.match(r"^(\d{4,6})\.(SH|SZ|BJ|HK)$", s)
+    if m_dot:
+        num, exch = m_dot.group(1), m_dot.group(2)
+        s = f"{exch}{num}"
+
+    m = re.match(r"^(SH|SZ|BJ|HK)(\d{4,6})$", s)
+    if m:
+        exch, num = m.group(1), m.group(2)
+        if exch == "SH" and num.startswith("000"):
+            return None  # 上证指数系列
+        if exch == "SZ" and num.startswith("399"):
+            return None  # 深证成指等
+        if exch == "HK":
+            return num.zfill(5) if len(num) <= 5 else num[-5:]
+        # SH/SZ/BJ A 股
+        if len(num) <= 6 and num.isdigit():
+            return num.zfill(6)
+        return num[-6:] if len(num) > 6 else num
+
+    # 纯数字
+    if s.isdigit() and 4 <= len(s) <= 6:
+        return s
+    # 夹杂非数字时尽量抽出连续数字段
+    digits = re.sub(r"\D", "", s)
+    if digits.isdigit() and 4 <= len(digits) <= 6:
+        return digits
+    return None
+
+
+def parse_watchlist_upload(filename: str, content: bytes) -> list:
+    """
+    解析上传文件为记录列表（dict）。
+    华泰证券等客户端导出的 Table.xls 实为 GBK/Tab 文本，并非真正 Excel。
+    """
+    name = (filename or "").lower()
+    stocks: list = []
+
+    def _from_dataframe(df: pd.DataFrame) -> list:
+        records = df.to_dict("records")
+        return [_normalize_record_keys(r) for r in records]
+
+    if name.endswith(".txt"):
+        text_content = None
+        for enc in ("utf-8-sig", "utf-8", "gbk", "gb18030"):
+            try:
+                text_content = content.decode(enc)
+                break
+            except Exception:
+                continue
+        if text_content is None:
+            text_content = content.decode("utf-8", errors="ignore")
+        # 若首行像表头且含制表符，按 TSV 解析
+        first = (text_content.splitlines() or [""])[0]
+        if "\t" in first and ("代码" in first or "名称" in first or "code" in first.lower()):
+            df = pd.read_csv(
+                io.BytesIO(text_content.encode("utf-8")),
+                sep="\t",
+                dtype=str,
+                keep_default_na=False,
+            )
+            return _from_dataframe(df)
+        potential_codes = re.split(r"[,\n\r\t ]+", text_content)
+        for c in potential_codes:
+            c = c.strip()
+            if c and c.isdigit() and 4 <= len(c) <= 6:
+                stocks.append({"code": c})
+        return stocks
+
+    if name.endswith(".csv"):
+        df = None
+        for enc in ("utf-8-sig", "gbk", "gb18030", "utf-8"):
+            try:
+                df = pd.read_csv(
+                    io.BytesIO(content), encoding=enc, dtype=str, keep_default_na=False
+                )
+                break
+            except Exception:
+                continue
+        if df is None:
+            df = pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False)
+        return _from_dataframe(df)
+
+    if name.endswith((".xlsx", ".xls")):
+        # 真 Excel
+        if _looks_like_binary_excel(content):
+            try:
+                df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
+                return _from_dataframe(df)
+            except Exception:
+                pass
+        # 伪 xls：券商 Table.xls（GBK + Tab），或失败后的文本回退
+        last_err = None
+        for enc in ("gbk", "gb18030", "utf-8-sig", "utf-8"):
+            try:
+                df = pd.read_csv(
+                    io.BytesIO(content),
+                    sep="\t",
+                    encoding=enc,
+                    dtype=str,
+                    keep_default_na=False,
+                )
+                if df is not None and len(df.columns) >= 1:
+                    return _from_dataframe(df)
+            except Exception as e:
+                last_err = e
+                continue
+        # 再试逗号分隔
+        for enc in ("gbk", "gb18030", "utf-8-sig"):
+            try:
+                df = pd.read_csv(
+                    io.BytesIO(content),
+                    encoding=enc,
+                    dtype=str,
+                    keep_default_na=False,
+                )
+                return _from_dataframe(df)
+            except Exception as e:
+                last_err = e
+                continue
+        raise ValueError(
+            f"无法解析 .xls/.xlsx（既非标准 Excel，也非可识别的券商文本表）: {last_err}"
+        )
+
+    raise ValueError("仅支持 .txt, .csv, .xlsx, .xls 格式")
+
 
 def _latest_quotes_by_codes(db: Session, model, codes: list):
     """按代码取各自最新一条行情（避免全局最新日缺票导致无数据）。"""
@@ -540,44 +699,21 @@ async def import_watchlist(
     db: Session = Depends(get_db),
     _perm: None = Depends(require_permission("channel.watchlist.tab.default.btn.import")),
 ):
-    """导入自选股列表"""
+    """导入自选股列表。支持 CSV/TXT/真 Excel，以及华泰等券商 Table.xls（GBK+Tab 伪 xls）。"""
     try:
         user_id = current_user.id
-        filename = file.filename
+        filename = file.filename or ""
         content = await file.read()
-        
-        stocks_to_import = []
-        
-        if filename.endswith('.txt'):
-            text_content = content.decode('utf-8')
-            # 按分隔符拆分，仅保留 4-6 位数字代码（港股5位、A股6位均可，不强制6位）
-            potential_codes = re.split(r'[,\n\r\t ]+', text_content)
-            for c in potential_codes:
-                c = c.strip()
-                if c and c.isdigit() and 4 <= len(c) <= 6:
-                    stocks_to_import.append({"code": c})
-                    
-        elif filename.endswith('.csv'):
-            # dtype=str 保留前导零，避免 09988/002271 被解析为 9988/2271
-            try:
-                df = pd.read_csv(io.BytesIO(content), encoding='utf-8-sig', dtype=str, keep_default_na=False)
-            except Exception:
-                try:
-                    df = pd.read_csv(io.BytesIO(content), encoding='gbk', dtype=str, keep_default_na=False)
-                except Exception:
-                    df = pd.read_csv(io.BytesIO(content), dtype=str, keep_default_na=False)
-            stocks_to_import = df.to_dict('records')
 
-        elif filename.endswith(('.xlsx', '.xls')):
-            # dtype=str 保留前导零
-            df = pd.read_excel(io.BytesIO(content), dtype=str, keep_default_na=False)
-            stocks_to_import = df.to_dict('records')
-        else:
-            return JSONResponse({'success': False, 'message': '仅支持 .txt, .csv, .xlsx, .xls 格式'}, status_code=400)
+        try:
+            stocks_to_import = parse_watchlist_upload(filename, content)
+        except ValueError as ve:
+            return JSONResponse({'success': False, 'message': str(ve)}, status_code=400)
 
         added_count = 0
         skipped_count = 0
         failed_count = 0
+        skipped_index_count = 0
 
         def _resolve_code_by_name(name_str: str) -> Optional[str]:
             """按名称在基础表中查找股票代码"""
@@ -649,6 +785,7 @@ async def import_watchlist(
             try:
                 # 使用 savepoint 隔离每条记录，单条失败不影响后续
                 with db.begin_nested():
+                    item = _normalize_record_keys(item if isinstance(item, dict) else {})
                     # 尝试各种可能的键名（优先代码列）
                     code_val = (
                         item.get('code') or item.get('代码') or item.get('Stock Code') or
@@ -660,16 +797,31 @@ async def import_watchlist(
                     if code_val is None:
                         continue
 
-                    code = str(code_val).strip()
-                    if not code.isdigit() and any('\u4e00' <= ch <= '\u9fff' for ch in code):
-                        resolved = _resolve_code_by_name(code)
+                    raw_code = str(code_val).strip()
+                    # 券商前缀代码（SH/SZ/...）或纯数字
+                    prefixed = normalize_import_stock_code(raw_code)
+                    if prefixed is None and re.match(r'^(SH|SZ|BJ|HK)\d+', raw_code.upper()):
+                        # 明确为指数等被过滤项
+                        skipped_index_count += 1
+                        continue
+
+                    code = prefixed if prefixed else raw_code
+                    if not str(code).isdigit() and any('\u4e00' <= ch <= '\u9fff' for ch in str(code)):
+                        resolved = _resolve_code_by_name(str(code))
                         if resolved:
                             code = resolved
                         else:
                             continue
 
-                    clean_code = code.split('.')[0].strip()
-                    if len(clean_code) > 6:
+                    clean_code = str(code).split('.')[0].strip()
+                    # 再次走归一化（处理残留前缀）
+                    normalized = normalize_import_stock_code(clean_code)
+                    if normalized is None and re.match(r'^(SH|SZ|BJ|HK)\d+', clean_code.upper()):
+                        skipped_index_count += 1
+                        continue
+                    if normalized:
+                        clean_code = normalized
+                    elif len(clean_code) > 6 and clean_code.isdigit():
                         clean_code = clean_code[-6:]
                     if not _is_valid_stock_code(clean_code):
                         continue
@@ -689,6 +841,8 @@ async def import_watchlist(
                         item.get('name') or item.get('名称') or item.get('Stock Name') or
                         item.get('股票名称') or item.get('证券名称') or item.get('Name')
                     )
+                    if name is not None:
+                        name = str(name).strip()
                     if not name:
                         try:
                             # 5位代码从港股表取，6位从A股表取
@@ -726,6 +880,8 @@ async def import_watchlist(
 
         db.commit()
         msg = f'导入完成。成功导入 {added_count} 只股票，跳过 {skipped_count} 只已存在股票。'
+        if skipped_index_count > 0:
+            msg += f' 跳过 {skipped_index_count} 只指数。'
         if failed_count > 0:
             msg += f' {failed_count} 条导入失败已跳过。'
         return JSONResponse({'success': True, 'message': msg})
