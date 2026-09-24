@@ -54,6 +54,7 @@
     selected: new Map(), // code -> { code, name, market }
     loaded: false,
     binding: false,
+    watchlistBusy: false,
   };
 
   function toast(msg, type) {
@@ -123,9 +124,11 @@
 
   function updateBatchBtn() {
     const btn = document.getElementById('rsaBatchAnalyzeBtn');
+    const wlBtn = document.getElementById('rsaBatchWatchlistBtn');
     const meta = document.getElementById('rsaMeta');
     const n = state.selected.size;
     if (btn) btn.disabled = n === 0;
+    if (wlBtn) wlBtn.disabled = n === 0 || !!state.watchlistBusy;
     if (meta && state.loaded) {
       const base = state.asof
         ? `基准日 ${state.asof} · 共 ${state.total} 只 · 第 ${state.page} 页`
@@ -185,6 +188,7 @@
           <td>
             <a class="gms-op-btn" href="${esc(traceHref)}" target="_blank" rel="noopener">追溯</a>
             <button type="button" class="gms-op-btn rsa-analyze-one" data-code="${esc(code)}" data-name="${esc(name)}">分析</button>
+            <button type="button" class="gms-op-btn rsa-watchlist-one" data-code="${esc(code)}" data-name="${esc(name)}" data-perm="channel.watchlist.tab.default.btn.add" title="加入自选股">自选</button>
           </td>
         </tr>`;
       })
@@ -309,6 +313,150 @@
     toast('分析模块未加载', 'error');
   }
 
+  function currentUserId() {
+    try {
+      if (global.CommonUtils && CommonUtils.auth && typeof CommonUtils.auth.getUserInfo === 'function') {
+        const u = CommonUtils.auth.getUserInfo();
+        return u && u.id != null ? u.id : null;
+      }
+    } catch (e) { /* ignore */ }
+    return null;
+  }
+
+  function ensureLogin() {
+    if (global.CommonUtils && typeof CommonUtils.checkLoginAndHandleExpiry === 'function') {
+      return !!CommonUtils.checkLoginAndHandleExpiry();
+    }
+    const uid = currentUserId();
+    if (!uid) {
+      toast('请先登录后再操作自选股', 'warning');
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * @returns {'ok'|'exists'|'fail'}
+   */
+  async function postAddWatchlist(code, name) {
+    const uid = currentUserId();
+    const res = await authFetch(apiUrl('/api/watchlist'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: uid,
+        stock_code: code,
+        stock_name: name || code,
+        group_name: 'default',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success) {
+      // 后台补行情/指标，不阻塞
+      authFetch(apiUrl('/api/watchlist/collect-and-calculate-indicators'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stock_code: code }),
+      }).catch(() => {});
+      return 'ok';
+    }
+    const msg = String(data.message || '');
+    if (res.status === 400 && (msg.includes('已在自选') || msg.includes('已存在'))) {
+      return 'exists';
+    }
+    throw new Error(msg || `添加失败 ${res.status}`);
+  }
+
+  async function addOneWatchlist(code, name, btnEl) {
+    const c = String(code || '').trim();
+    if (!c) {
+      toast('股票代码无效', 'warning');
+      return;
+    }
+    if (!ensureLogin()) return;
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = '…';
+    }
+    try {
+      const st = await postAddWatchlist(c, name || c);
+      if (st === 'ok') {
+        toast(`已添加 ${name || c} 到自选股`, 'success');
+        if (btnEl) {
+          btnEl.textContent = '已自选';
+          btnEl.classList.add('is-added');
+          btnEl.disabled = true;
+        }
+      } else if (st === 'exists') {
+        toast(`${name || c} 已在自选股中`, 'info');
+        if (btnEl) {
+          btnEl.textContent = '已自选';
+          btnEl.classList.add('is-added');
+          btnEl.disabled = true;
+        }
+      }
+    } catch (e) {
+      toast((e && e.message) || '加入自选失败', 'error');
+      if (btnEl) {
+        btnEl.textContent = '自选';
+        btnEl.disabled = false;
+      }
+    }
+  }
+
+  async function batchAddWatchlist() {
+    if (!ensureLogin()) return;
+    const list = Array.from(state.selected.values());
+    if (!list.length) {
+      toast('请先勾选至少一只股票', 'warning');
+      return;
+    }
+    if (list.length >= 40) {
+      const ok = global.confirm(
+        `将把 ${list.length} 只股票加入自选股，数量较多，是否继续？`
+      );
+      if (!ok) return;
+    }
+    if (state.watchlistBusy) return;
+    state.watchlistBusy = true;
+    updateBatchBtn();
+    const wlBtn = document.getElementById('rsaBatchWatchlistBtn');
+    if (wlBtn) wlBtn.textContent = '加入中…';
+
+    let okN = 0;
+    let existN = 0;
+    let failN = 0;
+    try {
+      for (const s of list) {
+        try {
+          const st = await postAddWatchlist(s.code, s.name || s.code);
+          if (st === 'ok') okN += 1;
+          else if (st === 'exists') existN += 1;
+          else failN += 1;
+        } catch (e) {
+          failN += 1;
+        }
+      }
+      const parts = [`成功 ${okN}`];
+      if (existN) parts.push(`已存在 ${existN}`);
+      if (failN) parts.push(`失败 ${failN}`);
+      toast(`加入自选完成：${parts.join('，')}`, failN && !okN ? 'error' : 'success');
+      // 刷新本页行按钮状态
+      document.querySelectorAll('#rsaResultsBody .rsa-watchlist-one').forEach((btn) => {
+        const code = btn.getAttribute('data-code');
+        if (code && state.selected.has(code)) {
+          btn.textContent = '已自选';
+          btn.classList.add('is-added');
+          btn.disabled = true;
+        }
+      });
+    } finally {
+      state.watchlistBusy = false;
+      if (wlBtn) wlBtn.textContent = '加入自选';
+      updateBatchBtn();
+    }
+  }
+
   function bindEvents() {
     if (state.binding) return;
     state.binding = true;
@@ -333,6 +481,9 @@
     document.getElementById('rsaSelectPageBtn')?.addEventListener('click', () => selectPage(true));
     document.getElementById('rsaClearSelectBtn')?.addEventListener('click', () => clearSelection());
     document.getElementById('rsaBatchAnalyzeBtn')?.addEventListener('click', () => openBatchAnalyze());
+    document.getElementById('rsaBatchWatchlistBtn')?.addEventListener('click', () => {
+      void batchAddWatchlist();
+    });
     document.getElementById('rsaSelectAllCb')?.addEventListener('change', (e) => {
       selectPage(!!e.target.checked);
     });
@@ -364,9 +515,16 @@
     });
     document.getElementById('rsaResultsBody')?.addEventListener('click', (e) => {
       const btn = e.target.closest('.rsa-analyze-one');
-      if (!btn) return;
-      e.preventDefault();
-      openOneAnalyze(btn.getAttribute('data-code'), btn.getAttribute('data-name'));
+      if (btn) {
+        e.preventDefault();
+        openOneAnalyze(btn.getAttribute('data-code'), btn.getAttribute('data-name'));
+        return;
+      }
+      const wl = e.target.closest('.rsa-watchlist-one');
+      if (wl) {
+        e.preventDefault();
+        void addOneWatchlist(wl.getAttribute('data-code'), wl.getAttribute('data-name'), wl);
+      }
     });
   }
 

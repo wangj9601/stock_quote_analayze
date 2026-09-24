@@ -306,7 +306,7 @@
                     <div class="rsa-workbench" data-perm="channel.analyze.tab.rs">
                         <p class="rsa-desc">
                             展示日终预计算的 IBD 风格股价相对强度（RS Rating，1–99）。支持 <strong>A 股</strong>与<strong>港股</strong>切换；
-                            勾选股票后可「批量个股分析」。数据来自采集流水线，非实时全市场现算。
+                            勾选后可「批量个股分析」或「加入自选」。数据来自采集流水线，非实时全市场现算。
                         </p>
                         <div class="rsa-toolbar">
                             <div class="rsa-market">
@@ -333,6 +333,7 @@
                             <button type="button" class="btn btn-secondary" id="rsaSelectPageBtn" title="全选当前页">全选本页</button>
                             <button type="button" class="btn btn-secondary" id="rsaClearSelectBtn" title="清空勾选">清空勾选</button>
                             <button type="button" class="btn btn-primary" id="rsaBatchAnalyzeBtn" data-perm="channel.analyze.tab.rs.btn.batch" title="对新标签批量打开个股分析" disabled>批量个股分析</button>
+                            <button type="button" class="btn btn-secondary" id="rsaBatchWatchlistBtn" data-perm="channel.watchlist.tab.default.btn.add" title="将勾选股票批量加入自选股" disabled>加入自选</button>
                             <span id="rsaMeta" class="rsa-meta">尚未查询</span>
                         </div>
                         <div class="rsa-table-wrap">
@@ -1668,7 +1669,7 @@
     <script src="js/stock_trade_plan.js"></script>
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_multi_strategy.js?v=20260922a"></script>
-    <script src="js/rs_rating_analysis.js?v=20260923c"></script>
+    <script src="js/rs_rating_analysis.js?v=20260924a"></script>
     <script src="js/trade_observe.js"></script>
     <script src="js/recommend.js?v=20260914a"></script>
     <script src="js/market_analysis.js?v=20260919c"></script>
