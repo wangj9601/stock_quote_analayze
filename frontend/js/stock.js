@@ -471,7 +471,7 @@ const StockPage = {
         console.log('[initKlineChart] 找到klineChart元素，开始初始化ECharts');
         this.klineChart = echarts.init(chartDom);
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: [
                 { left: '8%', right: '6%', top: '5%', height: '50%' },
                 { left: '8%', right: '6%', top: '60%', height: '16%' },
@@ -515,14 +515,14 @@ const StockPage = {
                 }
             ],
             yAxis: [
-                { scale: true, splitArea: { show: true } },
+                { scale: true, splitArea: { show: true, areaStyle: { color: ['rgba(217,226,236,0.02)', 'rgba(217,226,236,0.045)'] } }, axisLabel: { color: '#8b9aab' }, axisLine: { lineStyle: { color: 'rgba(217,226,236,0.18)' } }, splitLine: { lineStyle: { color: 'rgba(217,226,236,0.08)' } } },
                 {
                     scale: true,
                     gridIndex: 1,
                     splitNumber: 2,
                     axisLabel: {
                         show: true,
-                        color: '#999',
+                        color: '#8b9aab',
                         fontSize: 10,
                         formatter: function (value) {
                             if (value >= 100000000) return (value / 100000000).toFixed(1) + '亿';
@@ -540,7 +540,7 @@ const StockPage = {
                     splitNumber: 4,
                     axisLabel: {
                         show: true,
-                        color: '#999',
+                        color: '#8b9aab',
                         formatter: function (value) {
                             return value.toFixed(2);
                         }
@@ -590,10 +590,10 @@ const StockPage = {
                     barWidth: '80%',
                     barMaxWidth: '90%',
                     itemStyle: {
-                        color: '#dc2626',
-                        color0: '#16a34a',
-                        borderColor: '#dc2626',
-                        borderColor0: '#16a34a',
+                        color: '#c23b3b',
+                        color0: '#2f9e6b',
+                        borderColor: '#c23b3b',
+                        borderColor0: '#2f9e6b',
                         borderWidth: 1.5
                     },
                     emphasis: {
@@ -622,7 +622,7 @@ const StockPage = {
                     itemStyle: {
                         color: function (params) {
                             // 这里会在loadKlineData中动态设置特定颜色
-                            return params.value >= 0 ? '#dc2626' : '#16a34a';
+                            return params.value >= 0 ? '#c23b3b' : '#2f9e6b';
                         },
                         borderRadius: [2, 2, 0, 0]
                     },
@@ -667,7 +667,7 @@ const StockPage = {
                     itemStyle: {
                         color: function (params) {
                             // 正值显示红色，负值显示绿色
-                            return params.value >= 0 ? '#dc2626' : '#16a34a';
+                            return params.value >= 0 ? '#c23b3b' : '#2f9e6b';
                         }
                     }
                 },
@@ -777,10 +777,10 @@ const StockPage = {
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'cross' },
-                backgroundColor: 'rgba(245, 245, 245, 0.9)',
+                backgroundColor: 'rgba(22, 28, 36, 0.96)',
                 borderWidth: 1,
-                borderColor: '#ccc',
-                textStyle: { color: '#000' },
+                borderColor: 'rgba(217, 226, 236, 0.22)',
+                textStyle: { color: '#d9e2ec' },
                 formatter: (params) => {
                     let result = params[0].name + '<br/>';
 
@@ -881,7 +881,7 @@ const StockPage = {
         this.minuteChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: {
                 left: '8%',
                 right: '6%',
@@ -900,7 +900,10 @@ const StockPage = {
             yAxis: {
                 type: 'value',
                 scale: true,
-                splitArea: { show: true }
+                splitArea: { show: true, areaStyle: { color: ['rgba(217,226,236,0.02)', 'rgba(217,226,236,0.045)'] } },
+                axisLabel: { color: '#8b9aab' },
+                axisLine: { lineStyle: { color: 'rgba(217,226,236,0.18)' } },
+                splitLine: { lineStyle: { color: 'rgba(217,226,236,0.08)' } }
             },
             series: [{
                 name: '价格',
@@ -908,7 +911,7 @@ const StockPage = {
                 data: [], // 初始为空
                 smooth: true,
                 lineStyle: {
-                    color: '#2563eb',
+                    color: '#2f6fed',
                     width: 3
                 },
                 areaStyle: {
@@ -919,9 +922,9 @@ const StockPage = {
                         x2: 0,
                         y2: 1,
                         colorStops: [{
-                            offset: 0, color: 'rgba(37, 99, 235, 0.3)'
+                            offset: 0, color: 'rgba(47, 111, 237, 0.3)'
                         }, {
-                            offset: 1, color: 'rgba(37, 99, 235, 0.05)'
+                            offset: 1, color: 'rgba(47, 111, 237, 0.05)'
                         }]
                     }
                 },
@@ -940,11 +943,11 @@ const StockPage = {
                         买卖盘性质：${data.trade_type || '-'}
                     `;
                 },
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                backgroundColor: 'rgba(22, 28, 36, 0.96)',
                 borderWidth: 1,
-                borderColor: '#ccc',
+                borderColor: 'rgba(217, 226, 236, 0.22)',
                 textStyle: {
-                    color: '#333'
+                    color: '#d9e2ec'
                 }
             }
         };
@@ -960,7 +963,7 @@ const StockPage = {
         this.profitChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: {
                 left: '10%',
                 right: '8%',
@@ -985,7 +988,7 @@ const StockPage = {
                 type: 'bar',
                 data: [],
                 itemStyle: {
-                    color: '#2563eb'
+                    color: '#2f6fed'
                 }
             }, {
                 name: 'ROE',
@@ -993,7 +996,7 @@ const StockPage = {
                 yAxisIndex: 1,
                 data: [],
                 lineStyle: {
-                    color: '#dc2626',
+                    color: '#c23b3b',
                     width: 3
                 },
                 symbol: 'circle',
@@ -1018,7 +1021,7 @@ const StockPage = {
         this.flowChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: {
                 left: '10%',
                 right: '8%',
@@ -1037,17 +1040,17 @@ const StockPage = {
                 name: '流入',
                 type: 'bar',
                 data: [],
-                itemStyle: { color: '#dc2626' }
+                itemStyle: { color: '#c23b3b' }
             }, {
                 name: '流出',
                 type: 'bar',
                 data: [],
-                itemStyle: { color: '#16a34a' }
+                itemStyle: { color: '#2f9e6b' }
             }, {
                 name: '净流入',
                 type: 'line',
                 data: [],
-                itemStyle: { color: '#2563eb' }
+                itemStyle: { color: '#2f6fed' }
             }],
             tooltip: {
                 trigger: 'axis'
@@ -3301,7 +3304,7 @@ const StockPage = {
                     return {
                         value: volValue,
                         itemStyle: {
-                            color: close >= open ? '#dc2626' : '#16a34a'
+                            color: close >= open ? '#c23b3b' : '#2f9e6b'
                         }
                     };
                 });
@@ -3391,7 +3394,7 @@ const StockPage = {
                                 if (params.value === null || params.value === undefined || isNaN(params.value)) {
                                     return 'transparent';
                                 }
-                                return params.value >= 0 ? '#dc2626' : '#16a34a';
+                                return params.value >= 0 ? '#c23b3b' : '#2f9e6b';
                             };
                         }
                     }

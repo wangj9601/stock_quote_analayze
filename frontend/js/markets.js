@@ -355,6 +355,7 @@ const MarketsPage = {
                 }
             }
         });
+        this.loadIndexCharts();
     },
 
     // 加载指数图表
@@ -389,8 +390,15 @@ const MarketsPage = {
             data.push(Math.max(0.1, Math.min(0.9, value)));
         }
 
-        // 绘制线条
-        const color = data[data.length - 1] > data[0] ? '#dc2626' : '#16a34a';
+        // 绘制线条（优先跟指数涨跌语义色；无语义时按曲线首末方向）
+        const card = canvas.closest('.index-card');
+        const changeEl = card && card.querySelector('.index-change');
+        let color = data[data.length - 1] > data[0] ? '#c23b3b' : '#2f9e6b';
+        if (changeEl && changeEl.classList.contains('positive')) {
+            color = '#c23b3b';
+        } else if (changeEl && changeEl.classList.contains('negative')) {
+            color = '#2f9e6b';
+        }
         ctx.strokeStyle = color;
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -1346,7 +1354,7 @@ const MarketsPage = {
         if (!tbody) return;
         const rows = this._sortedSectors(sectors, ui.kind);
         if (!rows.length) {
-            tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#888;">暂无同花顺${ui.label}数据</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="11" class="ops-empty-cell">暂无同花顺${ui.label}数据</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map(sector => {
@@ -1412,7 +1420,7 @@ const MarketsPage = {
         if (!grid) return;
         const rows = this._sortedSectors(sectors, ui.kind);
         if (!rows.length) {
-            grid.innerHTML = `<div class="empty-tip" style="text-align:center;padding:2em;color:#888;">暂无同花顺${ui.label}数据</div>`;
+            grid.innerHTML = `<div class="empty-tip ops-empty-tip">暂无同花顺${ui.label}数据</div>`;
             return;
         }
         grid.innerHTML = rows.map(sector => {

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -11,8 +11,8 @@
     <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
     <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/markets.css">
-    <link rel="stylesheet" href="css/markets-ops.css">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
+    <link rel="stylesheet" href="css/markets-ops.css?v=20260925sectors2">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925polish2">
 </head>
 <body class="ops-map" data-channel="quotes">
 <script src="components/header.js"></script>
@@ -22,7 +22,7 @@
         <!-- 市场标签页切换 -->
         <section class="market-tabs-section">
             <div class="container">
-                <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div class="ops-page-head">
                     <h1 class="ops-page-title">行情中心</h1>
                 </div>
                 <div class="market-tabs ops-territory-tabs">
@@ -133,14 +133,14 @@
                                 <button class="ranking-type-btn" data-type="turnover">换手率榜</button>
                                 <button class="ranking-type-btn" data-type="volume_aberration">成交量异动榜</button>
                             </div>
-                            <div class="market-filter" style="display:flex;align-items:center;gap:12px;">
+                            <div class="market-filter">
                                 <select class="filter-select">
                                     <option value="all">全部市场</option>
                                     <option value="sh">沪市A股</option>
                                     <option value="sz">深市A股</option>
                                     <option value="cy">创业板</option>
                                 </select>
-                                <div id="volumeAberrationToolbar" class="volume-aberration-toolbar" style="display:none; align-items:center; gap:12px;">
+                                <div id="volumeAberrationToolbar" class="volume-aberration-toolbar" style="display:none;">
                                     <label>市场</label>
                                     <select id="volumeAberrationMarket">
                                         <option value="cn">A股</option>
@@ -156,15 +156,15 @@
                                     <button type="button" id="volumeAberrationQueryBtn" class="btn btn-sm btn-primary">查询</button>
                                     <button type="button" id="volumeAberrationExportCsv" class="btn btn-sm btn-secondary">导出 CSV</button>
                                     <button type="button" id="volumeAberrationExportExcel" class="btn btn-sm btn-secondary">导出 Excel</button>
-                                    <label style="margin-left:8px;">导出范围</label>
-                                    <select id="volumeAberrationExportScope" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;">
+                                    <label class="ops-export-scope-label">导出范围</label>
+                                    <select id="volumeAberrationExportScope" class="filter-select">
                                         <option value="page" selected>当前页</option>
                                         <option value="all">全部</option>
                                     </select>
                                 </div>
                                 <div class="market-search-bar">
-                                    <input type="text" id="marketSearchInput" placeholder="输入股票代码或名称" style="padding:6px 12px; font-size:1em; border:1px solid #ccc; border-radius:4px;">
-                                    <button id="marketSearchBtn" style="padding:6px 16px; margin-left:8px; font-size:1em; border:none; background:#1976d2; color:#fff; border-radius:4px; cursor:pointer;">查询</button>
+                                    <input type="text" id="marketSearchInput" class="ops-search-input" placeholder="输入股票代码或名称">
+                                    <button type="button" id="marketSearchBtn" class="ops-search-btn">查询</button>
                                 </div>
                             </div>
                             <div id="volumeAberrationHintWrap" class="volume-aberration-hint-wrap" style="display:none;">
@@ -233,7 +233,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="sectorsTableBody">
-                                    <tr><td colspan="11" style="text-align:center;color:#888;">加载中...</td></tr>
+                                    <tr><td colspan="11" class="ops-empty-cell">加载中...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -273,7 +273,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="conceptsTableBody">
-                                    <tr><td colspan="11" style="text-align:center;color:#888;">加载中...</td></tr>
+                                    <tr><td colspan="11" class="ops-empty-cell">加载中...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -311,7 +311,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="lhbTableBody">
-                                    <tr><td colspan="11" style="text-align:center;color:#888;">切换到本页后加载</td></tr>
+                                    <tr><td colspan="11" class="ops-empty-cell">切换到本页后加载</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -344,7 +344,7 @@
                                 <option value="final" selected>终态 final</option>
                                 <option value="live">实时 live</option>
                             </select>
-                            <input type="text" id="auctionKeyword" placeholder="代码/名称关键字" style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;">
+                            <input type="text" id="auctionKeyword" class="ops-search-input" placeholder="代码/名称关键字">
                             <button type="button" id="auctionQueryBtn" class="btn btn-sm btn-primary">查询</button>
                             <button type="button" id="auctionCollectBtn" class="btn btn-sm btn-secondary" title="从同花顺 Fuyao 采集并落库">采集</button>
                             <span id="auctionMeta" class="lhb-meta"></span>
@@ -375,7 +375,7 @@
                                     </tr>
                                 </thead>
                                 <tbody id="auctionTableBody">
-                                    <tr><td colspan="12" style="text-align:center;color:#888;">切换到本页后加载</td></tr>
+                                    <tr><td colspan="12" class="ops-empty-cell">切换到本页后加载</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -636,13 +636,13 @@
                                 <button class="ranking-type-btn" data-type="volume">成交量榜</button>
                                 <button class="ranking-type-btn" data-type="turnover">换手率榜</button>
                             </div>
-                            <div class="market-filter" style="display:flex;align-items:center;gap:12px;">
+                            <div class="market-filter">
                                 <select class="filter-select">
                                     <option value="all">全部市场</option>
                                 </select>
                                 <div class="market-search-bar">
-                                    <input type="text" id="hkMarketSearchInput" placeholder="输入股票代码或名称" style="padding:6px 12px; font-size:1em; border:1px solid #ccc; border-radius:4px;">
-                                    <button id="hkMarketSearchBtn" style="padding:6px 16px; margin-left:8px; font-size:1em; border:none; background:#1976d2; color:#fff; border-radius:4px; cursor:pointer;">查询</button>
+                                    <input type="text" id="hkMarketSearchInput" class="ops-search-input" placeholder="输入股票代码或名称">
+                                    <button type="button" id="hkMarketSearchBtn" class="ops-search-btn">查询</button>
                                 </div>
                             </div>
                         </div>
@@ -673,21 +673,21 @@
                     <!-- 港股行业板块 -->
                     <div class="tab-panel" id="hk-sectors" data-tab="sectors">
                         <div class="sectors-grid">
-                            <p style="text-align:center;padding:40px;color:#666;">港股行业板块功能开发中...</p>
+                            <p class="ops-placeholder-msg">港股行业板块功能开发中...</p>
                         </div>
                     </div>
 
                     <!-- 港股热门关注 -->
                     <div class="tab-panel" id="hk-hot" data-tab="hot">
                         <div class="hot-content">
-                            <p style="text-align:center;padding:40px;color:#666;">港股热门关注功能开发中...</p>
+                            <p class="ops-placeholder-msg">港股热门关注功能开发中...</p>
                         </div>
                     </div>
 
                     <!-- 港股市场统计 -->
                     <div class="tab-panel" id="hk-stats" data-tab="stats">
                         <div class="stats-grid">
-                            <p style="text-align:center;padding:40px;color:#666;">港股市场统计功能开发中...</p>
+                            <p class="ops-placeholder-msg">港股市场统计功能开发中...</p>
                         </div>
                     </div>
                 </div>

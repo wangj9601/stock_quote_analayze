@@ -353,7 +353,7 @@ def _pick_rank_sides(rows: list, sides: int) -> list:
 async def get_stock_fund_flow_rank(
     period: str = Query("day", description="day|week|month（近1/5/20 个交易日净流入合计）"),
     sides: int = Query(
-        40,
+        80,
         ge=5,
         le=100,
         description="净流入最强与最弱各取 N 只（合并去重后升序返回）",

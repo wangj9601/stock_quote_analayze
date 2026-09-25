@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/stock.css">
     <link rel="stylesheet" href="css/analysis.css?v=20260919a">
-    <link rel="stylesheet" href="css/stock-ops.css?v=20260925c">
+    <link rel="stylesheet" href="css/stock-ops.css?v=20260925polish">
     <script>
         (function () {
             try {
@@ -43,7 +43,7 @@
                         <span class="stock-code">--</span>
                         <a id="stockHistoryLink" class="stock-header-link" href="stock_history.html"
                             target="_blank" rel="noopener noreferrer" title="查看历史行情" hidden>历史行情</a>
-                        <button class="watchlist-toggle">⭐ 自选</button>
+                        <button class="watchlist-toggle" type="button">自选</button>
                     </div>
                     <div class="stock-price-section">
                         <div class="current-price">--</div>
@@ -169,7 +169,7 @@
                             <summary>传统指标参考（RSI / MACD / 旧版建议）</summary>
                             <div class="analysis-grid stock-legacy-analysis-grid" id="stockLegacyAnalysisBody">
                                 <div class="analysis-card">
-                                    <h3>📊 交易建议</h3>
+                                    <h3>交易建议</h3>
                                     <div class="recommendation-result">
                                         <div class="action-badge buy">--</div>
                                         <div class="recommendation-reasons"></div>
@@ -180,7 +180,7 @@
                                     </div>
                                 </div>
                                 <div class="analysis-card">
-                                    <h3>📈 其他指标</h3>
+                                    <h3>其他指标</h3>
                                     <div class="technical-indicators">
                                         <div class="indicator-row">
                                             <span class="indicator-name">RSI(14)</span>
@@ -482,7 +482,7 @@
 
                 if (result.success) {
                     // 根据is_hk字段加载对应的JS文件
-                    const jsFile = result.is_hk ? 'js/stock_hk.js' : 'js/stock.js';
+                    const jsFile = result.is_hk ? 'js/stock_hk.js?v=20260925polish' : 'js/stock.js';
                     console.log(`股票类型: ${result.is_hk ? '港股' : 'A股'}，加载文件: ${jsFile}`);
 
                     // 动态加载JS文件
@@ -504,7 +504,7 @@
                     console.error('判断股票类型失败:', result.message);
                     // 默认加载A股JS
                     const script = document.createElement('script');
-                    script.src = 'js/stock.js?v=20260924-no-thirdparty';
+                    script.src = 'js/stock.js?v=20260925polish';
                     script.onload = function () {
                         if (typeof StockPage !== 'undefined' && StockPage.init) {
                             StockPage.init();
@@ -516,7 +516,7 @@
                 console.error('判断股票类型异常:', error);
                 // 异常时默认加载A股JS
                 const script = document.createElement('script');
-                script.src = 'js/stock.js?v=20260924-no-thirdparty';
+                script.src = 'js/stock.js?v=20260925polish';
                 script.onload = function () {
                     if (typeof StockPage !== 'undefined' && StockPage.init) {
                         StockPage.init();

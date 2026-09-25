@@ -1,4 +1,8 @@
-/* Screening — strategy map workbench */
+/* Screening — 作战标图台 polish（挂在 screening.css 之后、ops-surfaces 之前/后均可）
+ * 压制业务 CSS 遗留浅底浅字，对齐行情/个股抬升语法。勿改后端契约与策略逻辑。
+ */
+
+/* —— 页头 —— */
 body.ops-map .screening-container {
     max-width: 1400px;
     margin: 0 auto;
@@ -6,12 +10,16 @@ body.ops-map .screening-container {
 }
 
 body.ops-map .screening-header {
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.65rem;
 }
 
 body.ops-map .screening-header h1 {
-    font-size: clamp(1.75rem, 3vw, 2.35rem);
-    margin: 0 0 0.35rem;
+    font-family: var(--font-mark) !important;
+    font-size: clamp(1.75rem, 3vw, 2.35rem) !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em;
+    color: var(--ops-ink) !important;
+    margin: 0 0 0.35rem !important;
 }
 
 body.ops-map .screening-header h1::after {
@@ -23,9 +31,74 @@ body.ops-map .screening-header h1::after {
     background: var(--ops-gold);
 }
 
+body.ops-map .strategy-description {
+    color: var(--ops-ink-muted) !important;
+    font-size: 0.9375rem !important;
+    margin: 0 0 0.75rem !important;
+    max-width: 52rem;
+}
+
+/* —— 策略 Tab 条 —— */
+body.ops-map .strategy-tabs {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 6px !important;
+    margin-bottom: 1.1rem !important;
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--color-border) !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+body.ops-map .strategy-tab {
+    font-family: var(--font-mark) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    font-size: 0.875rem !important;
+    padding: 0.65rem 0.95rem !important;
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 1px 1px 0 0 !important;
+    bottom: auto !important;
+}
+
+body.ops-map .strategy-tab:hover {
+    color: var(--ops-ink) !important;
+    background: rgba(47, 111, 237, 0.08) !important;
+}
+
+body.ops-map .strategy-tab.active {
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+    border-color: rgba(201, 162, 39, 0.35) !important;
+    border-bottom-color: var(--ops-gold) !important;
+}
+
+body.ops-map .strategy-tab:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+body.ops-map #gmsTab,
+body.ops-map #rpeTab,
+body.ops-map #urtTab,
+body.ops-map #sbbrTab,
+body.ops-map #csbTab {
+    font-size: 0.95rem !important;
+    letter-spacing: 0.06em !important;
+}
+
+/* —— 策略说明 / 参数卡 —— */
 body.ops-map .strategy-info-card {
     padding: 1rem 1.1rem !important;
-    margin: 1rem 0;
+    margin: 0.85rem 0 1rem !important;
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
 }
 
 body.ops-map .strategy-info-card h2 {
@@ -33,7 +106,7 @@ body.ops-map .strategy-info-card h2 {
     font-size: 1.05rem;
     letter-spacing: 0.08em;
     color: var(--ops-gold) !important;
-    margin-bottom: 0.65rem;
+    margin: 0 0 0.65rem !important;
 }
 
 body.ops-map .strategy-conditions,
@@ -43,70 +116,34 @@ body.ops-map .strategy-conditions li {
 
 body.ops-map .strategy-conditions .condition-item {
     color: var(--ops-ink-muted) !important;
+    line-height: 1.55;
 }
 
-body.ops-map .screening-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.65rem;
-    margin: 0.75rem 0 1rem;
-}
-
-body.ops-map .results-header {
-    border-bottom: 1px solid var(--color-border);
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.35rem;
-}
-
-body.ops-map .results-table-wrapper,
-body.ops-map .gms-table-wrap {
-    overflow-x: auto;
-    border: 1px solid var(--color-border);
-    border-radius: 2px;
-    background: var(--ops-ground);
-}
-
-body.ops-map .gms-sub-tabs,
-body.ops-map .gms-segmented-tabs,
-body.ops-map .vsb-sub-tabs {
-    background: rgba(217, 226, 236, 0.04) !important;
-    border: 1px solid var(--color-border) !important;
-    border-radius: 2px !important;
-    padding: 4px !important;
-}
-
-body.ops-map .gms-table-meta-bar {
-    background: rgba(217, 226, 236, 0.04) !important;
-    border: 1px solid var(--color-border) !important;
-    color: var(--ops-ink-muted) !important;
-}
-
-/* 核心策略短码在 Tab 上更醒目 */
-body.ops-map #gmsTab,
-body.ops-map #rpeTab,
-body.ops-map #urtTab,
-body.ops-map #sbbrTab,
-body.ops-map #csbTab {
-    font-size: 0.95rem;
-}
-
-/* 数据来源 / 参数区：标签可读 + 卡面不透明盖网 */
 body.ops-map .strategy-params-card,
 body.ops-map .parameters-card,
-body.ops-map .params-section {
-    background-color: var(--ops-ground-elevated) !important;
+body.ops-map .params-section,
+body.ops-map .rpe-board-wrap,
+body.ops-map .gms-toolbar,
+body.ops-map .observe-pool-toolbar,
+body.ops-map .gms-param-override-panel,
+body.ops-map .gms-results-card {
+    background: var(--ops-ground-elevated) !important;
     background-image: none !important;
     border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
     color: var(--ops-ink) !important;
+    box-shadow: none !important;
 }
 
 body.ops-map .strategy-params-card h3,
 body.ops-map .parameters-card h3,
-body.ops-map .params-section h3 {
+body.ops-map .params-section h3,
+body.ops-map .strategy-params-card h4,
+body.ops-map .parameters-card h4 {
     color: var(--ops-gold) !important;
     font-family: var(--font-mark);
     letter-spacing: 0.04em;
+    margin-top: 0;
 }
 
 body.ops-map .strategy-params-card label,
@@ -116,17 +153,370 @@ body.ops-map .parameter-group label,
 body.ops-map .param-group label,
 body.ops-map .param-item label,
 body.ops-map .param-label,
-body.ops-map .ma-periods-checkboxes label {
+body.ops-map .ma-periods-checkboxes label,
+body.ops-map .rpe-board-wrap-label {
     color: var(--ops-ink) !important;
 }
 
 body.ops-map .gms-params-refresh-hint,
 body.ops-map .param-hint,
-body.ops-map .board-source-hint {
+body.ops-map .board-source-hint,
+body.ops-map .gms-integrated-hint,
+body.ops-map .vsb-integrated-hint,
+body.ops-map .gms-meta-text,
+body.ops-map .search-date {
     color: var(--ops-ink-muted) !important;
 }
 
-/* 选股页龙头角色面板同样暗色 */
+/* 内联遗留浅色字（#666 / #888 / slate） */
+body.ops-map .screening-container [style*="color: #666"],
+body.ops-map .screening-container [style*="color:#666"],
+body.ops-map .screening-container [style*="color: #888"],
+body.ops-map .screening-container [style*="color:#888"],
+body.ops-map .screening-container [style*="color:#64748b"],
+body.ops-map .screening-container [style*="color: #64748b"],
+body.ops-map .screening-container [style*="color:#475569"],
+body.ops-map .screening-container [style*="color: #475569"],
+body.ops-map .screening-container [style*="color:#444"] {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .screening-container [style*="color:#b45309"],
+body.ops-map .screening-container [style*="color: #b45309"] {
+    color: var(--ops-gold) !important;
+}
+
+/* —— 操作条 / 主按钮 —— */
+body.ops-map .screening-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0.75rem 0 1rem;
+}
+
+body.ops-map[data-channel="screening"] .refresh-btn,
+body.ops-map[data-channel="screening"] button.refresh-btn,
+body.ops-map[data-channel="screening"] .gms-board-pick-btn {
+    font-family: var(--font-mark) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    background: var(--ops-overlay-film) !important;
+    color: var(--ops-gold) !important;
+    border: 1px solid rgba(201, 162, 39, 0.45) !important;
+    border-radius: 1px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map[data-channel="screening"] .refresh-btn:hover,
+body.ops-map[data-channel="screening"] .gms-board-pick-btn:hover {
+    background: rgba(201, 162, 39, 0.2) !important;
+    border-color: rgba(201, 162, 39, 0.65) !important;
+}
+
+body.ops-map[data-channel="screening"] .refresh-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+body.ops-map[data-channel="screening"] .export-btn,
+body.ops-map[data-channel="screening"] .gms-btn-outline {
+    font-family: var(--font-mark) !important;
+    letter-spacing: 0.04em !important;
+    background: transparent !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map[data-channel="screening"] .export-btn:hover,
+body.ops-map[data-channel="screening"] .gms-btn-outline:hover {
+    color: var(--ops-gold) !important;
+    border-color: rgba(201, 162, 39, 0.5) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .refresh-btn:focus-visible,
+body.ops-map .export-btn:focus-visible,
+body.ops-map .gms-btn-outline:focus-visible,
+body.ops-map .gms-sub-tab:focus-visible,
+body.ops-map .vsb-sub-tab:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+/* —— 子 Tab / 分段 —— */
+body.ops-map .gms-sub-tabs,
+body.ops-map .gms-segmented-tabs,
+body.ops-map .vsb-sub-tabs,
+body.ops-map .observe-source-tabs {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    padding: 4px !important;
+    gap: 4px !important;
+}
+
+body.ops-map .gms-sub-tab,
+body.ops-map .vsb-sub-tab,
+body.ops-map .observe-source-tabs button {
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid transparent !important;
+    border-radius: 1px !important;
+    box-shadow: none !important;
+    font-family: var(--font-mark) !important;
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .gms-sub-tab:hover,
+body.ops-map .vsb-sub-tab:hover {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-sub-tab.active,
+body.ops-map .vsb-sub-tab.active,
+body.ops-map .observe-source-tabs button.active {
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+    border-color: rgba(201, 162, 39, 0.45) !important;
+    box-shadow: none !important;
+}
+
+/* 参数区原生 select：深底可读（option 受 OS 限制，至少收起态一致） */
+body.ops-map .params-section select.param-input,
+body.ops-map .params-section .param-input,
+body.ops-map .screening-container select,
+body.ops-map .screening-container input[type="date"] {
+    background: rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    border-radius: 2px !important;
+    color-scheme: dark;
+}
+
+/* —— 自定义下拉（替代原生展开的系统浅蓝菜单） —— */
+body.ops-map .ops-select {
+    position: relative;
+    display: inline-block;
+    min-width: 11.5rem;
+    max-width: 100%;
+    vertical-align: middle;
+}
+
+body.ops-map .ops-select-native {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+body.ops-map .ops-select-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-height: 34px;
+    padding: 6px 10px !important;
+    font-family: var(--font-body, inherit) !important;
+    font-size: 0.875rem !important;
+    font-weight: 400 !important;
+    letter-spacing: normal !important;
+    text-align: left;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .ops-select-trigger::after {
+    content: "";
+    flex-shrink: 0;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--ops-ink-muted);
+}
+
+body.ops-map .ops-select.is-open .ops-select-trigger,
+body.ops-map .ops-select-trigger:focus-visible {
+    border-color: rgba(201, 162, 39, 0.55) !important;
+    box-shadow: var(--ops-focus);
+    outline: none;
+}
+
+body.ops-map .ops-select.is-open .ops-select-trigger::after {
+    border-top: none;
+    border-bottom: 5px solid var(--ops-gold);
+}
+
+body.ops-map .ops-select-menu {
+    position: absolute;
+    z-index: 40;
+    left: 0;
+    right: 0;
+    top: calc(100% + 4px);
+    margin: 0;
+    padding: 4px;
+    list-style: none;
+    max-height: min(280px, 50vh);
+    overflow-y: auto;
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+body.ops-map .ops-select-option {
+    padding: 8px 10px;
+    font-size: 0.875rem;
+    color: var(--ops-ink) !important;
+    border-radius: 1px;
+    cursor: pointer;
+}
+
+body.ops-map .ops-select-option:hover {
+    background: rgba(47, 111, 237, 0.14) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ops-select-option.is-selected {
+    background: var(--ops-overlay-film) !important;
+    color: var(--ops-gold) !important;
+    border: 1px solid rgba(201, 162, 39, 0.35);
+}
+
+body.ops-map .ops-select-option.is-disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* —— 工具条 / 搜索 / 元信息 —— */
+body.ops-map .gms-search-input {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-search-input:focus {
+    border-color: rgba(201, 162, 39, 0.55) !important;
+    box-shadow: var(--ops-focus) !important;
+}
+
+body.ops-map .gms-meta-chip {
+    font-family: var(--font-mark);
+    letter-spacing: 0.06em;
+    background: rgba(0, 0, 0, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2);
+    border-radius: 1px !important;
+    padding: 3px 9px !important;
+}
+
+body.ops-map .gms-table-meta-bar {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid var(--color-border) !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    color: var(--ops-ink-muted) !important;
+    border-radius: 2px 2px 0 0 !important;
+}
+
+body.ops-map .gms-table-meta-summary {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .results-header {
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.35rem;
+    background: transparent !important;
+}
+
+body.ops-map .results-count {
+    color: var(--ops-ink-muted) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .results-table-wrapper,
+body.ops-map .gms-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    background: var(--ops-ground) !important;
+}
+
+/* thead 浅底会透过半透明 th，必须一并压暗 */
+body.ops-map .results-table thead,
+body.ops-map .gms-table thead {
+    background: var(--ops-ground-elevated) !important;
+}
+
+body.ops-map .results-table th,
+body.ops-map .gms-table th {
+    background: rgba(217, 226, 236, 0.08) !important;
+    color: var(--ops-ink-muted) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .results-table td,
+body.ops-map .gms-table td {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.1) !important;
+    font-variant-numeric: tabular-nums;
+    background: transparent !important;
+}
+
+body.ops-map .results-table tbody tr:hover td,
+body.ops-map .gms-table tbody tr:hover td {
+    background: var(--ops-table-row-hover, rgba(47, 111, 237, 0.1)) !important;
+}
+
+body.ops-map .results-table a.stock-code,
+body.ops-map .gms-table a.stock-code {
+    color: var(--ops-route) !important;
+}
+
+body.ops-map .empty-state {
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+    padding: 2rem 1rem !important;
+    text-align: center;
+}
+
+/* —— 加载 / 错误 —— */
+body.ops-map .loading-indicator {
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+}
+
+body.ops-map .spinner {
+    border: 3px solid rgba(217, 226, 236, 0.15) !important;
+    border-top-color: var(--ops-gold) !important;
+}
+
+body.ops-map .error-message {
+    background: rgba(194, 59, 59, 0.14) !important;
+    border: 1px solid rgba(194, 59, 59, 0.45) !important;
+    color: var(--color-rise) !important;
+    border-radius: 2px !important;
+}
+
+/* —— 龙头 / 角色 —— */
 body.ops-map .gms-board-roles-panel,
 body.ops-map .gms-board-roles-block {
     background: rgba(0, 0, 0, 0.22) !important;
@@ -146,6 +536,7 @@ body.ops-map .gms-role-tag {
     background: rgba(0, 0, 0, 0.35) !important;
     border: 1px solid rgba(217, 226, 236, 0.22) !important;
     color: var(--ops-ink) !important;
+    border-radius: 1px !important;
 }
 
 body.ops-map .gms-role-tag--mid {
@@ -153,7 +544,269 @@ body.ops-map .gms-role-tag--mid {
     color: var(--ops-route) !important;
 }
 
+body.ops-map .gms-board-role-chip:hover {
+    border-color: rgba(201, 162, 39, 0.55) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .gms-board-role-chg,
 body.ops-map .gms-muted,
-body.ops-map .gms-board-roles-loading {
+body.ops-map .gms-board-roles-loading,
+body.ops-map .gms-penalty-section .gms-muted {
     color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-board-picker-summary {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-indicators-section {
+    border-left-color: var(--color-border) !important;
+}
+
+/* —— 风险 / 建议徽章（深底可读膜） —— */
+body.ops-map .gms-risk-info {
+    background: rgba(47, 111, 237, 0.18) !important;
+    color: var(--ops-route) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .gms-risk-warn {
+    background: rgba(201, 162, 39, 0.16) !important;
+    color: var(--ops-gold) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .gms-risk-danger {
+    background: rgba(194, 59, 59, 0.18) !important;
+    color: var(--color-rise) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .urt-advice-badge {
+    border-radius: 1px !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .urt-advice-badge--buy {
+    background: rgba(194, 59, 59, 0.16) !important;
+    color: var(--color-rise) !important;
+    border-color: rgba(194, 59, 59, 0.4) !important;
+}
+
+body.ops-map .urt-advice-badge--watch {
+    background: rgba(217, 226, 236, 0.08) !important;
+    color: var(--ops-ink-muted) !important;
+    border-color: rgba(217, 226, 236, 0.22) !important;
+}
+
+body.ops-map .urt-advice-badge--avoid {
+    background: rgba(194, 59, 59, 0.12) !important;
+    color: var(--color-rise) !important;
+    border-color: rgba(194, 59, 59, 0.35) !important;
+}
+
+body.ops-map .urt-advice-badge--conf-high {
+    background: rgba(47, 158, 107, 0.16) !important;
+    color: var(--color-fall) !important;
+    border-color: rgba(47, 158, 107, 0.4) !important;
+}
+
+body.ops-map .urt-advice-badge--conf-mid {
+    background: rgba(47, 111, 237, 0.16) !important;
+    color: var(--ops-route) !important;
+    border-color: rgba(47, 111, 237, 0.4) !important;
+}
+
+body.ops-map .urt-advice-badge--conf-low,
+body.ops-map .urt-advice-badge--rr,
+body.ops-map .urt-advice-badge--levels {
+    background: rgba(217, 226, 236, 0.06) !important;
+    color: var(--ops-ink) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .urt-trade-advice-section .urt-buy-logic-detail {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* —— 分页 / 保存等杂项 —— */
+body.ops-map .gms-pagination-inline button,
+body.ops-map .pagination button {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink-muted) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .gms-pagination-inline button:hover,
+body.ops-map .pagination button:hover {
+    color: var(--ops-gold) !important;
+    border-color: rgba(201, 162, 39, 0.45) !important;
+}
+
+body.ops-map .save-btn {
+    background: var(--ops-overlay-film) !important;
+    color: var(--ops-gold) !important;
+    border: 1px solid rgba(201, 162, 39, 0.45) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .save-btn:hover {
+    background: rgba(201, 162, 39, 0.2) !important;
+}
+
+/* —— 弹层（板块选择 / 转交易） —— */
+body.ops-map .screening-container .modal-content,
+body.ops-map .screening-container [class*="modal"] [class*="content"],
+body.ops-map .gms-board-picker-panel {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+
+/* 板块选择弹层在 body 下（不在 .screening-container 内），必须单独压白底 */
+body.ops-map .gms-modal-overlay {
+    background: rgba(8, 12, 18, 0.72) !important;
+}
+
+body.ops-map .gms-modal-card,
+body.ops-map .gms-modal-card.gms-board-picker-modal {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .gms-modal-header h3,
+body.ops-map .gms-modal-stock-label,
+body.ops-map .gms-modal-field label {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-modal-close {
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+    border: none !important;
+}
+
+body.ops-map .gms-modal-close:hover {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .gms-board-picker-toolbar {
+    background: transparent !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .gms-board-picker-list {
+    background: var(--ops-ground) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-board-picker-item {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid rgba(217, 226, 236, 0.1) !important;
+    border-radius: 1px !important;
+    color: var(--ops-ink) !important;
+    padding: 6px 8px !important;
+}
+
+body.ops-map .gms-board-picker-item:hover {
+    background: rgba(47, 111, 237, 0.12) !important;
+    border-color: rgba(201, 162, 39, 0.35) !important;
+}
+
+body.ops-map .gms-board-picker-item:has(input:checked) {
+    background: var(--ops-overlay-film) !important;
+    border-color: rgba(201, 162, 39, 0.45) !important;
+}
+
+body.ops-map .gms-board-picker-name {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-board-picker-source,
+body.ops-map .gms-board-picker-empty {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-board-source-btn {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink-muted) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .gms-board-source-btn:hover {
+    color: var(--ops-ink) !important;
+    border-color: rgba(47, 111, 237, 0.45) !important;
+}
+
+body.ops-map .gms-board-source-btn.active {
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+    border-color: rgba(201, 162, 39, 0.5) !important;
+    font-weight: 600;
+}
+
+body.ops-map .gms-modal-textarea,
+body.ops-map .gms-board-picker-search {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-modal-textarea:focus,
+body.ops-map .gms-board-picker-search:focus {
+    border-color: rgba(201, 162, 39, 0.55) !important;
+    box-shadow: var(--ops-focus) !important;
+    outline: none;
+}
+
+body.ops-map .gms-price-plan-hint {
+    background: rgba(47, 111, 237, 0.12) !important;
+    border: 1px solid rgba(47, 111, 237, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+/* —— 手机：策略条与操作条 —— */
+@media (max-width: 768px) {
+    body.ops-map .screening-container {
+        padding: 0.75rem 0.75rem 5.5rem;
+    }
+
+    body.ops-map .screening-header h1 {
+        font-size: 1.65rem !important;
+    }
+
+    body.ops-map .strategy-tabs {
+        gap: 4px !important;
+        margin-bottom: 0.85rem !important;
+    }
+
+    body.ops-map .strategy-tab {
+        padding: 0.55rem 0.75rem !important;
+        font-size: 0.8125rem !important;
+    }
+
+    body.ops-map .params-section,
+    body.ops-map .gms-toolbar,
+    body.ops-map .rpe-board-wrap {
+        padding: 12px !important;
+        gap: 12px !important;
+    }
+
+    body.ops-map .param-group {
+        min-width: 0 !important;
+        flex: 1 1 100%;
+    }
 }

@@ -4,7 +4,7 @@
 const MarketAnalysis = {
   API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
   BOARD_CODE_SOURCE: 'tonghuashun',
-  STOCK_SIDES: 40,
+  STOCK_SIDES: 80,
   /** ln(I_t) 日斜率走强门槛，与后端 DEFAULT_SLOPE_STRONG_THRESHOLD 一致 */
   SLOPE_STRONG_DAILY: 0.001,
   SLOPE_CHART_VISIBLE: 18,

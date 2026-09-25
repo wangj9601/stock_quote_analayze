@@ -40,13 +40,13 @@
     </div>
 </div>
 <div class="nav-overlay" id="navOverlay" hidden></div>
-<div class="ops-overlay-bar" id="opsOverlayBar" role="toolbar" aria-label="策略叠层">
+<div class="ops-overlay-bar" id="opsOverlayBar" role="radiogroup" aria-label="策略叠层">
     <span class="ops-overlay-label">叠层</span>
-    <button type="button" class="ops-overlay-chip is-on" data-strategy="GMS" aria-pressed="true">GMS</button>
-    <button type="button" class="ops-overlay-chip" data-strategy="RPE" aria-pressed="false">RPE</button>
-    <button type="button" class="ops-overlay-chip" data-strategy="URT" aria-pressed="false">URT</button>
-    <button type="button" class="ops-overlay-chip" data-strategy="做小做底" aria-pressed="false">做小做底</button>
-    <button type="button" class="ops-overlay-chip" data-strategy="通道突破" aria-pressed="false">通道突破</button>
+    <button type="button" class="ops-overlay-chip is-on" data-strategy="GMS" aria-pressed="true" aria-checked="true" role="radio">GMS</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="RPE" aria-pressed="false" aria-checked="false" role="radio">RPE</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="URT" aria-pressed="false" aria-checked="false" role="radio">URT</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="做小做底" aria-pressed="false" aria-checked="false" role="radio">做小做底</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="通道突破" aria-pressed="false" aria-checked="false" role="radio">通道突破</button>
 </div>
 <!-- 手机底栏：拇指热区（桌面/iPad CSS 隐藏） -->
 <nav class="ops-bottom-nav" id="opsBottomNav" aria-label="手机主导航">

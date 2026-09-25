@@ -442,7 +442,7 @@ const StockPage = {
         console.log('[initKlineChart] 找到klineChart元素，开始初始化ECharts');
         this.klineChart = echarts.init(chartDom);
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: [
                 { left: '8%', right: '6%', top: '5%', height: '50%' },
                 { left: '8%', right: '6%', top: '60%', height: '16%' },
@@ -536,7 +536,7 @@ const StockPage = {
                         show: true,
                         lineStyle: {
                             type: 'dashed',
-                            color: '#dc2626',
+                            color: '#c23b3b',
                             width: 1
                         }
                     }
@@ -575,10 +575,10 @@ const StockPage = {
                     barWidth: '80%',
                     barMaxWidth: '90%',
                     itemStyle: {
-                        color: '#dc2626',
-                        color0: '#16a34a',
-                        borderColor: '#dc2626',
-                        borderColor0: '#16a34a',
+                        color: '#c23b3b',
+                        color0: '#2f9e6b',
+                        borderColor: '#c23b3b',
+                        borderColor0: '#2f9e6b',
                         borderWidth: 1.5
                     },
                     emphasis: {
@@ -758,10 +758,10 @@ const StockPage = {
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'cross' },
-                backgroundColor: 'rgba(245, 245, 245, 0.9)',
+                backgroundColor: 'rgba(22, 28, 36, 0.96)',
                 borderWidth: 1,
-                borderColor: '#ccc',
-                textStyle: { color: '#000' },
+                borderColor: 'rgba(217, 226, 236, 0.22)',
+                textStyle: { color: '#d9e2ec' },
                 formatter: function (params) {
                     let result = params[0].name + '<br/>';
                     let macdInfo = '';
@@ -866,7 +866,7 @@ const StockPage = {
         this.minuteChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: {
                 left: '8%',
                 right: '6%',
@@ -925,9 +925,9 @@ const StockPage = {
                         买卖盘性质：${data.trade_type || '-'}
                     `;
                 },
-                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                backgroundColor: 'rgba(22, 28, 36, 0.96)',
                 borderWidth: 1,
-                borderColor: '#ccc',
+                borderColor: 'rgba(217, 226, 236, 0.22)',
                 textStyle: {
                     color: '#333'
                 }
@@ -945,7 +945,7 @@ const StockPage = {
         this.profitChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: {
                 left: '10%',
                 right: '8%',
@@ -978,7 +978,7 @@ const StockPage = {
                 yAxisIndex: 1,
                 data: [],
                 lineStyle: {
-                    color: '#dc2626',
+                    color: '#c23b3b',
                     width: 3
                 },
                 symbol: 'circle',
@@ -1003,7 +1003,7 @@ const StockPage = {
         this.flowChart = echarts.init(chartDom);
 
         const option = {
-            backgroundColor: '#ffffff',
+            backgroundColor: '#161c24',
             grid: {
                 left: '10%',
                 right: '8%',
@@ -1022,7 +1022,7 @@ const StockPage = {
                 name: '流入',
                 type: 'bar',
                 data: [],
-                itemStyle: { color: '#dc2626' }
+                itemStyle: { color: '#c23b3b' }
             }, {
                 name: '流出',
                 type: 'bar',

@@ -1,6 +1,5 @@
 /* 作战标图台 — design tokens (Impeccable direction a802e0ce)
- * 底图策略：稀疏主网格 + 暗角大气；行情/首页略强，选股/分析等阅读页几乎无网；
- * 内容抬升面不透明，网格只在卡缝/页边露出。
+ * 底图策略：无满屏方格；仅极淡暗角大气。抬升面不透明，靠色阶与细线分层。
  */
 @import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap");
 

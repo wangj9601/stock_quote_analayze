@@ -6,13 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>选股 - 股票分析</title>
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925u">
     <link rel="stylesheet" href="css/ops-shell.css">
-    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925u">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/screening.css?v=20260918a">
-    <link rel="stylesheet" href="css/screening-ops.css?v=20260925q">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
+    <link rel="stylesheet" href="css/screening.css?v=20260925u">
+    <link rel="stylesheet" href="css/screening-ops.css?v=20260925u">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925u">
 </head>
 
 <body class="ops-map" data-channel="screening">
@@ -170,7 +170,7 @@
                     <li class="condition-item">1. 时间段：前段=最近60交易日最高收盘价之前交易日(长度>0)，后段=最高价当日及后面的交易日</li>
                     <li class="condition-item">2. 前段由年线(250日)以下向上突破</li>
                     <li class="condition-item">3. 后段必须在年线以上运行，且后段最低价日与最高价日相差必须在10-50日间</li>
-                    <li class="condition-item">4. 回踩伴随缩量：最高价日交易量/后段最低价日交易量>2,后段最低价/最高价<0.8< /li>
+                    <li class="condition-item">4. 回踩伴随缩量：最高价日交易量/后段最低价日交易量>2,后段最低价/最高价&lt;0.8</li>
                 </ul>
             </div>
 
@@ -341,7 +341,7 @@
 
             <!-- 参数配置区域 -->
             <div class="strategy-params-card">
-                <h3>📊 策略参数配置</h3>
+                <h3>策略参数配置</h3>
                 <div class="params-grid">
                     <div class="param-item">
                         <label for="lowerShadowRatio">
@@ -630,7 +630,7 @@
 
             <!-- 数据来源选择 -->
             <div class="strategy-params-card">
-                <h3>🔍 数据来源</h3>
+                <h3>数据来源</h3>
                 <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
                     <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="scopeCN" name="pvfrsScope" value="cn" checked
@@ -651,7 +651,7 @@
 
             <!-- PVFARS 策略参数（可编辑） -->
             <div class="strategy-params-card" id="pvfrsStrategyParamsCard">
-                <h3>⚙️ PVFARS 策略参数</h3>
+                <h3>PVFARS 策略参数</h3>
                 <div class="params-grid pvfrs-params-grid">
                     <div class="parameter-group">
                         <label for="pvfrs-observation_period">观察周期（天）</label>
@@ -770,7 +770,7 @@
 
             <!-- 数据来源选择 -->
             <div class="strategy-params-card" id="gmsDataSourceCard">
-                <h3>🔍 数据来源</h3>
+                <h3>数据来源</h3>
                 <p class="gms-params-refresh-hint">修改数据来源、板块选择、剔除 ST 或策略参数后，须点击下方「刷新筛选」才会触发 GMS 策略打分选股。</p>
                 <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
                     <div class="param-item" style="display: flex; align-items: center;">
@@ -871,7 +871,7 @@
 
             <!-- GMS 策略参数（可配置） -->
             <div class="strategy-params-card" id="gmsStrategyParamsCard">
-                <h3>⚙️ GMS 策略参数</h3>
+                <h3>GMS 策略参数</h3>
                 <div class="parameter-group" style="margin-bottom: 12px; max-width: 480px;">
                     <label for="gms-config_id">参数版本（服务端）</label>
                     <select id="gms-config_id" class="param-input">
@@ -1466,7 +1466,7 @@
             </div>
 
             <div class="strategy-params-card" id="urtDataSourceCard">
-                <h3>🔍 数据来源</h3>
+                <h3>数据来源</h3>
                 <p class="gms-params-refresh-hint">修改数据来源或板块后，须点击「刷新筛选」才会重新计算。</p>
                 <div class="params-grid" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 10px 0;">
                     <div class="param-item" style="display: flex; align-items: center;">
@@ -2412,7 +2412,7 @@
     <script src="js/board_roles_panel.js"></script>
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_trade_link.js?v=20260917a"></script>
-    <script src="js/screening.js?v=urt50220260907a"></script>
+    <script src="js/screening.js?v=20260925u"></script>
     <script src="js/sbbr_screening.js?v=20260918a"></script>
     <script src="js/rpe_screening.js?v=20260917a"></script>
     <script src="js/csb_screening.js?v=20260915c"></script>

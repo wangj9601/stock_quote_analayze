@@ -152,9 +152,25 @@ function initOpsOverlayBar() {
         '做小做底': 'sbbr',
         '通道突破': 'csb'
     };
+    const KEY_TO_CODE = Object.fromEntries(
+        Object.entries(STRATEGY_TAB_MAP).map(([code, key]) => [key, code])
+    );
+
+    const chips = () => [...bar.querySelectorAll('.ops-overlay-chip')];
+
+    /** 叠层单选：只高亮当前芯片，其余一律熄灭 */
+    const selectExclusive = (activeChip) => {
+        chips().forEach((c) => {
+            const on = c === activeChip;
+            c.setAttribute('aria-pressed', on ? 'true' : 'false');
+            c.setAttribute('aria-checked', on ? 'true' : 'false');
+            c.classList.toggle('is-on', on);
+        });
+        applyBodyFlags();
+    };
 
     const applyBodyFlags = () => {
-        const on = [...bar.querySelectorAll('.ops-overlay-chip.is-on')].map((el) => el.dataset.strategy);
+        const on = chips().filter((el) => el.classList.contains('is-on')).map((el) => el.dataset.strategy);
         document.body.dataset.opsOverlays = on.join(',');
         document.body.dispatchEvent(new CustomEvent('ops-overlays-change', { detail: { strategies: on } }));
         highlightScreeningTabs(on);
@@ -180,18 +196,53 @@ function initOpsOverlayBar() {
         }
     };
 
+    // 选股页：按 URL hash / 当前策略 Tab 同步叠层高亮（避免多芯片同亮）
+    const syncFromScreeningContext = () => {
+        if ((document.body.dataset.channel || '') !== 'screening') return;
+        const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
+        let code = KEY_TO_CODE[h];
+        if (!code) {
+            const activeTab = document.querySelector('.strategy-tab.active[data-strategy]');
+            if (activeTab) code = KEY_TO_CODE[activeTab.dataset.strategy];
+        }
+        if (!code) return;
+        const chip = bar.querySelector(`.ops-overlay-chip[data-strategy="${code}"]`);
+        if (chip) selectExclusive(chip);
+    };
+
     bar.querySelectorAll('.ops-overlay-chip').forEach((chip) => {
         chip.addEventListener('click', () => {
-            const pressed = chip.getAttribute('aria-pressed') !== 'true';
-            chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
-            chip.classList.toggle('is-on', pressed);
-            applyBodyFlags();
-            // 在选股页：点亮叠层时直接切到对应策略 Tab
-            if (pressed && document.body.dataset.channel === 'screening') {
-                activateScreeningTab(chip.dataset.strategy);
+            const code = chip.dataset.strategy;
+            const key = STRATEGY_TAB_MAP[code];
+            const channel = document.body.dataset.channel || '';
+
+            // 单选高亮
+            selectExclusive(chip);
+
+            // 行情/自选/首页/分析：叠层芯片 = 策略入口（进选股对应 Tab）
+            if (key && ['quotes', 'watchlist', 'home', 'analyze'].includes(channel)) {
+                try {
+                    sessionStorage.setItem('opsOverlays', key);
+                } catch (_) { /* ignore */ }
+                window.location.href = `screening.html#${encodeURIComponent(key)}`;
+                return;
+            }
+
+            // 选股页：切到对应策略 Tab
+            if (key && channel === 'screening') {
+                activateScreeningTab(code);
             }
         });
     });
+
+    // 默认 HTML 可能只亮 GMS；选股深链时改为与 hash 一致
+    syncFromScreeningContext();
+    // 策略 Tab 切换后再对齐一次（hash / active class 可能稍后才就绪）
+    if ((document.body.dataset.channel || '') === 'screening') {
+        setTimeout(syncFromScreeningContext, 200);
+        window.addEventListener('hashchange', syncFromScreeningContext);
+    }
+
     applyBodyFlags();
 }
 

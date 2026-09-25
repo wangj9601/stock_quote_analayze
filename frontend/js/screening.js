@@ -99,9 +99,154 @@ const ScreeningPage = {
         }
         this.ensureActiveStrategyVisible();
         this.applyVsbHashOnLoad();
+        this.applyStrategyHashOnLoad();
         void this.applyRpeDeepLinkOnLoad();
         void this.initUrtStrategyConfig();
         void this.loadGmsUiConfig();
+        this.initOpsSelects();
+    },
+
+    /**
+     * 参数区原生 select 展开为系统浅蓝菜单，深底上刺眼。
+     * 用暗色自定义下拉替换观感，仍驱动原 select 的 value/change（不改筛选契约）。
+     */
+    initOpsSelects() {
+        const root = document.querySelector('.screening-container') || document;
+        root.querySelectorAll('select.param-input, select.param-select').forEach((sel) => {
+            this.enhanceOpsSelect(sel);
+        });
+    },
+
+    enhanceOpsSelect(select) {
+        if (!select || select.dataset.opsEnhanced === '1') return;
+        if (select.closest('.ops-select')) return;
+        select.dataset.opsEnhanced = '1';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'ops-select';
+        const parent = select.parentNode;
+        if (!parent) return;
+        parent.insertBefore(wrap, select);
+        wrap.appendChild(select);
+        select.classList.add('ops-select-native');
+        select.setAttribute('tabindex', '-1');
+        select.setAttribute('aria-hidden', 'true');
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ops-select-trigger';
+        btn.setAttribute('aria-haspopup', 'listbox');
+        btn.setAttribute('aria-expanded', 'false');
+        if (select.id) btn.id = `${select.id}Trigger`;
+
+        const menu = document.createElement('ul');
+        menu.className = 'ops-select-menu';
+        menu.setAttribute('role', 'listbox');
+        menu.hidden = true;
+
+        const syncLabel = () => {
+            const opt = select.options[select.selectedIndex];
+            btn.textContent = opt ? opt.textContent : '请选择';
+        };
+
+        const close = () => {
+            wrap.classList.remove('is-open');
+            btn.setAttribute('aria-expanded', 'false');
+            menu.hidden = true;
+        };
+
+        const rebuild = () => {
+            menu.innerHTML = '';
+            Array.from(select.options).forEach((opt) => {
+                if (opt.hidden) return;
+                const li = document.createElement('li');
+                li.className = 'ops-select-option';
+                li.setAttribute('role', 'option');
+                li.dataset.value = opt.value;
+                li.textContent = opt.textContent;
+                if (opt.disabled) {
+                    li.classList.add('is-disabled');
+                    li.setAttribute('aria-disabled', 'true');
+                }
+                if (opt.selected) {
+                    li.classList.add('is-selected');
+                    li.setAttribute('aria-selected', 'true');
+                }
+                li.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (opt.disabled) return;
+                    if (select.value !== opt.value) {
+                        select.value = opt.value;
+                        select.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    syncLabel();
+                    close();
+                });
+                menu.appendChild(li);
+            });
+            syncLabel();
+        };
+
+        const open = () => {
+            rebuild();
+            wrap.classList.add('is-open');
+            btn.setAttribute('aria-expanded', 'true');
+            menu.hidden = false;
+        };
+
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (wrap.classList.contains('is-open')) close();
+            else open();
+        });
+
+        select.addEventListener('change', syncLabel);
+        document.addEventListener('click', (e) => {
+            if (!wrap.contains(e.target)) close();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && wrap.classList.contains('is-open')) close();
+        });
+
+        wrap.appendChild(btn);
+        wrap.appendChild(menu);
+        rebuild();
+
+        if (select.id) {
+            const label = document.querySelector(`label[for="${CSS.escape(select.id)}"]`);
+            if (label) {
+                label.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    btn.focus();
+                    if (!wrap.classList.contains('is-open')) open();
+                });
+            }
+        }
+    },
+
+    /**
+     * 顶栏叠层深链：screening.html#gms|#rpe|#urt|#sbbr|#csb
+     * （行情等频道点亮叠层芯片会跳到此处）
+     */
+    applyStrategyHashOnLoad() {
+        const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
+        if (!h) return;
+        // VSB 子面板深链由 applyVsbHashOnLoad 处理
+        if (h === 'vsb-observe' || h === 'vsb-observe-daily' || h === 'triple-volume-observe'
+            || h === 'vsb-trade-observe' || h === 'vsb-pick') {
+            return;
+        }
+        const allowed = new Set([
+            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim',
+            'volume-shrink-breakout', 'one-yang-three-lines',
+            'cyb-midline', 'high-tight-flag'
+        ]);
+        if (!allowed.has(h)) return;
+        const tab = document.querySelector(`.strategy-tab[data-strategy="${h}"]`);
+        if (!tab || getComputedStyle(tab).display === 'none') return;
+        this.switchStrategy(h);
     },
 
     /** 从服务端拉取选股 UI 开关（如 ENABLE_ETF）并同步隐藏 ETF 选项 */

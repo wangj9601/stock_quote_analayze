@@ -156,8 +156,86 @@ body.ops-map .auction-section {
     background: var(--ops-ground-elevated) !important;
     border: 1px solid var(--color-border) !important;
     border-radius: 2px !important;
-    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+    box-shadow: none !important;
     color: var(--ops-ink) !important;
+}
+
+body.ops-map .chart-controls {
+    background: rgba(217, 226, 236, 0.03) !important;
+    border-bottom: 1px solid var(--color-border) !important;
+}
+
+body.ops-map .period-btn {
+    font-family: var(--font-mark) !important;
+    letter-spacing: 0.04em;
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid transparent !important;
+    border-radius: 1px !important;
+    padding: 0.3rem 0.7rem !important;
+}
+
+body.ops-map .period-btn:hover:not(.active) {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.22) !important;
+    background: rgba(47, 111, 237, 0.1) !important;
+}
+
+body.ops-map .period-btn.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .period-btn:focus-visible,
+body.ops-map .tab-btn:focus-visible,
+body.ops-map .content-tab:focus-visible,
+body.ops-map .watchlist-toggle:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+body.ops-map #klineChart,
+body.ops-map #minuteChart,
+body.ops-map #profitChart,
+body.ops-map #flowChart,
+body.ops-map .chart {
+    background: var(--ops-ground-elevated) !important;
+}
+
+body.ops-map .news-item,
+body.ops-map .news-card,
+body.ops-map .report-item {
+    background: rgba(0, 0, 0, 0.18) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .news-item h4,
+body.ops-map .news-card h4,
+body.ops-map .report-item h4 {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .news-item p,
+body.ops-map .news-card p,
+body.ops-map .report-item p,
+body.ops-map .news-meta,
+body.ops-map .auction-hint {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .stock-board-membership {
+    margin-top: 12px;
+}
+
+body.ops-map .board-source-hint {
+    color: var(--ops-ink-muted) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+    font-size: 0.75rem;
 }
 
 body.ops-map .news-list-container {

@@ -153,8 +153,15 @@ body.ops-map .vsb-sub-tab.active {
     background: var(--ops-overlay-film) !important;
 }
 
-/* 顶栏叠层高亮对应策略 Tab */
-body.ops-map .strategy-tab.ops-overlay-hit {
+/* 顶栏叠层对应策略：仅底边细金线提示，勿做成第二个 active（避免多 Tab 同亮） */
+body.ops-map .strategy-tab.ops-overlay-hit:not(.active) {
+    box-shadow: none;
+    border-color: rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+}
+
+body.ops-map .strategy-tab.ops-overlay-hit.active {
     box-shadow: inset 0 -2px 0 var(--ops-gold);
 }
 
