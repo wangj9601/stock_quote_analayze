@@ -1,0 +1,1125 @@
+/* 作战标图台 — 全局表面覆盖（必须挂在各页业务 CSS 之后）
+ * 一次压住遗留白底 + 浅字，避免逐页补洞。
+ * 登录页不挂本文件。
+ */
+
+body.ops-map {
+    --ops-surface: var(--ops-ground-elevated);
+    --ops-surface-inset: rgba(217, 226, 236, 0.045);
+    --ops-surface-row: rgba(217, 226, 236, 0.03);
+    --ops-table-head: rgba(217, 226, 236, 0.05);
+    --ops-table-row-hover: rgba(47, 111, 237, 0.1);
+}
+
+/* ========== 1) 主内容区：后缀/语义容器一律抬升暗面 ========== */
+body.ops-map .main-content [class*="-card"],
+body.ops-map .main-content [class*="-panel"],
+body.ops-map .main-content [class*="-section"],
+body.ops-map .main-content [class*="-workbench"],
+body.ops-map .main-content [class*="-block"],
+body.ops-map .main-content [class*="-box"],
+body.ops-map .main-content [class*="-wrap"]:not(.ssa-rs-rocs):not([class*="summary"]),
+body.ops-map .main-content [class*="-container"]:not(.news-list-container),
+body.ops-map .main-content [class*="-placeholder"],
+body.ops-map .main-content [class*="-board"],
+body.ops-map .screening-container [class*="-card"],
+body.ops-map .screening-container [class*="-panel"],
+body.ops-map .screening-container [class*="-section"],
+body.ops-map .screening-container [class*="-workbench"],
+body.ops-map .container > [class*="-card"],
+/* 审计名单：业务 CSS 仍写白底的关键类 */
+body.ops-map .function-card,
+body.ops-map .stock-card,
+body.ops-map .index-card,
+body.ops-map .stats-card,
+body.ops-map .sector-card,
+body.ops-map .profile-card,
+body.ops-map .overview-card,
+body.ops-map .settings-card,
+body.ops-map .user-profile-card,
+body.ops-map .portfolio-card,
+body.ops-map .portfolio-section,
+body.ops-map .parameters-card,
+body.ops-map .strategy-params-card,
+body.ops-map .strategy-info-card,
+body.ops-map .tool-card,
+body.ops-map .featured-card,
+body.ops-map .history-card,
+body.ops-map .gms-trace-card,
+body.ops-map .gms-modal-card,
+body.ops-map .lm-modal-card,
+body.ops-map .trade-modal-content,
+body.ops-map .modal-content,
+body.ops-map .search-content,
+body.ops-map .toolbar,
+body.ops-map .group-tabs,
+body.ops-map .content-tabs .tab-nav,
+body.ops-map .tab-nav,
+body.ops-map .tab-content,
+body.ops-map .stocks-list,
+body.ops-map .sectors-list,
+body.ops-map .hot-section,
+body.ops-map .hot-news-list,
+body.ops-map .results-container,
+body.ops-map .results-table-wrapper,
+body.ops-map .results-table-wrap,
+body.ops-map .table-wrap,
+body.ops-map .export-menu,
+body.ops-map .user-dropdown,
+body.ops-map .chart-section,
+body.ops-map .chart-container,
+body.ops-map .chart-controls,
+body.ops-map .chart-placeholder,
+body.ops-map .kline-container,
+body.ops-map .analysis-card,
+body.ops-map .finance-section,
+body.ops-map .finance-card,
+body.ops-map .report-card,
+body.ops-map .fund-flow-section,
+body.ops-map .auction-section,
+body.ops-map .flow-chart,
+body.ops-map .stock-header .stock-info,
+body.ops-map .stock-details,
+body.ops-map .stock-legacy-analysis,
+body.ops-map .gms-details-content,
+body.ops-map .gms-score-box,
+body.ops-map .notes-content,
+body.ops-map .sector-detail-content,
+body.ops-map .distribution-chart,
+body.ops-map .market-tabs-section,
+body.ops-map .auction-benchmark-card,
+body.ops-map .ba-workbench,
+body.ops-map .ba-meta-card,
+body.ops-map .ba-strategy-block--gms,
+body.ops-map .uto-panel,
+body.ops-map .uto-workbench,
+body.ops-map .uto-toolbar,
+body.ops-map .rsa-workbench,
+body.ops-map .lm-workbench,
+body.ops-map .ma-workbench,
+body.ops-map .ma-section,
+body.ops-map .ma-chart,
+body.ops-map .dr-workbench,
+body.ops-map .dr-section,
+body.ops-map .dr-metric,
+body.ops-map .dr-toolbar,
+body.ops-map .dr-md-preview,
+body.ops-map .recommend-workbench,
+body.ops-map .kde-levels-card,
+body.ops-map .kde-levels-section,
+body.ops-map .pattern-tactical-block,
+body.ops-map .gann-fan-wrap,
+body.ops-map .ms-zigzag-wrap,
+body.ops-map .ssa-section,
+body.ops-map .ssa-card,
+body.ops-map .ssa-results,
+body.ops-map .ssa-meta-card,
+body.ops-map .ssa-trade-plan-block,
+body.ops-map .ssa-fund-flow-card,
+body.ops-map .ssa-auction-card,
+body.ops-map .ssa-rs-card,
+body.ops-map .ssa-rs-roc,
+body.ops-map .ssa-candidates,
+body.ops-map .ssa-details,
+body.ops-map .ssa-png-shot,
+body.ops-map .trading-logs-section,
+body.ops-map .transactions-section {
+    background: var(--ops-surface) !important;
+    border-color: var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+    border-radius: 2px !important;
+}
+
+/* 资讯外层：去掉「白盒套黑卡」 */
+body.ops-map .news-list-container {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+body.ops-map .content-tabs {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+/* ========== 2) 内嵌行 / 指标格 / 筛选项 ========== */
+body.ops-map .main-content [class*="-item"]:not(.nav-item):not(.export-item),
+body.ops-map .main-content [class*="-row"]:not(tr):not([class*="table"]),
+body.ops-map .main-content [class*="-metric"],
+body.ops-map .stock-item,
+body.ops-map .sector-item,
+body.ops-map .rank-item,
+body.ops-map .detail-item,
+body.ops-map .heat-item,
+body.ops-map .behavior-item,
+body.ops-map .suggestion-item,
+body.ops-map .trade-item,
+body.ops-map .transaction-item,
+body.ops-map .trading-log-item,
+body.ops-map .search-item,
+body.ops-map .search-result-item,
+body.ops-map .hot-news-item,
+body.ops-map .hot-stock-item,
+body.ops-map .report-item,
+body.ops-map .research-item,
+body.ops-map .strategy-item,
+body.ops-map .level-item,
+body.ops-map .flow-item,
+body.ops-map .ssa-fund-flow-metric,
+body.ops-map .ssa-auction-metric,
+body.ops-map .ssa-rs-roc,
+body.ops-map .ssa-plan-badge,
+body.ops-map .filter-chip,
+body.ops-map .kde-conf-hero-item,
+body.ops-map .sector-detail-item,
+body.ops-map .sector-slope-latest-item,
+body.ops-map .summary-item,
+body.ops-map .news-filter,
+body.ops-map .news-card,
+body.ops-map .gms-board-picker-item,
+body.ops-map .lm-board-picker-item {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border-color: rgba(217, 226, 236, 0.12) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .news-card:hover,
+body.ops-map .stock-item:hover,
+body.ops-map .sector-item:hover,
+body.ops-map .function-card:hover {
+    background: rgba(217, 226, 236, 0.07) !important;
+    border-color: rgba(201, 162, 39, 0.35) !important;
+}
+
+/* ========== 3) 标题与正文强制可读（涨跌色除外） ========== */
+body.ops-map .main-content,
+body.ops-map .main-content h1,
+body.ops-map .main-content h2,
+body.ops-map .main-content h3,
+body.ops-map .main-content h4,
+body.ops-map .main-content h5,
+body.ops-map .main-content p,
+body.ops-map .main-content label,
+body.ops-map .main-content li,
+body.ops-map .main-content th,
+body.ops-map .main-content td,
+body.ops-map .main-content summary,
+body.ops-map .main-content span,
+body.ops-map .main-content strong,
+body.ops-map .main-content em,
+body.ops-map .main-content a:not(.btn):not([class*="badge"]),
+body.ops-map .main-content .label,
+body.ops-map .main-content .value,
+body.ops-map .main-content .title,
+body.ops-map .main-content .name,
+body.ops-map .main-content .summary,
+body.ops-map .main-content .desc,
+body.ops-map .main-content .hint,
+body.ops-map .main-content .meta,
+body.ops-map .finance-section h3,
+body.ops-map .finance-table td,
+body.ops-map .finance-table td:nth-child(odd),
+body.ops-map .finance-table td:nth-child(even),
+body.ops-map .news-title,
+body.ops-map .news-summary,
+body.ops-map .news-date,
+body.ops-map .news-source,
+body.ops-map .ssa-card-head h4,
+body.ops-map .ssa-plan-wrap,
+body.ops-map .ssa-plan-table td,
+body.ops-map .ssa-plan-table th,
+body.ops-map .ssa-plan-list,
+body.ops-map .ssa-plan-levels,
+body.ops-map .ssa-rs-roc span,
+body.ops-map .ssa-rs-roc strong,
+body.ops-map .ssa-rs-roc em,
+body.ops-map .ssa-fund-flow-meta,
+body.ops-map .ssa-fund-flow-metric span,
+body.ops-map .ssa-fund-flow-metric strong,
+body.ops-map .ssa-fund-flow-table th,
+body.ops-map .ssa-fund-flow-table td,
+body.ops-map .ssa-fund-flow-hint,
+body.ops-map .ssa-fund-flow-empty,
+body.ops-map .ssa-rs-hint,
+body.ops-map .flow-item .label,
+body.ops-map .flow-item .value,
+body.ops-map .toolbar-left h1,
+body.ops-map .stock-count,
+body.ops-map .analysis-card h3,
+body.ops-map .chart-section h3 {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .muted,
+body.ops-map .main-content .hint,
+body.ops-map .main-content .meta,
+body.ops-map .main-content .desc,
+body.ops-map .main-content .summary,
+body.ops-map .news-summary,
+body.ops-map .news-date,
+body.ops-map .news-source,
+body.ops-map .ssa-plan-levels,
+body.ops-map .ssa-plan-muted,
+body.ops-map .ssa-plan-disclaimer,
+body.ops-map .ssa-rs-roc span,
+body.ops-map .ssa-rs-roc em,
+body.ops-map .ssa-fund-flow-meta,
+body.ops-map .ssa-fund-flow-metric span,
+body.ops-map .ssa-fund-flow-hint,
+body.ops-map .ssa-fund-flow-empty,
+body.ops-map .ssa-rs-hint,
+body.ops-map .flow-item .label,
+body.ops-map .finance-table td:nth-child(odd),
+body.ops-map .stock-count {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* ========== 4) 涨跌语义保留（须压过 .main-content span/strong） ========== */
+body.ops-map .main-content .positive,
+body.ops-map .main-content .rise,
+body.ops-map .main-content .up,
+body.ops-map .main-content .text-rise,
+body.ops-map .main-content .change-up,
+body.ops-map .main-content .price-up,
+body.ops-map .main-content .change.positive,
+body.ops-map .main-content .change-pct.positive,
+body.ops-map .main-content .price-change.positive,
+body.ops-map .main-content .sector-change.positive,
+body.ops-map .main-content .is-up,
+body.ops-map .main-content .ssa-badge--yes,
+body.ops-map .main-content strong.is-up,
+body.ops-map .main-content td.is-up,
+body.ops-map .main-content span.is-up,
+body.ops-map .main-content .ssa-fund-flow-metric strong.is-up,
+body.ops-map .main-content .ssa-fund-flow-table td.is-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .main-content .negative,
+body.ops-map .main-content .fall,
+body.ops-map .main-content .down,
+body.ops-map .main-content .text-fall,
+body.ops-map .main-content .change-down,
+body.ops-map .main-content .price-down,
+body.ops-map .main-content .change.negative,
+body.ops-map .main-content .change-pct.negative,
+body.ops-map .main-content .price-change.negative,
+body.ops-map .main-content .sector-change.negative,
+body.ops-map .main-content .is-down,
+body.ops-map .main-content strong.is-down,
+body.ops-map .main-content td.is-down,
+body.ops-map .main-content span.is-down,
+body.ops-map .main-content .ssa-fund-flow-metric strong.is-down,
+body.ops-map .main-content .ssa-fund-flow-table td.is-down {
+    color: var(--color-fall) !important;
+}
+
+/* ========== 5) 表格 ========== */
+body.ops-map table,
+body.ops-map .table,
+body.ops-map .finance-table,
+body.ops-map .results-table,
+body.ops-map .recommend-table,
+body.ops-map .history-table,
+body.ops-map .trace-table,
+body.ops-map .rankings-table,
+body.ops-map .sectors-table,
+body.ops-map .gms-table,
+body.ops-map .gms-weight-table,
+body.ops-map .data-table,
+body.ops-map .ma-table,
+body.ops-map .ba-table,
+body.ops-map .lm-table,
+body.ops-map .uto-table,
+body.ops-map .rsa-table,
+body.ops-map .dr-table,
+body.ops-map .gann-table,
+body.ops-map .ms-points-table,
+body.ops-map .pattern-result-table,
+body.ops-map .ssa-fund-flow-table,
+body.ops-map .ssa-rs-history-table,
+body.ops-map .ssa-plan-table,
+body.ops-map .sector-limit-up-table {
+    background: transparent !important;
+    color: var(--ops-ink) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map thead th,
+body.ops-map .table th,
+body.ops-map .ssa-fund-flow-table th,
+body.ops-map .finance-table td:nth-child(odd) {
+    background: var(--ops-table-head) !important;
+    color: var(--ops-ink-muted) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map tbody td,
+body.ops-map .finance-table td:nth-child(even),
+body.ops-map .ssa-fund-flow-table td {
+    background: transparent !important;
+    border-color: rgba(217, 226, 236, 0.1) !important;
+}
+
+body.ops-map tbody tr:hover td,
+body.ops-map tbody tr:hover {
+    background: var(--ops-table-row-hover) !important;
+}
+
+/* ========== 6) 表单 / Tab / 按钮 ========== */
+body.ops-map input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+body.ops-map select,
+body.ops-map textarea,
+body.ops-map .filter-select,
+body.ops-map .indicator-select,
+body.ops-map .ma-select,
+body.ops-map .ba-role-select,
+body.ops-map .uto-source-select {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .btn,
+body.ops-map button.btn,
+body.ops-map .filter-btn,
+body.ops-map .page-btn,
+body.ops-map .view-btn,
+body.ops-map .action-btn,
+body.ops-map .content-tab,
+body.ops-map .tab-btn,
+body.ops-map .analysis-tab,
+body.ops-map .strategy-tab,
+body.ops-map .horizon-tab,
+body.ops-map .ranking-type-btn,
+body.ops-map .market-tab,
+body.ops-map .category-tab,
+body.ops-map .uto-subtab,
+body.ops-map .dr-subtab,
+body.ops-map .gms-op-btn,
+body.ops-map .gms-sub-tabs button,
+body.ops-map .gms-segmented-tabs button,
+body.ops-map .gms-trace-config-tab,
+body.ops-map .vsb-sub-tab,
+body.ops-map .ssa-stock-tab,
+body.ops-map .tool-btn {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink-muted) !important;
+    border-radius: 1px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .btn-primary,
+body.ops-map .btn.active,
+body.ops-map .filter-btn.active,
+body.ops-map .content-tab.active,
+body.ops-map .tab-btn.active,
+body.ops-map .analysis-tab.active,
+body.ops-map .strategy-tab.active,
+body.ops-map .horizon-tab.active,
+body.ops-map .ranking-type-btn.active,
+body.ops-map .market-tab.active,
+body.ops-map .category-tab.active,
+body.ops-map .view-btn.active,
+body.ops-map .uto-subtab.active,
+body.ops-map .dr-subtab.active,
+body.ops-map .gms-trace-config-tab.active,
+body.ops-map .vsb-sub-tab.active,
+body.ops-map .ssa-stock-tab.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+/* ========== 7) 资讯类型标 ========== */
+body.ops-map .news-type.announcement {
+    background: rgba(194, 59, 59, 0.18) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .news-type.news {
+    background: rgba(47, 111, 237, 0.18) !important;
+    color: var(--ops-route) !important;
+}
+
+body.ops-map .news-type.research {
+    background: rgba(201, 162, 39, 0.18) !important;
+    color: var(--ops-gold) !important;
+}
+
+/* ========== 8) 财务双栏 ========== */
+body.ops-map .finance-grid {
+    gap: 12px !important;
+}
+
+body.ops-map .finance-section {
+    padding: 1rem 1.1rem !important;
+}
+
+body.ops-map .finance-section h3 {
+    border-bottom: 1px solid var(--color-border) !important;
+}
+
+/* ========== 9) 弹层 ========== */
+body.ops-map .modal-content,
+body.ops-map .lm-modal-card,
+body.ops-map .gms-modal-card,
+body.ops-map .search-modal .search-content,
+body.ops-map .trade-modal-content {
+    background: var(--ops-surface) !important;
+    color: var(--ops-ink) !important;
+}
+
+/* ========== 10) 页头 / 底栏 / 登录不误伤 ========== */
+body.ops-map .main-header [class*="-card"],
+body.ops-map .ops-bottom-nav,
+body.ops-map .ops-bottom-nav [class*="-card"],
+body.ops-map .ops-overlay-bar [class*="-card"] {
+    box-shadow: none !important;
+}
+
+/* ========== 11) 个股策略分析 SSA（分析页 + 个股嵌入，不依赖 channel） ========== */
+body.ops-map .ssa-section,
+body.ops-map .ssa-panel,
+body.ops-map .ssa-panel--embedded,
+body.ops-map .stock-trade-analysis-panel,
+body.ops-map .stock-trade-analysis-mount,
+body.ops-map .ssa-export-root,
+body.ops-map .ssa-block,
+body.ops-map .ssa-trade-plan-block,
+body.ops-map .ssa-results,
+body.ops-map .ssa-card,
+body.ops-map .ssa-meta-card,
+body.ops-map .ssa-rs-card,
+body.ops-map .ssa-fund-flow-card,
+body.ops-map .ssa-auction-card,
+body.ops-map .ssa-candidates,
+body.ops-map .ssa-details,
+body.ops-map .ssa-toolbar,
+body.ops-map .ssa-toolbar--embedded {
+    background: var(--ops-surface) !important;
+    border-color: var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .ssa-toolbar,
+body.ops-map .ssa-toolbar--embedded,
+body.ops-map .ssa-trade-plan-block,
+body.ops-map .ssa-block--collapsible .ssa-details {
+    background: var(--ops-surface-inset) !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .ssa-deeplink-hint {
+    background: rgba(47, 111, 237, 0.12) !important;
+    border: 1px solid rgba(47, 111, 237, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .ssa-deeplink-hint code {
+    background: rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .ssa-header h3,
+body.ops-map .ssa-block-title,
+body.ops-map .ssa-block-header,
+body.ops-map .ssa-plan-col-title,
+body.ops-map .ssa-plan-wrap,
+body.ops-map .ssa-plan-summary,
+body.ops-map .ssa-plan-list,
+body.ops-map .ssa-meta,
+body.ops-map .ssa-form label,
+body.ops-map .ssa-batch-all-opt,
+body.ops-map .ssa-card-head h4,
+body.ops-map .ssa-card-body,
+body.ops-map .ssa-card-meta,
+body.ops-map .ssa-card p,
+body.ops-map .ssa-card li,
+body.ops-map .ssa-png-title,
+body.ops-map .lm-board-picker-summary {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-hint,
+body.ops-map .ssa-deeplink-hint,
+body.ops-map .ssa-plan-levels,
+body.ops-map .ssa-plan-muted,
+body.ops-map .ssa-plan-disclaimer,
+body.ops-map .ssa-candidates-title,
+body.ops-map .ssa-block-status,
+body.ops-map .ssa-leader-picker-hint,
+body.ops-map .ssa-leader-board-meta {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-form input,
+body.ops-map .ssa-form select,
+body.ops-map .ssa-toolbar input[type="date"] {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .ssa-stock-tab,
+body.ops-map .ssa-candidate-btn {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink-muted) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .ssa-stock-tab.active,
+body.ops-map .ssa-stock-tab:hover {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .ssa-stock-tab.is-bullish {
+    border-color: rgba(194, 59, 59, 0.45) !important;
+}
+
+body.ops-map .ssa-rs-roc,
+body.ops-map .ssa-fund-flow-metric,
+body.ops-map .ssa-auction-metric {
+    background: var(--ops-surface-inset) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-rs-roc span,
+body.ops-map .ssa-rs-roc em,
+body.ops-map .ssa-fund-flow-metric span,
+body.ops-map .ssa-fund-flow-meta,
+body.ops-map .ssa-fund-flow-hint,
+body.ops-map .ssa-fund-flow-empty,
+body.ops-map .ssa-rs-hint {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-rs-roc strong,
+body.ops-map .ssa-fund-flow-metric strong {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-plan-badge {
+    background: rgba(217, 226, 236, 0.06) !important;
+    border-color: rgba(217, 226, 236, 0.22) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .ssa-plan-badge--buy,
+body.ops-map .ssa-plan-badge--bull {
+    background: rgba(47, 158, 107, 0.14) !important;
+    border-color: rgba(47, 158, 107, 0.4) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .ssa-plan-badge--avoid,
+body.ops-map .ssa-plan-badge--bear {
+    background: rgba(194, 59, 59, 0.14) !important;
+    border-color: rgba(194, 59, 59, 0.4) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .ssa-plan-badge--watch,
+body.ops-map .ssa-plan-badge--conf-low,
+body.ops-map .ssa-plan-badge--neutral,
+body.ops-map .ssa-plan-badge--conf-mid {
+    background: rgba(217, 226, 236, 0.06) !important;
+    border-color: rgba(217, 226, 236, 0.22) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-plan-badge--conf-high,
+body.ops-map .ssa-plan-badge--primary,
+body.ops-map .ssa-plan-badge--rr {
+    background: rgba(47, 111, 237, 0.14) !important;
+    border-color: rgba(47, 111, 237, 0.4) !important;
+    color: var(--ops-route) !important;
+}
+
+body.ops-map .ssa-plan-conflicts {
+    background: rgba(201, 162, 39, 0.1) !important;
+    border: 1px solid rgba(201, 162, 39, 0.35) !important;
+}
+
+body.ops-map .ssa-plan-conflict-item {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .ssa-plan-table th,
+body.ops-map .ssa-plan-table td,
+body.ops-map .ssa-fund-flow-table th,
+body.ops-map .ssa-fund-flow-table td,
+body.ops-map .ssa-rs-history-table th,
+body.ops-map .ssa-rs-history-table td {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.12) !important;
+    background: transparent !important;
+}
+
+body.ops-map .ssa-plan-table th,
+body.ops-map .ssa-fund-flow-table th,
+body.ops-map .ssa-rs-history-table th {
+    background: var(--ops-table-head) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-png-shot {
+    background: var(--ops-surface) !important;
+}
+
+body.ops-map .kde-levels-card,
+body.ops-map .kde-levels-section,
+body.ops-map .pattern-tactical-block,
+body.ops-map .ms-zigzag-wrap,
+body.ops-map .gann-fan-wrap {
+    background: var(--ops-ground-elevated) !important;
+    border-color: var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+/* ========== 11b) KDE 阻力支撑（不透明暗面，禁止半透明叠白底） ========== */
+body.ops-map .kde-levels-result,
+body.ops-map .ssa-embedded-levels,
+body.ops-map .ssa-levels-host,
+body.ops-map .kde-conf-hero,
+body.ops-map .kde-conf-hero.is-empty,
+body.ops-map .kde-conf-list-details,
+body.ops-map .kde-algo-details,
+body.ops-map .kde-levels-card,
+body.ops-map .kde-levels-card.support,
+body.ops-map .kde-levels-card.resistance,
+body.ops-map .kde-levels-card.current,
+body.ops-map .kde-levels-card.fib,
+body.ops-map .kde-levels-card.pivot,
+body.ops-map .kde-levels-card.cam,
+body.ops-map .kde-levels-card.vp,
+body.ops-map .kde-levels-card.vp-compare,
+body.ops-map .kde-levels-card.confluence,
+body.ops-map .kde-levels-card--inline,
+body.ops-map .kde-levels-empty,
+body.ops-map .kde-levels-candidates,
+body.ops-map .ms-weekly-details,
+body.ops-map .ms-contrast,
+body.ops-map .ms-caution {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .kde-conf-hero {
+    background: linear-gradient(180deg, #1a2430 0%, var(--ops-ground-elevated) 100%) !important;
+    border-color: rgba(47, 111, 237, 0.35) !important;
+}
+
+body.ops-map .kde-conf-hero-item,
+body.ops-map .kde-conf-hero-item.is-strong,
+body.ops-map .kde-conf-hero-item.is-empty {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.14) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .kde-conf-hero-item.is-strong {
+    border-color: rgba(47, 111, 237, 0.55) !important;
+    box-shadow: inset 3px 0 0 var(--ops-route) !important;
+}
+
+body.ops-map .kde-levels-summary,
+body.ops-map .kde-levels-subtitle,
+body.ops-map .kde-conf-hero-heading,
+body.ops-map .kde-conf-hero-price,
+body.ops-map .kde-conf-hero-price strong,
+body.ops-map .kde-conf-hero-title,
+body.ops-map .kde-conf-hero-side,
+body.ops-map .kde-levels-card h4,
+body.ops-map .kde-levels-card li,
+body.ops-map .kde-conf-list-details li,
+body.ops-map .kde-algo-details > summary,
+body.ops-map .kde-conf-list-details > summary,
+body.ops-map .kde-levels-near,
+body.ops-map .kde-levels-near strong,
+body.ops-map .kde-levels-price,
+body.ops-map .kde-levels-meta,
+body.ops-map .kde-levels-meta-line,
+body.ops-map .kde-levels-dir,
+body.ops-map .kde-vp-compare-title,
+body.ops-map .ms-result-wrap,
+body.ops-map .ms-summary,
+body.ops-map .ms-details-static-title {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .kde-conf-hero-note,
+body.ops-map .kde-conf-hero-meta,
+body.ops-map .kde-conf-hero-near,
+body.ops-map .kde-conf-hero-item.is-empty,
+body.ops-map .kde-levels-hint,
+body.ops-map .kde-levels-atr-tip,
+body.ops-map .kde-levels-date,
+body.ops-map .kde-vp-lookback-meta,
+body.ops-map .kde-vp-compare-note,
+body.ops-map .kde-levels-card li.muted,
+body.ops-map .kde-conf-list-details li.muted,
+body.ops-map .ms-meta,
+body.ops-map .muted {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .kde-conf-tier-badge {
+    background: rgba(217, 226, 236, 0.12) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .kde-conf-tier-badge.is-strong {
+    background: var(--ops-route) !important;
+    color: #fff !important;
+}
+
+body.ops-map .kde-levels-card li .idx,
+body.ops-map .kde-conf-list-details li .idx {
+    background: rgba(217, 226, 236, 0.1) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .kde-levels-card li,
+body.ops-map .kde-conf-list-details li {
+    border-bottom-color: rgba(217, 226, 236, 0.1) !important;
+}
+
+body.ops-map .kde-levels-adjust-tag.is-qfq {
+    background: rgba(201, 162, 39, 0.18) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .kde-levels-adjust-tag.is-raw {
+    background: rgba(217, 226, 236, 0.1) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .kde-levels-board-tag,
+body.ops-map .kde-levels-badge {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .kde-levels-change.is-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .kde-levels-change.is-down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .kde-levels-price {
+    color: var(--ops-route) !important;
+}
+
+body.ops-map .ms-trend--up {
+    background: rgba(47, 158, 107, 0.18) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .ms-trend--down {
+    background: rgba(194, 59, 59, 0.18) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .ms-trend--trans,
+body.ops-map .ms-trend--range,
+body.ops-map .ms-trend--na {
+    background: rgba(217, 226, 236, 0.08) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+/* ========== 12) 历史行情页（无独立 main 时也兜底） ========== */
+body.ops-map .history-card .toolbar {
+    background: var(--ops-surface-inset) !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .history-title {
+    color: var(--ops-ink) !important;
+    text-align: left !important;
+}
+
+body.ops-map .history-table th {
+    background: var(--ops-table-head) !important;
+    color: var(--ops-ink-muted) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .history-table td {
+    background: transparent !important;
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.12) !important;
+}
+
+body.ops-map .history-card .pagination button {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .history-card #pageInfo {
+    background: rgba(217, 226, 236, 0.06) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .history-table .row-up,
+body.ops-map .history-table tr.row-up td {
+    background: rgba(194, 59, 59, 0.12) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .history-table .row-down,
+body.ops-map .history-table tr.row-down td {
+    background: rgba(47, 158, 107, 0.12) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .calculate-btn {
+    background: var(--ops-overlay-film) !important;
+    border: 1px solid var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    box-shadow: none !important;
+}
+
+/* ========== 14) 个股策略分析：徽章 / 价位标签 / 形态 / 波段 / 江恩可读性 ========== */
+/* 压过 .main-content span 的浅字，避免白底浅字 */
+body.ops-map .main-content .ssa-badge,
+body.ops-map .main-content .ssa-badge--yes,
+body.ops-map .main-content .ssa-badge--no {
+    border-radius: 1px !important;
+    font-weight: 600 !important;
+}
+
+body.ops-map .main-content .ssa-badge--yes {
+    background: rgba(194, 59, 59, 0.2) !important;
+    color: var(--color-rise) !important;
+    border: 1px solid rgba(194, 59, 59, 0.45) !important;
+}
+
+body.ops-map .main-content .ssa-badge--no {
+    background: rgba(0, 0, 0, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+}
+
+body.ops-map .main-content .ssa-card-score,
+body.ops-map .main-content .ssa-card-reason,
+body.ops-map .main-content .ssa-card-links,
+body.ops-map .main-content .ssa-link,
+body.ops-map .main-content .ssa-card-head h4 {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .ssa-link {
+    color: var(--ops-gold) !important;
+}
+
+/* KDE / Fib / Pivot / Camarilla 价位标签：禁止浅灰底+浅字 */
+body.ops-map .main-content .kde-levels-card li .idx,
+body.ops-map .main-content .kde-conf-list-details li .idx,
+body.ops-map .main-content .kde-levels-card li .idx-label,
+body.ops-map .main-content .kde-conf-list-details li .idx-label,
+body.ops-map .main-content span.idx,
+body.ops-map .main-content span.idx-label {
+    background: rgba(0, 0, 0, 0.4) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+}
+
+body.ops-map .main-content .kde-conf-list-details li,
+body.ops-map .main-content .kde-levels-card li {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .kde-conf-list-details li .idx-label {
+    max-width: min(100%, 42rem);
+    justify-content: flex-start !important;
+    text-align: left;
+    white-space: normal;
+    line-height: 1.35;
+    padding: 0.2rem 0.45rem !important;
+}
+
+/* 形态解读：整卡暗面 */
+body.ops-map .main-content .pattern-expert-analysis,
+body.ops-map .main-content .pattern-tactical-block,
+body.ops-map .main-content .pattern-result-wrap,
+body.ops-map .main-content .pattern-meta {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .main-content .pattern-expert-title,
+body.ops-map .main-content .pattern-expert-body,
+body.ops-map .main-content .pattern-expert-body p,
+body.ops-map .main-content .pattern-expert-body span,
+body.ops-map .main-content .pattern-expert-label,
+body.ops-map .main-content .pattern-expert-trade-levels,
+body.ops-map .main-content .pattern-expert-trade-levels p,
+body.ops-map .main-content .pattern-expert-trade-levels li,
+body.ops-map .main-content .pattern-tactical-block p,
+body.ops-map .main-content .pattern-tactical-block li,
+body.ops-map .main-content .pattern-tactical-block span {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .pattern-expert-risk,
+body.ops-map .main-content .pattern-tactical-risk {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .main-content .pattern-tactical-badge,
+body.ops-map .main-content .pattern-bq-strong,
+body.ops-map .main-content .pattern-bq-weak,
+body.ops-map .main-content .pattern-bq-hold,
+body.ops-map .main-content .pattern-tactical-caution {
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(217, 226, 236, 0.25) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .pattern-bq-strong {
+    border-color: rgba(47, 111, 237, 0.5) !important;
+    color: var(--ops-route) !important;
+}
+
+/* 波段趋势说明 */
+body.ops-map .main-content .ms-analysis,
+body.ops-map .main-content .ms-result-wrap,
+body.ops-map .main-content .ms-contrast,
+body.ops-map .main-content .ms-weekly-details,
+body.ops-map .main-content .ms-zigzag-wrap {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .main-content .ms-subtitle,
+body.ops-map .main-content .ms-analysis-list,
+body.ops-map .main-content .ms-analysis-list li,
+body.ops-map .main-content .ms-summary,
+body.ops-map .main-content .ms-meta,
+body.ops-map .main-content .ms-bos,
+body.ops-map .main-content .ms-period-tag {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .ms-muted,
+body.ops-map .main-content .ms-chart-hint,
+body.ops-map .main-content .ms-disclaimer,
+body.ops-map .main-content .ms-empty {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* 江恩 verdict：浅粉底改暗面 */
+body.ops-map .main-content .gann-verdict,
+body.ops-map .main-content .gann-bias--bull,
+body.ops-map .main-content .gann-bias--bear,
+body.ops-map .main-content .gann-bias--near,
+body.ops-map .main-content .gann-bias--na,
+body.ops-map .main-content .gann-fan-wrap,
+body.ops-map .main-content .gann-result-wrap {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .main-content .gann-bias--bear {
+    background: rgba(194, 59, 59, 0.16) !important;
+    border-color: rgba(194, 59, 59, 0.45) !important;
+}
+
+body.ops-map .main-content .gann-bias--bull {
+    background: rgba(47, 158, 107, 0.16) !important;
+    border-color: rgba(47, 158, 107, 0.45) !important;
+}
+
+body.ops-map .main-content .gann-bias--near {
+    background: rgba(201, 162, 39, 0.14) !important;
+    border-color: rgba(201, 162, 39, 0.45) !important;
+}
+
+body.ops-map .main-content .gann-verdict-label,
+body.ops-map .main-content .gann-verdict-summary,
+body.ops-map .main-content .gann-verdict span,
+body.ops-map .main-content .gann-meta,
+body.ops-map .main-content .gann-anchor-line,
+body.ops-map .main-content .gann-subtitle,
+body.ops-map .main-content .gann-table,
+body.ops-map .main-content .gann-table th,
+body.ops-map .main-content .gann-table td {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .gann-bias--bear .gann-verdict-label {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .main-content .gann-bias--bull .gann-verdict-label {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .main-content .gann-bias--near .gann-verdict-label {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .main-content .gann-chart-hint,
+body.ops-map .main-content .gann-disclaimer,
+body.ops-map .main-content .gann-empty {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .main-content .gann-table th {
+    background: var(--ops-table-head) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .main-content .kde-levels-atr-tip,
+body.ops-map .main-content .kde-levels-meta {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* ========== 13) 手机：双栏改单栏 ========== */
+@media (max-width: 767px) {
+    body.ops-map .finance-grid,
+    body.ops-map .ssa-rs-rocs,
+    body.ops-map .ssa-fund-flow-summary,
+    body.ops-map .ssa-auction-summary {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+    body.ops-map .finance-grid {
+        grid-template-columns: 1fr 1fr !important;
+        gap: 10px !important;
+    }
+
+    body.ops-map .ssa-fund-flow-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}

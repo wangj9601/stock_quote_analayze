@@ -1,0 +1,203 @@
+/* Markets page — territory map densification */
+body.ops-map .market-overview {
+    padding-top: 1rem;
+}
+
+body.ops-map .market-indices,
+body.ops-map .index-cards {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+body.ops-map .index-card {
+    padding: 12px 14px !important;
+    position: relative;
+}
+
+body.ops-map .index-card::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--ops-gold);
+    opacity: 0.55;
+}
+
+body.ops-map .index-header h3,
+body.ops-map .index-name {
+    font-family: var(--font-mark);
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .index-code {
+    font-family: var(--font-mark);
+    color: var(--ops-gold) !important;
+    background: transparent !important;
+}
+
+body.ops-map .board-section,
+body.ops-map .ranking-section,
+body.ops-map .volume-section {
+    margin-top: 1.25rem;
+}
+
+body.ops-map .board-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+}
+
+body.ops-map .board-card {
+    padding: 10px 12px !important;
+}
+
+body.ops-map .board-card .board-name {
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+}
+
+/* 内容频道条：涨跌排行 / 板块 … */
+body.ops-map .content-tabs {
+    background: transparent !important;
+    margin-top: 1rem;
+}
+
+body.ops-map .tab-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px 2px 0 0 !important;
+    padding: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+body.ops-map .content-tab {
+    font-family: var(--font-mark) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.05em !important;
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+    border: none !important;
+    border-right: 1px solid var(--color-border) !important;
+    border-bottom: none !important;
+    border-radius: 0 !important;
+    padding: 0.7rem 1rem !important;
+}
+
+body.ops-map .content-tab:hover,
+body.ops-map .content-tab:hover:not(.active) {
+    color: var(--ops-ink) !important;
+    background: rgba(47, 111, 237, 0.1) !important;
+}
+
+body.ops-map .content-tab.active {
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+    box-shadow: inset 0 -2px 0 var(--ops-gold);
+}
+
+body.ops-map .tab-content,
+body.ops-map .tab-panel,
+body.ops-map .rankings-content {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-top: none !important;
+    border-radius: 0 0 2px 2px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .rankings-header,
+body.ops-map .filters-bar,
+body.ops-map .ranking-types {
+    background: rgba(217, 226, 236, 0.03) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .ranking-type-btn {
+    font-family: var(--font-mark) !important;
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .ranking-type-btn.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .ranking-type-btn:hover:not(.active) {
+    color: var(--ops-ink) !important;
+    border-color: var(--ops-route) !important;
+}
+
+body.ops-map .rankings-table,
+body.ops-map .sectors-table,
+body.ops-map .table {
+    background: var(--ops-ground) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .rankings-table th,
+body.ops-map .sectors-table th,
+body.ops-map .table th {
+    background: rgba(217, 226, 236, 0.05) !important;
+    color: var(--ops-ink-muted) !important;
+    border-bottom: 1px solid var(--color-border) !important;
+}
+
+body.ops-map .rankings-table td,
+body.ops-map .sectors-table td,
+body.ops-map .table td {
+    background: transparent !important;
+    color: var(--ops-ink) !important;
+    border-bottom: 1px solid rgba(217, 226, 236, 0.08) !important;
+}
+
+body.ops-map .rankings-table tbody tr:hover td,
+body.ops-map .sectors-table tbody tr:hover td,
+body.ops-map .table tbody tr:hover td {
+    background: rgba(47, 111, 237, 0.1) !important;
+}
+
+body.ops-map .btn-buy,
+body.ops-map button.buy-btn {
+    background: var(--ops-route) !important;
+    border-color: var(--ops-route) !important;
+    color: #fff !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .btn-sell,
+body.ops-map button.sell-btn {
+    background: transparent !important;
+    border: 1px solid var(--ops-alert) !important;
+    color: var(--ops-alert) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .btn-watch,
+body.ops-map .btn-history,
+body.ops-map button.add-watchlist-btn,
+body.ops-map a.history-link {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+/* 叠层开启时给板块卡轻微叠层膜 */
+body.ops-map[data-ops-overlays]:not([data-ops-overlays=""]) .board-card,
+body.ops-map[data-ops-overlays]:not([data-ops-overlays=""]) .index-card {
+    box-shadow:
+        0 8px 22px rgba(0, 0, 0, 0.28),
+        inset 0 0 0 1px rgba(201, 162, 39, 0.18) !important;
+}

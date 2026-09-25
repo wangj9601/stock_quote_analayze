@@ -1,0 +1,42 @@
+/* Board detail — ops-map */
+body.ops-map.board-detail-page,
+body.ops-map[data-channel="quotes"].board-detail-page {
+    color: var(--ops-ink);
+}
+
+body.ops-map .board-detail-toolbar,
+body.ops-map .sector-detail-content,
+body.ops-map .sector-detail-header,
+body.ops-map .sector-detail-modal {
+    background: var(--ops-ground-elevated) !important;
+    border-color: var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .board-detail-back,
+body.ops-map .close-sector-detail {
+    color: var(--ops-gold) !important;
+    border: 1px solid rgba(201, 162, 39, 0.4);
+    border-radius: 2px;
+    padding: 8px 12px;
+    text-decoration: none;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+}
+
+body.ops-map #sectorDetailTitle {
+    font-family: var(--font-mark);
+    letter-spacing: 0.05em;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ops-force-pair {
+    margin: 12px 0;
+}
+
+@media (max-width: 767px) {
+    body.ops-map .board-detail-main .container {
+        padding: 12px !important;
+    }
+}

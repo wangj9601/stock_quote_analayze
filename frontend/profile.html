@@ -3,14 +3,20 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>个人中心 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/profile.css">
+    <link rel="stylesheet" href="css/profile-ops.css">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
 </head>
 
-<body data-channel="profile">
+<body data-channel="profile" class="ops-map">
     <script src="components/header.js"></script>
     <script>loadHeader('profile');</script>
     <!-- 主要内容 -->
@@ -49,6 +55,13 @@
                     </div>
                 </div>
             </section>
+
+            <nav class="ops-profile-shortcuts" aria-label="快捷入口">
+                <a href="index.html">首页</a>
+                <a href="news.html">资讯</a>
+                <a href="analysis.html">分析</a>
+            </nav>
+
 
             <!-- 内容标签 -->
             <section class="profile-tabs">

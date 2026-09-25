@@ -2,13 +2,19 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>行情中心 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/markets.css">
+    <link rel="stylesheet" href="css/markets-ops.css">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
 </head>
-<body data-channel="quotes">
+<body class="ops-map" data-channel="quotes">
 <script src="components/header.js"></script>
 <script>loadHeader('quotes');</script>
     <!-- 主要内容 -->
@@ -17,9 +23,9 @@
         <section class="market-tabs-section">
             <div class="container">
                 <div style="display: flex; align-items: center; justify-content: space-between;">
-                    <h1>行情中心</h1>
+                    <h1 class="ops-page-title">行情中心</h1>
                 </div>
-                <div class="market-tabs">
+                <div class="market-tabs ops-territory-tabs">
                     <button class="market-tab active" data-market="a-stock" id="aStockTab">A股</button>
                     <button class="market-tab" data-market="hk-stock" id="hkStockTab">港股</button>
                 </div>

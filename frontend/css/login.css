@@ -1,30 +1,31 @@
-/* 登录页面样式 - 专业交易平台风格 */
+/* 登录 — 作战标图台图例入口 */
 
-/* 整体布局 */
-body {
+body.ops-map {
     margin: 0;
     padding: 0;
     min-height: 100vh;
-    font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", Arial, sans-serif;
-    background: linear-gradient(135deg, #001529 0%, #002140 50%, #001529 100%);
+    font-family: var(--font-ui, "Noto Sans SC", sans-serif);
+    background-color: var(--ops-ground, #0f1419);
+    background-image:
+        linear-gradient(var(--ops-grid-line, rgba(217,226,236,0.08)) 1px, transparent 1px),
+        linear-gradient(90deg, var(--ops-grid-line, rgba(217,226,236,0.08)) 1px, transparent 1px);
+    background-size: 48px 48px;
     overflow-x: hidden;
     position: relative;
     display: flex;
     flex-direction: column;
+    color: var(--ops-ink, #d9e2ec);
 }
 
-/* 背景图案 */
-body::before {
+body.ops-map::before {
     content: '';
     position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: 
-        radial-gradient(circle at 20% 80%, rgba(120, 179, 255, 0.05) 0%, transparent 50%),
-        radial-gradient(circle at 80% 20%, rgba(120, 179, 255, 0.05) 0%, transparent 50%);
+    inset: 0;
+    background:
+        radial-gradient(circle at 18% 78%, rgba(201, 162, 39, 0.08) 0%, transparent 42%),
+        radial-gradient(circle at 82% 18%, rgba(47, 111, 237, 0.1) 0%, transparent 45%);
     z-index: 1;
+    pointer-events: none;
 }
 
 .login-container {
@@ -38,45 +39,51 @@ body::before {
 }
 
 .login-box {
-    background: rgba(255, 255, 255, 0.98);
-    backdrop-filter: blur(20px);
-    border-radius: 12px;
-    box-shadow: 
-        0 20px 40px rgba(0, 0, 0, 0.2),
-        0 0 0 1px rgba(255, 255, 255, 0.1);
-    padding: 3rem 2.5rem;
+    background: var(--ops-ground-elevated, #161c24);
+    border: 1px solid rgba(217, 226, 236, 0.16);
+    border-radius: 2px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    padding: 2.5rem 2rem;
     width: 100%;
     max-width: 420px;
     position: relative;
     z-index: 10;
-    transition: all 0.3s ease;
 }
 
-/* Logo区域 */
 .login-header {
     text-align: center;
-    margin-bottom: 2.5rem;
+    margin-bottom: 2rem;
 }
 
 .logo {
     display: inline-block;
-    background: #fff;
-    border-radius: 8px;
-    padding: 0.5rem 1.5rem 0.5rem 1.2rem;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-    border: 2px solid #e0e0e0;
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+    border: none;
 }
 
 .logo h1 {
-    font-size: 2.2rem;
+    font-family: var(--font-mark, "Barlow Condensed", "Noto Sans SC", sans-serif);
+    font-size: 2.75rem;
     font-weight: 700;
-    background: linear-gradient(135deg, #1890ff, #722ed1);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 0;
-    margin-bottom: 0.5rem;
-    transition: all 0.3s ease;
+    letter-spacing: 0.18em;
+    color: var(--ops-ink, #d9e2ec);
+    background: none;
+    -webkit-text-fill-color: unset;
+    margin: 0 0 0.35rem;
+}
+
+.logo h1::after {
+    content: "北京冰枫堂商贸有限公司";
+    display: block;
+    margin-top: 0.55rem;
+    font-family: var(--font-ui, "Noto Sans SC", sans-serif);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    color: var(--ops-gold, #c9a227);
 }
 
 .logo h1::before {
@@ -682,3 +689,54 @@ body::before {
         font-size: 11px;
     }
 } 
+
+/* Ops-map form contrast overrides */
+body.ops-map .login-form-container h2 {
+    color: var(--ops-ink, #d9e2ec);
+    font-family: var(--font-mark, "Barlow Condensed", "Noto Sans SC", sans-serif);
+    letter-spacing: 0.08em;
+}
+body.ops-map .login-form-container h2::after {
+    background: var(--ops-gold, #c9a227);
+    border-radius: 0;
+    height: 2px;
+}
+body.ops-map .form-group label {
+    color: var(--ops-ink-muted, #8b9aab);
+}
+body.ops-map .form-group input {
+    background: var(--ops-ground, #0f1419);
+    border: 1px solid rgba(217, 226, 236, 0.2);
+    color: var(--ops-ink, #d9e2ec);
+    border-radius: 2px;
+}
+body.ops-map .form-group input:focus {
+    border-color: var(--ops-gold, #c9a227);
+    box-shadow: var(--ops-focus);
+}
+body.ops-map .remember-me,
+body.ops-map .forgot-password {
+    color: var(--ops-ink-muted, #8b9aab);
+}
+body.ops-map .login-btn {
+    background: var(--ops-route, #2f6fed);
+    border-radius: 2px;
+    border: none;
+    box-shadow: none;
+}
+body.ops-map .login-btn:hover {
+    background: #3f7df5;
+}
+body.ops-map .icp-footer {
+    background: transparent;
+    backdrop-filter: none;
+    border-top: 1px solid rgba(217, 226, 236, 0.12);
+}
+body.ops-map .icp-footer a:hover {
+    color: var(--ops-gold, #c9a227);
+}
+body.ops-map .modal-content {
+    background: var(--ops-ground-elevated, #161c24);
+    color: var(--ops-ink, #d9e2ec);
+    border: 1px solid rgba(217, 226, 236, 0.16);
+}

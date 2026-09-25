@@ -1,0 +1,308 @@
+/* Watchlist — ops-map：暗色标图台，消除白底卡片/白条 */
+
+body.ops-map[data-channel="watchlist"] .main-content {
+    background: transparent !important;
+}
+
+body.ops-map[data-channel="watchlist"] .toolbar,
+body.ops-map[data-channel="watchlist"] .group-tabs,
+body.ops-map[data-channel="watchlist"] .price-alerts,
+body.ops-map[data-channel="watchlist"] .batch-panel,
+body.ops-map[data-channel="watchlist"] .stocks-list {
+    background: var(--ops-ground-elevated) !important;
+    border-color: var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+}
+
+body.ops-map[data-channel="watchlist"] .toolbar {
+    border-bottom: 1px solid var(--color-border) !important;
+    margin-bottom: 12px !important;
+    padding: 14px 0 !important;
+}
+
+body.ops-map[data-channel="watchlist"] .group-tabs {
+    border-bottom: 1px solid var(--color-border) !important;
+    margin-bottom: 12px !important;
+    padding-bottom: 12px !important;
+}
+
+body.ops-map[data-channel="watchlist"] h1,
+body.ops-map[data-channel="watchlist"] .toolbar-left h1 {
+    font-family: var(--font-mark);
+    letter-spacing: 0.05em;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .toolbar-left h1::after {
+    content: "";
+    display: block;
+    width: 2.5rem;
+    height: 2px;
+    margin-top: 0.35rem;
+    background: var(--ops-gold);
+}
+
+body.ops-map[data-channel="watchlist"] .stock-count {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* 按钮 */
+body.ops-map[data-channel="watchlist"] .btn,
+body.ops-map[data-channel="watchlist"] .analyze-all-btn,
+body.ops-map[data-channel="watchlist"] .import-btn,
+body.ops-map[data-channel="watchlist"] .export-dropdown-btn,
+body.ops-map[data-channel="watchlist"] .view-btn {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+body.ops-map[data-channel="watchlist"] .btn-primary,
+body.ops-map[data-channel="watchlist"] .add-stock-btn {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .btn:hover,
+body.ops-map[data-channel="watchlist"] .analyze-all-btn:hover,
+body.ops-map[data-channel="watchlist"] .view-btn:hover {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+    transform: none !important;
+}
+
+body.ops-map[data-channel="watchlist"] .view-btn.active {
+    background: var(--ops-overlay-film) !important;
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .view-controls {
+    border-color: var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="watchlist"] .export-menu {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .export-item {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .export-item:hover {
+    background: rgba(47, 111, 237, 0.12) !important;
+    color: var(--ops-gold) !important;
+}
+
+/* 分组 Tab */
+body.ops-map[data-channel="watchlist"] .tab-btn,
+body.ops-map[data-channel="watchlist"] .group-tab {
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map[data-channel="watchlist"] .tab-btn.active,
+body.ops-map[data-channel="watchlist"] .group-tab.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+/* —— 股票卡片 —— */
+body.ops-map[data-channel="watchlist"] .stocks-grid {
+    gap: 12px !important;
+}
+
+body.ops-map[data-channel="watchlist"] .stock-card {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+    padding: 1rem 1.05rem !important;
+    color: var(--ops-ink) !important;
+    transform: none !important;
+}
+
+body.ops-map[data-channel="watchlist"] .stock-card:hover {
+    transform: none !important;
+    border-color: rgba(201, 162, 39, 0.45) !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .stock-card .stock-header {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin-bottom: 0.65rem !important;
+}
+
+body.ops-map[data-channel="watchlist"] .stock-basic h3 {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.03em;
+}
+
+body.ops-map[data-channel="watchlist"] .stock-code {
+    color: var(--ops-ink-muted) !important;
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .remove-btn {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .remove-btn:hover {
+    background: rgba(194, 59, 59, 0.15) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .current-price {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .price-change.positive,
+body.ops-map[data-channel="watchlist"] .change-percent.positive {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .price-change.negative,
+body.ops-map[data-channel="watchlist"] .change-percent.negative {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .stock-card .stock-details {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid rgba(217, 226, 236, 0.1) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+    padding: 0.75rem !important;
+}
+
+body.ops-map[data-channel="watchlist"] .detail-row span:first-child {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .detail-row span:last-child {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .action-btn {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink-muted) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map[data-channel="watchlist"] .action-btn:hover,
+body.ops-map[data-channel="watchlist"] .trade-btn:hover {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+/* 列表视图表格 */
+body.ops-map[data-channel="watchlist"] .table th {
+    background: var(--ops-table-head, rgba(217, 226, 236, 0.04)) !important;
+    color: var(--ops-ink-muted) !important;
+    border-bottom-color: var(--color-border) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .table td {
+    color: var(--ops-ink) !important;
+    border-bottom-color: rgba(217, 226, 236, 0.1) !important;
+}
+
+body.ops-map[data-channel="watchlist"] .table tbody tr:hover {
+    background: var(--ops-table-row-hover, rgba(47, 111, 237, 0.1)) !important;
+}
+
+body.ops-map[data-channel="watchlist"] table {
+    font-variant-numeric: tabular-nums;
+}
+
+/* 弹层 / 模态 */
+body.ops-map[data-channel="watchlist"] .modal-content,
+body.ops-map[data-channel="watchlist"] .add-stock-modal .modal-body,
+body.ops-map[data-channel="watchlist"] .search-results {
+    background: var(--ops-ground-elevated) !important;
+    border-color: var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="watchlist"] input[type="text"],
+body.ops-map[data-channel="watchlist"] input[type="number"],
+body.ops-map[data-channel="watchlist"] select,
+body.ops-map[data-channel="watchlist"] textarea {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+    body.ops-map[data-channel="watchlist"] .stocks-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px !important;
+    }
+
+    body.ops-map[data-channel="watchlist"] .toolbar-right {
+        flex-wrap: wrap;
+    }
+
+    body.ops-map[data-channel="watchlist"] .btn,
+    body.ops-map[data-channel="watchlist"] .analyze-all-btn,
+    body.ops-map[data-channel="watchlist"] .add-stock-btn {
+        min-height: var(--ops-touch-min, 44px);
+    }
+}
+
+@media (max-width: 767px) {
+    body.ops-map[data-channel="watchlist"] .stocks-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+    }
+
+    body.ops-map[data-channel="watchlist"] .toolbar .container {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+
+    body.ops-map[data-channel="watchlist"] .toolbar-right {
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    body.ops-map[data-channel="watchlist"] .btn,
+    body.ops-map[data-channel="watchlist"] .analyze-all-btn,
+    body.ops-map[data-channel="watchlist"] .add-stock-btn,
+    body.ops-map[data-channel="watchlist"] .import-btn,
+    body.ops-map[data-channel="watchlist"] .export-dropdown-btn {
+        min-height: var(--ops-touch-min, 44px);
+        flex: 1 1 auto;
+    }
+
+    body.ops-map[data-channel="watchlist"] .watchlist-table-wrap,
+    body.ops-map[data-channel="watchlist"] .table-responsive,
+    body.ops-map[data-channel="watchlist"] .stocks-list {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.ops-map[data-channel="watchlist"] .table {
+        min-width: 640px;
+    }
+}

@@ -1,0 +1,68 @@
+/* Profile channel — ops-map */
+body.ops-map[data-channel="profile"] .user-profile-card,
+body.ops-map[data-channel="profile"] .profile-section,
+body.ops-map[data-channel="profile"] .settings-card,
+body.ops-map[data-channel="profile"] .info-card {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="profile"] h1,
+body.ops-map[data-channel="profile"] h2,
+body.ops-map[data-channel="profile"] h3 {
+    font-family: var(--font-mark);
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="profile"] .user-avatar {
+    background: var(--ops-overlay-film) !important;
+    border: 1px solid rgba(201, 162, 39, 0.45) !important;
+    color: var(--ops-gold) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="profile"] .quick-link,
+body.ops-map[data-channel="profile"] .menu-item,
+body.ops-map[data-channel="profile"] .profile-action-btn {
+    background: var(--ops-ground) !important;
+    border: 1px solid rgba(217, 226, 236, 0.18) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+    min-height: 44px;
+}
+
+body.ops-map[data-channel="profile"] .quick-link:hover,
+body.ops-map[data-channel="profile"] .menu-item:hover {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+}
+
+/* 手机：资讯快捷入口条 */
+body.ops-map[data-channel="profile"] .ops-profile-shortcuts {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin: 12px 0 18px;
+}
+
+body.ops-map[data-channel="profile"] .ops-profile-shortcuts a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    font-family: var(--font-mark);
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    color: var(--ops-ink);
+    background: var(--ops-ground);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+}
+
+body.ops-map[data-channel="profile"] .ops-profile-shortcuts a:hover {
+    color: var(--ops-gold);
+    border-color: var(--ops-gold);
+}

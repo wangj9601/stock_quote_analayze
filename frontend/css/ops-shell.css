@@ -1,0 +1,102 @@
+/* 作战标图台 — page shell helpers */
+
+.ops-page-title {
+    font-family: var(--font-mark);
+    font-weight: 700;
+    font-size: clamp(1.75rem, 3vw, 2.5rem);
+    letter-spacing: 0.04em;
+    color: var(--ops-ink);
+    text-transform: none;
+    margin: 0 0 0.35rem;
+}
+
+.ops-page-title::after {
+    content: "";
+    display: block;
+    width: 3rem;
+    height: 2px;
+    margin-top: 0.5rem;
+    background: var(--ops-gold);
+}
+
+.ops-territory-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--color-border);
+    margin-top: 0.75rem;
+}
+
+.ops-territory-tabs .market-tab,
+.ops-territory-tabs button {
+    font-family: var(--font-mark);
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 0.65rem 1.25rem;
+    border: none;
+    background: transparent;
+    color: var(--ops-ink-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+}
+
+.ops-territory-tabs .market-tab.active,
+.ops-territory-tabs button.active {
+    color: var(--ops-gold);
+    border-bottom-color: var(--ops-gold);
+    background: var(--ops-overlay-film);
+}
+
+.ops-map-panel {
+    background: var(--ops-ground-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.ops-signal-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-family: var(--font-mark);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 0.2rem 0.55rem;
+    border: 1px solid var(--ops-gold);
+    color: var(--ops-gold);
+    background: var(--ops-overlay-film);
+    border-radius: 1px;
+}
+
+.ops-force-pair {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.875rem;
+}
+
+.ops-force-pair .force-label {
+    font-family: var(--font-mark);
+    letter-spacing: 0.06em;
+    color: var(--ops-gold);
+}
+
+.ops-force-pair .force-vs {
+    color: var(--ops-ink-muted);
+    font-size: 0.75rem;
+}
+
+/* 底栏默认隐藏，仅手机断点显示 */
+.ops-bottom-nav {
+    display: none;
+}
+
+/* 非投研工作台频道隐藏策略叠层，减少干扰 */
+body.ops-map[data-channel="news"] .ops-overlay-bar,
+body.ops-map[data-channel="profile"] .ops-overlay-bar,
+body.ops-map:has(.login-container) .ops-overlay-bar {
+    display: none !important;
+}

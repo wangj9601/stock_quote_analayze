@@ -3,14 +3,20 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>我的自选股 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925p">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925o">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/watchlist.css">
+    <link rel="stylesheet" href="css/watchlist-ops.css?v=20260925a">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925o">
 </head>
 
-<body data-channel="watchlist">
+<body class="ops-map" data-channel="watchlist">
     <script src="components/header.js"></script>
     <script>loadHeader('watchlist');</script>
     <!-- 主要内容 -->

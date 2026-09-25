@@ -1,0 +1,65 @@
+/* News channel — ops-map */
+body.ops-map[data-channel="news"] .news-main,
+body.ops-map[data-channel="news"] .page-header {
+    color: var(--ops-ink);
+}
+
+body.ops-map[data-channel="news"] .page-header h1 {
+    font-family: var(--font-mark);
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    letter-spacing: 0.06em;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="news"] .page-header h1::after {
+    content: "";
+    display: block;
+    width: 2.5rem;
+    height: 2px;
+    margin-top: 0.4rem;
+    background: var(--ops-gold);
+}
+
+body.ops-map[data-channel="news"] .page-header p {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="news"] .featured-card,
+body.ops-map[data-channel="news"] .news-card,
+body.ops-map[data-channel="news"] .news-item,
+body.ops-map[data-channel="news"] .category-tabs {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="news"] .category-tab,
+body.ops-map[data-channel="news"] .news-cat-btn {
+    font-family: var(--font-mark);
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    background: transparent !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map[data-channel="news"] .category-tab.active,
+body.ops-map[data-channel="news"] .news-cat-btn.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map[data-channel="news"] a {
+    color: var(--ops-route);
+}
+
+@media (max-width: 767px) {
+    body.ops-map[data-channel="news"] .category-tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 6px;
+    }
+}

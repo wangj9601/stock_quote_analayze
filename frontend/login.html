@@ -2,10 +2,13 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>北京冰枫堂商贸有限公司</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/login.css">
     <script>
         // 仅清理用户站登录态，避免与同域 /admin 共用的 localStorage 整库 clear 误删 admin_token
@@ -16,7 +19,7 @@
         })();
     </script>
 </head>
-<body>
+<body class="ops-map">
     <div class="login-container">
         <div class="login-box">
             <!-- Logo区域 -->

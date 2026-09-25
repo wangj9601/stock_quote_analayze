@@ -1,0 +1,233 @@
+/* Home — map entry after login */
+
+body.ops-map .market-overview > .container > h2 {
+    font-size: clamp(1.5rem, 2.5vw, 2rem);
+    margin-bottom: 0.75rem;
+}
+
+body.ops-map .market-overview > .container > h2::after {
+    content: "";
+    display: block;
+    width: 2.5rem;
+    height: 2px;
+    margin-top: 0.4rem;
+    background: var(--ops-gold);
+}
+
+body.ops-map .index-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
+}
+
+/* —— 底部四宫格：暗色标图面板（勿留白底） —— */
+body.ops-map .function-area {
+    padding: 0.5rem 0 2rem;
+}
+
+body.ops-map .function-grid {
+    gap: 12px !important;
+}
+
+body.ops-map .function-card {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+    padding: 1rem 1.1rem !important;
+    color: var(--ops-ink) !important;
+    transform: none !important;
+}
+
+body.ops-map .function-card:hover {
+    transform: none !important;
+    border-color: rgba(217, 226, 236, 0.28) !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+}
+
+body.ops-map .function-header {
+    border-bottom: 1px solid var(--color-border) !important;
+    margin-bottom: 0.75rem !important;
+    padding-bottom: 0.55rem !important;
+}
+
+body.ops-map .function-card h3 {
+    font-family: var(--font-mark) !important;
+    letter-spacing: 0.06em;
+    color: var(--ops-ink) !important;
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+}
+
+body.ops-map .more-link {
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .more-link:hover {
+    color: var(--ops-ink) !important;
+    opacity: 1;
+}
+
+/* 自选股行 */
+body.ops-map .stock-item {
+    background: rgba(217, 226, 236, 0.03) !important;
+    border: 1px solid rgba(217, 226, 236, 0.12) !important;
+    border-radius: 2px !important;
+    min-height: 56px;
+    padding: 0.7rem 0.85rem !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .stock-item:hover {
+    background: rgba(47, 111, 237, 0.1) !important;
+    border-color: rgba(47, 111, 237, 0.35) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .stock-code {
+    color: var(--ops-ink-muted) !important;
+    background: rgba(217, 226, 236, 0.06) !important;
+    font-family: var(--font-mark) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .stock-name,
+body.ops-map .price {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .price {
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map .change {
+    background: rgba(217, 226, 236, 0.06) !important;
+    border-radius: 1px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .change.positive {
+    color: var(--color-rise) !important;
+    background: var(--ops-positive-bg, rgba(194, 59, 59, 0.12)) !important;
+}
+
+body.ops-map .change.negative {
+    color: var(--color-fall) !important;
+    background: var(--ops-negative-bg, rgba(47, 158, 107, 0.12)) !important;
+}
+
+body.ops-map .empty-state {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* 热门板块 */
+body.ops-map .sector-item {
+    background: rgba(217, 226, 236, 0.03) !important;
+    border: 1px solid rgba(217, 226, 236, 0.12) !important;
+    border-radius: 2px !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .sector-item:hover {
+    background: rgba(47, 111, 237, 0.1) !important;
+    border-color: rgba(47, 111, 237, 0.35) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .sector-name {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .sector-change {
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map .sector-change.positive {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .sector-change.negative {
+    color: var(--color-fall) !important;
+}
+
+/* 涨幅榜 */
+body.ops-map .rank-item {
+    border-bottom-color: rgba(217, 226, 236, 0.1) !important;
+}
+
+body.ops-map .rank-item:hover {
+    background: rgba(47, 111, 237, 0.08) !important;
+}
+
+body.ops-map .rank-item .stock-code,
+body.ops-map .rank-item .stock-name {
+    color: var(--ops-ink) !important;
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+body.ops-map .change-pct {
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map .change-pct.positive {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .change-pct.negative {
+    color: var(--color-fall) !important;
+}
+
+/* 资讯 */
+body.ops-map .news-item {
+    border-bottom-color: rgba(217, 226, 236, 0.1) !important;
+}
+
+body.ops-map .news-item:hover {
+    background: rgba(47, 111, 237, 0.08) !important;
+}
+
+body.ops-map .news-time {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .news-title,
+body.ops-map .news-content,
+body.ops-map .news-item a {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .news-summary {
+    color: var(--ops-ink-muted) !important;
+    font-size: 0.82rem;
+    margin-top: 0.2rem;
+}
+
+/* iPad：两列 */
+@media (min-width: 768px) and (max-width: 1024px) {
+    body.ops-map .function-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+}
+
+/* 手机：单列 */
+@media (max-width: 767px) {
+    body.ops-map .function-grid {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+    }
+
+    body.ops-map .function-card {
+        padding: 0.85rem 0.9rem !important;
+    }
+
+    body.ops-map .stock-item {
+        min-height: var(--ops-touch-min, 44px);
+    }
+}

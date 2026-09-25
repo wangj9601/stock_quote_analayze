@@ -1,0 +1,159 @@
+/* Screening — strategy map workbench */
+body.ops-map .screening-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1rem 1.25rem 2.5rem;
+}
+
+body.ops-map .screening-header {
+    margin-bottom: 0.5rem;
+}
+
+body.ops-map .screening-header h1 {
+    font-size: clamp(1.75rem, 3vw, 2.35rem);
+    margin: 0 0 0.35rem;
+}
+
+body.ops-map .screening-header h1::after {
+    content: "";
+    display: block;
+    width: 3rem;
+    height: 2px;
+    margin-top: 0.45rem;
+    background: var(--ops-gold);
+}
+
+body.ops-map .strategy-info-card {
+    padding: 1rem 1.1rem !important;
+    margin: 1rem 0;
+}
+
+body.ops-map .strategy-info-card h2 {
+    font-family: var(--font-mark);
+    font-size: 1.05rem;
+    letter-spacing: 0.08em;
+    color: var(--ops-gold) !important;
+    margin-bottom: 0.65rem;
+}
+
+body.ops-map .strategy-conditions,
+body.ops-map .strategy-conditions li {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .strategy-conditions .condition-item {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .screening-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+    margin: 0.75rem 0 1rem;
+}
+
+body.ops-map .results-header {
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+
+body.ops-map .results-table-wrapper,
+body.ops-map .gms-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    background: var(--ops-ground);
+}
+
+body.ops-map .gms-sub-tabs,
+body.ops-map .gms-segmented-tabs,
+body.ops-map .vsb-sub-tabs {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    padding: 4px !important;
+}
+
+body.ops-map .gms-table-meta-bar {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+/* 核心策略短码在 Tab 上更醒目 */
+body.ops-map #gmsTab,
+body.ops-map #rpeTab,
+body.ops-map #urtTab,
+body.ops-map #sbbrTab,
+body.ops-map #csbTab {
+    font-size: 0.95rem;
+}
+
+/* 数据来源 / 参数区：标签可读 + 卡面不透明盖网 */
+body.ops-map .strategy-params-card,
+body.ops-map .parameters-card,
+body.ops-map .params-section {
+    background-color: var(--ops-ground-elevated) !important;
+    background-image: none !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .strategy-params-card h3,
+body.ops-map .parameters-card h3,
+body.ops-map .params-section h3 {
+    color: var(--ops-gold) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .strategy-params-card label,
+body.ops-map .parameters-card label,
+body.ops-map .params-section label,
+body.ops-map .parameter-group label,
+body.ops-map .param-group label,
+body.ops-map .param-item label,
+body.ops-map .param-label,
+body.ops-map .ma-periods-checkboxes label {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-params-refresh-hint,
+body.ops-map .param-hint,
+body.ops-map .board-source-hint {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* 选股页龙头角色面板同样暗色 */
+body.ops-map .gms-board-roles-panel,
+body.ops-map .gms-board-roles-block {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-board-roles-title,
+body.ops-map .gms-board-roles-line {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-board-role-chip,
+body.ops-map .gms-role-tag {
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-role-tag--mid {
+    border-color: rgba(47, 111, 237, 0.45) !important;
+    color: var(--ops-route) !important;
+}
+
+body.ops-map .gms-muted,
+body.ops-map .gms-board-roles-loading {
+    color: var(--ops-ink-muted) !important;
+}

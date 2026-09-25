@@ -70,6 +70,14 @@ async function loadHeader(activePage) {
                 nav.classList.add('active');
                 console.log('导航高亮设置完成:', activePage);
             }
+            const bn = document.getElementById('bn-' + activePage);
+            if (bn) {
+                bn.classList.add('active');
+            }
+            if (['home', 'news', 'profile'].includes(activePage)) {
+                const moreBtn = document.getElementById('bn-more');
+                if (moreBtn) moreBtn.classList.add('active');
+            }
         }
 
         // 延迟初始化用户菜单，确保DOM完全加载
@@ -77,6 +85,8 @@ async function loadHeader(activePage) {
             console.log('开始初始化用户菜单...');
             initUserMenu();
             initMobileNav();
+            initOpsOverlayBar();
+            initOpsMoreSheet();
         }, 100);
 
         await loadPermissionEngine();
@@ -98,6 +108,91 @@ async function loadHeader(activePage) {
         console.error('加载 header 失败:', err);
         // 避免 Uncaught (in promise)；顶栏缺失时页面主体仍可继续
     }
+}
+
+// 手机「更多」底栏抽屉：首页 / 资讯 / 我的
+function initOpsMoreSheet() {
+    const sheet = document.getElementById('opsMoreSheet');
+    const btn = document.getElementById('bn-more');
+    const backdrop = document.getElementById('opsMoreBackdrop');
+    const closeBtn = document.getElementById('opsMoreClose');
+    if (!sheet || !btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+
+    const setOpen = (open) => {
+        sheet.hidden = !open;
+        sheet.classList.toggle('is-open', open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        btn.classList.toggle('active', open);
+        document.body.classList.toggle('ops-more-open', open);
+    };
+
+    btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setOpen(sheet.hidden);
+    });
+    if (backdrop) backdrop.addEventListener('click', () => setOpen(false));
+    if (closeBtn) closeBtn.addEventListener('click', () => setOpen(false));
+    sheet.querySelectorAll('.ops-more-item').forEach((a) => {
+        a.addEventListener('click', () => setOpen(false));
+    });
+}
+
+// 策略叠层开关（作战标图台 signature interaction）
+function initOpsOverlayBar() {
+    const bar = document.getElementById('opsOverlayBar');
+    if (!bar || bar.dataset.bound === '1') return;
+    bar.dataset.bound = '1';
+
+    // 顶栏短码 -> 选股页 data-strategy
+    const STRATEGY_TAB_MAP = {
+        GMS: 'gms',
+        RPE: 'rpe',
+        URT: 'urt',
+        '做小做底': 'sbbr',
+        '通道突破': 'csb'
+    };
+
+    const applyBodyFlags = () => {
+        const on = [...bar.querySelectorAll('.ops-overlay-chip.is-on')].map((el) => el.dataset.strategy);
+        document.body.dataset.opsOverlays = on.join(',');
+        document.body.dispatchEvent(new CustomEvent('ops-overlays-change', { detail: { strategies: on } }));
+        highlightScreeningTabs(on);
+    };
+
+    const highlightScreeningTabs = (onCodes) => {
+        const tabs = document.querySelectorAll('.strategy-tab[data-strategy]');
+        if (!tabs.length) return;
+        const mapped = new Set(
+            onCodes.map((c) => STRATEGY_TAB_MAP[c]).filter(Boolean)
+        );
+        tabs.forEach((tab) => {
+            tab.classList.toggle('ops-overlay-hit', mapped.has(tab.dataset.strategy));
+        });
+    };
+
+    const activateScreeningTab = (code) => {
+        const key = STRATEGY_TAB_MAP[code];
+        if (!key) return;
+        const tab = document.querySelector(`.strategy-tab[data-strategy="${key}"]`);
+        if (tab && typeof tab.click === 'function') {
+            tab.click();
+        }
+    };
+
+    bar.querySelectorAll('.ops-overlay-chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+            const pressed = chip.getAttribute('aria-pressed') !== 'true';
+            chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+            chip.classList.toggle('is-on', pressed);
+            applyBodyFlags();
+            // 在选股页：点亮叠层时直接切到对应策略 Tab
+            if (pressed && document.body.dataset.channel === 'screening') {
+                activateScreeningTab(chip.dataset.strategy);
+            }
+        });
+    });
+    applyBodyFlags();
 }
 
 // 移动端顶栏汉堡菜单 / 抽屉
@@ -399,6 +494,9 @@ if (!document.querySelector('#header-animations')) {
 
 // 导出函数供外部使用
 window.initUserMenu = initUserMenu;
+window.initMobileNav = initMobileNav;
+window.initOpsOverlayBar = initOpsOverlayBar;
+window.initOpsMoreSheet = initOpsMoreSheet;
 window.toggleUserDropdown = toggleUserDropdown;
 window.openUserDropdown = openUserDropdown;
 window.closeUserDropdown = closeUserDropdown;

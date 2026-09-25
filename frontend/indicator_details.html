@@ -3,122 +3,30 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>股票指标详情</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-responsive.css">
+    <link rel="stylesheet" href="css/workbench-ops.css">
+
     <link rel="stylesheet" href="css/stock.css">
     <style>
-        body {
-            background-color: #f5f7fa;
-            padding: 20px;
-        }
-
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
-
-        .header {
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header h1 {
-            margin: 0;
-            font-size: 24px;
-            color: #333;
-        }
-
-        .stock-info {
-            font-size: 16px;
-            color: #666;
-        }
-
-        .indicator-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
-        }
-
-        .indicator-card {
-            background: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-            padding: 20px;
-            transition: transform 0.3s;
-        }
-
-        .indicator-card:hover {
-            transform: translateY(-5px);
-        }
-
-        .card-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #333;
-            margin-bottom: 15px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .card-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .data-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px dashed #f0f0f0;
-        }
-
-        .data-label {
-            color: #909399;
-            font-size: 14px;
-        }
-
-        .data-value {
-            color: #303133;
-            font-weight: 500;
-            font-family: 'Roboto', sans-serif;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 50px;
-            font-size: 18px;
-            color: #909399;
-        }
-
-        .error {
-            text-align: center;
-            padding: 50px;
-            color: #f56c6c;
-            font-size: 18px;
-        }
-
-        .no-data {
-            color: #909399;
-            font-style: italic;
-        }
+        .indicator-workbench .container { max-width: 1200px; margin: 0 auto; padding: 0 16px; }
+        .indicator-workbench .card-content { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .indicator-workbench .card-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--color-border); }
+        .indicator-workbench .data-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px dashed rgba(217, 226, 236, 0.12); }
+        .indicator-workbench .loading,
+        .indicator-workbench .error { text-align: center; padding: 2rem 1rem; }
     </style>
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
 </head>
 
-<body>
-    <div class="container">
+<body class="ops-map indicator-page indicator-workbench" data-channel="analyze">
+    <div class="container indicator-workbench">
         <div class="header">
             <h1>指标详情数据</h1>
             <div class="stock-info" id="stockInfo">加载中...</div>

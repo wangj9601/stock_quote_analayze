@@ -2,14 +2,20 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>北京冰枫堂商贸有限公司</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/home.css">
     <link rel="stylesheet" href="css/home_colors.css">
+    <link rel="stylesheet" href="css/home-ops.css?v=20260925a">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
 </head>
-<body data-channel="home">
+<body class="ops-map" data-channel="home">
 <script src="components/header.js"></script>
 <script>loadHeader('home');</script>
 
@@ -21,7 +27,7 @@
                 <h2>市场概览</h2>
                 
                 <!-- 标签页导航 -->
-                <div class="market-tabs">
+                <div class="market-tabs ops-territory-tabs">
                     <button class="market-tab active" data-tab="a-stock">A股</button>
                     <button class="market-tab" data-tab="hk-stock">港股</button>
                 </div>
@@ -119,7 +125,7 @@
                     <!-- 自选股 -->
                     <div class="function-card">
                         <div class="function-header">
-                            <h3>📋 我的自选股</h3>
+                            <h3>我的自选股</h3>
                             <a href="watchlist.html" class="more-link">更多 &gt;</a>
                         </div>
                         <div class="stock-list">
@@ -130,7 +136,7 @@
                     <!-- 热门板块 -->
                     <div class="function-card">
                         <div class="function-header">
-                            <h3>🔥 热门板块</h3>
+                            <h3>热门板块</h3>
                             <a href="markets.html" class="more-link">更多 &gt;</a>
                         </div>
                         <div class="sector-list">
@@ -141,7 +147,7 @@
                     <!-- 涨幅榜 -->
                     <div class="function-card">
                         <div class="function-header">
-                            <h3>📈 今日涨幅榜</h3>
+                            <h3>今日涨幅榜</h3>
                             <a href="markets.html" class="more-link">更多 &gt;</a>
                         </div>
                         <div class="gainer-list">
@@ -152,7 +158,7 @@
                     <!-- 市场资讯 -->
                     <div class="function-card">
                         <div class="function-header">
-                            <h3>📰 市场资讯</h3>
+                            <h3>市场资讯</h3>
                             <a href="news.html" class="more-link">更多 &gt;</a>
                         </div>
                         <div class="news-list">

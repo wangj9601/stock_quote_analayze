@@ -1,0 +1,464 @@
+/* Stock detail — ops-map 暗色标图台（须置于 analysis.css 之后） */
+
+body.ops-map .main-content {
+    background: transparent !important;
+}
+
+/* —— 顶部报价区 —— */
+body.ops-map .stock-header {
+    background: var(--ops-ground-elevated) !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    padding: 1rem 0 1.1rem !important;
+    margin-bottom: 0 !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .stock-name {
+    font-family: var(--font-mark) !important;
+    font-size: clamp(1.5rem, 2.5vw, 2rem) !important;
+    margin: 0 !important;
+    color: var(--ops-ink) !important;
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .stock-code {
+    font-family: var(--font-mark) !important;
+    letter-spacing: 0.08em !important;
+    background: var(--ops-overlay-film) !important;
+    color: var(--ops-gold) !important;
+    border: 1px solid rgba(201, 162, 39, 0.45) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .stock-header-link,
+body.ops-map .watchlist-toggle {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .watchlist-toggle.active,
+body.ops-map .watchlist-toggle.on {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .current-price {
+    font-size: 2rem !important;
+    font-family: var(--font-mark) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .price-change.positive { color: var(--color-rise) !important; }
+body.ops-map .price-change.negative { color: var(--color-fall) !important; }
+body.ops-map .price-time { color: var(--ops-ink-muted) !important; }
+
+body.ops-map .stock-details {
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px;
+    padding: 12px !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .detail-item {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid rgba(217, 226, 236, 0.12) !important;
+    border-radius: 1px !important;
+    padding: 8px 10px;
+}
+
+body.ops-map .detail-item .label {
+    display: block;
+    font-size: 0.75rem;
+    margin-bottom: 2px;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .detail-item .value {
+    font-family: var(--font-mark);
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .industry-board-tag,
+body.ops-map .stock-board-tags a,
+body.ops-map .stock-board-tags span {
+    background: rgba(47, 111, 237, 0.12) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(47, 111, 237, 0.35) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .stock-board-label {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* —— 频道 Tab / 内容区 —— */
+body.ops-map .content-tabs {
+    background: transparent !important;
+    padding: 1rem 0 2rem !important;
+}
+
+body.ops-map .content-tabs .tab-nav,
+body.ops-map .tab-nav {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    gap: 6px !important;
+    padding: 6px !important;
+    margin-bottom: 1rem !important;
+}
+
+body.ops-map .content-tab,
+body.ops-map .tab-btn {
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+    background: transparent !important;
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map .content-tab.active,
+body.ops-map .tab-btn.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+    border-bottom-color: var(--ops-gold) !important;
+}
+
+body.ops-map .content-tab:hover:not(.active) {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .tab-panel.active {
+    color: var(--ops-ink);
+}
+
+body.ops-map .chart-section,
+body.ops-map .chart-container,
+body.ops-map .chart-placeholder,
+body.ops-map .kline-container,
+body.ops-map .analysis-card,
+body.ops-map .news-card,
+body.ops-map .news-list-container,
+body.ops-map .finance-card,
+body.ops-map .finance-section,
+body.ops-map .report-card,
+body.ops-map .fund-flow-section,
+body.ops-map .auction-section {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .news-list-container {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+body.ops-map .finance-table td,
+body.ops-map .finance-table td:nth-child(even) {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .finance-table td:nth-child(odd),
+body.ops-map .finance-section h3 {
+    color: var(--ops-ink-muted) !important;
+    border-bottom-color: var(--color-border) !important;
+}
+
+body.ops-map .analysis-card h3,
+body.ops-map .chart-section h3 {
+    color: var(--ops-ink) !important;
+    border-bottom-color: var(--color-border) !important;
+    font-family: var(--font-mark);
+}
+
+body.ops-map .indicator-select,
+body.ops-map .sub-indicator-select-1,
+body.ops-map .sub-indicator-select-2,
+body.ops-map input[type="date"],
+body.ops-map input[type="text"],
+body.ops-map input[type="number"],
+body.ops-map select {
+    background: rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .btn,
+body.ops-map .ssa-action-btns .btn {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .btn-primary,
+body.ops-map .ssa-action-btns .btn-primary {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .btn.is-watchlisted,
+body.ops-map .ssa-action-btns .btn.is-watchlisted {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+/* 策略追溯入口 */
+body.ops-map a[href*="_trace"],
+body.ops-map .strategy-trace-link,
+body.ops-map .trace-btn {
+    font-family: var(--font-mark);
+    letter-spacing: 0.05em;
+    border: 1px solid rgba(201, 162, 39, 0.45);
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film);
+    border-radius: 1px;
+    padding: 0.2rem 0.55rem;
+    text-decoration: none;
+}
+
+/* —— 嵌入交易分析 SSA —— */
+body.ops-map .stock-trade-analysis-mount,
+body.ops-map .ssa-panel,
+body.ops-map .ssa-panel--embedded,
+body.ops-map .ssa-section,
+body.ops-map .ssa-block,
+body.ops-map .ssa-trade-plan-block,
+body.ops-map .ssa-strategy-grid .ssa-strategy-card,
+body.ops-map .ssa-card,
+body.ops-map .stock-legacy-analysis {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .ssa-trade-plan-block {
+    background: rgba(217, 226, 236, 0.03) !important;
+}
+
+body.ops-map .ssa-panel--embedded .ssa-block--collapsible .ssa-details {
+    background: rgba(217, 226, 236, 0.03) !important;
+    border-color: var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .ssa-panel--embedded .ssa-details > summary,
+body.ops-map .stock-legacy-analysis > summary,
+body.ops-map .ssa-header h3,
+body.ops-map .ssa-block-header,
+body.ops-map .ssa-plan-col-title,
+body.ops-map .ssa-plan-wrap,
+body.ops-map .ssa-meta,
+body.ops-map .ssa-hint,
+body.ops-map .ssa-deeplink-hint,
+body.ops-map .ssa-form label {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-plan-levels,
+body.ops-map .ssa-plan-muted,
+body.ops-map .ssa-hint,
+body.ops-map .ssa-deeplink-hint,
+body.ops-map .ssa-candidates-title {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-plan-table th,
+body.ops-map .ssa-plan-table td {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.12) !important;
+}
+
+body.ops-map .ssa-plan-table th {
+    color: var(--ops-ink-muted) !important;
+    background: rgba(217, 226, 236, 0.04) !important;
+}
+
+body.ops-map .ssa-plan-list,
+body.ops-map .ssa-plan-summary,
+body.ops-map .ssa-plan-summary li {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-plan-list--exit {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .ssa-plan-badge {
+    border-radius: 1px !important;
+    background: rgba(217, 226, 236, 0.06) !important;
+    border-color: rgba(217, 226, 236, 0.22) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-plan-badge--watch,
+body.ops-map .ssa-plan-badge--conf-low,
+body.ops-map .ssa-plan-badge--neutral {
+    background: rgba(201, 162, 39, 0.12) !important;
+    border-color: rgba(201, 162, 39, 0.4) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .ssa-plan-badge--buy,
+body.ops-map .ssa-plan-badge--bull {
+    background: rgba(194, 59, 59, 0.12) !important;
+    border-color: rgba(194, 59, 59, 0.4) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .ssa-plan-badge--avoid,
+body.ops-map .ssa-plan-badge--bear {
+    background: rgba(47, 158, 107, 0.12) !important;
+    border-color: rgba(47, 158, 107, 0.4) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .ssa-meta-bar,
+body.ops-map .ssa-toolbar,
+body.ops-map .ssa-toolbar--embedded {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-strategy-card,
+body.ops-map .ssa-hit-card,
+body.ops-map .ssa-card,
+body.ops-map .ssa-results .ssa-card,
+body.ops-map [class*="ssa-"] .card {
+    background: rgba(217, 226, 236, 0.03) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-card--hit {
+    border-color: rgba(194, 59, 59, 0.45) !important;
+    background: rgba(194, 59, 59, 0.08) !important;
+}
+
+body.ops-map .ssa-card--miss {
+    border-color: var(--color-border) !important;
+    background: rgba(217, 226, 236, 0.03) !important;
+}
+
+body.ops-map .ssa-card-head h4 {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark);
+}
+
+body.ops-map .ssa-badge {
+    border-radius: 1px !important;
+}
+
+body.ops-map .ssa-badge--yes {
+    background: rgba(194, 59, 59, 0.15) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .ssa-badge--no {
+    background: rgba(217, 226, 236, 0.1) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-card-body,
+body.ops-map .ssa-card-meta,
+body.ops-map .ssa-card p,
+body.ops-map .ssa-card li {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-plan-disclaimer,
+body.ops-map .ms-disclaimer,
+body.ops-map .ms-empty {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-stock-tab {
+    background: transparent !important;
+    border-color: rgba(217, 226, 236, 0.25) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .ssa-stock-tab.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .ssa-candidate-btn {
+    background: transparent !important;
+    border-color: rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .ssa-scroll-fab__btn {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-scroll-fab__btn.is-active,
+body.ops-map .ssa-scroll-fab__btn:hover:not(:disabled) {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+@media (max-width: 767px) {
+    body.ops-map .content-tabs .tab-nav {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.ops-map .content-tab {
+        flex: 0 0 auto;
+        min-height: var(--ops-touch-min, 44px);
+        white-space: nowrap;
+    }
+
+    body.ops-map .ssa-plan-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    body.ops-map .stock-details {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    body.ops-map .ssa-action-btns .btn {
+        min-height: var(--ops-touch-min, 44px);
+    }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+    body.ops-map .stock-details {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+
+    body.ops-map .content-tab {
+        min-height: var(--ops-touch-min, 44px);
+    }
+}

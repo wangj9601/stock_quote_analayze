@@ -1,0 +1,317 @@
+/* 作战标图台 — 行情/选股/个股共享数据面
+   原则：密表优先、涨跌语义清晰、策略名扫读、无玻璃霓虹 */
+
+body.ops-map {
+    --ops-table-row-hover: rgba(47, 111, 237, 0.1);
+    --ops-table-head: rgba(217, 226, 236, 0.04);
+    --ops-positive-bg: rgba(194, 59, 59, 0.12);
+    --ops-negative-bg: rgba(47, 158, 107, 0.12);
+}
+
+body.ops-map .main-content,
+body.ops-map .screening-container,
+body.ops-map .container {
+    color: var(--ops-ink);
+}
+
+/* —— 标题 / 分区 —— */
+body.ops-map .screening-header h1,
+body.ops-map .market-overview > .container > h2,
+body.ops-map .market-tabs-section h1,
+body.ops-map .section-header h2,
+body.ops-map .stock-name {
+    font-family: var(--font-mark);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ops-ink);
+}
+
+body.ops-map .strategy-description,
+body.ops-map .search-date,
+body.ops-map .results-count,
+body.ops-map .price-time,
+body.ops-map .label,
+body.ops-map .board-source-hint {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* —— 面板 / 卡片：平坦标图面，禁止圆角堆叠 —— */
+body.ops-map .index-card,
+body.ops-map .board-card,
+body.ops-map .rank-card,
+body.ops-map .volume-card,
+body.ops-map .strategy-info-card,
+body.ops-map .results-container,
+body.ops-map .stock-header,
+body.ops-map .stock-details,
+body.ops-map .chart-container,
+body.ops-map .analysis-card,
+body.ops-map .news-card,
+body.ops-map .watchlist-section,
+body.ops-map .hot-stocks-section,
+body.ops-map .market-overview,
+body.ops-map .market-tabs-section,
+body.ops-map .strategy-params-card,
+body.ops-map .parameters-card,
+body.ops-map .params-section,
+body.ops-map .history-card,
+body.ops-map .ssa-section,
+body.ops-map .ssa-panel {
+    background-color: var(--ops-ground-elevated) !important;
+    background-image: none !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .market-tabs-section {
+    box-shadow: none !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-radius: 0 !important;
+}
+
+/* —— 领地 Tab（A股 / 港股） —— */
+body.ops-map .market-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent !important;
+}
+
+body.ops-map .market-tab {
+    font-family: var(--font-mark) !important;
+    font-size: 1.125rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    border-radius: 0 !important;
+    padding: 0.65rem 1.2rem !important;
+}
+
+body.ops-map .market-tab:hover {
+    color: var(--ops-ink) !important;
+    background: rgba(47, 111, 237, 0.08) !important;
+}
+
+body.ops-map .market-tab.active {
+    color: var(--ops-gold) !important;
+    border-bottom-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map #a-stock-content.active,
+body.ops-map #a-stock-market-tab.active {
+    background: var(--ops-territory-a);
+}
+
+body.ops-map #hk-stock-content.active,
+body.ops-map #hk-stock-market-tab.active {
+    background: var(--ops-territory-hk);
+}
+
+/* —— 策略 Tab：叠层语法 —— */
+body.ops-map .strategy-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 0 14px;
+    border-bottom: 1px solid var(--color-border);
+    background: transparent !important;
+}
+
+body.ops-map .strategy-tab,
+body.ops-map .gms-sub-tab,
+body.ops-map .vsb-sub-tab,
+body.ops-map .observe-source-tabs button {
+    font-family: var(--font-mark) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.04em !important;
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .strategy-tab:hover,
+body.ops-map .gms-sub-tab:hover,
+body.ops-map .vsb-sub-tab:hover {
+    color: var(--ops-ink) !important;
+    border-color: var(--ops-route) !important;
+    background: rgba(47, 111, 237, 0.1) !important;
+}
+
+body.ops-map .strategy-tab.active,
+body.ops-map .gms-sub-tab.active,
+body.ops-map .vsb-sub-tab.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+/* 顶栏叠层高亮对应策略 Tab */
+body.ops-map .strategy-tab.ops-overlay-hit {
+    box-shadow: inset 0 -2px 0 var(--ops-gold);
+}
+
+/* —— 表格：密表 + 等宽数字 —— */
+body.ops-map table,
+body.ops-map .results-table,
+body.ops-map .stock-table,
+body.ops-map .data-table,
+body.ops-map .gms-table {
+    width: 100%;
+    border-collapse: collapse;
+    color: var(--ops-ink);
+    font-variant-numeric: tabular-nums;
+    background: transparent !important;
+}
+
+body.ops-map thead th,
+body.ops-map .results-table th,
+body.ops-map .gms-table th {
+    background: var(--ops-table-head) !important;
+    color: var(--ops-ink-muted) !important;
+    font-family: var(--font-mark);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    font-size: 0.8125rem;
+    border-bottom: 1px solid var(--color-border) !important;
+    padding: 0.55rem 0.65rem !important;
+    white-space: nowrap;
+}
+
+body.ops-map tbody td,
+body.ops-map .results-table td,
+body.ops-map .gms-table td {
+    border-bottom: 1px solid rgba(217, 226, 236, 0.08) !important;
+    padding: 0.5rem 0.65rem !important;
+    color: var(--ops-ink) !important;
+    background: transparent !important;
+}
+
+body.ops-map tbody tr:hover td,
+body.ops-map .results-table tbody tr:hover td {
+    background: var(--ops-table-row-hover) !important;
+}
+
+/* 涨跌（A股惯例：红涨绿跌） */
+body.ops-map .rise,
+body.ops-map .up,
+body.ops-map .price-up,
+body.ops-map .positive,
+body.ops-map .text-rise,
+body.ops-map .change-up,
+body.ops-map .index-change.up,
+body.ops-map .price-change.up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .fall,
+body.ops-map .down,
+body.ops-map .price-down,
+body.ops-map .negative,
+body.ops-map .text-fall,
+body.ops-map .change-down,
+body.ops-map .index-change.down,
+body.ops-map .price-change.down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .index-value,
+body.ops-map .current-price {
+    font-family: var(--font-mark);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--ops-ink) !important;
+}
+
+/* —— 按钮 —— */
+body.ops-map .refresh-btn,
+body.ops-map .export-btn,
+body.ops-map .primary-btn,
+body.ops-map .btn-primary,
+body.ops-map button.refresh-btn {
+    font-family: var(--font-mark) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    background: var(--ops-route) !important;
+    color: #f5f8ff !important;
+    border: 1px solid transparent !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .refresh-btn:hover,
+body.ops-map .export-btn:hover {
+    background: #3f7df5 !important;
+}
+
+body.ops-map .export-btn,
+body.ops-map .secondary-btn {
+    background: transparent !important;
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.28) !important;
+}
+
+/* —— 输入 / 筛选条 —— */
+body.ops-map input[type="text"],
+body.ops-map input[type="date"],
+body.ops-map input[type="number"],
+body.ops-map select,
+body.ops-map textarea {
+    background: var(--ops-ground) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map input:focus,
+body.ops-map select:focus,
+body.ops-map textarea:focus {
+    outline: none !important;
+    border-color: var(--ops-gold) !important;
+    box-shadow: var(--ops-focus) !important;
+}
+
+/* —— 加载 / 错误 —— */
+body.ops-map .loading-indicator,
+body.ops-map .error-message {
+    color: var(--ops-ink-muted);
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+}
+
+body.ops-map .error-message {
+    color: var(--ops-alert);
+    border-color: rgba(194, 59, 59, 0.45);
+}
+
+/* —— 龙头 / 中军对向力 —— */
+body.ops-map .ops-force-pair {
+    padding: 0.65rem 0.75rem;
+    border: 1px dashed rgba(201, 162, 39, 0.35);
+    background: rgba(201, 162, 39, 0.06);
+}
+
+/* —— 滚动条 —— */
+body.ops-map ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+body.ops-map ::-webkit-scrollbar-track {
+    background: var(--ops-ground);
+}
+body.ops-map ::-webkit-scrollbar-thumb {
+    background: rgba(217, 226, 236, 0.22);
+    border-radius: 1px;
+}
+body.ops-map ::-webkit-scrollbar-thumb:hover {
+    background: rgba(201, 162, 39, 0.45);
+}

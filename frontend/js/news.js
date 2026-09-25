@@ -56,10 +56,27 @@ const NewsChannel = {
                         if (nav) {
                             nav.classList.add('active');
                         }
-                        
+                        const bn = document.getElementById('bn-news');
+                        if (bn) {
+                            bn.classList.add('active');
+                        }
+                        const moreBtn = document.getElementById('bn-more');
+                        if (moreBtn) {
+                            moreBtn.classList.add('active');
+                        }
+
                         // 初始化用户菜单
                         if (typeof initUserMenu === 'function') {
                             initUserMenu();
+                        }
+                        if (typeof initMobileNav === 'function') {
+                            initMobileNav();
+                        }
+                        if (typeof initOpsOverlayBar === 'function') {
+                            initOpsOverlayBar();
+                        }
+                        if (typeof initOpsMoreSheet === 'function') {
+                            initOpsMoreSheet();
                         }
                         
                         // 初始化股票搜索功能

@@ -403,23 +403,40 @@ function updateNewsDisplay(news) {
     const newsContainer = document.querySelector('.news-list');
     if (newsContainer) {
         let newsHTML = '';
-        news.forEach(function(item) {
-            // 格式化时间显示（只显示时分秒）
-            const publishTime = new Date(item.publish_time).toLocaleTimeString('zh-CN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            
+        (news || []).forEach(function(item) {
+            const rawTitle = (item && (item.title || item.headline || item.name)) || '';
+            const rawSummary = (item && (item.summary || item.content || item.desc)) || '';
+            const title = String(rawTitle).trim();
+            let summary = String(rawSummary).trim();
+            if (!title || title === 'nan' || title.toLowerCase() === 'null') {
+                return;
+            }
+            // 摘要与标题相同或无效时不重复展示
+            if (!summary || summary === 'nan' || summary.toLowerCase() === 'null' || summary === title) {
+                summary = '';
+            }
+
+            let publishTime = '--:--:--';
+            try {
+                const t = item && item.publish_time;
+                if (t && String(t) !== 'nan') {
+                    publishTime = new Date(t).toLocaleTimeString('zh-CN', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                }
+            } catch (e) { /* ignore */ }
+
             newsHTML += '<div class="news-item">' +
                 '<div class="news-time">' + publishTime + '</div>' +
                 '<div class="news-content">' +
-                    '<div class="news-title">' + item.title + '</div>' +
-                    '<div class="news-summary">' + item.summary + '</div>' +
+                    '<div class="news-title">' + title + '</div>' +
+                    (summary ? '<div class="news-summary">' + summary + '</div>' : '') +
                 '</div>' +
             '</div>';
         });
-        newsContainer.innerHTML = newsHTML;
+        newsContainer.innerHTML = newsHTML || '<div class="empty-state"><p>暂无资讯</p></div>';
     }
 }
 

@@ -1,0 +1,401 @@
+/* 作战标图台 — 追溯 / 历史 / 指标等二级工作台
+   覆盖旧浅色卡片与表格，挂在 ops-data 之后 */
+
+/* —— 通用面板 —— */
+body.ops-map .gms-trace-card,
+body.ops-map .history-card,
+body.ops-map .indicator-workbench .header,
+body.ops-map .indicator-workbench .tabs,
+body.ops-map .indicator-workbench .content-area,
+body.ops-map .indicator-workbench .indicator-card {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-trace-title,
+body.ops-map .history-title,
+body.ops-map .indicator-workbench .header h1,
+body.ops-map .indicator-workbench .card-title {
+    font-family: var(--font-mark) !important;
+    letter-spacing: 0.05em;
+    color: var(--ops-ink) !important;
+    text-align: left !important;
+}
+
+body.ops-map .gms-trace-title::after,
+body.ops-map .history-title::after,
+body.ops-map .indicator-workbench .header h1::after {
+    content: "";
+    display: block;
+    width: 2.5rem;
+    height: 2px;
+    margin-top: 0.4rem;
+    background: var(--ops-gold);
+}
+
+body.ops-map .history-card {
+    margin-top: 1.25rem !important;
+    padding: 1.25rem 1.1rem !important;
+}
+
+body.ops-map .gms-trace-card {
+    margin-top: 1rem;
+    padding: 1.1rem 1rem !important;
+}
+
+/* —— 工具条 —— */
+body.ops-map .gms-trace-card .toolbar-row,
+body.ops-map .history-card .toolbar-row,
+body.ops-map .toolbar-row {
+    gap: 10px !important;
+}
+
+body.ops-map .gms-trace-card .toolbar-row label,
+body.ops-map .history-card .toolbar label,
+body.ops-map .toolbar label {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-trace-card .toolbar-row input[type="date"],
+body.ops-map .gms-trace-card .toolbar-row input[type="text"],
+body.ops-map .history-card .toolbar input[type="date"],
+body.ops-map .history-card .toolbar input[type="text"],
+body.ops-map .toolbar input[type="date"],
+body.ops-map .toolbar input[type="text"],
+body.ops-map .toolbar select {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+    min-height: 36px;
+    padding: 6px 10px !important;
+}
+
+body.ops-map .gms-trace-card .toolbar-row button,
+body.ops-map .gms-trace-card .toolbar-row a.btn-secondary,
+body.ops-map .gms-op-btn,
+body.ops-map .history-card .toolbar button,
+body.ops-map .toolbar button:not(.calculate-btn) {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+    min-height: 36px;
+    box-shadow: none !important;
+}
+
+body.ops-map .gms-trace-card .toolbar-row button:hover,
+body.ops-map .gms-op-btn:hover,
+body.ops-map .history-card .toolbar button:hover {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .gms-op-btn--primary,
+body.ops-map .gms-trace-card .toolbar-row button#searchBtn,
+body.ops-map .history-card .toolbar button.btn-primary,
+body.ops-map #searchBtn {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .calculate-btn {
+    background: var(--ops-overlay-film) !important;
+    border: 1px solid var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    border-radius: 1px !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+body.ops-map .calculate-btn:hover {
+    transform: none !important;
+    box-shadow: none !important;
+    background: rgba(201, 162, 39, 0.2) !important;
+}
+
+/* —— 配置 Tab —— */
+body.ops-map .gms-trace-config-tabs {
+    border-bottom-color: var(--color-border) !important;
+}
+
+body.ops-map .gms-trace-config-tab {
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .gms-trace-config-tab.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .gms-meta-text,
+body.ops-map .gms-trace-config-tab-hint {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* —— 表格 —— */
+body.ops-map .trace-table,
+body.ops-map .history-table,
+body.ops-map .indicator-workbench .data-table {
+    background: transparent !important;
+    border: 1px solid var(--color-border) !important;
+    box-shadow: none !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .trace-table th,
+body.ops-map .history-table th,
+body.ops-map .indicator-workbench .data-table th {
+    background: var(--ops-table-head) !important;
+    color: var(--ops-ink-muted) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .trace-table td,
+body.ops-map .history-table td,
+body.ops-map .indicator-workbench .data-table td {
+    background: transparent !important;
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.12) !important;
+}
+
+body.ops-map .trace-table tr:nth-child(even),
+body.ops-map .history-table tr:nth-child(even),
+body.ops-map .indicator-workbench .data-table tr:nth-child(even) {
+    background: rgba(217, 226, 236, 0.03) !important;
+}
+
+body.ops-map .trace-table tr:hover,
+body.ops-map .history-table tr:hover,
+body.ops-map .indicator-workbench .data-table tr:hover {
+    background: var(--ops-table-row-hover) !important;
+}
+
+body.ops-map .notes-cell.has-notes {
+    background: rgba(201, 162, 39, 0.12) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-trace-card .pagination button,
+body.ops-map .history-card .pagination button {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .history-card .pagination button:hover {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .history-card .toolbar {
+    background: var(--ops-surface-inset, rgba(217, 226, 236, 0.04)) !important;
+    border: 1px solid var(--color-border) !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .history-card #pageInfo {
+    background: rgba(217, 226, 236, 0.06) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+/* 涨跌行：去掉浅粉底，改半透明语义色 */
+body.ops-map .history-table .row-up,
+body.ops-map .history-table tr.row-up td {
+    background: rgba(194, 59, 59, 0.12) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .history-table .row-down,
+body.ops-map .history-table tr.row-down td {
+    background: rgba(47, 158, 107, 0.12) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .history-table .cell-up,
+body.ops-map .history-table .close-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .history-table .cell-down,
+body.ops-map .history-table .close-down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .notes-content,
+body.ops-map .notes-header h3,
+body.ops-map .notes-form .form-group label {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .notes-header {
+    border-bottom-color: var(--color-border) !important;
+}
+
+body.ops-map .close-notes {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .close-notes:hover {
+    background: rgba(217, 226, 236, 0.08) !important;
+}
+
+body.ops-map .gms-score-detail-cell {
+    border-left-color: var(--ops-gold) !important;
+    color: var(--ops-ink) !important;
+}
+
+/* —— 指标页 —— */
+body.ops-map.indicator-workbench,
+body.ops-map .indicator-workbench {
+    padding-top: 0.75rem;
+}
+
+body.ops-map .indicator-workbench .header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 1rem 1.1rem !important;
+    margin-bottom: 12px !important;
+}
+
+body.ops-map .indicator-workbench .stock-info {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .indicator-workbench .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px !important;
+    margin-bottom: 12px !important;
+}
+
+body.ops-map .indicator-workbench .tab {
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+    padding: 8px 14px !important;
+}
+
+body.ops-map .indicator-workbench .tab:hover {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.45) !important;
+    background: transparent !important;
+}
+
+body.ops-map .indicator-workbench .tab.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .indicator-workbench .content-area {
+    padding: 1rem !important;
+}
+
+body.ops-map .indicator-workbench .loading,
+body.ops-map .indicator-workbench .no-data {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .indicator-workbench .error {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .indicator-workbench .indicator-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+}
+
+body.ops-map .indicator-workbench .indicator-card {
+    padding: 1rem !important;
+    transition: none !important;
+}
+
+body.ops-map .indicator-workbench .indicator-card:hover {
+    transform: none !important;
+}
+
+body.ops-map .indicator-workbench .card-title {
+    border-bottom-color: var(--color-border) !important;
+}
+
+body.ops-map .indicator-workbench .data-label {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .indicator-workbench .data-value {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark) !important;
+}
+
+body.ops-map .indicator-workbench .data-item {
+    border-bottom-color: rgba(217, 226, 236, 0.12) !important;
+}
+
+body.ops-map .gms-backtest-hint,
+body.ops-map .gms-backtest-status,
+body.ops-map .gms-backtest-result,
+body.ops-map .gms-backtest-summary-item span {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-backtest-select,
+body.ops-map .gms-backtest-input-num {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-backtest-actions button {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .gms-backtest-actions button:first-child:not(:disabled) {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map .gms-backtest-result,
+body.ops-map .gms-backtest-status {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-backtest-buckets th {
+    background: var(--ops-table-head) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-backtest-buckets td {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.12) !important;
+}
+
+/* 覆盖页面内联浅色 body 底 */
+body.ops-map.indicator-page {
+    background-color: transparent !important;
+    padding: 0.75rem 0 2rem !important;
+}

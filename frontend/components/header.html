@@ -1,7 +1,12 @@
 <div id="main-header" class="main-header">
     <div class="logo-area">
-        <img src="img/logo.svg" alt="logo" class="logo-img">
-        <span class="logo-title">股票分析</span>
+        <a href="index.html" class="logo-home-link" aria-label="返回首页">
+            <img src="img/logo.svg" alt="冰枫堂" class="logo-img">
+            <div class="logo-text">
+                <span class="logo-title">冰枫堂</span>
+                <span class="logo-sub">股票分析</span>
+            </div>
+        </a>
     </div>
     <button type="button" class="nav-toggle" id="navToggle" aria-label="打开菜单" aria-expanded="false" aria-controls="mainNavBar">
         <span class="nav-toggle-bar"></span>
@@ -18,7 +23,12 @@
         <a href="profile.html" class="nav-link" id="nav-profile" data-perm="channel.profile">我的</a>
     </nav>
     <div class="header-actions">
-        <button class="search-btn" type="button" aria-label="搜索">🔍</button>
+        <button class="search-btn" type="button" aria-label="搜索">
+            <svg class="search-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                <circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"/>
+            </svg>
+        </button>
         <div class="user-menu" id="userMenu">
             <span id="userStatus" class="user-status">未登录</span>
             <div class="user-dropdown" id="userDropdown" style="display:none;">
@@ -30,6 +40,47 @@
     </div>
 </div>
 <div class="nav-overlay" id="navOverlay" hidden></div>
+<div class="ops-overlay-bar" id="opsOverlayBar" role="toolbar" aria-label="策略叠层">
+    <span class="ops-overlay-label">叠层</span>
+    <button type="button" class="ops-overlay-chip is-on" data-strategy="GMS" aria-pressed="true">GMS</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="RPE" aria-pressed="false">RPE</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="URT" aria-pressed="false">URT</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="做小做底" aria-pressed="false">做小做底</button>
+    <button type="button" class="ops-overlay-chip" data-strategy="通道突破" aria-pressed="false">通道突破</button>
+</div>
+<!-- 手机底栏：拇指热区（桌面/iPad CSS 隐藏） -->
+<nav class="ops-bottom-nav" id="opsBottomNav" aria-label="手机主导航">
+    <a href="watchlist.html" class="ops-bn-link" data-nav="watchlist" id="bn-watchlist">
+        <svg class="ops-bn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 4l2.2 4.5 5 .7-3.6 3.5.9 5.1L12 15.8 7.5 17.8l.9-5.1L4.8 9.2l5-.7L12 4z"/></svg>
+        <span>自选</span>
+    </a>
+    <a href="markets.html" class="ops-bn-link" data-nav="quotes" id="bn-quotes">
+        <svg class="ops-bn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 16l4-4 3 3 6-7"/><path d="M4 20h16"/></svg>
+        <span>行情</span>
+    </a>
+    <a href="screening.html" class="ops-bn-link" data-nav="screening" id="bn-screening">
+        <svg class="ops-bn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6"/><path d="M20 20l-3.5-3.5"/><path d="M8 11h6M11 8v6"/></svg>
+        <span>选股</span>
+    </a>
+    <a href="analysis.html" class="ops-bn-link" data-nav="analyze" id="bn-analyze">
+        <svg class="ops-bn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 19V9M10 19V5M15 19v-7M20 19V8"/></svg>
+        <span>分析</span>
+    </a>
+    <button type="button" class="ops-bn-link ops-bn-more" id="bn-more" aria-expanded="false" aria-controls="opsMoreSheet">
+        <svg class="ops-bn-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="18" cy="12" r="1.6" fill="currentColor"/></svg>
+        <span>更多</span>
+    </button>
+</nav>
+<div class="ops-more-sheet" id="opsMoreSheet" hidden>
+    <div class="ops-more-backdrop" id="opsMoreBackdrop"></div>
+    <div class="ops-more-panel" role="dialog" aria-label="更多频道">
+        <div class="ops-more-handle" aria-hidden="true"></div>
+        <a href="index.html" class="ops-more-item" data-nav="home" id="bn-home">首页</a>
+        <a href="news.html" class="ops-more-item" data-nav="news" id="bn-news">资讯</a>
+        <a href="profile.html" class="ops-more-item" data-nav="profile" id="bn-profile">我的</a>
+        <button type="button" class="ops-more-close" id="opsMoreClose">关闭</button>
+    </div>
+</div>
 
 <!-- 股票搜索模态框（隐藏） -->
 <div id="stockSearchModal" class="stock-search-modal" style="display:none !important; visibility:hidden !important;">
@@ -74,42 +125,60 @@
 </div>
 
 <style>
-:root {
-    --bp-md: 768px;
-    --bp-sm: 480px;
-}
-
 .main-header {
     display: flex !important;
     align-items: center !important;
     justify-content: space-between !important;
-    background: #03213a !important;
-    color: #fff !important;
-    padding: 0 32px !important;
-    height: 56px !important;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04) !important;
+    background: var(--ops-ground, #0f1419) !important;
+    color: var(--ops-ink, #d9e2ec) !important;
+    padding: 0 28px !important;
+    height: var(--header-h, 64px) !important;
+    border-bottom: 1px solid rgba(217, 226, 236, 0.14) !important;
+    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35) !important;
     position: sticky !important;
     top: 0 !important;
     z-index: 9000 !important;
 }
 
+.logo-home-link {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    text-decoration: none !important;
+    color: inherit !important;
+}
 .logo-area {
     display: flex !important;
     align-items: center !important;
     flex-shrink: 0 !important;
+    gap: 10px !important;
 }
 
 .logo-img {
-    width: 32px !important;
-    height: 32px !important;
-    margin-right: 8px !important;
+    width: 34px !important;
+    height: 34px !important;
     vertical-align: middle !important;
 }
 
+.logo-text {
+    display: flex !important;
+    flex-direction: column !important;
+    line-height: 1.1 !important;
+}
+
 .logo-title {
-    font-size: 20px !important;
-    font-weight: bold !important;
-    letter-spacing: 2px !important;
+    font-family: var(--font-mark, "Barlow Condensed", "Noto Sans SC", sans-serif) !important;
+    font-size: 1.35rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.12em !important;
+    color: var(--ops-ink, #d9e2ec) !important;
+}
+
+.logo-sub {
+    font-size: 0.68rem !important;
+    letter-spacing: 0.18em !important;
+    color: var(--ops-gold, #c9a227) !important;
+    text-transform: none !important;
 }
 
 .nav-toggle {
@@ -122,8 +191,8 @@
     margin-left: auto !important;
     margin-right: 8px !important;
     padding: 8px !important;
-    border: 1px solid #174b7a !important;
-    border-radius: 6px !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    border-radius: 2px !important;
     background: transparent !important;
     cursor: pointer !important;
 }
@@ -132,35 +201,109 @@
     display: block !important;
     width: 20px !important;
     height: 2px !important;
-    background: #fff !important;
-    border-radius: 1px !important;
+    background: var(--ops-ink, #d9e2ec) !important;
+    border-radius: 0 !important;
 }
 
 .nav-bar {
     display: flex !important;
-    align-items: center !important;
-    gap: 24px !important;
+    align-items: baseline !important;
+    gap: 6px !important;
+    flex: 1 !important;
+    justify-content: center !important;
+    min-width: 0 !important;
 }
 
 .nav-link {
-    color: #fff !important;
+    color: var(--ops-ink-muted, #8b9aab) !important;
     text-decoration: none !important;
-    font-size: 16px !important;
-    padding: 8px 12px !important;
-    border-radius: 4px !important;
-    transition: background 0.2s !important;
+    font-family: var(--font-mark, "Barlow Condensed", "Noto Sans SC", sans-serif) !important;
+    font-size: 1.35rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    padding: 6px 10px !important;
+    border-radius: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease !important;
     white-space: nowrap !important;
+    background: transparent !important;
 }
 
-.nav-link.active, .nav-link:hover {
-    background: #174b7a !important;
+.nav-link#nav-watchlist,
+.nav-link#nav-quotes,
+.nav-link#nav-screening {
+    font-size: 1.55rem !important;
+    color: var(--ops-ink, #d9e2ec) !important;
+}
+
+.nav-link.active {
+    color: var(--ops-gold, #c9a227) !important;
+    border-bottom-color: var(--ops-gold, #c9a227) !important;
+    background: rgba(201, 162, 39, 0.08) !important;
+}
+
+.nav-link:hover {
+    color: var(--ops-ink, #d9e2ec) !important;
+    background: rgba(47, 111, 237, 0.12) !important;
+}
+
+.nav-link:focus-visible {
+    outline: none !important;
+    box-shadow: var(--ops-focus, 0 0 0 2px #0f1419, 0 0 0 4px #c9a227) !important;
+}
+
+.ops-overlay-bar {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    flex-wrap: wrap !important;
+    padding: 6px 28px !important;
+    min-height: var(--overlay-bar-h, 40px) !important;
+    background: var(--ops-ground-elevated, #161c24) !important;
+    border-bottom: 1px solid rgba(217, 226, 236, 0.1) !important;
+    position: sticky !important;
+    top: var(--header-h, 64px) !important;
+    z-index: 8995 !important;
+}
+
+.ops-overlay-label {
+    font-family: var(--font-mark, "Barlow Condensed", "Noto Sans SC", sans-serif) !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 0.16em !important;
+    color: var(--ops-ink-muted, #8b9aab) !important;
+    margin-right: 4px !important;
+}
+
+.ops-overlay-chip {
+    font-family: var(--font-mark, "Barlow Condensed", "Noto Sans SC", sans-serif) !important;
+    font-size: 0.8125rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    padding: 3px 10px !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    background: transparent !important;
+    color: var(--ops-ink-muted, #8b9aab) !important;
+    border-radius: 1px !important;
+    cursor: pointer !important;
+}
+
+.ops-overlay-chip.is-on,
+.ops-overlay-chip[aria-pressed="true"] {
+    border-color: var(--ops-gold, #c9a227) !important;
+    color: var(--ops-gold, #c9a227) !important;
+    background: rgba(201, 162, 39, 0.14) !important;
+}
+
+.ops-overlay-chip:focus-visible {
+    outline: none !important;
+    box-shadow: var(--ops-focus, 0 0 0 2px #0f1419, 0 0 0 4px #c9a227) !important;
 }
 
 .nav-overlay {
     display: none !important;
     position: fixed !important;
     inset: 0 !important;
-    background: rgba(0,0,0,0.45) !important;
+    background: rgba(0,0,0,0.55) !important;
     z-index: 8990 !important;
 }
 
@@ -171,40 +314,48 @@
 .header-actions {
     display: flex !important;
     align-items: center !important;
-    gap: 16px !important;
+    gap: 12px !important;
     flex-shrink: 0 !important;
 }
 
 .search-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     background: none !important;
-    border: 1px solid #174b7a !important;
-    color: #fff !important;
-    border-radius: 4px !important;
-    padding: 4px 8px !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    color: var(--ops-ink, #d9e2ec) !important;
+    border-radius: 2px !important;
+    padding: 6px 8px !important;
     cursor: pointer !important;
-    font-size: 16px !important;
-    transition: background 0.2s, border 0.2s !important;
+    transition: background 0.15s, border-color 0.15s !important;
 }
 
 .search-btn:hover {
-    background: #174b7a !important;
+    border-color: var(--ops-route, #2f6fed) !important;
+    background: rgba(47, 111, 237, 0.15) !important;
+}
+
+.search-icon {
+    display: block !important;
 }
 
 .user-menu {
     display: flex !important;
     align-items: center !important;
     position: relative !important;
-    background: #22384a !important;
-    border-radius: 20px !important;
-    padding: 2px 14px 2px 6px !important;
-    margin-left: 16px !important;
+    background: rgba(217, 226, 236, 0.06) !important;
+    border: 1px solid rgba(217, 226, 236, 0.14) !important;
+    border-radius: 2px !important;
+    padding: 2px 12px 2px 6px !important;
+    margin-left: 8px !important;
     cursor: pointer !important;
     min-width: 80px !important;
-    transition: background 0.2s !important;
+    transition: background 0.15s !important;
 }
 
 .user-menu:hover {
-    background: #2a4258 !important;
+    background: rgba(47, 111, 237, 0.14) !important;
 }
 
 .user-menu::before {
@@ -493,21 +644,23 @@
     font-size: 14px !important;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
     .main-header {
         padding: 0 12px !important;
         gap: 8px !important;
+        height: 52px !important;
     }
     .logo-title {
-        font-size: 16px !important;
-        letter-spacing: 1px !important;
+        font-size: 1.05rem !important;
+        letter-spacing: 0.08em !important;
+    }
+    .logo-sub {
+        display: none !important;
     }
     .nav-toggle {
-        display: flex !important;
-        order: 2 !important;
+        display: none !important;
     }
     .header-actions {
-        order: 3 !important;
         gap: 8px !important;
     }
     .user-menu {
@@ -520,42 +673,48 @@
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         white-space: nowrap !important;
-        font-size: 13px !important;
+        font-size: 12px !important;
+        color: var(--ops-ink, #d9e2ec) !important;
     }
     .nav-bar {
         display: none !important;
-        position: fixed !important;
-        top: 56px !important;
-        left: 0 !important;
-        right: 0 !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        gap: 0 !important;
-        background: #03213a !important;
-        padding: 8px 0 calc(12px + env(safe-area-inset-bottom, 0px)) !important;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.25) !important;
-        z-index: 8995 !important;
-        max-height: calc(100vh - 56px) !important;
-        max-height: calc(100dvh - 56px) !important;
-        overflow-y: auto !important;
     }
-    .nav-bar.is-open {
-        display: flex !important;
-    }
-    .nav-bar .nav-link {
-        padding: 14px 20px !important;
-        font-size: 16px !important;
-        border-radius: 0 !important;
-        border-bottom: 1px solid rgba(255,255,255,0.08) !important;
-    }
-    body.nav-drawer-open {
-        overflow: hidden !important;
+    .ops-overlay-bar {
+        padding: 8px 12px !important;
+        gap: 8px !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
     }
 }
 
-@media (max-width: 480px) {
+/* iPad：保留顶栏频道，加大触控 */
+@media (min-width: 768px) and (max-width: 1024px) {
+    .main-header {
+        padding: 0 16px !important;
+        height: 60px !important;
+    }
+    .nav-bar {
+        gap: 4px !important;
+    }
+    .nav-link {
+        font-size: 1.15rem !important;
+        padding: 10px 8px !important;
+    }
+    .nav-link#nav-watchlist,
+    .nav-link#nav-quotes,
+    .nav-link#nav-screening {
+        font-size: 1.28rem !important;
+    }
+    .ops-overlay-chip {
+        min-height: 36px !important;
+        padding: 6px 12px !important;
+    }
+}
+
+@media (max-width: 380px) {
     .logo-title {
-        font-size: 15px !important;
+        font-size: 0.95rem !important;
     }
 }
 </style>

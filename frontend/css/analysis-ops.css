@@ -1,0 +1,394 @@
+/* Analysis channel — ops-map
+ * 注意：勿对 .analysis-tabs 设 display:flex —— 它同时包含 .tab-nav 与各 .tab-panel，
+ * flex 会把 Tab 按钮拉成等高竖条、并把内容区挤成窄列。
+ */
+
+body.ops-map[data-channel="analyze"] .main-content,
+body.ops-map[data-channel="analyze"] .analysis-container,
+body.ops-map[data-channel="analyze"] .analysis-main {
+    color: var(--ops-ink);
+}
+
+body.ops-map[data-channel="analyze"] .main-content > .container > h1 {
+    font-family: var(--font-mark);
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    color: var(--ops-ink) !important;
+    margin: 0.5rem 0 0.35rem;
+}
+
+body.ops-map[data-channel="analyze"] .main-content > .container > h1::after {
+    content: "";
+    display: block;
+    width: 3rem;
+    height: 2px;
+    margin-top: 0.45rem;
+    background: var(--ops-gold);
+}
+
+body.ops-map[data-channel="analyze"] h2,
+body.ops-map[data-channel="analyze"] .section-title {
+    font-family: var(--font-mark);
+    letter-spacing: 0.05em;
+    color: var(--ops-ink) !important;
+}
+
+/* —— Tab 导航条（仅导航，不含 panel） —— */
+body.ops-map[data-channel="analyze"] .analysis-tabs {
+    display: block;
+    margin-top: 1.25rem;
+}
+
+body.ops-map[data-channel="analyze"] .analysis-tabs > .tab-nav,
+body.ops-map[data-channel="analyze"] .sub-tabs {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    padding: 6px !important;
+    margin-bottom: 1rem !important;
+    border-bottom: 1px solid var(--color-border) !important;
+}
+
+body.ops-map[data-channel="analyze"] .analysis-tab:not([hidden]):not([data-tab="strategy"]),
+body.ops-map[data-channel="analyze"] .tab-btn,
+body.ops-map[data-channel="analyze"] button.tab {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 36px;
+    padding: 0.5rem 0.9rem !important;
+    font-family: var(--font-mark) !important;
+    font-size: 0.88rem !important;
+    white-space: nowrap;
+    background: transparent !important;
+    color: var(--ops-ink-muted) !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+    border-bottom: 1px solid rgba(217, 226, 236, 0.2) !important;
+}
+
+body.ops-map[data-channel="analyze"] .analysis-tab[data-tab="strategy"],
+body.ops-map[data-channel="analyze"] .analysis-tab[hidden],
+body.ops-map[data-channel="analyze"] #strategy.tab-panel {
+    display: none !important;
+}
+
+body.ops-map[data-channel="analyze"] .analysis-tab.active:not([hidden]):not([data-tab="strategy"]),
+body.ops-map[data-channel="analyze"] .tab-btn.active,
+body.ops-map[data-channel="analyze"] button.tab.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map[data-channel="analyze"] .analysis-tab:hover:not(.active):not([hidden]):not([data-tab="strategy"]) {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.45) !important;
+}
+
+/* —— 内容区：全宽，盖掉 markets-ops 全局 .tab-panel 的边框叠层 —— */
+body.ops-map[data-channel="analyze"] .analysis-tabs > .tab-panel {
+    display: none;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .analysis-tabs > .tab-panel.active {
+    display: block !important;
+}
+
+body.ops-map[data-channel="analyze"] .card,
+body.ops-map[data-channel="analyze"] .panel,
+body.ops-map[data-channel="analyze"] .analysis-card,
+body.ops-map[data-channel="analyze"] .recommend-card,
+body.ops-map[data-channel="analyze"] .chart-box,
+body.ops-map[data-channel="analyze"] .ba-workbench,
+body.ops-map[data-channel="analyze"] .lm-workbench,
+body.ops-map[data-channel="analyze"] .ssa-section,
+body.ops-map[data-channel="analyze"] .rsa-workbench,
+body.ops-map[data-channel="analyze"] .uto-workbench,
+body.ops-map[data-channel="analyze"] .ma-workbench,
+body.ops-map[data-channel="analyze"] .ma-section,
+body.ops-map[data-channel="analyze"] .dr-workbench,
+body.ops-map[data-channel="analyze"] .dr-section,
+body.ops-map[data-channel="analyze"] .recommend-workbench,
+body.ops-map[data-channel="analyze"] .tool-card,
+body.ops-map[data-channel="analyze"] .kde-levels-section,
+body.ops-map[data-channel="analyze"] .kde-levels-card,
+body.ops-map[data-channel="analyze"] .quick-analysis {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ma-select,
+body.ops-map[data-channel="analyze"] .ma-table-wrap,
+body.ops-map[data-channel="analyze"] .ma-table th {
+    background: rgba(0, 0, 0, 0.22) !important;
+    color: var(--ops-ink) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ma-table td,
+body.ops-map[data-channel="analyze"] .dr-subnav,
+body.ops-map[data-channel="analyze"] .ba-desc,
+body.ops-map[data-channel="analyze"] .lm-desc,
+body.ops-map[data-channel="analyze"] .uto-desc,
+body.ops-map[data-channel="analyze"] .rsa-desc {
+    color: var(--ops-ink) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-subnav {
+    background: rgba(217, 226, 236, 0.04) !important;
+}
+
+/* SSA 细节已下沉到 ops-surfaces.css（分析页 + 个股嵌入共用） */
+body.ops-map[data-channel="analyze"] .ssa-header h3 {
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-workbench {
+    padding: 16px 18px 28px !important;
+    max-width: none !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-desc,
+body.ops-map[data-channel="analyze"] .recommend-score-formula,
+body.ops-map[data-channel="analyze"] .page-sub,
+body.ops-map[data-channel="analyze"] .ba-desc,
+body.ops-map[data-channel="analyze"] .ma-desc {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .horizon-tabs {
+    border-bottom-color: var(--color-border) !important;
+}
+
+body.ops-map[data-channel="analyze"] .horizon-tab {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .horizon-tab.active {
+    color: var(--ops-gold) !important;
+    box-shadow: inset 0 -2px 0 var(--ops-gold) !important;
+}
+
+body.ops-map[data-channel="analyze"] .summary-item {
+    background: rgba(217, 226, 236, 0.06) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="analyze"] .summary-item .k {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .summary-item .v {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .table-wrap,
+body.ops-map[data-channel="analyze"] .recommend-table {
+    background: transparent !important;
+    border-color: var(--color-border) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table th {
+    background: rgba(217, 226, 236, 0.08) !important;
+    color: var(--ops-ink-muted) !important;
+    border-bottom-color: var(--color-border) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table td {
+    border-bottom-color: rgba(217, 226, 236, 0.12) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table .empty {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .btn {
+    background: transparent !important;
+    border-color: rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .btn-primary {
+    background: var(--ops-overlay-film) !important;
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+}
+
+/* 龙头中军 / 板块角色条：禁止白底条 */
+body.ops-map[data-channel="analyze"] .ba-short-roles,
+body.ops-map[data-channel="analyze"] .gms-board-roles-panel,
+body.ops-map[data-channel="analyze"] .gms-board-roles-block,
+body.ops-map[data-channel="analyze"] .ba-meta-card,
+body.ops-map[data-channel="analyze"] .ba-strategy-block--gms,
+body.ops-map[data-channel="analyze"] .lm-table-wrap,
+body.ops-map[data-channel="analyze"] .ba-roles {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .gms-board-roles-block + .gms-board-roles-block {
+    border-top: 1px solid rgba(217, 226, 236, 0.1) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ba-short-roles-label,
+body.ops-map[data-channel="analyze"] .ba-short-roles-board,
+body.ops-map[data-channel="analyze"] .gms-board-roles-title,
+body.ops-map[data-channel="analyze"] .gms-board-roles-line,
+body.ops-map[data-channel="analyze"] .lm-muted,
+body.ops-map[data-channel="analyze"] .lm-empty,
+body.ops-map[data-channel="analyze"] .lm-meta,
+body.ops-map[data-channel="analyze"] .lm-meta-line {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .gms-muted,
+body.ops-map[data-channel="analyze"] .gms-board-roles-loading,
+body.ops-map[data-channel="analyze"] .ba-short-roles-label {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .gms-board-role-chip,
+body.ops-map[data-channel="analyze"] .ba-role-pill,
+body.ops-map[data-channel="analyze"] .ba-hit,
+body.ops-map[data-channel="analyze"] .lm-role,
+body.ops-map[data-channel="analyze"] .lm-hit,
+body.ops-map[data-channel="analyze"] .gms-role-tag {
+    background: rgba(0, 0, 0, 0.35) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map[data-channel="analyze"] .gms-role-tag--mid,
+body.ops-map[data-channel="analyze"] .lm-role--mid {
+    border-color: rgba(47, 111, 237, 0.45) !important;
+    color: var(--ops-route) !important;
+}
+
+body.ops-map[data-channel="analyze"] .lm-role--leader {
+    border-color: rgba(201, 162, 39, 0.5) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ba-hit--buy,
+body.ops-map[data-channel="analyze"] .lm-hit--yes {
+    background: rgba(194, 59, 59, 0.16) !important;
+    border-color: rgba(194, 59, 59, 0.4) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ba-hit--avoid,
+body.ops-map[data-channel="analyze"] .lm-hit--no {
+    background: rgba(47, 158, 107, 0.12) !important;
+    border-color: rgba(47, 158, 107, 0.35) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ba-hit--watch {
+    background: rgba(47, 111, 237, 0.14) !important;
+    border-color: rgba(47, 111, 237, 0.4) !important;
+    color: var(--ops-route) !important;
+}
+
+body.ops-map[data-channel="analyze"] .lm-table th,
+body.ops-map[data-channel="analyze"] .lm-table td,
+body.ops-map[data-channel="analyze"] .ba-table th,
+body.ops-map[data-channel="analyze"] .ba-table td {
+    background: transparent !important;
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.1) !important;
+}
+
+body.ops-map[data-channel="analyze"] .lm-table th,
+body.ops-map[data-channel="analyze"] .ba-table th {
+    background: rgba(217, 226, 236, 0.05) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .lm-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map[data-channel="analyze"] .lm-down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map[data-channel="analyze"] a.ba-stock-code-link {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ba-workbench,
+body.ops-map[data-channel="analyze"] .lm-workbench {
+    box-shadow: none !important;
+}
+
+body.ops-map[data-channel="analyze"] .asof-label,
+body.ops-map[data-channel="analyze"] .filters label {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] select,
+body.ops-map[data-channel="analyze"] input[type="text"],
+body.ops-map[data-channel="analyze"] input[type="date"],
+body.ops-map[data-channel="analyze"] input[type="number"] {
+    background: rgba(0, 0, 0, 0.25) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="analyze"] .score-cell .score-detail,
+body.ops-map[data-channel="analyze"] .score-cell .score-k,
+body.ops-map[data-channel="analyze"] .score-cell .score-tip {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .score-cell .score-line b {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .link-btn {
+    color: var(--ops-gold) !important;
+}
+
+@media (max-width: 767px) {
+    body.ops-map[data-channel="analyze"] .analysis-tabs > .tab-nav {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.ops-map[data-channel="analyze"] .analysis-tab {
+        flex: 0 0 auto !important;
+    }
+}

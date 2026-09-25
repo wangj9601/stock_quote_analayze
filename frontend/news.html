@@ -2,13 +2,19 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>财经资讯 - 股票分析</title>
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/news.css">
     <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="css/news-ops.css">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
 </head>
-<body data-channel="news">
+<body data-channel="news" class="ops-map">
     <!-- 头部导航 -->
     <div id="header-container"></div>
 
@@ -16,8 +22,8 @@
     <main class="news-main">
         <!-- 页面标题 -->
         <div class="page-header">
-            <h1>📰 财经资讯</h1>
-            <p>实时掌握市场动态，把握投资机会</p>
+            <h1>财经资讯</h1>
+            <p>内部投研资讯流 · 掌握市场动态</p>
         </div>
 
         <!-- 头条新闻 -->

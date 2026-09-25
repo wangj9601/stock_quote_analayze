@@ -1,0 +1,130 @@
+/* 作战标图台 — design tokens (Impeccable direction a802e0ce)
+ * 底图策略：稀疏主网格 + 暗角大气；行情/首页略强，选股/分析等阅读页几乎无网；
+ * 内容抬升面不透明，网格只在卡缝/页边露出。
+ */
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap");
+
+:root {
+    /* World */
+    --ops-ground: #0f1419;
+    --ops-ground-elevated: #161c24;
+    --ops-ink: #d9e2ec;
+    --ops-ink-muted: #8b9aab;
+    --ops-gold: #c9a227;
+    --ops-route: #2f6fed;
+    --ops-alert: #c23b3b;
+    --ops-overlay-film: rgba(201, 162, 39, 0.12);
+    --ops-territory-a: #121820;
+    --ops-territory-hk: #14161f;
+
+    /* Ground map — 几乎看不见网格，只留极淡暗角 */
+    --ops-grid-line: transparent;
+    --ops-grid-line-major: transparent;
+    --ops-grid-size: 160px;
+    --ops-grid-major: 640px;
+    --ops-vignette:
+        radial-gradient(ellipse 95% 75% at 50% 16%, rgba(22, 30, 40, 0.22) 0%, transparent 55%),
+        radial-gradient(ellipse 100% 80% at 50% 100%, rgba(0, 0, 0, 0.22) 0%, transparent 48%);
+
+    /* Market semantics (A-share convention) */
+    --color-rise: #c23b3b;
+    --color-fall: #2f9e6b;
+    --color-primary: var(--ops-route);
+    --color-bg-dark: var(--ops-ground);
+    --color-bg-light: var(--ops-ground-elevated);
+    --color-text-primary: var(--ops-ink);
+    --color-text-secondary: var(--ops-ink-muted);
+    --color-text-light: #6b7a8a;
+    --color-border: rgba(217, 226, 236, 0.14);
+    --color-warning: var(--ops-gold);
+
+    /* Type */
+    --font-ui: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mark: "Barlow Condensed", "Noto Sans SC", sans-serif;
+
+    /* Chrome */
+    --header-h: 64px;
+    --overlay-bar-h: 40px;
+    --bp-md: 768px;
+    --bp-sm: 480px;
+
+    /* Selection / focus */
+    --ops-focus: 0 0 0 2px var(--ops-ground), 0 0 0 4px var(--ops-gold);
+}
+
+::selection {
+    background: rgba(201, 162, 39, 0.35);
+    color: var(--ops-ink);
+}
+
+/* —— 默认底：纯色作战板，无任何网格层 —— */
+body.ops-map {
+    font-family: var(--font-ui);
+    background-color: var(--ops-ground) !important;
+    background-image: var(--ops-vignette) !important;
+    background-size: auto !important;
+    background-attachment: fixed !important;
+    background-repeat: no-repeat !important;
+    color: var(--ops-ink);
+    line-height: 1.5;
+    font-size: 14px;
+}
+
+/* 各频道统一：无方格，仅极淡暗角（领地色除外） */
+body.ops-map[data-channel="home"],
+body.ops-map[data-channel="quotes"],
+body.ops-map[data-channel="watchlist"],
+body.ops-map[data-channel="screening"],
+body.ops-map[data-channel="analyze"],
+body.ops-map[data-channel="news"],
+body.ops-map[data-channel="profile"] {
+    --ops-grid-line: transparent;
+    --ops-grid-line-major: transparent;
+    --ops-vignette:
+        radial-gradient(ellipse 95% 75% at 50% 16%, rgba(22, 30, 40, 0.22) 0%, transparent 55%),
+        radial-gradient(ellipse 100% 80% at 50% 100%, rgba(0, 0, 0, 0.22) 0%, transparent 48%);
+}
+
+body.ops-map[data-channel="home"] {
+    background-color: var(--ops-territory-a);
+}
+
+/* 主内容区透出底图；抬升面由 ops-data / ops-surfaces 用不透明色盖住 */
+body.ops-map .main-content,
+body.ops-map .page-content,
+body.ops-map .screening-container {
+    background: transparent !important;
+}
+
+/* 顶区刻度也关掉，进一步素净 */
+body.ops-map .main-content::before,
+body.ops-map .screening-container::before {
+    content: none;
+    display: none;
+}
+
+body.ops-map .icp-footer {
+    background: transparent !important;
+    border-top: 1px solid var(--color-border) !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .icp-footer a {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .icp-footer a:hover {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map a {
+    color: var(--ops-route);
+}
+
+@media (max-width: 767px) {
+    body.ops-map {
+        --ops-grid-line: transparent;
+        --ops-grid-line-major: transparent;
+        background-attachment: scroll;
+    }
+}

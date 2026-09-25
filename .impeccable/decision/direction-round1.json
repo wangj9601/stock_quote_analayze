@@ -1,0 +1,192 @@
+{
+  "title": "选择视觉世界",
+  "question": "骰子指定了「作战标图台」。采用它、换备选，或重抽。",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "作战标图台",
+      "kicker": "THE ROLL",
+      "lineage": "作战室标图 / 研判地图叠层",
+      "thesis": "市场是一张活地图：板块与个股为底图，自研策略是可开关的战术叠层。",
+      "palette": ["#0f1419", "#d9e2ec", "#c9a227", "#2f6fed", "#c23b3b"],
+      "materials": ["半透明叠层醋酸片", "标图用色铅笔", "哑光作战板"],
+      "viewport": "顶栏冰枫堂署名 + 超大频道字（自选/行情/选股）三秒可读；下方行情/首页为板块网格底图，GMS·RPE·URT 等策略芯片作叠层开关。",
+      "risk": "若图标游戏化，会像 FPS HUD；必须克制为研判标图，而非电竞皮肤。",
+      "raised": [
+        {
+          "from": "challenger-festival-lineup",
+          "raise": "频道与策略名靠字号阶梯跨房可读，不用色彩噪音喊话。"
+        },
+        {
+          "from": "challenger-zine",
+          "raise": "A股/港股/板块用底图领地区分，不用一堆描边 chrome。"
+        },
+        {
+          "from": "challenger-darkroom",
+          "raise": "交易辅助的不可逆动作先出预览条再提交，像定影前的试条。"
+        },
+        {
+          "from": "challenger-tensegrity",
+          "raise": "龙头/中军以对向力标注，关系一眼可读。"
+        }
+      ],
+      "comp": ".impeccable/mocks/decision/assigned.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "冰枫堂 + 频道导航", "x": 0, "y": 0, "w": 12, "h": 1, "accent": true},
+          {"label": "策略叠层开关", "x": 0, "y": 1, "w": 12, "h": 1},
+          {"label": "指数/市场概览条", "x": 0, "y": 2, "w": 12, "h": 1},
+          {"label": "板块/行情底图网格", "x": 0, "y": 3, "w": 8, "h": 7, "accent": true},
+          {"label": "信号/龙头侧栏", "x": 8, "y": 3, "w": 4, "h": 7}
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "多通道示波器台",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "实验室多通道示波器 / 机柜仪表",
+      "thesis": "每个自研策略是一条通道：信号幅度、触发与门限在同一机架上对齐扫读。",
+      "palette": ["#12151a", "#e6edf3", "#3ddc97", "#f0a202", "#5b8def"],
+      "materials": ["阳极氧化铝面板", "荧光示波残影", "机柜导轨"],
+      "viewport": "顶栏通道选择器即主导航；主区多通道轨迹对齐，策略短码印在通道标签上。",
+      "risk": "也是此类产品最常落脚的「专业仪表」方向，辨识度可能偏熟悉。",
+      "comp": ".impeccable/mocks/decision/model-pick.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "机架顶栏 / 通道导航", "x": 0, "y": 0, "w": 12, "h": 1, "accent": true},
+          {"label": "通道标签 GMS RPE URT", "x": 0, "y": 1, "w": 2, "h": 9},
+          {"label": "对齐波形 / 信号主区", "x": 2, "y": 1, "w": 7, "h": 9, "accent": true},
+          {"label": "触发/门限侧板", "x": 9, "y": 1, "w": 3, "h": 9}
+        ]
+      }
+    },
+    {
+      "id": "challenger-festival-lineup",
+      "label": "音乐节名单海报",
+      "verdict": "competitive",
+      "lineage": "festival lineup poster",
+      "thesis": "全站层级只靠字号：头牌频道横贯全宽，长尾策略名挤成脚注块。",
+      "palette": ["#111111", "#f4f0e6", "#e4572e"],
+      "materials": ["单色油墨", "无图纯字"],
+      "viewport": "第一屏几乎只有「自选 / 行情 / 选股」三级字号，内容表在下一折。",
+      "case": "受众认同偏弱，但产品清晰度极强：三秒找频道几乎必胜。",
+      "risk": "密度数据页会被字号律法挤爆，需把表格另开语法。",
+      "comp": ".impeccable/mocks/decision/challenger-festival-lineup.webp",
+      "hero": "https://impeccable.style/worlds/cards/posters-covers-sleeves-festival-lineup-poster-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/posters-covers-sleeves-festival-lineup-poster.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "冰枫堂", "x": 0, "y": 0, "w": 12, "h": 1},
+          {"label": "自选（超大）", "x": 0, "y": 1, "w": 12, "h": 2, "accent": true},
+          {"label": "行情（大）", "x": 0, "y": 3, "w": 12, "h": 2, "accent": true},
+          {"label": "选股（大）", "x": 0, "y": 5, "w": 12, "h": 2, "accent": true},
+          {"label": "策略名脚注块", "x": 0, "y": 7, "w": 12, "h": 3}
+        ]
+      }
+    },
+    {
+      "id": "challenger-variable-font",
+      "label": "可变字体样本台",
+      "verdict": "competitive",
+      "lineage": "variable font specimen",
+      "thesis": "策略名与信号状态用同一字体轴实时变粗变宽，层级只靠字形物理量。",
+      "palette": ["#f7f5f0", "#111111", "#2563eb"],
+      "materials": ["近白纸面", "纯墨字", "一条字重滑杆"],
+      "viewport": "首屏巨大策略短码（如 GMS），下方字形网格随状态轴呼吸。",
+      "case": "清晰度强（可读性契约），内部投研认同一般，偏设计工具气质。",
+      "risk": "若无严格网格，会像字体站而非行情台。",
+      "comp": ".impeccable/mocks/decision/challenger-variable-font.webp",
+      "hero": "https://impeccable.style/worlds/cards/variable-font-specimen-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/variable-font-specimen.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          {"label": "导航微标", "x": 0, "y": 0, "w": 12, "h": 1},
+          {"label": "巨型策略短码", "x": 0, "y": 1, "w": 9, "h": 4, "accent": true},
+          {"label": "字轴读数", "x": 9, "y": 1, "w": 3, "h": 4},
+          {"label": "信号/个股字形网格", "x": 0, "y": 5, "w": 12, "h": 5}
+        ]
+      }
+    },
+    {
+      "id": "challenger-zine",
+      "label": "复印店小报内页",
+      "verdict": "declined",
+      "lineage": "copy-shop zine interior",
+      "palette": ["#f0c020", "#111111"],
+      "materials": ["色纸", "打字机等宽"],
+      "case": "双轴皆负：内部用户不认同复印店气质，密行情也不适合单栏长文。",
+      "kept": "用底色领地分区，而不是靠描边盒子。",
+      "hero": "https://impeccable.style/worlds/cards/rw-copy-shop-zine-interior-hero.webp"
+    },
+    {
+      "id": "challenger-darkroom",
+      "label": "暗房安全灯工作台",
+      "verdict": "declined",
+      "lineage": "darkroom safelight bay",
+      "palette": ["#2a1808", "#e8a317", "#cfc7b8"],
+      "materials": ["琥珀安全灯", "显影盘"],
+      "case": "慢显影节奏与「三秒找到频道」冲突。",
+      "kept": "不可逆动作前的试条预览纪律。",
+      "hero": "https://impeccable.style/worlds/cards/signals-instruments-darkroom-safelight-bay-hero.webp"
+    },
+    {
+      "id": "challenger-alphabet-storm",
+      "label": "字母风暴",
+      "verdict": "declined",
+      "lineage": "alphabet storm",
+      "palette": ["#ffffff", "#111111", "#c0c0c0"],
+      "materials": ["纸白", "风暴黑字"],
+      "case": "超现实语法伤害 Operate 清晰度。",
+      "kept": "无。",
+      "hero": "https://impeccable.style/worlds/cards/dream-surreal-impossible-worlds-alphabet-storm-hero.webp"
+    },
+    {
+      "id": "challenger-tensegrity",
+      "label": "张拉整体柱",
+      "verdict": "declined",
+      "lineage": "tensegrity breathing column",
+      "palette": ["#e8e4dc", "#1a1a1a", "#d62828"],
+      "materials": ["碳杆", "红拉索"],
+      "case": "力网络隐喻难被内部用户一眼认领。",
+      "kept": "对向力标注（龙头/中军）。",
+      "hero": "https://impeccable.style/worlds/cards/kinetic-sculpture-automata-tensegrity-breathing-column-hero.webp"
+    }
+  ],
+  "reroll": {
+    "registers": ["safer", "bolder"]
+  },
+  "buildPath": {
+    "value": "code",
+    "toggle": true
+  },
+  "canon": true,
+  "canonCard": {
+    "label": "品类标准（深色金融终端）",
+    "thesis": "深色仪表盘 + 涨跌红绿 + 密表，做到极致的熟悉路径。",
+    "palette": ["#0b1220", "#e5e7eb", "#22c55e", "#ef4444", "#3b82f6"],
+    "materials": ["玻璃拟态卡片", "霓虹涨跌点"],
+    "viewport": "顶栏导航 + 多卡片 KPI + 行情表，同花顺/通达信气质的 Web 版。",
+    "risk": "按设计就会与竞品难以区分——这是你的主动出口，不是推荐。",
+    "comp": ".impeccable/mocks/decision/canon.webp",
+    "wireframe": {
+      "cols": 12,
+      "rows": 10,
+      "regions": [
+        {"label": "顶栏", "x": 0, "y": 0, "w": 12, "h": 1},
+        {"label": "KPI 卡片行", "x": 0, "y": 1, "w": 12, "h": 2},
+        {"label": "主行情表", "x": 0, "y": 3, "w": 8, "h": 7, "accent": true},
+        {"label": "侧栏榜单", "x": 8, "y": 3, "w": 4, "h": 7}
+      ]
+    }
+  },
+  "steer": true
+}

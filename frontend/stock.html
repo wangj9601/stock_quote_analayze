@@ -3,12 +3,17 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>个股详情 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/stock.css">
     <link rel="stylesheet" href="css/analysis.css?v=20260919a">
+    <link rel="stylesheet" href="css/stock-ops.css?v=20260925c">
     <script>
         (function () {
             try {
@@ -21,9 +26,10 @@
     <!-- ECharts库 - 优先使用本地文件，失败时使用CDN -->
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925q">
 </head>
 
-<body>
+<body class="ops-map" data-channel="quotes">
     <!-- 头部导航将由JavaScript动态加载 -->
 
     <!-- 主要内容 -->

@@ -1,0 +1,627 @@
+/* 作战标图台 — 平板 / 手机适应
+   Phone ≤767：独立排版（底栏导航、表→卡、横滑轨）
+   iPad 768–1024：触控加强的桌面压缩态
+   Desktop ≥1025：保持桌面标图台 */
+
+:root {
+    --ops-touch-min: 44px;
+    --ops-phone-bottom-h: 56px;
+    --ops-pad-gutter: 16px;
+}
+
+/* ========== iPad / 小平板 ========== */
+@media (min-width: 768px) and (max-width: 1024px) {
+    body.ops-map {
+        font-size: 15px;
+    }
+
+    body.ops-map .main-header {
+        height: 60px !important;
+        padding: 0 16px !important;
+    }
+
+    body.ops-map .nav-link {
+        font-size: 1.2rem !important;
+        padding: 10px 12px !important;
+        min-height: var(--ops-touch-min);
+        display: inline-flex !important;
+        align-items: center !important;
+    }
+
+    body.ops-map .nav-link#nav-watchlist,
+    body.ops-map .nav-link#nav-quotes,
+    body.ops-map .nav-link#nav-screening {
+        font-size: 1.35rem !important;
+    }
+
+    body.ops-map .ops-overlay-bar {
+        padding: 8px 16px !important;
+        gap: 8px !important;
+    }
+
+    body.ops-map .ops-overlay-chip {
+        min-height: 36px !important;
+        padding: 6px 12px !important;
+    }
+
+    body.ops-map .container,
+    body.ops-map .screening-container,
+    body.ops-map .main-content > .container {
+        padding-left: var(--ops-pad-gutter);
+        padding-right: var(--ops-pad-gutter);
+        max-width: 100%;
+    }
+
+    body.ops-map .market-indices,
+    body.ops-map .index-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    body.ops-map .stock-details {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+
+    body.ops-map .content-tab,
+    body.ops-map .strategy-tab,
+    body.ops-map .ranking-type-btn,
+    body.ops-map .market-tab {
+        min-height: var(--ops-touch-min);
+        display: inline-flex !important;
+        align-items: center !important;
+    }
+
+    body.ops-map .rankings-table td,
+    body.ops-map .results-table td,
+    body.ops-map .table td {
+        padding: 0.7rem 0.65rem !important;
+    }
+}
+
+/* 平板横屏：指数可回 4 列 */
+@media (min-width: 900px) and (max-width: 1024px) and (orientation: landscape) {
+    body.ops-map .market-indices,
+    body.ops-map .index-cards {
+        grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    }
+}
+
+/* ========== 手机：独立布局 ========== */
+@media (max-width: 767px) {
+    body.ops-map {
+        font-size: 16px; /* 防 iOS 自动缩放 */
+        --header-h: 52px;
+        padding-bottom: calc(var(--ops-phone-bottom-h) + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* —— 顶栏：只留品牌 + 搜索 + 用户；频道移交底栏 —— */
+    body.ops-map .main-header {
+        height: var(--header-h) !important;
+        padding: 0 12px !important;
+        padding-top: env(safe-area-inset-top, 0px) !important;
+        gap: 8px !important;
+    }
+
+    body.ops-map .nav-toggle {
+        display: none !important; /* 底栏接管主频道 */
+    }
+
+    body.ops-map .nav-bar {
+        display: none !important;
+    }
+
+    body.ops-map .logo-title {
+        font-size: 1.05rem !important;
+    }
+
+    body.ops-map .logo-sub {
+        display: none !important;
+    }
+
+    body.ops-map .user-status {
+        max-width: 4.5em !important;
+        font-size: 12px !important;
+    }
+
+    /* —— 叠层：横向惯性滑动 —— */
+    body.ops-map .ops-overlay-bar {
+        position: sticky !important;
+        top: calc(var(--header-h) + env(safe-area-inset-top, 0px)) !important;
+        padding: 8px 12px !important;
+        gap: 8px !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        overscroll-behavior-x: contain;
+    }
+
+    body.ops-map .ops-overlay-bar::-webkit-scrollbar {
+        display: none;
+    }
+
+    body.ops-map .ops-overlay-label {
+        flex-shrink: 0;
+    }
+
+    body.ops-map .ops-overlay-chip {
+        flex-shrink: 0;
+        min-height: 40px !important;
+        padding: 8px 14px !important;
+        font-size: 0.9rem !important;
+    }
+
+    /* —— 底栏导航（手机独立） —— */
+    body.ops-map .ops-bottom-nav {
+        display: grid !important;
+        grid-template-columns: repeat(5, 1fr);
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9500;
+        height: calc(var(--ops-phone-bottom-h) + env(safe-area-inset-bottom, 0px));
+        padding: 0 2px env(safe-area-inset-bottom, 0px);
+        background: var(--ops-ground-elevated);
+        border-top: 1px solid var(--color-border);
+        box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
+    }
+
+    body.ops-map .ops-bottom-nav a {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        min-height: var(--ops-phone-bottom-h);
+        text-decoration: none;
+        color: var(--ops-ink-muted);
+        font-family: var(--font-mark);
+        font-size: 0.72rem;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    body.ops-map .ops-bottom-nav a .ops-bn-icon {
+        width: 22px;
+        height: 22px;
+        display: block;
+    }
+
+    body.ops-map .ops-bottom-nav a.active {
+        color: var(--ops-gold);
+    }
+
+    body.ops-map .ops-bottom-nav a:active {
+        background: rgba(47, 111, 237, 0.12);
+    }
+
+    /* —— 页面标题压缩 —— */
+    body.ops-map .ops-page-title,
+    body.ops-map .screening-header h1,
+    body.ops-map .market-overview > .container > h2 {
+        font-size: 1.45rem !important;
+    }
+
+    body.ops-map .container,
+    body.ops-map .screening-container {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    body.ops-map .main-content {
+        padding-bottom: 0.5rem;
+    }
+
+    /* —— 行情：指数 2 列；频道轨横滑 —— */
+    body.ops-map .market-indices,
+    body.ops-map .index-cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 8px !important;
+    }
+
+    body.ops-map .index-card {
+        padding: 10px !important;
+    }
+
+    body.ops-map .index-value,
+    body.ops-map .current-price {
+        font-size: 1.25rem !important;
+    }
+
+    body.ops-map .market-tabs,
+    body.ops-map .tab-nav,
+    body.ops-map .ranking-types,
+    body.ops-map .strategy-tabs {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 6px !important;
+        padding-bottom: 4px;
+    }
+
+    body.ops-map .market-tabs::-webkit-scrollbar,
+    body.ops-map .tab-nav::-webkit-scrollbar,
+    body.ops-map .ranking-types::-webkit-scrollbar,
+    body.ops-map .strategy-tabs::-webkit-scrollbar {
+        display: none;
+    }
+
+    body.ops-map .content-tab,
+    body.ops-map .market-tab,
+    body.ops-map .ranking-type-btn,
+    body.ops-map .strategy-tab {
+        flex: 0 0 auto !important;
+        min-height: var(--ops-touch-min) !important;
+        white-space: nowrap !important;
+        padding: 10px 14px !important;
+    }
+
+    body.ops-map .tab-nav {
+        border-radius: 2px !important;
+        margin-bottom: 8px !important;
+    }
+
+    body.ops-map .tab-content {
+        border-top: 1px solid var(--color-border) !important;
+        border-radius: 2px !important;
+    }
+
+    body.ops-map .tab-panel {
+        padding: 12px 8px !important;
+    }
+
+    /* 密表：横滑 + 冻结名称列（避免错列卡片化） */
+    body.ops-map .rankings-content,
+    body.ops-map .results-table-wrapper,
+    body.ops-map .table-responsive,
+    body.ops-map .tab-panel {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+    }
+
+    body.ops-map .rankings-table,
+    body.ops-map .sectors-table,
+    body.ops-map .results-table,
+    body.ops-map .table {
+        min-width: 640px;
+    }
+
+    body.ops-map .rankings-table th,
+    body.ops-map .rankings-table td,
+    body.ops-map .results-table th,
+    body.ops-map .results-table td,
+    body.ops-map .sectors-table th,
+    body.ops-map .sectors-table td {
+        padding: 12px 10px !important;
+        min-height: var(--ops-touch-min);
+    }
+
+    /* 冻结股票名列，横滑时仍能对行 */
+    body.ops-map .rankings-table th:nth-child(2),
+    body.ops-map .rankings-table td:nth-child(2),
+    body.ops-map .results-table th:nth-child(1),
+    body.ops-map .results-table td:nth-child(1) {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        background: var(--ops-ground-elevated) !important;
+        box-shadow: 4px 0 8px rgba(0, 0, 0, 0.25);
+    }
+
+    body.ops-map .rankings-table tbody tr:hover td:nth-child(2),
+    body.ops-map .results-table tbody tr:hover td:nth-child(1) {
+        background: #1a2430 !important;
+    }
+
+    body.ops-map .rankings-table td:last-child,
+    body.ops-map .results-table td:last-child {
+        white-space: nowrap;
+    }
+
+    body.ops-map .rankings-table td:last-child button,
+    body.ops-map .rankings-table td:last-child a,
+    body.ops-map .results-table td:last-child button,
+    body.ops-map .results-table td:last-child a {
+        min-height: var(--ops-touch-min);
+        min-width: 56px;
+        padding: 8px 10px !important;
+        margin: 2px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    body.ops-map .screening-actions {
+        position: sticky;
+        bottom: calc(var(--ops-phone-bottom-h) + env(safe-area-inset-bottom, 0px) + 8px);
+        z-index: 20;
+        background: rgba(15, 20, 25, 0.92);
+        backdrop-filter: blur(8px);
+        padding: 8px;
+        border: 1px solid var(--color-border);
+        border-radius: 2px;
+    }
+
+    body.ops-map .refresh-btn,
+    body.ops-map .export-btn,
+    body.ops-map .login-btn {
+        min-height: var(--ops-touch-min) !important;
+        width: 100%;
+    }
+
+    /* —— 个股：竖向报价单 —— */
+    body.ops-map .stock-info {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+    }
+
+    body.ops-map .stock-price-section {
+        text-align: left !important;
+    }
+
+    body.ops-map .current-price {
+        font-size: 2rem !important;
+    }
+
+    body.ops-map .stock-details {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    body.ops-map .stock-name-section {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    body.ops-map .watchlist-toggle,
+    body.ops-map .stock-header-link {
+        min-height: var(--ops-touch-min);
+        padding: 8px 12px !important;
+    }
+
+    /* 登录 */
+    body.ops-map .login-box {
+        padding: 1.75rem 1.1rem !important;
+        margin: 0 4px;
+    }
+
+    body.ops-map .logo h1 {
+        font-size: 2.1rem !important;
+        letter-spacing: 0.12em !important;
+    }
+
+    body.ops-map .icp-footer {
+        padding-bottom: calc(12px + var(--ops-phone-bottom-h) + env(safe-area-inset-bottom, 0px));
+    }
+
+    /* 登录页无底栏 */
+    body.ops-map:has(.login-container) {
+        padding-bottom: 0;
+    }
+
+    body.ops-map:has(.login-container) .ops-bottom-nav {
+        display: none !important;
+    }
+}
+
+/* 超小屏 */
+@media (max-width: 380px) {
+    body.ops-map .ops-bottom-nav a {
+        font-size: 0.65rem;
+    }
+
+    body.ops-map .market-indices,
+    body.ops-map .index-cards {
+        grid-template-columns: 1fr !important;
+    }
+}
+
+/* 桌面默认隐藏底栏 */
+@media (min-width: 768px) {
+    body.ops-map .ops-bottom-nav {
+        display: none !important;
+    }
+}
+
+/* —— 二级工作台：iPad 工具条触控 —— */
+@media (min-width: 768px) and (max-width: 1024px) {
+    body.ops-map .gms-trace-card .toolbar-row,
+    body.ops-map .history-card .toolbar-row {
+        gap: 10px !important;
+    }
+
+    body.ops-map .gms-trace-card .toolbar-row button,
+    body.ops-map .gms-trace-card .toolbar-row a.btn-secondary,
+    body.ops-map .history-card .toolbar button,
+    body.ops-map .gms-op-btn {
+        min-height: var(--ops-touch-min);
+        padding: 8px 14px !important;
+    }
+
+    body.ops-map .indicator-workbench .tab {
+        min-height: var(--ops-touch-min);
+        display: inline-flex;
+        align-items: center;
+    }
+
+    body.ops-map[data-channel="analyze"] .analysis-tab {
+        min-height: var(--ops-touch-min);
+    }
+}
+
+/* —— 二级工作台：手机 —— */
+@media (max-width: 767px) {
+    body.ops-map .gms-trace-card,
+    body.ops-map .history-card {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding: 12px 10px !important;
+    }
+
+    body.ops-map .gms-trace-card .toolbar-row,
+    body.ops-map .history-card .toolbar-row,
+    body.ops-map .history-card .toolbar {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+
+    body.ops-map .gms-trace-card .toolbar-row label,
+    body.ops-map .history-card .toolbar label {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    body.ops-map .gms-trace-card .toolbar-row button,
+    body.ops-map .gms-trace-card .toolbar-row a.btn-secondary,
+    body.ops-map .history-card .toolbar button,
+    body.ops-map .gms-op-btn,
+    body.ops-map .calculate-btn {
+        width: 100%;
+        min-height: var(--ops-touch-min);
+        justify-content: center;
+    }
+
+    body.ops-map .trace-table,
+    body.ops-map .history-table {
+        min-width: 640px;
+    }
+
+    body.ops-map .gms-trace-card,
+    body.ops-map .history-card {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.ops-map .indicator-workbench .tabs {
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    body.ops-map .indicator-workbench .tab {
+        flex: 0 0 auto;
+        min-height: var(--ops-touch-min);
+        white-space: nowrap;
+    }
+
+    body.ops-map .indicator-workbench .indicator-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    body.ops-map .indicator-workbench .card-content {
+        grid-template-columns: 1fr !important;
+    }
+
+    body.ops-map[data-channel="analyze"] .summary-bar {
+        grid-template-columns: 1fr 1fr !important;
+    }
+
+    body.ops-map[data-channel="analyze"] .page-actions,
+    body.ops-map[data-channel="analyze"] .recommend-toolbar {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+
+    body.ops-map[data-channel="analyze"] .recommend-toolbar .btn,
+    body.ops-map[data-channel="analyze"] .asof-label {
+        width: 100%;
+    }
+
+    body.ops-map[data-channel="analyze"] .ma-toolbar,
+    body.ops-map[data-channel="analyze"] .ba-toolbar {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 8px !important;
+    }
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+    body.ops-map * {
+        scroll-behavior: auto !important;
+    }
+}
+
+
+/* 手机「更多」抽屉 */
+.ops-more-sheet {
+    display: none;
+}
+@media (max-width: 767px) {
+    body.ops-map .ops-bottom-nav .ops-bn-more {
+        appearance: none;
+        border: none;
+        background: transparent;
+        font: inherit;
+        color: inherit;
+        cursor: pointer;
+        width: 100%;
+    }
+    body.ops-map .ops-more-sheet.is-open,
+    body.ops-map .ops-more-sheet:not([hidden]) {
+        display: block;
+    }
+    body.ops-map .ops-more-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        z-index: 9600;
+    }
+    body.ops-map .ops-more-panel {
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9610;
+        padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+        background: var(--ops-ground-elevated);
+        border-top: 1px solid var(--color-border);
+        border-radius: 12px 12px 0 0;
+        box-shadow: 0 -12px 32px rgba(0,0,0,0.4);
+    }
+    body.ops-map .ops-more-handle {
+        width: 40px;
+        height: 4px;
+        margin: 4px auto 14px;
+        border-radius: 2px;
+        background: rgba(217,226,236,0.25);
+    }
+    body.ops-map .ops-more-item {
+        display: flex;
+        align-items: center;
+        min-height: 48px;
+        padding: 0 12px;
+        margin-bottom: 8px;
+        text-decoration: none;
+        font-family: var(--font-mark);
+        letter-spacing: 0.08em;
+        color: var(--ops-ink);
+        background: var(--ops-ground);
+        border: 1px solid var(--color-border);
+        border-radius: 2px;
+    }
+    body.ops-map .ops-more-item.active {
+        color: var(--ops-gold);
+        border-color: var(--ops-gold);
+        background: var(--ops-overlay-film);
+    }
+    body.ops-map .ops-more-close {
+        width: 100%;
+        min-height: 44px;
+        margin-top: 4px;
+        font-family: var(--font-mark);
+        letter-spacing: 0.06em;
+        color: var(--ops-ink-muted);
+        background: transparent;
+        border: 1px solid rgba(217,226,236,0.2);
+        border-radius: 2px;
+        cursor: pointer;
+    }
+}

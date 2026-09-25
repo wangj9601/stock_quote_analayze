@@ -3,20 +3,26 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>历史行情</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20260925p">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20260925o">
+    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/stock.css">
     <link rel="stylesheet" href="css/stock_history.css">
+    <link rel="stylesheet" href="css/workbench-ops.css?v=20260925b">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925o">
 </head>
 
-<body>
+<body class="ops-map" data-channel="quotes">
     <!-- 头部导航将由JavaScript动态加载 -->
     <script src="components/header.js"></script>
     <script>loadHeader('quotes');</script>
 
-    <div class="container">
+    <div class="container main-content">
         <!-- 历史行情卡片 -->
         <div class="history-card">
             <div class="history-title">历史行情数据</div>
@@ -39,8 +45,7 @@
                 <div class="toolbar-row" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px;">
                     <button id="searchBtn">查询</button>
                     <button id="exportBtn">导出</button>
-                    <button id="showIndicatorsBtn" class="calculate-btn"
-                        style="background-color: #67c23a;">显示指标数据</button>
+                    <button id="showIndicatorsBtn" class="calculate-btn">显示指标数据</button>
                     <button id="calculateFiveDayBtn" class="calculate-btn">计算5天升跌</button>
                     <button id="calculateTenDayBtn" class="calculate-btn">计算10天涨跌</button>
                     <button id="calculateThirtyDayBtn" class="calculate-btn">计算30天涨跌</button>

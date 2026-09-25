@@ -1,0 +1,11 @@
+{
+  "files": ["frontend/**/*.html"],
+  "exclude": [
+    "frontend/test_*.html",
+    "frontend/animation-test.html",
+    "frontend/clear_cache_instructions.html"
+  ],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}
