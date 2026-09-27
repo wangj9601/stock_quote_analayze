@@ -17,8 +17,10 @@ echo 将执行:
 echo   powershell -ExecutionPolicy Bypass -File .\scripts\deploy\deploy.ps1 %*
 echo.
 echo 说明:
-echo   - 默认仅本地打包（admin 构建 + 生成 zip），不上传服务器
-echo   - 输出目录: dist\stock_quote_release_*.zip
+echo   - 默认仅本地打包（admin 构建 + 生成 stock_quote_release_*.zip），不上传服务器
+echo   - 正式发布请只用: dist\stock_quote_release_*.zip
+echo   - 默认不再生成 stock_quote_analyze_v*.zip（旧 package.py 分发包）
+echo   - 若仍需要旧包: deploy_pack.bat -IncludePackagePy
 echo   - 跳过 admin 构建: deploy_pack.bat -SkipAdminBuild
 echo   - 远程部署需额外参数，例如:
 echo     deploy_pack.bat -RemoteDeploy -ServerHost host -ServerUser user

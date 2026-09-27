@@ -70,7 +70,7 @@ cd E:\wangxw\股票分析软件\编码\stock_quote_analayze
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy\deploy.ps1
 ```
 
-可选跳过 `package.py`：`.\scripts\deploy\deploy.ps1 -SkipPackagePy`
+默认已跳过 `package.py`（只打 `stock_quote_release_*.zip`）。若需旧分发包：`.\scripts\deploy\deploy.ps1 -IncludePackagePy`
 
 ### 4.1 可选：开发机 SSH 一键上传（需服务器已开通 SSH 且安全组放行 22）
 
@@ -100,7 +100,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy\deploy.ps1 `
 `deploy.ps1`（本地）会：
 
 1. 在本地对 **`admin`** 执行 **`npm install`** 与 **`npm run build`**（需本机已安装 Node/npm）
-2. 在项目根执行 **`python package.py`**（默认 `--format zip --output dist`，可用 `-PackageProjectRoot` 指定其它工程根；`-SkipPackagePy` 可跳过）。说明：`package.py` 会在 `dist` 下额外生成 **`stock_quote_analyze_*.zip`**；与下面第 3 步的 **`stock_quote_release_*.zip`** 不是同一个文件。
+2. （可选）旧分发包：`python package.py` 或 `deploy.ps1 -IncludePackagePy`，会生成 **`stock_quote_analyze_*.zip`**。日常发布请只用下面第 3 步的 **`stock_quote_release_*.zip`**，不要混用。
 3. 再打 **`stock_quote_release_*.zip`**（**不包含** 顶层 `.git`、`.cursor`、`dist`、`node_modules` 等；并用临时目录 + **`robocopy`** 排除各目录下 **`node_modules` / `__pycache__`** 后再压缩；远端 **`release.ps1`** 仍会 **`npm install`**）
 4. **默认到此结束**，终端会打印 **手工上传** 与 **`release.ps1`** 示例命令。
 5. **仅当指定 `-RemoteDeploy`** 时：再通过 **`scp` / `ssh`** 上传并远端执行 **`release.ps1`**。

@@ -12,6 +12,10 @@
     [string]$PythonExe = "python",
     # Skip admin npm build when set; default runs npm install + npm run build so zip includes admin dist.
     [switch]$SkipAdminBuild,
+    # 默认不跑 package.py（避免再生成易混淆的 stock_quote_analyze_v*.zip）。
+    # 正式发布物仅为本脚本打出的 stock_quote_release_*.zip。需要旧分发包时再加 -IncludePackagePy。
+    [switch]$IncludePackagePy,
+    # 兼容旧参数：已默认跳过 package.py，传入 -SkipPackagePy 无额外效果。
     [switch]$SkipPackagePy,
     [string]$PackageProjectRoot = "",
     [string]$PackagePyFormat = "zip",
@@ -102,8 +106,8 @@ else {
     }
 }
 
-if (-not $SkipPackagePy) {
-    Write-Step "Run package.py"
+if ($IncludePackagePy -and -not $SkipPackagePy) {
+    Write-Step "Run package.py (opt-in; produces stock_quote_analyze_v*.zip)"
     $packageScript = Join-Path $projectRoot "package.py"
     if (-not (Test-Path -LiteralPath $packageScript)) {
         throw "Not found: package.py"
@@ -118,6 +122,9 @@ if (-not $SkipPackagePy) {
         "--output", $PackagePyOutput,
         "--project-root", $projRootForPkg
     )
+}
+else {
+    Write-Step "Skip package.py (default). Release artifact: dist\stock_quote_release_*.zip only"
 }
 
 Write-Step "Create zip archive"
