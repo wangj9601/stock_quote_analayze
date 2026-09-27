@@ -175,3 +175,58 @@ def test_analyze_smc_keys():
     assert "fvgs" in smc
     assert "summary" in smc
     assert smc["structure_bias"] in ("bullish", "bearish", "neutral")
+
+
+def test_order_blocks_and_fvgs_sorted_by_date_desc():
+    """OB/FVG 对外列表按日期新→旧。"""
+    from backend_core.analysis.smc_engine import detect_fvgs, detect_order_blocks, parse_ohlc_bars
+
+    base = date(2024, 1, 2)
+    bars = []
+    for i in range(80):
+        lvl = 10.0 + (i % 7) * 0.3
+        bars.append(_bar(base + timedelta(days=i), lvl, lvl + 0.5, lvl - 0.4, lvl + 0.1))
+    # 人为放大缺口便于检出 FVG
+    bars[20] = _bar(base + timedelta(days=20), 10, 10.1, 9.9, 10.0)
+    bars[21] = _bar(base + timedelta(days=21), 10.2, 10.3, 10.1, 10.2)
+    bars[22] = _bar(base + timedelta(days=22), 11.5, 11.8, 11.4, 11.6)
+    bars[40] = _bar(base + timedelta(days=40), 12, 12.1, 11.9, 12.0)
+    bars[41] = _bar(base + timedelta(days=41), 12.0, 12.2, 11.95, 12.1)
+    bars[42] = _bar(base + timedelta(days=42), 13.5, 13.8, 13.4, 13.6)
+
+    ohlc = parse_ohlc_bars(bars)
+    events = [
+        {
+            "type": "bos",
+            "direction": "bullish",
+            "event_key": "bos_bullish",
+            "bar_index": 30,
+            "bar_date": "2024-02-01",
+            "leg_start_index": 10,
+        },
+        {
+            "type": "bos",
+            "direction": "bullish",
+            "event_key": "bos_bullish",
+            "bar_index": 55,
+            "bar_date": "2024-02-26",
+            "leg_start_index": 40,
+        },
+        {
+            "type": "choch",
+            "direction": "bearish",
+            "event_key": "choch_bearish",
+            "bar_index": 70,
+            "bar_date": "2024-03-12",
+            "leg_start_index": 60,
+        },
+    ]
+    obs = detect_order_blocks(ohlc, events, max_blocks=6)
+    assert obs
+    dates = [str(b.get("bar_date") or "") for b in obs]
+    assert dates == sorted(dates, reverse=True)
+
+    fvgs = detect_fvgs(ohlc, atr=1.0, min_pct=0.001, atr_mult=0.01, max_fvgs=8)
+    assert fvgs
+    fvg_dates = [str(f.get("end_date") or "") for f in fvgs]
+    assert fvg_dates == sorted(fvg_dates, reverse=True)

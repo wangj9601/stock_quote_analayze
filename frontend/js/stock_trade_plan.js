@@ -67,10 +67,14 @@ const StockTradePlan = {
         const isStructWatch =
             plan.stance_short === 'watch' &&
             st.entry_zone &&
-            st.entry_zone.basis === 'structure_watch';
+            ['structure_watch', 'smc_ob_watch', 'smc_fvg_watch'].includes(
+                String(st.entry_zone.basis || '')
+            );
         const entryTh = isStructWatch ? '观察区' : '入场/承接';
         const stopTh =
-            st.stop_zone && st.stop_zone.basis === 'structure_invalidation'
+            st.stop_zone &&
+            (st.stop_zone.basis === 'structure_invalidation' ||
+                st.stop_zone.basis === 'smc_ob_invalidation')
                 ? '失效参考'
                 : '止损参考';
         const tpTh =
@@ -87,6 +91,12 @@ const StockTradePlan = {
         const conflictHtml = conflicts.length
             ? `<div class="ssa-plan-conflicts">${conflicts
                   .map((c) => `<div class="ssa-plan-conflict-item">${this.esc(c)}</div>`)
+                  .join('')}</div>`
+            : '';
+        const smcNotes = Array.isArray(plan.smc_notes) ? plan.smc_notes : [];
+        const smcHtml = smcNotes.length
+            ? `<div class="ssa-plan-smc-notes"><div class="ssa-plan-smc-title">SMC 软增强</div>${smcNotes
+                  .map((n) => `<div class="ssa-plan-smc-item">${this.esc(n)}</div>`)
                   .join('')}</div>`
             : '';
 
@@ -130,6 +140,7 @@ const StockTradePlan = {
             (mt.summary && mt.summary !== mt.holding_plan ? `<p class="ssa-plan-muted">${this.esc(mt.summary)}</p>` : '') +
             `</div>` +
             `</div>` +
+            smcHtml +
             conflictHtml +
             `<p class="ssa-plan-disclaimer">${this.esc(plan.disclaimer || '规则模板，非投资建议。')}</p>` +
             `</div>`;

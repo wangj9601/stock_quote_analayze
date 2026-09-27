@@ -678,6 +678,29 @@ body.ops-map .ssa-plan-conflict-item {
     color: var(--ops-gold) !important;
 }
 
+/* SMC 软增强：抬升暗面 + 航线蓝点缀，禁止白卡/浅紫卡贴深底 */
+body.ops-map .ssa-plan-smc-notes {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid rgba(47, 111, 237, 0.35) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .ssa-plan-smc-title {
+    color: var(--ops-route) !important;
+    background: transparent !important;
+}
+
+body.ops-map .ssa-plan-smc-item {
+    color: var(--ops-ink) !important;
+    background: transparent !important;
+    border-color: rgba(217, 226, 236, 0.12) !important;
+}
+
+body.ops-map .ssa-plan-smc-item + .ssa-plan-smc-item {
+    border-top: 1px solid rgba(217, 226, 236, 0.12) !important;
+}
+
 body.ops-map .ssa-plan-table th,
 body.ops-map .ssa-plan-table td,
 body.ops-map .ssa-fund-flow-table th,

@@ -291,11 +291,26 @@ def _extract_ms(swing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     weekly = data.get("weekly") if isinstance(data.get("weekly"), dict) else {}
     smc = ms.get("smc") if isinstance(ms.get("smc"), dict) else {}
     last_ev = smc.get("last_event") if isinstance(smc.get("last_event"), dict) else None
-    active_ob = None
+    bull_ob = None
+    bear_ob = None
     for b in smc.get("order_blocks") or []:
-        if isinstance(b, dict) and b.get("status") == "active":
-            active_ob = b
-            break
+        if not isinstance(b, dict) or b.get("status") != "active":
+            continue
+        d = str(b.get("direction") or "")
+        if d == "bullish" and bull_ob is None:
+            bull_ob = b
+        elif d == "bearish" and bear_ob is None:
+            bear_ob = b
+    bull_fvg = None
+    for f in smc.get("fvgs") or []:
+        if not isinstance(f, dict):
+            continue
+        if f.get("direction") != "bullish":
+            continue
+        if f.get("status") not in ("open", "partial"):
+            continue
+        bull_fvg = f
+        break
     return {
         "daily_trend": ms.get("trend"),
         "daily_trend_label": ms.get("trend_label") or ms.get("trend"),
@@ -306,8 +321,270 @@ def _extract_ms(swing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "weekly_summary": weekly.get("summary"),
         "smc_summary": smc.get("summary"),
         "smc_last_event": last_ev,
-        "smc_active_ob": active_ob,
+        "smc_active_ob": bull_ob or bear_ob,
+        "smc_bull_ob": bull_ob,
+        "smc_bear_ob": bear_ob,
+        "smc_bull_fvg": bull_fvg,
+        "smc_ok": bool(smc.get("ok")),
     }
+
+
+def _zone_range(z: Optional[Dict[str, Any]]) -> Optional[tuple]:
+    if not z or not isinstance(z, dict):
+        return None
+    lo, hi = _f(z.get("low")), _f(z.get("high"))
+    px = _f(z.get("price"))
+    if lo is not None and hi is not None:
+        if lo > hi:
+            lo, hi = hi, lo
+        return (lo, hi)
+    if px is not None:
+        return (px, px)
+    if lo is not None:
+        return (lo, lo)
+    if hi is not None:
+        return (hi, hi)
+    return None
+
+
+def _intersect_entry_with_band(
+    entry: Optional[Dict[str, Any]],
+    band_lo: float,
+    band_hi: float,
+    *,
+    label: str,
+    basis: str,
+) -> Optional[Dict[str, Any]]:
+    """买入/观察区与 SMC 价带取交集；无交集返回 None。"""
+    if band_lo > band_hi:
+        band_lo, band_hi = band_hi, band_lo
+    rng = _zone_range(entry)
+    if rng is None:
+        mid = round((band_lo + band_hi) / 2.0, 2)
+        return {
+            "low": round(band_lo, 2),
+            "high": round(band_hi, 2),
+            "price": mid,
+            "basis": basis,
+            "label": label,
+        }
+    lo, hi = rng
+    ilo, ihi = max(lo, band_lo), min(hi, band_hi)
+    if ilo > ihi:
+        return None
+    mid = round((ilo + ihi) / 2.0, 2)
+    return {
+        "low": round(ilo, 2),
+        "high": round(ihi, 2),
+        "price": mid,
+        "basis": basis,
+        "label": label,
+    }
+
+
+def _band_from_block(block: Dict[str, Any]) -> Optional[tuple]:
+    lo, hi = _f(block.get("low")), _f(block.get("high"))
+    if lo is None or hi is None:
+        return None
+    if lo > hi:
+        lo, hi = hi, lo
+    return (lo, hi)
+
+
+def _tighten_long_stop(
+    stop_zone: Optional[Dict[str, Any]],
+    floor: float,
+    *,
+    label: str,
+) -> Dict[str, Any]:
+    """多头止损抬至 floor（更严）；保留原止损若已更高。"""
+    floor = round(float(floor), 2)
+    old_px = None
+    if stop_zone and isinstance(stop_zone, dict):
+        old_px = _f(stop_zone.get("price"))
+        if old_px is None:
+            old_px = _f(stop_zone.get("low"))
+    new_px = floor if old_px is None else max(old_px, floor)
+    return {
+        "price": round(new_px, 2),
+        "low": round(new_px, 2),
+        "basis": "smc_ob_stop",
+        "label": label,
+    }
+
+
+def _smc_event_flags(last_ev: Optional[Dict[str, Any]]) -> Dict[str, bool]:
+    if not last_ev:
+        return {
+            "choch_bull": False,
+            "choch_bear": False,
+            "bos_bull": False,
+            "bos_bear": False,
+        }
+    et = str(last_ev.get("type") or "").lower()
+    direction = str(last_ev.get("direction") or "").lower()
+    return {
+        "choch_bull": et == "choch" and direction == "bullish",
+        "choch_bear": et == "choch" and direction == "bearish",
+        "bos_bull": et == "bos" and direction == "bullish",
+        "bos_bear": et == "bos" and direction == "bearish",
+    }
+
+
+def _apply_smc_soft_overlay(
+    *,
+    advice: Dict[str, Any],
+    action: str,
+    confidence: str,
+    ms_info: Dict[str, Any],
+    short_bias: str,
+    evidence: List[str],
+    conflicts: List[str],
+) -> tuple:
+    """
+    策略定资格；SMC 软调价区与置信。
+    不取消策略买点；FVG 单独不开仓；不做空。
+    """
+    notes: List[str] = []
+    action_n = str(action or "watch")
+    conf_n = str(confidence or "medium")
+    flags = _smc_event_flags(ms_info.get("smc_last_event"))
+    bull_ob = ms_info.get("smc_bull_ob") if isinstance(ms_info.get("smc_bull_ob"), dict) else None
+    bear_ob = ms_info.get("smc_bear_ob") if isinstance(ms_info.get("smc_bear_ob"), dict) else None
+    bull_fvg = ms_info.get("smc_bull_fvg") if isinstance(ms_info.get("smc_bull_fvg"), dict) else None
+
+    if action_n == "buy":
+        entry = advice.get("buy_zone") if isinstance(advice.get("buy_zone"), dict) else None
+        applied = False
+        if bull_ob:
+            band = _band_from_block(bull_ob)
+            if band:
+                inter = _intersect_entry_with_band(
+                    entry,
+                    band[0],
+                    band[1],
+                    label=f"策略买区 ∩ 看涨OB [{_fmt_px(band[0])}–{_fmt_px(band[1])}]",
+                    basis="smc_ob_intersect",
+                )
+                if inter:
+                    advice["buy_zone"] = inter
+                    floor = band[0] * 0.995
+                    advice["stop_zone"] = _tighten_long_stop(
+                        advice.get("stop_zone") if isinstance(advice.get("stop_zone"), dict) else None,
+                        floor,
+                        label=f"止损参考：OB下沿缓冲 ≈{_fmt_px(floor)}",
+                    )
+                    notes.append("买入区已与活跃看涨OB取交集；止损按OB下沿收紧")
+                    evidence.append(f"SMC调仓：买区∩看涨OB [{_fmt_px(band[0])}–{_fmt_px(band[1])}]")
+                    applied = True
+                else:
+                    notes.append("活跃看涨OB与策略买区无重合，保留原买区")
+                    evidence.append("SMC：看涨OB与买区未重合，价区未改")
+        if not applied and bull_fvg:
+            band = _band_from_block(bull_fvg)
+            if band:
+                inter = _intersect_entry_with_band(
+                    entry,
+                    band[0],
+                    band[1],
+                    label=f"策略买区 ∩ 看涨FVG [{_fmt_px(band[0])}–{_fmt_px(band[1])}]",
+                    basis="smc_fvg_intersect",
+                )
+                if inter:
+                    advice["buy_zone"] = inter
+                    notes.append("买入区已与未填看涨FVG取交集（FVG不单独开仓）")
+                    evidence.append(
+                        f"SMC调仓：买区∩看涨FVG [{_fmt_px(band[0])}–{_fmt_px(band[1])}]"
+                    )
+                    applied = True
+                else:
+                    notes.append("看涨FVG与策略买区无重合，保留原买区")
+
+        if flags["choch_bear"] or bear_ob:
+            conflicts.append("SMC结构偏空（看跌CHOCH或活跃看跌OB）：不取消策略买点，仅试错仓、降置信")
+            conf_n = "low"
+            notes.append("结构转空旁证：仓位降级为试错")
+
+    elif action_n == "watch":
+        if flags["choch_bear"]:
+            advice["summary"] = (
+                "看跌CHOCH后暂无策略买点：等结构再确认，勿把观察区当作隐性买点"
+            )
+            notes.append("看跌CHOCH：观察区降级为结构等待")
+            conf_n = "low"
+        elif bull_ob:
+            band = _band_from_block(bull_ob)
+            if band:
+                mid = round((band[0] + band[1]) / 2.0, 2)
+                advice["buy_zone"] = {
+                    "low": round(band[0], 2),
+                    "high": round(band[1], 2),
+                    "price": mid,
+                    "basis": "smc_ob_watch",
+                    "label": f"看涨OB观察区（非买点）[{_fmt_px(band[0])}–{_fmt_px(band[1])}]",
+                }
+                stop_px = round(band[0] * 0.98, 2)
+                advice["stop_zone"] = {
+                    "price": stop_px,
+                    "low": stop_px,
+                    "basis": "smc_ob_invalidation",
+                    "label": f"跌破看涨OB下沿失效参考 ≈{_fmt_px(stop_px)}",
+                }
+                advice["deeper_watch"] = dict(advice["buy_zone"])
+                advice["summary"] = (
+                    f"暂无策略正式买点；优先观察回踩看涨OB [{_fmt_px(band[0])}–{_fmt_px(band[1])}] 是否企稳"
+                )
+                notes.append("无策略命中：观察区优先用活跃看涨OB")
+                evidence.append(
+                    f"SMC观察：看涨OB [{_fmt_px(band[0])}–{_fmt_px(band[1])}]（非买点）"
+                )
+        elif bull_fvg:
+            band = _band_from_block(bull_fvg)
+            if band:
+                mid = round((band[0] + band[1]) / 2.0, 2)
+                advice["buy_zone"] = {
+                    "low": round(band[0], 2),
+                    "high": round(band[1], 2),
+                    "price": mid,
+                    "basis": "smc_fvg_watch",
+                    "label": f"看涨FVG观察区（非买点）[{_fmt_px(band[0])}–{_fmt_px(band[1])}]",
+                }
+                advice["deeper_watch"] = dict(advice["buy_zone"])
+                advice["summary"] = (
+                    f"暂无策略正式买点；可关注未填看涨FVG [{_fmt_px(band[0])}–{_fmt_px(band[1])}] 回补企稳"
+                )
+                notes.append("无策略命中：观察区次选未填看涨FVG")
+                evidence.append(
+                    f"SMC观察：看涨FVG [{_fmt_px(band[0])}–{_fmt_px(band[1])}]（非买点）"
+                )
+
+    # 日周冲突 + 反向 CHOCH → 强制低置信
+    has_counter = bool(ms_info.get("counter_trend_note"))
+    weekly_bear = str(ms_info.get("weekly_trend") or "") == "downtrend"
+    if action_n == "buy" and (has_counter or weekly_bear) and flags["choch_bear"]:
+        conflicts.append("日周逆势叠加看跌CHOCH：强制低置信，仅试错或不做")
+        conf_n = "low"
+    if action_n == "buy" and has_counter and flags["choch_bull"]:
+        # 逆势中出现看涨 CHOCH：仍低置信，但可作旁证
+        notes.append("日周冲突下出现看涨CHOCH，仅作结构旁证，不抬置信")
+        if conf_n == "high":
+            conf_n = "medium"
+
+    # 形态与 CHOCH 并列不覆盖
+    if short_bias == "看空" and flags["choch_bull"]:
+        conflicts.append("形态短线看空与看涨CHOCH并存：并列对照，互不覆盖")
+    if short_bias == "看多" and flags["choch_bear"]:
+        conflicts.append("形态短线看多与看跌CHOCH并存：并列对照，互不覆盖")
+
+    if notes:
+        advice["smc_notes"] = notes
+        # 摘要尾部轻量标注
+        base_sum = str(advice.get("summary") or "").strip()
+        tag = "；".join(notes[:2])
+        if tag and tag not in base_sum:
+            advice["summary"] = f"{base_sum}｜{tag}" if base_sum else tag
+
+    return advice, action_n, conf_n, evidence, conflicts
 
 
 def _extract_gann(gann: Optional[Dict[str, Any]]) -> Dict[str, Any]:
@@ -430,12 +707,25 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
     action = str(advice.get("action") or "watch")
     confidence = str(advice.get("confidence") or "medium")
 
+    # SMC 软增强：不改策略资格，只调价区/置信/冲突
+    advice, action, confidence, evidence, conflicts = _apply_smc_soft_overlay(
+        advice=advice,
+        action=action,
+        confidence=confidence,
+        ms_info=ms_info,
+        short_bias=short_bias,
+        evidence=evidence,
+        conflicts=conflicts,
+    )
+
     # 形态与短线 action 冲突
     if short_bias == "看空" and action == "buy":
         conflicts.append("形态短线偏空，与策略买点并存，宜降仓或等待确认")
         confidence = "low"
     elif short_bias == "看多" and action == "watch":
-        if confidence == "low":
+        if confidence == "low" and not (
+            _smc_event_flags(ms_info.get("smc_last_event")).get("choch_bear")
+        ):
             confidence = "medium"
 
     daily_st, daily_lab = _trend_stance(ms_info.get("daily_trend"))
@@ -511,18 +801,26 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
     elif action == "watch":
         short_triggers.append("等待策略买点或形态确认后再介入")
         bz_watch = advice.get("buy_zone")
+        watch_bases = (
+            "structure_watch",
+            "smc_ob_watch",
+            "smc_fvg_watch",
+        )
         if (
             bz_watch
             and isinstance(bz_watch, dict)
-            and bz_watch.get("basis") == "structure_watch"
+            and bz_watch.get("basis") in watch_bases
         ):
-            short_triggers.append("当前仅为结构观察区，非策略正式买点")
+            short_triggers.append("当前仅为结构/SMC观察区，非策略正式买点")
     bz = advice.get("buy_zone")
     if bz and bz.get("label"):
         short_triggers.append(str(bz["label"]))
     tp = advice.get("take_profit")
     if tp and isinstance(tp, dict) and tp.get("label"):
         short_triggers.append(f"止盈：{tp['label']}")
+    for note in advice.get("smc_notes") or []:
+        if note and note not in short_triggers:
+            short_triggers.append(str(note))
 
     medium_summary = "；".join(holding_parts[:3]) if holding_parts else "暂无明确中长线计划，以周线趋势与结构位为主"
 
@@ -542,7 +840,7 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
             "take_profit": advice.get("take_profit"),
             "triggers": short_triggers,
             "summary": advice.get("summary") or "",
-            "evidence": [e for e in evidence if "短线" in e or "策略" in e or "结构" in e][:6],
+            "evidence": [e for e in evidence if "短线" in e or "策略" in e or "结构" in e or "SMC" in e][:8],
         },
         "medium_term": {
             "bias": stance_medium,
@@ -565,8 +863,9 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
         "structure_rr": advice.get("structure_rr"),
         "conflicts": conflicts,
         "evidence": evidence,
+        "smc_notes": list(advice.get("smc_notes") or []),
         "disclaimer": (
-            "以上为规则模板合成的短线/中长线参考，整合策略命中、结构位、形态战术、"
-            "波段趋势与江恩几何结论，不构成投资建议。"
+            "以上为规则模板合成的短线/中长线参考：四策略定交易资格，"
+            "SMC（CHOCH/BOS/OB/FVG）仅软调价区与风险等级，不构成投资建议。"
         ),
     }

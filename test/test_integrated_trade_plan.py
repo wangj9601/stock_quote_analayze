@@ -117,3 +117,169 @@ def test_gms_left_buy_with_kde_support_short_buy_zone():
     entry = plan["short_term"].get("entry_zone")
     assert entry is not None
     assert entry.get("low") is not None or entry.get("price") is not None
+
+
+def test_buy_intersects_bullish_ob_and_tightens_stop():
+    ctx = {
+        "meta": {"code": "600519"},
+        "strategy_pack": _base_pack(
+            urt_hit=True,
+            urt_row={
+                "buy_signal": True,
+                "close": 10.2,
+                "nearest_support": 10.0,
+                "nearest_resistance": 11.0,
+                "score_total": 72,
+            },
+        ),
+        "levels": {
+            "data": {
+                "nearest_support": 10.0,
+                "nearest_resistance": 11.0,
+                "last_close": 10.2,
+            }
+        },
+        "pattern": {"tactical": {"short_bias": "看多"}},
+        "swing": {
+            "data": {
+                "market_structure": {
+                    "trend": "uptrend",
+                    "trend_label": "上升趋势",
+                    "smc": {
+                        "ok": True,
+                        "last_event": {
+                            "type": "bos",
+                            "direction": "bullish",
+                            "event_key": "bos_bullish",
+                            "level": 10.5,
+                        },
+                        "order_blocks": [
+                            {
+                                "direction": "bullish",
+                                "low": 9.9,
+                                "high": 10.15,
+                                "status": "active",
+                            }
+                        ],
+                        "fvgs": [],
+                    },
+                },
+                "weekly": {"trend": "uptrend", "trend_label": "上升趋势"},
+            }
+        },
+        "gann": None,
+    }
+    plan = build_integrated_trade_plan(ctx)
+    assert plan["stance_short"] == "buy"
+    entry = plan["short_term"]["entry_zone"]
+    assert entry["basis"] == "smc_ob_intersect"
+    assert entry["low"] >= 9.9
+    assert entry["high"] <= 10.15
+    stop = plan["short_term"]["stop_zone"]
+    assert stop["basis"] == "smc_ob_stop"
+    assert stop["price"] >= round(9.9 * 0.995, 2) - 0.01
+    assert any("OB" in n for n in (plan.get("smc_notes") or []))
+
+
+def test_buy_bearish_choch_keeps_buy_lowers_confidence():
+    ctx = {
+        "meta": {"code": "000001"},
+        "strategy_pack": _base_pack(
+            urt_hit=True,
+            urt_row={
+                "buy_signal": True,
+                "close": 10.0,
+                "nearest_support": 9.5,
+                "nearest_resistance": 11.0,
+                "score_total": 70,
+            },
+        ),
+        "levels": {
+            "data": {
+                "nearest_support": 9.5,
+                "nearest_resistance": 11.0,
+                "last_close": 10.0,
+            }
+        },
+        "pattern": {"tactical": {"short_bias": "看多"}},
+        "swing": {
+            "data": {
+                "market_structure": {
+                    "trend": "transition",
+                    "trend_label": "趋势转换",
+                    "smc": {
+                        "ok": True,
+                        "last_event": {
+                            "type": "choch",
+                            "direction": "bearish",
+                            "event_key": "choch_bearish",
+                            "level": 9.8,
+                        },
+                        "order_blocks": [
+                            {
+                                "direction": "bearish",
+                                "low": 10.2,
+                                "high": 10.5,
+                                "status": "active",
+                            }
+                        ],
+                        "fvgs": [],
+                    },
+                },
+                "weekly": {"trend": "downtrend", "trend_label": "下降趋势"},
+                "counter_trend_note": "日线与周线冲突",
+            }
+        },
+        "gann": None,
+    }
+    plan = build_integrated_trade_plan(ctx)
+    assert plan["stance_short"] == "buy"  # 不取消买点
+    assert plan["confidence"] == "low"
+    conflicts = " ".join(plan.get("conflicts") or [])
+    assert "试错" in conflicts or "CHOCH" in conflicts
+    assert "看多" in conflicts and "CHOCH" in conflicts  # 形态与 CHOCH 并列
+
+
+def test_watch_prefers_bullish_ob_over_kde():
+    ctx = {
+        "meta": {"code": "000002"},
+        "strategy_pack": _base_pack(),
+        "levels": {
+            "data": {
+                "nearest_support": 8.0,
+                "nearest_resistance": 9.0,
+                "current_price": 8.5,
+            }
+        },
+        "pattern": None,
+        "swing": {
+            "data": {
+                "market_structure": {
+                    "trend": "uptrend",
+                    "smc": {
+                        "ok": True,
+                        "last_event": {
+                            "type": "bos",
+                            "direction": "bullish",
+                            "event_key": "bos_bullish",
+                        },
+                        "order_blocks": [
+                            {
+                                "direction": "bullish",
+                                "low": 8.2,
+                                "high": 8.4,
+                                "status": "active",
+                            }
+                        ],
+                        "fvgs": [],
+                    },
+                }
+            }
+        },
+        "gann": None,
+    }
+    plan = build_integrated_trade_plan(ctx)
+    assert plan["stance_short"] == "watch"
+    entry = plan["short_term"]["entry_zone"]
+    assert entry["basis"] == "smc_ob_watch"
+    assert abs(entry["low"] - 8.2) < 0.01

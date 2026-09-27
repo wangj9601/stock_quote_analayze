@@ -429,10 +429,14 @@
     const isStructWatch =
       plan.stance_short === 'watch' &&
       st.entry_zone &&
-      st.entry_zone.basis === 'structure_watch';
+      ['structure_watch', 'smc_ob_watch', 'smc_fvg_watch'].includes(
+        String(st.entry_zone.basis || '')
+      );
     const entryLabel = isStructWatch ? '观察区' : '入场/承接';
     const stopLabel =
-      st.stop_zone && st.stop_zone.basis === 'structure_invalidation'
+      st.stop_zone &&
+      (st.stop_zone.basis === 'structure_invalidation' ||
+        st.stop_zone.basis === 'smc_ob_invalidation')
         ? '失效参考'
         : '止损参考';
     const tpLabel =
@@ -473,6 +477,7 @@
       shortSummary: st.summary || '',
       mediumSummary: mt.summary || mt.holding_plan || '',
       conflicts: Array.isArray(plan.conflicts) ? plan.conflicts : [],
+      smcNotes: Array.isArray(plan.smc_notes) ? plan.smc_notes : [],
       disclaimer: plan.disclaimer || '',
     };
   }
@@ -696,6 +701,10 @@
       if (tp.mediumSummary) {
         drawTitle('中长线摘要', 10, [71, 85, 105]);
         drawWrapped(tp.mediumSummary, 8.5, 4);
+      }
+      if (tp.smcNotes && tp.smcNotes.length) {
+        drawTitle('SMC 软增强', 10, [71, 85, 105]);
+        tp.smcNotes.forEach((n) => drawWrapped(`• ${n}`, 8.5, 4));
       }
       if (tp.conflicts && tp.conflicts.length) {
         drawTitle('冲突提示', 10, [185, 28, 28]);

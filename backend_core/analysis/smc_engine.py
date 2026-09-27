@@ -347,7 +347,7 @@ def detect_order_blocks(
             }
         )
 
-    # 近端优先：按事件顺序倒序去重（同区间合并），再按距现价排序截断
+    # 近端优先：按事件顺序倒序去重，再按日期新→旧截断
     blocks.reverse()
     deduped: List[Dict[str, Any]] = []
     seen = set()
@@ -357,7 +357,13 @@ def detect_order_blocks(
             continue
         seen.add(key)
         deduped.append(b)
-    deduped.sort(key=lambda x: float(x.get("distance_pct") or 1e9))
+    deduped.sort(
+        key=lambda x: (
+            str(x.get("bar_date") or x.get("event_bar_date") or ""),
+            int(x.get("bar_index") or 0),
+        ),
+        reverse=True,
+    )
     return deduped[: max(1, int(max_blocks))]
 
 
@@ -424,13 +430,14 @@ def detect_fvgs(
                 }
             )
 
-    # 优先 open/partial，再按时间近端
-    def _rank(f: Dict[str, Any]) -> Tuple[int, int]:
-        st = str(f.get("status") or "")
-        pri = 0 if st == "open" else (1 if st == "partial" else 2)
-        return (pri, -int(f.get("bar_index") or 0))
-
-    found.sort(key=_rank)
+    # 按形成日新→旧；同日用 bar_index 近端优先
+    found.sort(
+        key=lambda f: (
+            str(f.get("end_date") or f.get("start_date") or ""),
+            int(f.get("bar_index") or 0),
+        ),
+        reverse=True,
+    )
     return found[: max(1, int(max_fvgs))]
 
 
