@@ -1042,8 +1042,32 @@ body.ops-map .main-content .ms-analysis-list li,
 body.ops-map .main-content .ms-summary,
 body.ops-map .main-content .ms-meta,
 body.ops-map .main-content .ms-bos,
-body.ops-map .main-content .ms-period-tag {
+body.ops-map .main-content .ms-period-tag,
+body.ops-map .main-content .ms-smc {
     color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .ssa-pa-section {
+    background: var(--ops-ground-elevated) !important;
+    border-color: var(--ops-border) !important;
+}
+
+body.ops-map .main-content .ssa-pa-section__title {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .main-content .ssa-pa-section__hint {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .main-content .ms-smc-badge--choch {
+    background: rgba(124, 58, 237, 0.22) !important;
+    color: #ddd6fe !important;
+}
+
+body.ops-map .main-content .ms-smc-badge--bos {
+    background: rgba(99, 102, 241, 0.22) !important;
+    color: #c7d2fe !important;
 }
 
 body.ops-map .main-content .ms-muted,

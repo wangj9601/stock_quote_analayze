@@ -133,6 +133,11 @@ def test_analyze_uptrend_synth():
     assert ms["trend"] in ("uptrend", "transition", "range")
     assert ms["summary"]
     assert "params" in ms
+    assert isinstance(ms.get("smc"), dict)
+    assert ms["smc"].get("ok") is True
+    assert "order_blocks" in ms["smc"]
+    assert "fvgs" in ms["smc"]
+    assert "events" in ms["smc"]
 
 
 def test_analyze_insufficient():

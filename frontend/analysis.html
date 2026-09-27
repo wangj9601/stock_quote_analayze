@@ -136,11 +136,11 @@
                             <p class="ssa-hint">
                                 输入股票代码或名称后，一次分析即可得到：
                                 <strong>RPE / SBBR / GMS / URT</strong> 策略命中与得分、
-                                <strong>阻力支撑位</strong>（与技术工具同口径）、
                                 <strong>资金流向</strong>（本地入库日数据）、
                                 <strong>集合竞价</strong>（同花顺 Fuyao 当日竞价）、
-                                <strong>形态识别</strong>（与技术工具同口径）、
-                                <strong>波段与趋势</strong>（日线 ZigZag · HH/HL）。
+                                以及<strong>价格行为</strong>专区（建议阅读顺序：
+                                <strong>波段与趋势</strong> → <strong>形态识别</strong> → <strong>阻力支撑位</strong>；
+                                波段含 ZigZag / HH-HL 与已实现 SMC：CHOCH/BOS · OB · FVG；与形态三态<strong>并列不覆盖</strong>）。
                                 可选手动指定基准日；留空则使用行情表最近交易日。
                                 点击「实时分析」将拉取最新现价，叠加当日未收盘 K 线后重算相关指标。
                                 自选股、<strong>行业龙头</strong>与<strong>概念龙头</strong>均支持多选或全选；默认勾选「一次分析全部勾选」时，选多少分析多少（数量较多会确认）。
@@ -258,22 +258,32 @@
                                 <div class="ssa-auction-host" id="ssaAuctionHost"></div>
                             </section>
 
-                            <section class="ssa-block" id="ssaLevelsBlock" hidden>
-                                <h4 class="ssa-block-title">阻力支撑位</h4>
-                                <div class="ssa-block-status" id="ssaLevelsStatus"></div>
-                                <div class="ssa-levels-host" id="ssaLevelsHost"></div>
-                            </section>
+                            <section class="ssa-pa-section" id="ssaPaSection" hidden>
+                                <div class="ssa-pa-section__head">
+                                    <h4 class="ssa-pa-section__title">价格行为</h4>
+                                    <p class="ssa-pa-section__hint">
+                                        建议顺序：波段定方向 → 形态定短线三态 → 关键位定攻防价；
+                                        日/周与形态冲突时<strong>并列对照</strong>，互不覆盖。轻量破位事件不等于 CHOCH（仅 <code>smc_type=choch</code> 时称 CHOCH）。
+                                    </p>
+                                </div>
 
-                            <section class="ssa-block" id="ssaPatternBlock" hidden>
-                                <h4 class="ssa-block-title">形态识别</h4>
-                                <div class="ssa-block-status" id="ssaPatternStatus"></div>
-                                <div class="ssa-pattern-host" id="ssaPatternHost"></div>
-                            </section>
+                                <section class="ssa-block" id="ssaSwingBlock" hidden>
+                                    <h4 class="ssa-block-title">1. 波段与趋势（含 SMC）</h4>
+                                    <div class="ssa-block-status" id="ssaSwingStatus"></div>
+                                    <div class="ssa-swing-host" id="ssaSwingHost"></div>
+                                </section>
 
-                            <section class="ssa-block" id="ssaSwingBlock" hidden>
-                                <h4 class="ssa-block-title">波段与趋势</h4>
-                                <div class="ssa-block-status" id="ssaSwingStatus"></div>
-                                <div class="ssa-swing-host" id="ssaSwingHost"></div>
+                                <section class="ssa-block" id="ssaPatternBlock" hidden>
+                                    <h4 class="ssa-block-title">2. 形态识别</h4>
+                                    <div class="ssa-block-status" id="ssaPatternStatus"></div>
+                                    <div class="ssa-pattern-host" id="ssaPatternHost"></div>
+                                </section>
+
+                                <section class="ssa-block" id="ssaLevelsBlock" hidden>
+                                    <h4 class="ssa-block-title">3. 阻力支撑位</h4>
+                                    <div class="ssa-block-status" id="ssaLevelsStatus"></div>
+                                    <div class="ssa-levels-host" id="ssaLevelsHost"></div>
+                                </section>
                             </section>
 
                             <section class="ssa-block" id="ssaGannBlock" hidden>

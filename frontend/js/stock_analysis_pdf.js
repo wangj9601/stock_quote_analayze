@@ -1,6 +1,6 @@
 /**
  * 个股分析 · 数据驱动 PDF 导出（复用 BoardAnalysisPdf 的 jsPDF / 中文字体封装）
- * 覆盖：综合交易策略 + 策略分析 + 阻力支撑位 + 形态识别 + 波段与趋势 + 江恩趋势
+ * 覆盖：综合交易策略 + 策略分析 + 价格行为（波段→形态→关键位）+ 江恩趋势
  */
 (function (global) {
   function cell(v) {
@@ -509,6 +509,26 @@
       p.price != null ? Number(p.price).toFixed(2) : '--',
       cell(p.structure || '—'),
     ]);
+    const smc = (ms && ms.smc) || null;
+    const obRows =
+      smc && Array.isArray(smc.order_blocks)
+        ? smc.order_blocks.map((b) => [
+            b.direction === 'bullish' ? '看涨' : '看跌',
+            `${b.low != null ? Number(b.low).toFixed(2) : '--'}–${b.high != null ? Number(b.high).toFixed(2) : '--'}`,
+            cell(b.status),
+            cell(b.source_event || b.event_type),
+            cell(b.bar_date),
+          ])
+        : [];
+    const fvgRows =
+      smc && Array.isArray(smc.fvgs)
+        ? smc.fvgs.map((f) => [
+            f.direction === 'bullish' ? '看涨' : '看跌',
+            `${f.low != null ? Number(f.low).toFixed(2) : '--'}–${f.high != null ? Number(f.high).toFixed(2) : '--'}`,
+            cell(f.status),
+            cell(f.end_date || f.start_date),
+          ])
+        : [];
     return {
       error: pack.error || null,
       text,
@@ -516,6 +536,10 @@
       trend: (ms && (ms.trend_label || ms.trend)) || '--',
       bos: ms && ms.last_bos_like,
       contrast: ms && ms.pattern_contrast,
+      smcSummary: smc && smc.summary,
+      lastEvent: smc && smc.last_event,
+      obRows: obRows.length ? obRows : null,
+      fvgRows: fvgRows.length ? fvgRows : null,
     };
   }
 
@@ -702,32 +726,88 @@
       }
     }
 
-    // —— 阻力支撑 ——
-    drawTitle('三、阻力支撑位', 12, [30, 64, 175]);
-    const lv = levelsTables(host);
-    if (!host.lastLevels) {
-      drawWrapped('本报告未包含阻力支撑结果', 9, 4.2);
-      y += 2;
-    } else if (lv.error) {
-      drawWrapped(`阻力支撑计算失败：${lv.error}`, 9, 4.2);
-      y += 2;
-    } else if (!lv.sections.length) {
-      drawWrapped('暂无阻力支撑数据', 9, 4.2);
-      y += 2;
+    // —— 价格行为：波段 → 形态 → 关键位 ——
+    drawTitle('三、价格行为 · 波段与趋势', 12, [30, 64, 175]);
+    const sw = swingBody(host);
+    if (!host.lastSwing) {
+      drawWrapped('本报告未包含波段趋势结果', 9, 4.2);
+    } else if (sw.error && !sw.rows && !sw.text) {
+      drawWrapped(`波段趋势分析失败：${sw.error}`, 9, 4.2);
     } else {
-      lv.sections.forEach((sec) => {
-        if (sec.note) {
-          drawWrapped(sec.note, 8.5, 4);
-          y += 2;
-          return;
-        }
-        drawTitle(sec.title, 10, [71, 85, 105]);
-        drawTable(sec.head, sec.body);
-      });
+      drawWrapped(`趋势：${sw.trend || '--'}`, 9, 4.2);
+      if (sw.contrast) {
+        drawWrapped(`形态对照：${sw.contrast}`, 8.5, 4);
+      }
+      if (sw.bos) {
+        const b = sw.bos;
+        const st = String(b.smc_type || '').toLowerCase();
+        let bosTitle = b.label || b.type || '';
+        if (st === 'choch') bosTitle = `CHOCH${b.smc_event_key ? ' · ' + b.smc_event_key : ''}`;
+        else if (st === 'bos') bosTitle = `BOS${b.smc_event_key ? ' · ' + b.smc_event_key : ''}（非 CHOCH）`;
+        else if (bosTitle) bosTitle = `${bosTitle}（轻量破位 ≠ CHOCH）`;
+        drawWrapped(
+          `关键事件：${bosTitle} @ ${b.level != null ? b.level : '--'}`,
+          8.5,
+          4
+        );
+      }
+      if (sw.lastEvent) {
+        const e = sw.lastEvent;
+        drawWrapped(
+          `SMC：${e.type || ''} ${e.event_key || ''} @ ${e.level != null ? e.level : '--'}（${e.bar_date || ''}）`,
+          8.5,
+          4
+        );
+      }
+      if (sw.smcSummary) {
+        drawWrapped(sw.smcSummary, 8.5, 4);
+      }
+      if (sw.text) {
+        y += 1;
+        drawWrapped(sw.text, 8.5, 4);
+      }
+      if (sw.obRows) {
+        drawTitle('订单块 OB', 10, [71, 85, 105]);
+        drawTable(
+          [['方向', '区间', '状态', '来源', '日期']],
+          sw.obRows,
+          {
+            0: { cellWidth: 16 },
+            1: { cellWidth: 28 },
+            2: { cellWidth: 18 },
+            3: { cellWidth: 28 },
+            4: { cellWidth: 22 },
+          }
+        );
+      }
+      if (sw.fvgRows) {
+        drawTitle('公允价值缺口 FVG', 10, [71, 85, 105]);
+        drawTable(
+          [['方向', '区间', '状态', '形成']],
+          sw.fvgRows,
+          {
+            0: { cellWidth: 16 },
+            1: { cellWidth: 32 },
+            2: { cellWidth: 18 },
+            3: { cellWidth: 24 },
+          }
+        );
+      }
+      if (sw.rows) {
+        drawTitle('摆动点', 10, [71, 85, 105]);
+        drawTable(
+          [['日期', '类型', '价格', '标注']],
+          sw.rows,
+          { 0: { cellWidth: 28 }, 1: { cellWidth: 18 }, 2: { cellWidth: 22 }, 3: { cellWidth: 18 } }
+        );
+      }
+      if (sw.error) {
+        y += 2;
+        drawWrapped(`提示：${sw.error}`, 8.5, 4);
+      }
     }
 
-    // —— 形态识别 ——
-    drawTitle('四、形态识别', 12, [30, 64, 175]);
+    drawTitle('四、价格行为 · 形态识别', 12, [30, 64, 175]);
     const pt = patternBody(host);
     if (!host.lastPattern) {
       drawWrapped('本报告未包含形态识别结果', 9, 4.2);
@@ -761,41 +841,27 @@
       }
     }
 
-    // —— 波段与趋势 ——
-    drawTitle('五、波段与趋势', 12, [30, 64, 175]);
-    const sw = swingBody(host);
-    if (!host.lastSwing) {
-      drawWrapped('本报告未包含波段趋势结果', 9, 4.2);
-    } else if (sw.error && !sw.rows && !sw.text) {
-      drawWrapped(`波段趋势分析失败：${sw.error}`, 9, 4.2);
+    drawTitle('五、价格行为 · 阻力支撑位', 12, [30, 64, 175]);
+    const lv = levelsTables(host);
+    if (!host.lastLevels) {
+      drawWrapped('本报告未包含阻力支撑结果', 9, 4.2);
+      y += 2;
+    } else if (lv.error) {
+      drawWrapped(`阻力支撑计算失败：${lv.error}`, 9, 4.2);
+      y += 2;
+    } else if (!lv.sections.length) {
+      drawWrapped('暂无阻力支撑数据', 9, 4.2);
+      y += 2;
     } else {
-      drawWrapped(`趋势：${sw.trend || '--'}`, 9, 4.2);
-      if (sw.contrast) {
-        drawWrapped(sw.contrast, 8.5, 4);
-      }
-      if (sw.bos) {
-        drawWrapped(
-          `关键事件：${sw.bos.label || sw.bos.type || ''} @ ${sw.bos.level != null ? sw.bos.level : '--'}`,
-          8.5,
-          4
-        );
-      }
-      if (sw.text) {
-        y += 1;
-        drawWrapped(sw.text, 8.5, 4);
-      }
-      if (sw.rows) {
-        drawTitle('摆动点', 10, [71, 85, 105]);
-        drawTable(
-          [['日期', '类型', '价格', '标注']],
-          sw.rows,
-          { 0: { cellWidth: 28 }, 1: { cellWidth: 18 }, 2: { cellWidth: 22 }, 3: { cellWidth: 18 } }
-        );
-      }
-      if (sw.error) {
-        y += 2;
-        drawWrapped(`提示：${sw.error}`, 8.5, 4);
-      }
+      lv.sections.forEach((sec) => {
+        if (sec.note) {
+          drawWrapped(sec.note, 8.5, 4);
+          y += 2;
+          return;
+        }
+        drawTitle(sec.title, 10, [71, 85, 105]);
+        drawTable(sec.head, sec.body);
+      });
     }
 
     // —— 江恩趋势预测 ——

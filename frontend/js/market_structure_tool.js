@@ -1,6 +1,6 @@
 /**
  * 波段与趋势结构（Market Structure）展示工具
- * 与个股分析 / PDF 同口径；轻量 SVG ZigZag 折线（非完整 K 线叠加）。
+ * 与个股分析 / PDF 同口径；轻量 SVG ZigZag 折线 + SMC 价区（OB/FVG），非完整 K 线叠加。
  */
 const MarketStructureTool = {
     API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
@@ -26,6 +26,55 @@ const MarketStructureTool = {
         if (trend === 'transition') return 'ms-trend--trans';
         if (trend === 'range') return 'ms-trend--range';
         return 'ms-trend--na';
+    },
+
+    smcEventBadge(ev) {
+        if (!ev) return '';
+        const t = String(ev.type || '').toUpperCase();
+        const key = String(ev.event_key || '');
+        const dir = ev.direction === 'bullish' ? '多' : ev.direction === 'bearish' ? '空' : '';
+        const cls =
+            ev.type === 'choch'
+                ? 'ms-smc-badge ms-smc-badge--choch'
+                : 'ms-smc-badge ms-smc-badge--bos';
+        const label = key || `${t} ${dir}`;
+        return `<span class="${cls}">${this.esc(label)}</span>`;
+    },
+
+    statusCls(status) {
+        const s = String(status || '');
+        if (s === 'active' || s === 'open') return 'ms-st--bull';
+        if (s === 'partial') return 'ms-trend--trans';
+        if (s === 'mitigated' || s === 'filled') return 'ms-muted';
+        return '';
+    },
+
+    /**
+     * 关键事件文案：仅 smc_type=choch 称 CHOCH；bos 称 BOS；其余为轻量破位（非 CHOCH）。
+     */
+    _formatBosEventHtml(bos) {
+        if (!bos) {
+            return '<div class="ms-bos ms-muted">关键事件：近期未有效越过确认摆动高/低</div>';
+        }
+        const smcType = String(bos.smc_type || '').toLowerCase();
+        const smcKey = String(bos.smc_event_key || '');
+        let title;
+        let note = '';
+        if (smcType === 'choch') {
+            title = `CHOCH${smcKey ? ' · ' + smcKey : ''}`;
+        } else if (smcType === 'bos') {
+            title = `BOS${smcKey ? ' · ' + smcKey : ''}`;
+            note = '（趋势延续破位，非 CHOCH）';
+        } else {
+            title = bos.label || bos.type || '轻量破位';
+            note = '（轻量破位 ≠ CHOCH；完整性质转换见上方 SMC 徽章）';
+        }
+        return (
+            `<div class="ms-bos"><strong>关键事件：</strong>${this.esc(title)}${this.esc(note)}` +
+            `（位 ${bos.level != null ? Number(bos.level).toFixed(2) : '--'}` +
+            `${bos.level_date ? ` @ ${this.esc(bos.level_date)}` : ''}；` +
+            `收盘 ${bos.close != null ? Number(bos.close).toFixed(2) : '--'}）</div>`
+        );
     },
 
     async fetchStructure(code, opts) {
@@ -54,7 +103,7 @@ const MarketStructureTool = {
         return data;
     },
 
-    /** 简单 ZigZag 折线 SVG（价-时间示意，非蜡烛图） */
+    /** 简单 ZigZag 折线 SVG（价-时间示意，非蜡烛图）；可选 OB/FVG 价区 */
     buildZigzagSvg(points, opts) {
         const o = opts || {};
         const showPrice = o.showPrice !== false;
@@ -63,20 +112,105 @@ const MarketStructureTool = {
         );
         if (pts.length < 2) return '';
         const w = 520;
-        const h = showPrice ? 168 : 140;
+        const h = showPrice ? 188 : 156;
         const padX = 28;
         const padY = showPrice ? 28 : 18;
+        const zones = Array.isArray(o.zones) ? o.zones : [];
+        const kl = o.keyLevels || {};
         const prices = pts.map((p) => Number(p.price));
+        zones.forEach((z) => {
+            if (z && z.low != null) prices.push(Number(z.low));
+            if (z && z.high != null) prices.push(Number(z.high));
+        });
+        ['nearest_support', 'nearest_resistance'].forEach((k) => {
+            const v = kl[k];
+            if (v != null && Number.isFinite(Number(v))) prices.push(Number(v));
+        });
+        if (o.lastEvent && o.lastEvent.level != null) {
+            prices.push(Number(o.lastEvent.level));
+        }
         const minP = Math.min(...prices);
         const maxP = Math.max(...prices);
         const span = maxP - minP || 1;
         const n = pts.length;
+        const yOf = (price) =>
+            padY + (1 - (Number(price) - minP) / span) * (h - padY * 2);
         const xy = pts.map((p, i) => {
             const x = padX + (i / Math.max(1, n - 1)) * (w - padX * 2);
-            const y = padY + (1 - (Number(p.price) - minP) / span) * (h - padY * 2);
+            const y = yOf(p.price);
             return { x, y, p };
         });
+        // 摆动点关键水平线 + 可选 KDE 近端支撑/阻力
+        let pivotLines = '';
+        if (o.showPivotLevels !== false) {
+            const seen = new Set();
+            pts.forEach((p) => {
+                const px = Number(p.price);
+                if (!Number.isFinite(px)) return;
+                const key = px.toFixed(2);
+                if (seen.has(key)) return;
+                seen.add(key);
+                const y = yOf(px);
+                const col = p.kind === 'high' ? '#86efac' : '#fca5a5';
+                pivotLines +=
+                    `<line x1="${padX}" y1="${y.toFixed(1)}" x2="${(w - padX).toFixed(1)}" y2="${y.toFixed(1)}" ` +
+                    `stroke="${col}" stroke-width="0.6" stroke-dasharray="2 3" opacity="0.55"/>`;
+            });
+        }
+        ['nearest_support', 'nearest_resistance'].forEach((k) => {
+            const v = kl[k];
+            if (v == null || !Number.isFinite(Number(v))) return;
+            const y = yOf(Number(v));
+            const col = k === 'nearest_support' ? '#15803d' : '#b91c1c';
+            const lab = k === 'nearest_support' ? '近端支撑' : '近端阻力';
+            pivotLines +=
+                `<line x1="${padX}" y1="${y.toFixed(1)}" x2="${(w - padX).toFixed(1)}" y2="${y.toFixed(1)}" ` +
+                `stroke="${col}" stroke-width="1" stroke-dasharray="5 3" opacity="0.75"/>` +
+                `<text x="${(w - padX - 2).toFixed(1)}" y="${(y - 2).toFixed(1)}" text-anchor="end" ` +
+                `font-size="8" fill="${col}">${this.esc(lab)} ${Number(v).toFixed(2)}</text>`;
+        });
+
+        const zoneRects = zones
+            .filter((z) => z && z.low != null && z.high != null)
+            .map((z) => {
+                const lo = Number(z.low);
+                const hi = Number(z.high);
+                const y1 = yOf(hi);
+                const y2 = yOf(lo);
+                const top = Math.min(y1, y2);
+                const height = Math.max(2, Math.abs(y2 - y1));
+                const bull = z.direction === 'bullish';
+                const faded = z.status === 'mitigated' || z.status === 'filled';
+                const fill = bull
+                    ? faded
+                        ? 'rgba(22,163,74,0.08)'
+                        : 'rgba(22,163,74,0.18)'
+                    : faded
+                      ? 'rgba(220,38,38,0.08)'
+                      : 'rgba(220,38,38,0.18)';
+                const stroke = bull ? '#16a34a' : '#dc2626';
+                const label = this.esc(z.label || (z.kind === 'fvg' ? 'FVG' : 'OB'));
+                return (
+                    `<rect x="${padX}" y="${top.toFixed(1)}" width="${(w - padX * 2).toFixed(1)}" ` +
+                    `height="${height.toFixed(1)}" fill="${fill}" stroke="${stroke}" ` +
+                    `stroke-width="0.8" stroke-dasharray="${z.kind === 'fvg' ? '3 2' : '0'}" opacity="${faded ? 0.55 : 0.9}"/>` +
+                    `<text x="${(padX + 4).toFixed(1)}" y="${(top + 10).toFixed(1)}" ` +
+                    `font-size="8" fill="${stroke}">${label}</text>`
+                );
+            })
+            .join('');
         const poly = xy.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+        const lastEv = o.lastEvent;
+        let eventMark = '';
+        if (lastEv && lastEv.level != null && Number.isFinite(Number(lastEv.level))) {
+            const ey = yOf(lastEv.level);
+            const et = String(lastEv.type || '').toUpperCase();
+            eventMark =
+                `<line x1="${padX}" y1="${ey.toFixed(1)}" x2="${(w - padX).toFixed(1)}" y2="${ey.toFixed(1)}" ` +
+                `stroke="#7c3aed" stroke-width="1" stroke-dasharray="4 3"/>` +
+                `<text x="${(w - padX - 4).toFixed(1)}" y="${(ey - 3).toFixed(1)}" text-anchor="end" ` +
+                `font-size="8" fill="#7c3aed">${this.esc(et)}</text>`;
+        }
         const dots = xy
             .map((c) => {
                 const st = String(c.p.structure || '—');
@@ -87,7 +221,6 @@ const MarketStructureTool = {
                           ? '#dc2626'
                           : '#64748b';
                 const kind = String(c.p.kind || '');
-                // 高点标签在点上方，低点在下方，减少与折线重叠
                 const above = kind !== 'low';
                 const px = Number(c.p.price);
                 const pxTxt = Number.isFinite(px) ? px.toFixed(2) : '';
@@ -114,10 +247,101 @@ const MarketStructureTool = {
             .join('');
         return (
             `<svg class="ms-zigzag-svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" ` +
-            `aria-label="ZigZag 波段折线">` +
+            `aria-label="ZigZag 波段折线与 SMC 价区">` +
+            pivotLines +
+            zoneRects +
+            eventMark +
             `<polyline fill="none" stroke="#94a3b8" stroke-width="1.5" points="${poly}"/>` +
             dots +
             `</svg>`
+        );
+    },
+
+    _smcZonesForSvg(smc) {
+        if (!smc || typeof smc !== 'object') return [];
+        const zones = [];
+        (smc.order_blocks || []).slice(0, 4).forEach((b) => {
+            zones.push({
+                kind: 'ob',
+                direction: b.direction,
+                low: b.low,
+                high: b.high,
+                status: b.status,
+                label: `OB·${b.direction === 'bullish' ? '多' : '空'}·${b.status || ''}`,
+            });
+        });
+        (smc.fvgs || [])
+            .filter((f) => f && (f.status === 'open' || f.status === 'partial'))
+            .slice(0, 3)
+            .forEach((f) => {
+                zones.push({
+                    kind: 'fvg',
+                    direction: f.direction,
+                    low: f.low,
+                    high: f.high,
+                    status: f.status,
+                    label: `FVG·${f.direction === 'bullish' ? '多' : '空'}`,
+                });
+            });
+        return zones;
+    },
+
+    renderSmcSection(smc) {
+        if (!smc || !smc.ok) {
+            return '<div class="ms-smc ms-muted">SMC：样本不足或暂无结构事件</div>';
+        }
+        const last = smc.last_event;
+        const badge = this.smcEventBadge(last);
+        const summary = smc.summary ? `<p class="ms-summary">${this.esc(smc.summary)}</p>` : '';
+        let obTable = '';
+        const obs = smc.order_blocks || [];
+        if (obs.length) {
+            obTable =
+                '<div class="ms-subtitle">订单块 OB</div>' +
+                '<table class="ms-points-table ms-smc-table"><thead><tr>' +
+                '<th>方向</th><th>区间</th><th>状态</th><th>来源</th><th>日期</th>' +
+                '</tr></thead><tbody>';
+            obs.forEach((b) => {
+                const dir = b.direction === 'bullish' ? '看涨' : '看跌';
+                obTable +=
+                    `<tr><td>${dir}</td>` +
+                    `<td>${b.low != null ? Number(b.low).toFixed(2) : '--'} – ` +
+                    `${b.high != null ? Number(b.high).toFixed(2) : '--'}</td>` +
+                    `<td class="${this.statusCls(b.status)}">${this.esc(b.status || '--')}</td>` +
+                    `<td>${this.esc(b.source_event || b.event_type || '--')}</td>` +
+                    `<td>${this.esc(b.bar_date || '--')}</td></tr>`;
+            });
+            obTable += '</tbody></table>';
+        }
+        let fvgTable = '';
+        const fvgs = smc.fvgs || [];
+        if (fvgs.length) {
+            fvgTable =
+                '<div class="ms-subtitle">公允价值缺口 FVG</div>' +
+                '<table class="ms-points-table ms-smc-table"><thead><tr>' +
+                '<th>方向</th><th>区间</th><th>状态</th><th>形成</th>' +
+                '</tr></thead><tbody>';
+            fvgs.forEach((f) => {
+                const dir = f.direction === 'bullish' ? '看涨' : '看跌';
+                fvgTable +=
+                    `<tr><td>${dir}</td>` +
+                    `<td>${f.low != null ? Number(f.low).toFixed(2) : '--'} – ` +
+                    `${f.high != null ? Number(f.high).toFixed(2) : '--'}</td>` +
+                    `<td class="${this.statusCls(f.status)}">${this.esc(f.status || '--')}</td>` +
+                    `<td>${this.esc(f.end_date || f.start_date || '--')}</td></tr>`;
+            });
+            fvgTable += '</tbody></table>';
+        }
+        const bias = smc.structure_bias
+            ? `<span class="ms-muted">结构偏置 ${this.esc(smc.structure_bias)}</span>`
+            : '';
+        return (
+            `<div class="ms-smc">` +
+            `<div class="ms-subtitle">SMC 结构（CHOCH / BOS · OB · FVG） ${badge} ${bias}</div>` +
+            summary +
+            obTable +
+            fvgTable +
+            `</div>`
         );
     },
 
@@ -162,15 +386,10 @@ const MarketStructureTool = {
             table = '<p class="ms-empty">暂无摆动点</p>';
         }
 
-        const bosHtml = bos
-            ? `<div class="ms-bos"><strong>关键事件：</strong>${this.esc(bos.label || bos.type)}` +
-              `（位 ${bos.level != null ? Number(bos.level).toFixed(2) : '--'}` +
-              `${bos.level_date ? ` @ ${this.esc(bos.level_date)}` : ''}；` +
-              `收盘 ${bos.close != null ? Number(bos.close).toFixed(2) : '--'}）</div>`
-            : '<div class="ms-bos ms-muted">关键事件：近期未有效越过确认摆动高/低</div>';
+        const bosHtml = this._formatBosEventHtml(bos);
 
         const contrastHtml = contrast
-            ? `<div class="ms-contrast">${this.esc(contrast)}</div>`
+            ? `<div class="ms-contrast ms-contrast--elevated"><strong>形态对照：</strong>${this.esc(contrast)}</div>`
             : '';
 
         const weekly = (payload && payload.weekly) || o.weekly || null;
@@ -192,10 +411,20 @@ const MarketStructureTool = {
                 : '<span class="ms-muted">周线：样本不足</span>') +
             `</div>`;
         const cautionHtml = caution
-            ? `<div class="ms-caution">${this.esc(caution)}</div>`
+            ? `<div class="ms-caution ms-caution--elevated" role="alert">` +
+              `<strong>日周冲突：</strong>${this.esc(caution)}` +
+              ` <span class="ms-muted">（并列提示，不否决策略正式买点）</span></div>`
             : '';
 
-        const svg = this.buildZigzagSvg(points);
+        const smc = ms.smc || null;
+        const keyLevels = o.keyLevels || null;
+        const svg = this.buildZigzagSvg(points, {
+            zones: this._smcZonesForSvg(smc),
+            lastEvent: smc && smc.last_event ? smc.last_event : null,
+            showPivotLevels: true,
+            keyLevels,
+        });
+        const smcHtml = this.renderSmcSection(smc);
         const analysis = ms.trend_analysis || null;
         let analysisHtml = '';
         if (analysis && (analysis.paragraphs || analysis.text)) {
@@ -213,7 +442,11 @@ const MarketStructureTool = {
         let weeklyBlock = '';
         if (weekly && weekly.ok) {
             const wPts = weekly.points || weekly.zigzag || [];
-            const wSvg = this.buildZigzagSvg(wPts);
+            const wSmc = weekly.smc || null;
+            const wSvg = this.buildZigzagSvg(wPts, {
+                zones: this._smcZonesForSvg(wSmc),
+                lastEvent: wSmc && wSmc.last_event ? wSmc.last_event : null,
+            });
             weeklyBlock =
                 `<details class="ms-weekly-details" open>` +
                 `<summary>周线摆动明细（${this.esc(weeklyLabel || weeklyTrend || '--')}）</summary>` +
@@ -223,28 +456,32 @@ const MarketStructureTool = {
                     ? `<div class="ms-contrast">${this.esc(weekly.pattern_contrast)}</div>`
                     : '') +
                 (wSvg
-                    ? `<div class="ms-zigzag-wrap">${wSvg}<p class="ms-muted ms-chart-hint">周线示意折线（结构标注旁为对应价格）</p></div>`
+                    ? `<div class="ms-zigzag-wrap">${wSvg}<p class="ms-muted ms-chart-hint">周线示意折线（含 SMC 价区，结构标注旁为对应价格）</p></div>`
                     : '') +
+                this.renderSmcSection(wSmc) +
                 `</div></details>`;
         }
 
         host.innerHTML =
             `<div class="ms-result-wrap">` +
             `<div class="ms-meta">个股 ${this.esc(code)} ${this.esc(name)} · 基准日 ${this.esc(asof || '--')}` +
-            ` · ${this.esc(this.adjustLabel(pa))} · ZigZag 分形</div>` +
-            dualTrendHtml +
+            ` · ${this.esc(this.adjustLabel(pa))} · ZigZag 分形 · SMC</div>` +
             cautionHtml +
+            dualTrendHtml +
             `<div class="ms-trend-row">` +
             `<span class="ms-summary">${this.esc(summary)}</span>` +
             `</div>` +
             contrastHtml +
             bosHtml +
-            (svg ? `<div class="ms-zigzag-wrap">${svg}<p class="ms-muted ms-chart-hint">示意折线（摆动点连线，标注旁为对应价格），非完整 K 线叠加</p></div>` : '') +
+            (svg
+                ? `<div class="ms-zigzag-wrap">${svg}<p class="ms-muted ms-chart-hint">示意折线（摆动点连线 + OB/FVG 价区），非完整 K 线叠加</p></div>`
+                : '') +
+            smcHtml +
             analysisHtml +
             weeklyBlock +
             `<div class="ms-subtitle">近端摆动点（HH/HL/LH/LL）·日线</div>` +
             table +
-            `<p class="ms-disclaimer">规则模板，非投资建议；与形态短期三态并列，不互相覆盖；周线逆势提示不否决 URT/GMS 正式买点。</p>` +
+            `<p class="ms-disclaimer">规则模板，非投资建议；SMC 与形态短期三态并列，不互相覆盖；不入策略硬筛；周线逆势提示不否决 URT/GMS 正式买点。</p>` +
             `</div>`;
     },
 
@@ -275,9 +512,36 @@ const MarketStructureTool = {
         if (m.pattern_contrast) lines.push(m.pattern_contrast);
         if (m.last_bos_like) {
             const b = m.last_bos_like;
+            const st = String(b.smc_type || '').toLowerCase();
+            let title = b.label || b.type;
+            if (st === 'choch') title = `CHOCH${b.smc_event_key ? ' · ' + b.smc_event_key : ''}`;
+            else if (st === 'bos') title = `BOS${b.smc_event_key ? ' · ' + b.smc_event_key : ''}（非 CHOCH）`;
+            else title = `${title || '轻量破位'}（轻量破位 ≠ CHOCH）`;
             lines.push(
-                `关键事件：${b.label || b.type} @ ${b.level != null ? b.level : '--'}（${b.level_date || ''}）`
+                `关键事件：${title} @ ${b.level != null ? b.level : '--'}（${b.level_date || ''}）`
             );
+        }
+        const smc = m.smc;
+        if (smc && smc.ok) {
+            lines.push('【SMC】');
+            if (smc.structure_bias) lines.push(`结构偏置：${smc.structure_bias}`);
+            if (smc.summary) lines.push(smc.summary);
+            if (smc.last_event) {
+                const e = smc.last_event;
+                lines.push(
+                    `最近事件：${e.type || ''} ${e.event_key || ''} @ ${e.level != null ? e.level : '--'}（${e.bar_date || ''}）`
+                );
+            }
+            (smc.order_blocks || []).forEach((b) => {
+                lines.push(
+                    `  OB ${b.direction === 'bullish' ? '看涨' : '看跌'} [${b.low}–${b.high}] ${b.status || ''} ${b.bar_date || ''}`
+                );
+            });
+            (smc.fvgs || []).forEach((f) => {
+                lines.push(
+                    `  FVG ${f.direction === 'bullish' ? '看涨' : '看跌'} [${f.low}–${f.high}] ${f.status || ''} ${f.end_date || ''}`
+                );
+            });
         }
         const pts = m.points || [];
         if (pts.length) {

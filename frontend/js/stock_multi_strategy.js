@@ -2147,8 +2147,19 @@ const StockMultiStrategy = {
         }
     },
 
+    /** 价格行为专区：任一子块可见则展开外层 */
+    syncPaSectionVisibility() {
+        const wrap = document.getElementById('ssaPaSection');
+        if (!wrap) return;
+        const any = ['ssaSwingBlock', 'ssaPatternBlock', 'ssaLevelsBlock'].some((id) => {
+            const el = document.getElementById(id);
+            return el && !el.hidden;
+        });
+        wrap.hidden = !any;
+    },
+
     hideResultBlocks() {
-        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaFundFlowBlock', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
+        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaFundFlowBlock', 'ssaPaSection', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
@@ -2191,6 +2202,9 @@ const StockMultiStrategy = {
             status.hidden = false;
             status.className = 'ssa-block-status is-loading';
             status.textContent = text || '加载中…';
+        }
+        if (['ssaSwingBlock', 'ssaPatternBlock', 'ssaLevelsBlock'].includes(blockId)) {
+            this.syncPaSectionVisibility();
         }
     },
 
@@ -2712,7 +2726,13 @@ const StockMultiStrategy = {
             swingBlock.hidden = false;
             const MST = this._analysisTool('MarketStructureTool');
             if (bundle.swing && bundle.swing.fetched && MST && typeof MST.renderEmbedded === 'function') {
-                MST.renderEmbedded(swingHost, bundle.swing.fetched);
+                const lvData = (this.lastLevels && this.lastLevels.data) || {};
+                MST.renderEmbedded(swingHost, bundle.swing.fetched, {
+                    keyLevels: {
+                        nearest_support: lvData.nearest_support,
+                        nearest_resistance: lvData.nearest_resistance,
+                    },
+                });
                 this.setBlockOk('ssaSwingStatus', '');
                 const st = document.getElementById('ssaSwingStatus');
                 if (st) st.hidden = true;
@@ -2725,6 +2745,7 @@ const StockMultiStrategy = {
                 );
             }
         }
+        this.syncPaSectionVisibility();
 
         // 江恩
         const gannBlock = document.getElementById('ssaGannBlock');
@@ -3584,7 +3605,22 @@ const StockMultiStrategy = {
             this.lastLevels = { ok: false, data: null, error: e.message || '阻力支撑计算失败' };
             this.setBlockError('ssaLevelsStatus', e.message || '阻力支撑计算失败，可稍后在「技术工具」重试');
         }
+        this.syncPaSectionVisibility();
         this.updateExportBtn();
+        // 关键位就绪后刷新波段图上的近端 S/R 水平线
+        if (this.lastSwing && this.lastSwing.ok && this.lastSwing.data) {
+            const host = document.getElementById('ssaSwingHost');
+            const MST = this._analysisTool('MarketStructureTool');
+            if (host && MST && typeof MST.renderEmbedded === 'function') {
+                const lvData = (this.lastLevels && this.lastLevels.data) || {};
+                MST.renderEmbedded(host, this.lastSwing.data, {
+                    keyLevels: {
+                        nearest_support: lvData.nearest_support,
+                        nearest_resistance: lvData.nearest_resistance,
+                    },
+                });
+            }
+        }
     },
 
     async loadPatternSection(code, asof, opts) {
@@ -3653,6 +3689,7 @@ const StockMultiStrategy = {
             };
             this.setBlockError('ssaPatternStatus', e.message || '形态识别失败，可稍后在「技术工具」重试');
         }
+        this.syncPaSectionVisibility();
         this.updateExportBtn();
         // 形态就绪后补一次波段对照（若波段已出）
         if (this.lastSwing && this.lastSwing.ok && this.lastSwing.data) {
@@ -3717,7 +3754,13 @@ const StockMultiStrategy = {
                 pattern_short_bias: bias || undefined,
                 use_realtime: useRealtime,
             });
-            MST.renderEmbedded(host, fetched);
+            const lvData = (this.lastLevels && this.lastLevels.data) || {};
+            MST.renderEmbedded(host, fetched, {
+                keyLevels: {
+                    nearest_support: lvData.nearest_support,
+                    nearest_resistance: lvData.nearest_resistance,
+                },
+            });
             this.lastSwing = {
                 ok: !!(fetched.market_structure && fetched.market_structure.ok !== false),
                 data: fetched,
@@ -3743,6 +3786,7 @@ const StockMultiStrategy = {
             };
             this.setBlockError('ssaSwingStatus', e.message || '波段趋势分析失败，可稍后重试');
         }
+        this.syncPaSectionVisibility();
         this.updateExportBtn();
     },
 
@@ -4147,12 +4191,12 @@ const StockMultiStrategy = {
   <div class="meta">${metaHtml}</div>
   <h2>策略分析</h2>
   ${strategyHtml}
-  <h2>阻力支撑位</h2>
-  ${levelsHtml}
-  <h2>形态识别</h2>
-  ${patternHtml}
-  <h2>波段与趋势</h2>
+  <h2>价格行为 · 波段与趋势</h2>
   ${swingHtml}
+  <h2>价格行为 · 形态识别</h2>
+  ${patternHtml}
+  <h2>价格行为 · 阻力支撑位</h2>
+  ${levelsHtml}
   <h2>江恩趋势预测</h2>
   ${gannHtml}
 </body></html>`;

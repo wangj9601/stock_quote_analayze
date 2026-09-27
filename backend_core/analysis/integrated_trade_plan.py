@@ -289,6 +289,13 @@ def _extract_ms(swing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     data = swing.get("data") if isinstance(swing.get("data"), dict) else swing
     ms = data.get("market_structure") if isinstance(data.get("market_structure"), dict) else data
     weekly = data.get("weekly") if isinstance(data.get("weekly"), dict) else {}
+    smc = ms.get("smc") if isinstance(ms.get("smc"), dict) else {}
+    last_ev = smc.get("last_event") if isinstance(smc.get("last_event"), dict) else None
+    active_ob = None
+    for b in smc.get("order_blocks") or []:
+        if isinstance(b, dict) and b.get("status") == "active":
+            active_ob = b
+            break
     return {
         "daily_trend": ms.get("trend"),
         "daily_trend_label": ms.get("trend_label") or ms.get("trend"),
@@ -297,6 +304,9 @@ def _extract_ms(swing: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "counter_trend_note": data.get("counter_trend_note") or ms.get("counter_trend_note"),
         "summary": ms.get("summary"),
         "weekly_summary": weekly.get("summary"),
+        "smc_summary": smc.get("summary"),
+        "smc_last_event": last_ev,
+        "smc_active_ob": active_ob,
     }
 
 
@@ -366,6 +376,19 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
         evidence.append(f"日线趋势：{ms_info.get('daily_trend_label')}")
     if ms_info.get("weekly_trend_label"):
         evidence.append(f"周线趋势：{ms_info.get('weekly_trend_label')}")
+    last_ev = ms_info.get("smc_last_event")
+    if isinstance(last_ev, dict) and last_ev.get("type"):
+        evidence.append(
+            f"SMC：{str(last_ev.get('type') or '').upper()}"
+            f"{('·' + str(last_ev.get('event_key'))) if last_ev.get('event_key') else ''}"
+            f"{(' @ ' + str(last_ev.get('level'))) if last_ev.get('level') is not None else ''}"
+        )
+    active_ob = ms_info.get("smc_active_ob")
+    if isinstance(active_ob, dict):
+        d = "看涨" if active_ob.get("direction") == "bullish" else "看跌"
+        evidence.append(
+            f"活跃{d}OB [{active_ob.get('low')}–{active_ob.get('high')}]"
+        )
     if gann_info.get("bias_label"):
         evidence.append(f"江恩：{gann_info.get('bias_label')}")
 

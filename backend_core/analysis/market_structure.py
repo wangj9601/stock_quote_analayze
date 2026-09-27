@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""日线波段与趋势结构（Market Structure）：ZigZag → HH/HL → 趋势标签。
+"""日线波段与趋势结构（Market Structure）：ZigZag → HH/HL → 趋势标签 + SMC 子集。
 
 复用 swing_zigzag 参数口径（与 Fib / KDE 结构锚一致）。
-一期不做完整 SMC（CHOCH/OB/FVG）；仅提供可解释的波段叙事层。
+SMC（CHOCH/BOS、OB、FVG）由 smc_engine 计算，挂载于返回字段 ``smc``；
+不改写形态 tactical，不入策略硬筛。
 """
 
 from __future__ import annotations
@@ -444,6 +445,7 @@ def analyze_market_structure(
         "points": [],
         "zigzag": [],
         "last_bos_like": None,
+        "smc": None,
         "trend_analysis": None,
         "summary": f"{period_zh}样本不足，暂无法判断波段趋势。",
         "last_close": None,
@@ -499,14 +501,47 @@ def analyze_market_structure(
     points = labeled[-max_pts:]
     trend, trend_meta = _trend_from_labels(labeled)
     bos = _last_bos_like(labeled, last_close=last_close)
+    from backend_core.analysis.smc_engine import (
+        analyze_smc,
+        event_to_bos_like,
+        parse_ohlc_bars,
+    )
+
+    # SMC 窗口与 ZigZag 用的 parsed 尾部对齐，并重编 index
+    ohlc_aligned = parse_ohlc_bars(bars)
+    if len(ohlc_aligned) > mb:
+        ohlc_aligned = ohlc_aligned[-mb:]
+    for i, row in enumerate(ohlc_aligned):
+        row["index"] = i
+    bars_window = [
+        {
+            "date": r["date"],
+            "open": r["open"],
+            "high": r["high"],
+            "low": r["low"],
+            "close": r["close"],
+        }
+        for r in ohlc_aligned
+    ]
+    smc = analyze_smc(
+        bars_window,
+        labeled,
+        confirm_right=fractal_right,
+        atr=atr,
+    )
+    # 兼容：优先 SMC last_event 映射；无事件时回退旧 bos_like
+    bos_compat = event_to_bos_like(smc.get("last_event")) if smc.get("ok") else None
+    if bos_compat is None:
+        bos_compat = bos
+
     analysis = build_trend_analysis(
         trend,
         points,
-        bos,
+        bos_compat,
         last_close=last_close,
         trend_meta=trend_meta,
     )
-    summary = _summary_nlg(trend, points, bos, analysis, period_zh=period_zh)
+    summary = _summary_nlg(trend, points, bos_compat, analysis, period_zh=period_zh)
 
     return {
         "ok": True,
@@ -526,7 +561,8 @@ def analyze_market_structure(
             }
             for p in points
         ],
-        "last_bos_like": bos,
+        "last_bos_like": bos_compat,
+        "smc": smc,
         "summary": summary,
         "last_close": round(last_close, PRICE_DECIMALS),
         "asof": asof,

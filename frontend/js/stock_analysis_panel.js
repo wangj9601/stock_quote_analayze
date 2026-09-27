@@ -81,24 +81,30 @@
       <div class="ssa-block-status" id="ssaAuctionStatus"></div>
       <div class="ssa-auction-host" id="ssaAuctionHost"></div>
     </section>
-    <section class="ssa-block" id="ssaLevelsBlock" hidden>
-      <h4 class="ssa-block-title">阻力支撑位</h4>
-      <div class="ssa-block-status" id="ssaLevelsStatus"></div>
-      <div class="ssa-levels-host" id="ssaLevelsHost"></div>
-    </section>
-    <section class="ssa-block ssa-block--collapsible" id="ssaPatternBlock" hidden>
-      <details class="ssa-details">
-        <summary class="ssa-block-title">形态识别</summary>
-        <div class="ssa-block-status" id="ssaPatternStatus"></div>
-        <div class="ssa-pattern-host" id="ssaPatternHost"></div>
-      </details>
-    </section>
-    <section class="ssa-block ssa-block--collapsible" id="ssaSwingBlock" hidden>
-      <details class="ssa-details">
-        <summary class="ssa-block-title">波段与趋势</summary>
-        <div class="ssa-block-status" id="ssaSwingStatus"></div>
-        <div class="ssa-swing-host" id="ssaSwingHost"></div>
-      </details>
+    <section class="ssa-pa-section" id="ssaPaSection" hidden>
+      <div class="ssa-pa-section__head">
+        <h4 class="ssa-pa-section__title">价格行为</h4>
+        <p class="ssa-pa-section__hint">顺序：波段 → 形态 → 关键位；并列不覆盖。轻量破位 ≠ CHOCH。</p>
+      </div>
+      <section class="ssa-block ssa-block--collapsible" id="ssaSwingBlock" hidden>
+        <details class="ssa-details" open>
+          <summary class="ssa-block-title">1. 波段与趋势（含 SMC）</summary>
+          <div class="ssa-block-status" id="ssaSwingStatus"></div>
+          <div class="ssa-swing-host" id="ssaSwingHost"></div>
+        </details>
+      </section>
+      <section class="ssa-block ssa-block--collapsible" id="ssaPatternBlock" hidden>
+        <details class="ssa-details" open>
+          <summary class="ssa-block-title">2. 形态识别</summary>
+          <div class="ssa-block-status" id="ssaPatternStatus"></div>
+          <div class="ssa-pattern-host" id="ssaPatternHost"></div>
+        </details>
+      </section>
+      <section class="ssa-block" id="ssaLevelsBlock" hidden>
+        <h4 class="ssa-block-title">3. 阻力支撑位</h4>
+        <div class="ssa-block-status" id="ssaLevelsStatus"></div>
+        <div class="ssa-levels-host" id="ssaLevelsHost"></div>
+      </section>
     </section>
     <section class="ssa-block ssa-block--collapsible" id="ssaGannBlock" hidden>
       <details class="ssa-details">
