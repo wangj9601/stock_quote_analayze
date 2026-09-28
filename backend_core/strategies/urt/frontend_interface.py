@@ -283,8 +283,6 @@ class URTFrontendInterface:
                                 for r in cached
                                 if code_matches_urt_boards(r.get("code"), board_keys)
                             ]
-                        if limit and len(cached) > int(limit):
-                            cached = cached[: int(limit)]
                         if cached:
                             from backend_core.strategies.urt.signal_detector import build_buy_logic
 
@@ -293,6 +291,12 @@ class URTFrontendInterface:
                                 row["filter_ok"] = row["buy_logic"].get("filter_ok")
                                 row["score_ok"] = row["buy_logic"].get("score_ok")
                             data = _apply_quality_filter(cached)
+                            data.sort(
+                                key=lambda x: float(x.get("score") or 0),
+                                reverse=True,
+                            )
+                            if limit and len(data) > int(limit):
+                                data = data[: int(limit)]
                         else:
                             data = []
                     else:
@@ -380,6 +384,7 @@ class URTFrontendInterface:
                 require_pass=require_pass,
             )
             data = _apply_quality_filter(data)
+            data.sort(key=lambda x: float(x.get("score") or 0), reverse=True)
             data_source = "realtime"
 
         parameters_out = {

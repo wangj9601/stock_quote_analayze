@@ -213,6 +213,43 @@ def test_trace_only_blocks_full_market_realtime_even_when_env_allows():
     Eng.assert_not_called()
 
 
+def test_cache_hits_sorted_by_score_desc():
+    """全市场读预计算后按信号得分降序，limit 在过滤后截取。"""
+    rows = [
+        {"code": "000001", "name": "a", "buy_signal": True, "score": 71},
+        {"code": "600519", "name": "b", "buy_signal": True, "score": 91},
+        {"code": "000002", "name": "c", "buy_signal": True, "score": 80},
+    ]
+    db = MagicMock()
+    with patch.object(URTFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.urt.frontend_interface.URTConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.urt.frontend_interface.URTDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.urt.frontend_interface.query_buy_signals_for_date",
+        return_value=rows,
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.dates_ready_for_universe_backtest",
+        return_value=set(),
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.get_trace_freshness",
+        return_value={"stale": False, "need_recompute": False, "config_updated_at": None, "trace_computed_at": None},
+    ), patch(
+        "backend_core.strategies.urt.signal_detector.build_buy_logic",
+        return_value={"filter_ok": True, "score_ok": True},
+    ):
+        cm = CM.return_value
+        cm.get_config.return_value = CFG
+        cm.merge_overrides.return_value = CFG
+        Loader.resolve_effective_history_end_date.return_value = "2026-09-28"
+        Loader.return_value = MagicMock()
+        out = URTFrontendInterface.screen(
+            db, scope="all", config_id=1, prefer_cache=True, market="CN", limit=2
+        )
+    assert out["data_source"] == "urt_signal_trace"
+    assert [r["code"] for r in out["data"]] == ["600519", "000002"]
+
+
 if __name__ == "__main__":
     test_code_matches_urt_boards()
     test_screen_uses_cache_when_boards_set()
@@ -220,4 +257,5 @@ if __name__ == "__main__":
     test_full_market_no_precompute_failfast()
     test_full_market_no_precompute_allows_realtime()
     test_trace_only_blocks_full_market_realtime_even_when_env_allows()
+    test_cache_hits_sorted_by_score_desc()
     print("test_urt_board_cache_filter.py: all passed")

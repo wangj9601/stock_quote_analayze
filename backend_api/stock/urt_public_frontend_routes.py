@@ -40,6 +40,9 @@ async def list_urt_strategy_configs_public(db: Session = Depends(get_db)):
                 "updated_at": r.get("updated_at"),
                 "min_score": merged.get("min_score", params.get("min_score")),
                 "volume_multiple": merged.get("volume_multiple", params.get("volume_multiple")),
+                "signal_quality_mode": merged.get(
+                    "signal_quality_mode", params.get("signal_quality_mode") or "standard"
+                ),
             }
             data.append(item)
             if item["is_default"] and default_id is None:
@@ -58,6 +61,7 @@ async def list_urt_strategy_configs_public(db: Session = Depends(get_db)):
                     "name": effective.get("name"),
                     "min_score": effective.get("min_score"),
                     "volume_multiple": effective.get("volume_multiple"),
+                    "signal_quality_mode": effective.get("signal_quality_mode") or "standard",
                     "updated_at": effective.get("updated_at"),
                 },
             }

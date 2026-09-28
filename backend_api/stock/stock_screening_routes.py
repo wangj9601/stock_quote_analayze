@@ -3198,8 +3198,8 @@ async def get_urt_strategy(
     min_turnover: Optional[float] = Query(None, ge=0, description="最低换手率%"),
     min_volume_ratio: Optional[float] = Query(None, ge=0, description="最低量比"),
     signal_quality_mode: Optional[str] = Query(
-        "standard",
-        description="信号质量: standard=标准(排除均线多头分中段) | premium=精选(近支撑≤2%+排除弱项)",
+        None,
+        description="信号质量: 空=用参数版本（与预计算一致） | standard=标准 | premium=精选",
     ),
     prefer_cache: bool = Query(
         True,
@@ -3423,9 +3423,8 @@ async def get_urt_strategy(
     screen_boards = None if stock_codes is not None else boards_out
     # 对齐 GMS：非全市场（自选/行业/概念/单股）不按硬筛+最低得分过滤列表，得分原样返回；正式买点仍看 buy_signal
     skip_filters = scope_raw in ("single", "watchlist", "industry_board", "concept_board")
-    sqm = (signal_quality_mode or "standard").strip().lower()
-    if sqm not in ("standard", "premium"):
-        sqm = "standard"
+    sqm_raw = (signal_quality_mode or "").strip().lower()
+    sqm = sqm_raw if sqm_raw in ("standard", "premium") else None
 
     # 全市场：页面「优先读预计算」→ prefer_cache + trace_only（无缓存不回退全量现算）
     # 取消勾选 → force_realtime。自选/板块/单股仍由 skip_filters 强制现算明细。

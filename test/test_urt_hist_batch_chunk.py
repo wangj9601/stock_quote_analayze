@@ -82,10 +82,34 @@ def test_load_hist_map_rollbacks_before_fallback():
     loader.db.rollback.assert_called()
 
 
+def test_screen_universe_outer_chunks_not_full_universe():
+    """日终全市场扫描应按 outer_batch 分批拉行情，而不是一次攒整池 hist。"""
+    loader = MagicMock()
+    load_calls: list = []
+
+    def _fake_batch(codes, start_date=None, end_date=None, chunk_size=None):
+        load_calls.append(list(codes))
+        return {c: [{"date": "2026-09-23", "close": 10.0}] for c in codes}
+
+    loader.fetch_historical_desc_batch.side_effect = _fake_batch
+    engine = URTStrategyEngine(loader, {})
+    rows = [(f"{i:06d}", f"n{i}") for i in range(30)]
+    with patch.object(URTDataLoader, "resolve_hist_batch_chunk_size", return_value=10):
+        with patch(
+            "backend_core.strategies.urt.strategy_engine.evaluate_buy_signal",
+            return_value=None,
+        ):
+            engine.screen_universe(rows, as_of_end_date="2026-09-23", require_pass=True)
+    assert len(load_calls) == 3
+    assert all(len(c) == 10 for c in load_calls)
+    assert [c[0] for c in load_calls] == ["000000", "000010", "000020"]
+
+
 if __name__ == "__main__":
     test_resolve_hist_batch_chunk_size_long_window_is_small()
     test_resolve_hist_batch_chunk_size_short_window_allows_more()
     test_resolve_hist_batch_chunk_size_explicit_override()
     test_fetch_batch_oom_shrinks_then_succeeds()
     test_load_hist_map_rollbacks_before_fallback()
+    test_screen_universe_outer_chunks_not_full_universe()
     print("test_urt_hist_batch_chunk.py: all passed")

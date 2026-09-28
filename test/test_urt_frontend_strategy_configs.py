@@ -42,8 +42,8 @@ def test_list_urt_strategy_configs_public_shape():
         inst.list_configs = MagicMock(return_value=fake_rows)
         inst.get_config = MagicMock(
             side_effect=lambda cid, db=None: {
-                1: {"min_score": 72, "volume_multiple": 3.2},
-                2: {"min_score": 65, "volume_multiple": 2.5},
+                1: {"min_score": 72, "volume_multiple": 3.2, "signal_quality_mode": "standard"},
+                2: {"min_score": 65, "volume_multiple": 2.5, "signal_quality_mode": "standard"},
             }.get(int(cid), {})
         )
         inst.get_config_meta = MagicMock(
@@ -73,5 +73,6 @@ def test_list_urt_strategy_configs_public_shape():
         assert body["data"][0]["name"] == "默认"
         assert body["data"][0]["min_score"] == 72
         assert body["data"][0]["volume_multiple"] == 3.2
+        assert body["data"][0]["signal_quality_mode"] == "standard"
         # updated_at 可选透出（有则便于前台陈旧判断）
         assert "updated_at" in body["data"][0]

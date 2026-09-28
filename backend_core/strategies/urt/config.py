@@ -256,6 +256,7 @@ class URTConfigManager:
             "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
             "min_score": cfg.get("min_score"),
             "volume_multiple": cfg.get("volume_multiple"),
+            "signal_quality_mode": cfg.get("signal_quality_mode") or "standard",
             "config_params": cfg,
         }
 

@@ -4883,8 +4883,10 @@ const ScreeningPage = {
             }
         }
         const sqmEl = document.getElementById('urtSignalQualityMode');
-        const sqm = sqmEl && sqmEl.value ? String(sqmEl.value).trim().toLowerCase() : 'standard';
-        params.set('signal_quality_mode', sqm === 'premium' ? 'premium' : 'standard');
+        const sqm = sqmEl && sqmEl.value ? String(sqmEl.value).trim().toLowerCase() : '';
+        if (sqm === 'premium' || sqm === 'standard') {
+            params.set('signal_quality_mode', sqm);
+        }
 
         // 全部 A/H：勾选「优先读预计算」→ prefer_cache + trace_only；取消 → force_realtime
         if (scope === 'cn' || scope === 'hk') {
@@ -4998,14 +5000,33 @@ const ScreeningPage = {
         }
     },
 
+    _resetUrtOverrideInputs() {
+        const vmEl = document.getElementById('urtVolumeMultiple');
+        const msEl = document.getElementById('urtMinScore');
+        const sqmEl = document.getElementById('urtSignalQualityMode');
+        if (vmEl) vmEl.value = '';
+        if (msEl) msEl.value = '';
+        if (sqmEl) sqmEl.value = '';
+        const preferEl = document.getElementById('urtPreferPrecompute');
+        if (preferEl) preferEl.checked = true;
+    },
+
     _fillUrtParamPlaceholders(item) {
         const vmEl = document.getElementById('urtVolumeMultiple');
         const msEl = document.getElementById('urtMinScore');
+        const sqmEl = document.getElementById('urtSignalQualityMode');
         if (vmEl && item && item.volume_multiple != null) {
             vmEl.placeholder = `版本 ${item.volume_multiple}`;
         }
         if (msEl && item && item.min_score != null) {
             msEl.placeholder = `版本 ${item.min_score}`;
+        }
+        if (sqmEl && sqmEl.options && sqmEl.options.length) {
+            const mode = String((item && item.signal_quality_mode) || 'standard').trim().toLowerCase();
+            const label = mode === 'premium'
+                ? '精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）'
+                : '标准（排除均线多头分中段）';
+            sqmEl.options[0].textContent = `用参数版本（${label}）`;
         }
     },
 
@@ -5043,6 +5064,7 @@ const ScreeningPage = {
             this.urtConfigId = selected;
             this.urtDefaultConfigId = defaultId;
             const selectedItem = list.find((x) => x.id === selected) || list[0];
+            this._resetUrtOverrideInputs();
             this._fillUrtParamPlaceholders(selectedItem);
             this._updateUrtConfigAlignHint(defaultId);
             if (!selectEl._urtConfigBound) {

@@ -1460,7 +1460,7 @@
                     <li><strong>资金确认：</strong>当日成交量 ≥ 近 20 日均量 × 倍数（缺省 3.0）</li>
                     <li><strong>结构 / 过热：</strong>支撑阻力硬闸 + 过热硬闸；得分默认最低 70 分</li>
                     <li><strong>数据来源：</strong>全部 A 股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票；A 股板块（主板/创业板/中小板/科创板/北证）可多选</li>
-                    <li><strong>预计算：</strong>每日数据采集会写入 urt_signal_trace；全部 A/H 股默认「优先读预计算」，无缓存时不回退全市场现算（可取消勾选强制现算，或设 limit）</li>
+                    <li><strong>预计算：</strong>全部 A/H 股默认只读当日 urt_signal_trace（与数据采集预计算同一参数版本），按信号得分降序；无预计算不回退全市场现算</li>
                     <li class="condition-item">全市场实时扫描较慢且易超时，联调请先确认预计算或设置 limit；系统仅作量化初筛，介入需结合基本面终选</li>
                 </ul>
             </div>
@@ -1529,7 +1529,7 @@
 
             <div class="parameters-card">
                 <h3>可选参数</h3>
-                <p class="gms-params-refresh-hint">默认使用「生效（默认）」参数版本及其中的量能/最低得分；量能与最低得分留空表示不覆盖（可读预计算缓存）。仅在「全部A股 / 全部港股」填写覆盖值时才会过滤买点并关闭缓存。切换版本或覆盖项后须点「刷新筛选」。</p>
+                <p class="gms-params-refresh-hint">默认与每日数据采集预计算一致：使用「生效（默认）」参数版本，量能/最低得分/信号质量留空即不覆盖，直接查当日 urt_signal_trace 买点并按得分排序。仅在「全部A股 / 全部港股」填写覆盖值时才会过滤买点并关闭缓存。切换版本或覆盖项后须点「刷新筛选」。</p>
                 <div class="parameters-grid">
                     <div class="parameter-group">
                         <label for="urt-config_id">策略参数版本</label>
@@ -1553,11 +1553,12 @@
                     </div>
                     <div class="parameter-group">
                         <label for="urtMinScore">最低得分（空=用版本）</label>
-                        <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" placeholder="生效配置">
+                        <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" placeholder="生效配置" value="">
                     </div>
                     <div class="param-item">
                         <label for="urtSignalQualityMode">信号质量</label>
                         <select id="urtSignalQualityMode" class="param-input">
+                            <option value="" selected>用参数版本（与预计算一致）</option>
                             <option value="standard">标准（排除均线多头分中段）</option>
                             <option value="premium">精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）</option>
                         </select>
@@ -2412,7 +2413,7 @@
     <script src="js/board_roles_panel.js"></script>
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_trade_link.js?v=20260917a"></script>
-    <script src="js/screening.js?v=20260925u"></script>
+    <script src="js/screening.js?v=20260928-urt-precompute"></script>
     <script src="js/sbbr_screening.js?v=20260918a"></script>
     <script src="js/rpe_screening.js?v=20260917a"></script>
     <script src="js/csb_screening.js?v=20260915c"></script>

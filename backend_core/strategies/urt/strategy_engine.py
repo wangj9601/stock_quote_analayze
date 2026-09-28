@@ -100,36 +100,59 @@ class URTStrategyEngine:
         """
         require_pass=True：仅返回硬筛+得分通过的买点（全部A股/港股全量选股）。
         require_pass=False：始终返回可计算的信号明细（自选/板块/单股，对齐 GMS 列表不过滤）。
+
+        外部分块拉行情→评点→丢弃 hist，避免日终全市场 K 线同时驻留导致 PG/客户端 OOM。
+        （与 screen_universe_for_dates 同策略；内部 OOM 缩分块仅作兜底。）
         """
         cal_days = history_calendar_days_for_fetch(self.config)
         start_s, end_s = URTDataLoader.default_date_window(cal_days, as_of_end_date)
         results: List[Dict[str, Any]] = []
         if not stock_rows:
             return results
-        batch_n = URTDataLoader.resolve_hist_batch_chunk_size(
+
+        n_chunk = URTDataLoader.resolve_hist_batch_chunk_size(
             start_date=start_s, end_date=end_s
         )
-        # 先整池一次批量（内部再按 batch_n 切 codes）；失败则回退逐股
-        hist_map = self._load_hist_map(stock_rows, start_s, end_s, chunk_size=batch_n)
-        for code, name in stock_rows:
-            try:
-                if hist_map is not None:
-                    hist = list(hist_map.get(code) or [])
-                else:
-                    hist = self.loader.fetch_historical_desc(code, start_date=start_s, end_date=end_s)
-                if not hist:
+        total = len(stock_rows)
+        logger.info(
+            "URT 全市场扫描 stocks=%s window=%s~%s outer_batch_codes=%s",
+            total,
+            start_s,
+            end_s,
+            n_chunk,
+        )
+
+        for i in range(0, total, n_chunk):
+            chunk = stock_rows[i : i + n_chunk]
+            # 每批独立拉取；评完即离开作用域，不把整池 hist 叠在一起
+            hist_map = self._load_hist_map(chunk, start_s, end_s, chunk_size=n_chunk)
+            for code, name in chunk:
+                try:
+                    if hist_map is not None:
+                        hist = list(hist_map.get(code) or [])
+                    else:
+                        hist = self.loader.fetch_historical_desc(
+                            code, start_date=start_s, end_date=end_s
+                        )
+                    if not hist:
+                        continue
+                    if as_of_end_date:
+                        anchor = str(as_of_end_date)[:10]
+                        hist = [
+                            b for b in hist if str(b.get("date") or "")[:10] <= anchor
+                        ]
+                    detail = evaluate_buy_signal(
+                        hist, self.config, require_pass=require_pass
+                    )
+                    if not detail:
+                        continue
+                    results.append({"code": code, "name": name, **detail})
+                except Exception as e:
+                    logger.debug("URT screen skip %s: %s", code, e)
                     continue
-                # 若指定基准日，截到该日及之前
-                if as_of_end_date:
-                    anchor = str(as_of_end_date)[:10]
-                    hist = [b for b in hist if str(b.get("date") or "")[:10] <= anchor]
-                detail = evaluate_buy_signal(hist, self.config, require_pass=require_pass)
-                if not detail:
-                    continue
-                results.append({"code": code, "name": name, **detail})
-            except Exception as e:
-                logger.debug("URT screen skip %s: %s", code, e)
-                continue
+            # 显式释放本批引用，便于长跑预计算及时回收
+            hist_map = None
+
         results.sort(key=lambda x: float(x.get("score") or 0), reverse=True)
         return results
 
