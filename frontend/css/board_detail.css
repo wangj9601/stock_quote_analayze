@@ -11,15 +11,16 @@
 }
 
 .board-detail-back {
-    color: #1d4ed8;
+    color: var(--ops-gold, #c9a227);
     text-decoration: none;
     font-size: 0.9rem;
     font-weight: 600;
 }
 
-.board-detail-back:hover {
+.board-detail-back:hover,
+.board-detail-back:focus {
     text-decoration: underline;
-    color: #1e40af;
+    color: var(--ops-gold, #c9a227);
 }
 
 .sector-detail-modal.is-standalone {
@@ -34,11 +35,12 @@
 }
 
 .sector-detail-modal.is-standalone .sector-detail-content {
-    max-width: 920px;
+    max-width: 960px;
     max-height: none;
     width: 100%;
     margin: 0 auto;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.06);
+    box-shadow: none;
+    border-radius: 2px;
 }
 
 .sector-detail-modal.is-standalone .sector-detail-body {
@@ -54,6 +56,6 @@
 
 @media (max-width: 640px) {
     .sector-detail-modal.is-standalone .sector-detail-content {
-        border-radius: 6px;
+        border-radius: 2px;
     }
 }

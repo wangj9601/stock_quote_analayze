@@ -620,6 +620,110 @@ body.ops-map .sector-weak-chip.unknown {
     border-color: rgba(217, 226, 236, 0.2) !important;
 }
 
+/* 板块详情内层：禁浅底浅字 / 厚左边框 / 白胶囊 */
+body.ops-map .sector-detail-sub,
+body.ops-map .sector-detail-loading,
+body.ops-map .sector-detail-error,
+body.ops-map .sector-detail-meta,
+body.ops-map .sector-limit-up-summary,
+body.ops-map .sector-limit-up-controls,
+body.ops-map .sector-limit-up-wave-meta,
+body.ops-map .sector-limit-up-hint,
+body.ops-map .sector-slope-trend-hint,
+body.ops-map .sector-trend-summary-body,
+body.ops-map .sector-fund-flow-tiers summary {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .sector-detail-section h3,
+body.ops-map .sector-trend-summary-title,
+body.ops-map .sector-slope-trend-title {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .sector-detail-summary,
+body.ops-map .sector-trend-summary-body {
+    background: rgba(217, 226, 236, 0.04) !important;
+    border: 1px solid var(--color-border) !important;
+    border-left: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .sector-detail-summary {
+    padding: 10px 12px !important;
+}
+
+body.ops-map .sector-slope-trend-wrap,
+body.ops-map .sector-limit-up-wave,
+body.ops-map .sector-limit-up-table-wrap {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map .sector-slope-legend-btn {
+    background: rgba(217, 226, 236, 0.06) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    border-radius: 1px !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .sector-slope-legend-btn.is-on {
+    background: var(--ops-overlay-film) !important;
+    border-color: rgba(201, 162, 39, 0.4) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .sector-slope-legend-btn .sector-slope-legend-n {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .sector-limit-up-link,
+body.ops-map .sector-detail-body a:not(.btn):not(.board-detail-back):not(.close-sector-detail) {
+    color: var(--ops-route) !important;
+}
+
+body.ops-map .sector-limit-up-link:hover,
+body.ops-map .sector-limit-up-link:focus {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .sector-limit-up-table th {
+    background: var(--ops-table-head, rgba(217, 226, 236, 0.06)) !important;
+    color: var(--ops-ink-muted) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .sector-limit-up-table td {
+    border-color: rgba(217, 226, 236, 0.1) !important;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .sector-ff-chart {
+    border-top-color: var(--color-border) !important;
+}
+
+body.ops-map .sector-ff-bar.up {
+    background: var(--color-rise) !important;
+}
+
+body.ops-map .sector-ff-bar.down {
+    background: var(--color-fall) !important;
+}
+
+body.ops-map .sector-ff-bar-label {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .close-sector-detail:hover {
+    background: rgba(201, 162, 39, 0.16) !important;
+    color: var(--ops-gold) !important;
+}
+
 body.ops-map .ba-short-roles {
     background: rgba(0, 0, 0, 0.22) !important;
     border: 1px solid var(--color-border) !important;

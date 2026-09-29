@@ -4318,9 +4318,29 @@ html.analysis-popup-window .analysis-tabs {
 .dr-summary { margin: 0 0 0.55rem; color: #334155; line-height: 1.55; }
 .dr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem 1rem; align-items: start; }
 .dr-ladder { display: flex; flex-wrap: wrap; gap: 0.45rem; margin: 0 0 0.7rem; }
-.dr-chip { display: inline-flex; align-items: baseline; gap: 0.35rem; padding: 0.28rem 0.6rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px; font-size: 0.82rem; color: #334155; }
-.dr-chip b { font-variant-numeric: tabular-nums; color: #0f172a; }
-.dr-chip--hot { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.dr-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.3rem 0.65rem;
+    background: rgba(15, 20, 25, 0.35);
+    border: 1px solid rgba(217, 226, 236, 0.22);
+    border-radius: 1px;
+    font-size: 0.82rem;
+    color: #8b9aab;
+}
+.dr-chip b { font-variant-numeric: tabular-nums; color: #d9e2ec; font-weight: 700; }
+.dr-chip--hot {
+    background: rgba(194, 59, 59, 0.16);
+    border-color: rgba(194, 59, 59, 0.45);
+    color: #f0b4b4;
+}
+.dr-chip--hot b,
+.dr-chip--hot .dr-stock-link { color: #f7d4d4; }
+.dr-chip .dr-code { color: #8b9aab; }
+.dr-chip .dr-stock-link { color: #d9e2ec; text-decoration: none; font-weight: 600; }
+.dr-chip .dr-stock-link:hover,
+.dr-chip .dr-stock-link:focus { color: #c9a227; text-decoration: underline; }
 .dr-table-wrap { overflow-x: auto; overflow-y: visible; max-height: none; border: 1px solid #e2e8f0; border-radius: 8px; }
 .dr-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .dr-table th, .dr-table td { border-bottom: 1px solid #eef2f6; padding: 0.48rem 0.65rem; text-align: left; vertical-align: middle; }
