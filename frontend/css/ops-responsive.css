@@ -30,7 +30,8 @@
 
     body.ops-map .nav-link#nav-watchlist,
     body.ops-map .nav-link#nav-quotes,
-    body.ops-map .nav-link#nav-screening {
+    body.ops-map .nav-link#nav-screening,
+    body.ops-map .nav-link#nav-analyze {
         font-size: 1.35rem !important;
     }
 
