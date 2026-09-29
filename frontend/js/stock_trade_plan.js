@@ -67,7 +67,7 @@ const StockTradePlan = {
         const isStructWatch =
             plan.stance_short === 'watch' &&
             st.entry_zone &&
-            ['structure_watch', 'smc_ob_watch', 'smc_fvg_watch'].includes(
+            ['structure_watch', 'smc_ob_watch', 'smc_fvg_watch', 'gms_right_wait'].includes(
                 String(st.entry_zone.basis || '')
             );
         const entryTh = isStructWatch ? '观察区' : '入场/承接';
@@ -110,9 +110,11 @@ const StockTradePlan = {
             (plan.primary_strategy && plan.primary_strategy !== 'none'
                 ? `<span class="ssa-plan-badge ssa-plan-badge--primary">主策略 ${this.esc(plan.primary_strategy_name || plan.primary_strategy)}</span>`
                 : '') +
-            (plan.structure_rr != null
-                ? `<span class="ssa-plan-badge ssa-plan-badge--rr">RR≈${this.fmtPrice(plan.structure_rr)}</span>`
-                : '') +
+            (plan.plan_rr != null
+                ? `<span class="ssa-plan-badge ssa-plan-badge--rr" title="按入场中值、止损、止盈测算">盈亏比≈${this.fmtPrice(plan.plan_rr)}</span>`
+                : plan.structure_rr != null
+                    ? `<span class="ssa-plan-badge ssa-plan-badge--rr" title="策略结构盈亏比（现价相对最近支撑/阻力）">结构RR≈${this.fmtPrice(plan.structure_rr)}</span>`
+                    : '') +
             `</div>` +
             (kl.support != null || kl.resistance != null || kl.close != null
                 ? `<div class="ssa-plan-levels">关键位：支撑 ${this.fmtPrice(kl.support)} / 现价 ${this.fmtPrice(kl.close)} / 阻力 ${this.fmtPrice(kl.resistance)}</div>`

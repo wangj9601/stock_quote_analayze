@@ -5,7 +5,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from backend_core.analysis.trade_advice import build_trade_advice
+from backend_core.analysis.trade_advice import (
+    TRADE_MIN_PLAN_RR as PLAN_MIN_RR,
+    _compute_plan_rr,
+    _entry_mid,
+    _tp_price,
+    build_trade_advice,
+)
 
 _STRATEGY_PRIORITY = ("urt", "gms", "sbbr", "rpe")
 _ACTION_LABELS = {
@@ -41,6 +47,15 @@ def _f(v: Any) -> Optional[float]:
 def _fmt_px(v: Any) -> str:
     x = _f(v)
     return f"{x:.2f}" if x is not None else "--"
+
+
+def _plan_rr_from_advice(advice: Dict[str, Any]) -> Optional[float]:
+    """SMC 调整价区后，按最终入场中值/止损/止盈重算盈亏比。"""
+    stop = advice.get("stop_zone") if isinstance(advice.get("stop_zone"), dict) else {}
+    entry = _entry_mid(advice.get("buy_zone"))
+    if entry is None:
+        entry = _f((advice.get("key_levels") or {}).get("close"))
+    return _compute_plan_rr(entry, _f(stop.get("price")), _tp_price(advice.get("take_profit")))
 
 
 def _resolve_close_from_levels(levels: Optional[Dict[str, Any]]) -> Optional[float]:
@@ -718,6 +733,14 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
         conflicts=conflicts,
     )
 
+    plan_rr = _plan_rr_from_advice(advice)
+    if action == "buy" and plan_rr is not None and plan_rr < PLAN_MIN_RR:
+        action = "watch"
+        confidence = "low"
+        conflicts.append(
+            f"按入场/止损/止盈测算盈亏比仅≈{plan_rr:.2f}，不足 {PLAN_MIN_RR:.1f}，降级为观察"
+        )
+
     # 形态与短线 action 冲突
     if short_bias == "看空" and action == "buy":
         conflicts.append("形态短线偏空，与策略买点并存，宜降仓或等待确认")
@@ -805,6 +828,7 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
             "structure_watch",
             "smc_ob_watch",
             "smc_fvg_watch",
+            "gms_right_wait",
         )
         if (
             bz_watch
@@ -861,6 +885,7 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
             "close": _resolve_close_from_levels(levels_data),
         },
         "structure_rr": advice.get("structure_rr"),
+        "plan_rr": plan_rr,
         "conflicts": conflicts,
         "evidence": evidence,
         "smc_notes": list(advice.get("smc_notes") or []),

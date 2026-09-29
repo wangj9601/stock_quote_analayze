@@ -311,3 +311,61 @@ def test_urt_buy_uses_second_support_when_near_first():
     assert float(adv["buy_zone"]["low"]) <= 15.2 + 1e-6
     assert float(adv["stop_zone"]["price"]) < float(adv["buy_zone"]["low"])
     assert float(adv["take_profit"]["prices"][0]) == 18.30
+
+
+def test_gms_right_hugging_resistance_not_buy_and_no_one_cent_target():
+    """截图复现：右侧买点现价 15.15、阻力 15.16、支撑 14.44 → 不追买，止盈不再是 15.16。"""
+    adv = build_trade_advice(
+        "gms",
+        {
+            "right_buy_signal": True,
+            "buy_type": "右侧",
+            "close": 15.15,
+            "nearest_support": 14.44,
+            "nearest_resistance": 15.16,
+        },
+    )
+    assert adv["action"] == "watch"
+    assert adv["buy_zone"]["basis"] == "gms_right_wait"
+    tp = float(adv["take_profit"]["prices"][0])
+    entry = float(adv["buy_zone"].get("low") or adv["buy_zone"].get("price"))
+    assert tp > 15.16
+    assert (tp - entry) / entry >= 0.05 - 1e-9
+    assert float(adv["stop_zone"]["price"]) < entry
+    assert "贴近结构阻力" in adv["summary"]
+    assert adv["plan_rr"] is not None and adv["plan_rr"] >= 1.0
+
+
+def test_gms_right_uses_next_resistance_level_when_nearest_too_thin():
+    adv = build_trade_advice(
+        "gms",
+        {
+            "right_buy_signal": True,
+            "buy_type": "右侧",
+            "close": 10.0,
+            "nearest_support": 9.6,
+            "nearest_resistance": 10.3,
+            "resistance_levels": [10.3, 11.2],
+        },
+    )
+    assert adv["action"] == "buy"
+    assert float(adv["take_profit"]["prices"][0]) == 11.2
+    assert "第2档阻力" in adv["summary"]
+    assert adv["plan_rr"] == round((11.2 - 10.0) / (10.0 - 9.6 * 0.98), 2)
+
+
+def test_low_plan_rr_downgrades_buy_to_watch():
+    """SBBR 防守下沿远、箱体上沿近：盈亏比 <1 时降级为观察。"""
+    adv = build_trade_advice(
+        "sbbr",
+        {
+            "entry_signal": True,
+            "entry_low": 10.0,
+            "close": 10.0,
+            "defense_low": 9.0,
+            "box_resistance": 10.3,
+        },
+    )
+    assert adv["action"] == "watch"
+    assert adv["plan_rr"] is not None and adv["plan_rr"] < 1.0
+    assert "降级为观察" in adv["summary"]

@@ -429,7 +429,7 @@
     const isStructWatch =
       plan.stance_short === 'watch' &&
       st.entry_zone &&
-      ['structure_watch', 'smc_ob_watch', 'smc_fvg_watch'].includes(
+      ['structure_watch', 'smc_ob_watch', 'smc_fvg_watch', 'gms_right_wait'].includes(
         String(st.entry_zone.basis || '')
       );
     const entryLabel = isStructWatch ? '观察区' : '入场/承接';

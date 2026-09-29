@@ -16,6 +16,12 @@ URT_NEAR_SUPPORT_BAND_PCT = 0.01  # 短线可执行区：支撑下方约 1%～�
 STRUCTURE_ENTRY_NEAR_SUPPORT_PCT = 0.03
 STRUCTURE_EXIT_TARGET_PCT = 0.10
 STRUCTURE_EXIT_MIN_UPSIDE_PCT = 0.05
+# 贴阻力：近端阻力上行不足 2% 时，禁止把现价当买入、把近端阻力当止盈
+TRADE_NEAR_RESISTANCE_PCT = 0.02
+# 可执行止盈的绝对下限（约 1.5%），避免「买入 15.15 / 止盈 15.16」这类 1 分钱目标
+TRADE_MIN_REWARD_PCT = 0.015
+# 按实际入场/止损/止盈测算的盈亏比低于此值时，买点降级为观察
+TRADE_MIN_PLAN_RR = 1.0
 
 
 def _position_advice_text(pa: Any) -> Optional[str]:
@@ -150,6 +156,167 @@ def _pick_entry_structure_support(
     if s2 is not None and float(s2) < ns - 1e-6:
         return float(s2), 2, dist
     return ns, 1, dist
+
+
+def _is_hugging_resistance(
+    price: Optional[float],
+    resistance: Optional[float],
+    *,
+    near_pct: float = TRADE_NEAR_RESISTANCE_PCT,
+) -> bool:
+    """现价已贴着或越过近端阻力（上行空间过薄）。"""
+    if price is None or resistance is None:
+        return False
+    px, r = float(price), float(resistance)
+    if px <= 0:
+        return False
+    if r <= px + 1e-9:
+        return True
+    return (r - px) / px < float(near_pct)
+
+
+def _pick_executable_resistance(
+    entry_price: Optional[float],
+    nearest_resistance: Optional[float],
+    level_pool: Optional[List[Any]],
+    *,
+    min_upside_pct: float = STRUCTURE_EXIT_MIN_UPSIDE_PCT,
+) -> tuple[Optional[float], int]:
+    """选第一档相对入场上行空间足够的阻力；没有则返回 None（交给百分比目标）。"""
+    if entry_price is None:
+        nr = _f(nearest_resistance)
+        return nr, (1 if nr is not None else 0)
+    entry = float(entry_price)
+    if entry <= 0:
+        nr = _f(nearest_resistance)
+        return nr, (1 if nr is not None else 0)
+    cands: List[float] = []
+    seen: set = set()
+
+    def _add(raw: Any) -> None:
+        v = _f(raw)
+        if v is None or v <= entry + 1e-9:
+            return
+        k = round(float(v), 4)
+        if k in seen:
+            return
+        seen.add(k)
+        cands.append(k)
+
+    _add(nearest_resistance)
+    for x in level_pool or []:
+        _add(x)
+    cands.sort()
+    min_up = max(0.0, float(min_upside_pct or 0))
+    for i, r in enumerate(cands, start=1):
+        if (r - entry) / entry >= min_up:
+            return r, i
+    return None, 0
+
+
+def _entry_mid(buy_zone: Optional[Dict[str, Any]]) -> Optional[float]:
+    """入场参考价：区间取中值，单点取 price。"""
+    if not buy_zone or not isinstance(buy_zone, dict):
+        return None
+    lo, hi = _f(buy_zone.get("low")), _f(buy_zone.get("high"))
+    if lo is not None and hi is not None:
+        return round((lo + hi) / 2.0, 4)
+    px = _f(buy_zone.get("price"))
+    if px is not None:
+        return px
+    return lo if lo is not None else hi
+
+
+def _tp_price(take_profit: Optional[Dict[str, Any]]) -> Optional[float]:
+    if not take_profit or not isinstance(take_profit, dict):
+        return None
+    prices = take_profit.get("prices") if isinstance(take_profit.get("prices"), list) else []
+    if prices:
+        return _f(prices[0])
+    return _f(take_profit.get("price"))
+
+
+def _compute_plan_rr(
+    entry: Optional[float],
+    stop: Optional[float],
+    tp: Optional[float],
+) -> Optional[float]:
+    if entry is None or stop is None or tp is None:
+        return None
+    risk = float(entry) - float(stop)
+    reward = float(tp) - float(entry)
+    if risk <= 1e-9:
+        return None
+    if reward <= 0:
+        return 0.0
+    return round(reward / risk, 2)
+
+
+def _apply_structure_exits(
+    *,
+    entry_price: Optional[float],
+    entry_support: Optional[float],
+    nearest_resistance: Optional[float],
+    resist_pool: Optional[List[Any]],
+    summary_bits: List[str],
+) -> tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]]]:
+    """按可执行阻力（或百分比回退）生成止损/止盈，避免近端阻力只有几分钱空间。"""
+    if entry_price is None:
+        return None, None
+    exec_r, rank = _pick_executable_resistance(
+        entry_price, nearest_resistance, resist_pool
+    )
+    sz, tp, notes = _structure_stop_target_zones(
+        entry_price=float(entry_price),
+        entry_support=entry_support,
+        nearest_resistance=exec_r,
+    )
+    nr = _f(nearest_resistance)
+    if rank >= 2 and exec_r is not None:
+        summary_bits.append(
+            f"近端阻力上行不足，止盈改用第{rank}档阻力≈{_fmt_px(exec_r)}"
+        )
+    elif exec_r is None and nr is not None and float(entry_price) > 0:
+        if nr <= float(entry_price) * (1.0 + STRUCTURE_EXIT_MIN_UPSIDE_PCT):
+            summary_bits.append(
+                f"近端阻力≈{_fmt_px(nr)}上行不足，仅作减仓观察，止盈回退百分比目标"
+            )
+    summary_bits.extend(notes)
+    return sz, tp
+
+
+def _sanitize_thin_take_profit(
+    *,
+    take_profit: Optional[Dict[str, Any]],
+    entry_price: Optional[float],
+    entry_support: Optional[float],
+    nearest_resistance: Optional[float],
+    resist_pool: Optional[List[Any]],
+    summary_bits: List[str],
+) -> Optional[Dict[str, Any]]:
+    """兜底：若止盈相对入场不足 TRADE_MIN_REWARD_PCT，改用可执行阻力或百分比目标。"""
+    tp_px = _tp_price(take_profit)
+    if entry_price is None or tp_px is None or float(entry_price) <= 0:
+        return take_profit
+    reward_pct = (float(tp_px) - float(entry_price)) / float(entry_price)
+    if reward_pct >= float(TRADE_MIN_REWARD_PCT):
+        return take_profit
+    sz, tp2 = _apply_structure_exits(
+        entry_price=entry_price,
+        entry_support=entry_support,
+        nearest_resistance=nearest_resistance,
+        resist_pool=resist_pool,
+        summary_bits=summary_bits,
+    )
+    del sz  # 止损不在此改写，只替换过薄止盈
+    if tp2 is not None and _tp_price(tp2) is not None:
+        new_pct = (_tp_price(tp2) - float(entry_price)) / float(entry_price)
+        if new_pct >= float(TRADE_MIN_REWARD_PCT) - 1e-9:
+            summary_bits.append(
+                f"已纠正过薄止盈（原≈{_fmt_px(tp_px)}），避免盈亏比失真"
+            )
+            return tp2
+    return take_profit
 
 
 def _structure_stop_target_zones(
@@ -737,37 +904,81 @@ def build_trade_advice(
                     f"距第一支撑过近（{pct_txt}），入场参考第二档支撑≈{_fmt_px(entry_anchor)}"
                 )
             ref_entry = _entry_anchor(buy_zone) or close or entry_anchor
+            resist_pool = _structure_level_pool(row, ref, "resistance")
             if ref_entry is not None and entry_anchor is not None:
-                sz, tp, st_notes = _structure_stop_target_zones(
+                sz, tp = _apply_structure_exits(
                     entry_price=float(ref_entry),
                     entry_support=float(entry_anchor),
                     nearest_resistance=kde_r,
+                    resist_pool=resist_pool,
+                    summary_bits=summary_bits,
                 )
                 if sz is not None:
                     stop_zone = sz
                 if tp is not None:
                     take_profit = tp
-                summary_bits.extend(st_notes)
         elif right or buy_type == "右侧":
-            action = "buy"
-            buy_zone = _zone(
-                price=close,
-                label="右侧动量：突破后回踩不破支撑再跟",
-                basis="gms_right",
-            )
-            summary_bits.append("GMS右侧买点：回踩不破支撑再跟进")
+            hugging = _is_hugging_resistance(close, kde_r)
+            resist_pool = _structure_level_pool(row, ref, "resistance")
+            if hugging:
+                action = "watch"
+                confidence = "low"
+                buy_zone = _build_structure_entry_zone(
+                    entry_anchor=kde_s or close,
+                    close=close,
+                    label="右侧动量：现价贴阻力，等待回踩支撑不破再跟",
+                    basis="gms_right_wait",
+                )
+                if buy_zone is None:
+                    buy_zone = _zone(
+                        price=kde_s or close,
+                        label="右侧动量：现价贴阻力，等待回踩支撑不破再跟",
+                        basis="gms_right_wait",
+                    )
+                summary_bits.append(
+                    "GMS右侧买点：现价贴近结构阻力，不宜追买；"
+                    "等待回踩支撑不破再跟，或放量突破后再看下一档压力"
+                )
+            else:
+                action = "buy"
+                buy_zone = _zone(
+                    price=close,
+                    label="右侧动量：突破后回踩不破支撑再跟",
+                    basis="gms_right",
+                )
+                summary_bits.append("GMS右侧买点：回踩不破支撑再跟进")
+            ref_entry = _entry_anchor(buy_zone) or close or kde_s
+            if ref_entry is not None:
+                sz, tp = _apply_structure_exits(
+                    entry_price=float(ref_entry),
+                    entry_support=kde_s,
+                    nearest_resistance=kde_r,
+                    resist_pool=resist_pool,
+                    summary_bits=summary_bits,
+                )
+                if sz is not None:
+                    stop_zone = sz
+                if tp is not None:
+                    take_profit = tp
         if not stop_zone and kde_s is not None:
             stop_zone = _urt_stop_with_buffer(
                 float(kde_s),
                 basis="kde",
                 ref_label="结构支撑",
             )
-        if not take_profit and kde_r is not None:
-            take_profit = {
-                "label": "靠近结构压力减仓/止盈",
-                "basis": "kde",
-                "prices": [round(kde_r, 4)],
-            }
+        if not take_profit:
+            resist_pool = _structure_level_pool(row, ref, "resistance")
+            ref_entry = _entry_anchor(buy_zone) or close
+            if ref_entry is not None:
+                _, tp = _apply_structure_exits(
+                    entry_price=float(ref_entry),
+                    entry_support=kde_s,
+                    nearest_resistance=kde_r,
+                    resist_pool=resist_pool,
+                    summary_bits=summary_bits,
+                )
+                if tp is not None:
+                    take_profit = tp
         if sell:
             sell_triggers.append(
                 {"type": "gms_sell_signal", "label": "策略卖点触发，考虑减仓/离场", "basis": "sell_signal"}
@@ -1171,6 +1382,29 @@ def build_trade_advice(
                     f"已重钳：买入下沿≥{_fmt_px(min_entry)}，止损{_fmt_px(s_px)}"
                 )
 
+    plan_entry = _entry_mid(buy_zone) or close
+    if buy_zone and take_profit:
+        take_profit = _sanitize_thin_take_profit(
+            take_profit=take_profit,
+            entry_price=plan_entry,
+            entry_support=kde_s,
+            nearest_resistance=kde_r,
+            resist_pool=_structure_level_pool(row, ref, "resistance"),
+            summary_bits=summary_bits,
+        )
+    plan_rr = _compute_plan_rr(
+        plan_entry,
+        _f((stop_zone or {}).get("price")),
+        _tp_price(take_profit),
+    )
+    if action == "buy" and plan_rr is not None and plan_rr < TRADE_MIN_PLAN_RR:
+        action = "watch"
+        confidence = "low"
+        summary_bits.append(
+            f"按入场/止损/止盈测算盈亏比仅≈{plan_rr:.2f}（<{TRADE_MIN_PLAN_RR:.1f}），"
+            "降级为观察，等待回踩支撑或突破后再评估"
+        )
+
     structure_rr = _f(row.get("structure_rr"))
     if structure_rr is None:
         st0 = row.get("structure") if isinstance(row.get("structure"), dict) else {}
@@ -1197,6 +1431,7 @@ def build_trade_advice(
         "kde_support": round(float(kde_s), 2) if kde_s is not None else None,
         "kde_resistance": round(float(kde_r), 2) if kde_r is not None else None,
         "structure_rr": round(float(structure_rr), 2) if structure_rr is not None else None,
+        "plan_rr": plan_rr,
         "key_levels": key_levels or None,
         "reference_levels": ref,
     }
