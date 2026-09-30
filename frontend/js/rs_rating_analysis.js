@@ -90,6 +90,14 @@
     return `${sign}${n.toFixed(1)}%`;
   }
 
+  function rocClass(v) {
+    if (v == null || v === '' || Number.isNaN(Number(v))) return '';
+    const n = Number(v);
+    if (n > 0) return 'rsa-up';
+    if (n < 0) return 'rsa-down';
+    return '';
+  }
+
   function fmtRaw(v) {
     if (v == null || v === '' || Number.isNaN(Number(v))) return '--';
     return Number(v).toFixed(4);
@@ -172,23 +180,27 @@
             ? `stock.html?code=${encodeURIComponent(code)}&market=HK`
             : `stock.html?code=${encodeURIComponent(code)}`;
         const traceHref = `${TRACE_PAGE}?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}`;
+        const label = esc(name || code);
+        const rocTd = (v) => `<td class="rsa-num ${rocClass(v)}">${esc(fmtRoc(v))}</td>`;
         return `<tr data-code="${esc(code)}">
-          <td class="rsa-col-check"><input type="checkbox" class="rsa-row-cb" data-code="${esc(code)}" data-name="${esc(name)}"${checked}></td>
-          <td class="${tone}"><strong>${esc(rating)}</strong></td>
+          <td class="rsa-col-check"><input type="checkbox" class="rsa-row-cb" data-code="${esc(code)}" data-name="${esc(name)}" aria-label="勾选 ${label}"${checked}></td>
+          <td class="rsa-num rsa-rating ${tone}">${esc(rating)}</td>
           <td>${esc(r.strength_label || '--')}</td>
           <td><a class="ba-stock-code-link" href="${esc(detailHref)}" target="_blank" rel="noopener">${esc(code)}</a></td>
           <td>${esc(name || '--')}</td>
-          <td>${esc((r.date || '').slice(0, 10) || '--')}</td>
-          <td>${esc(fmtRoc(r.roc_63))}</td>
-          <td>${esc(fmtRoc(r.roc_126))}</td>
-          <td>${esc(fmtRoc(r.roc_189))}</td>
-          <td>${esc(fmtRoc(r.roc_252))}</td>
-          <td>${esc(fmtRaw(r.rs_raw))}</td>
-          <td>${r.universe_size != null ? esc(r.universe_size) : '--'}</td>
-          <td>
-            <a class="gms-op-btn" href="${esc(traceHref)}" target="_blank" rel="noopener">追溯</a>
-            <button type="button" class="gms-op-btn rsa-analyze-one" data-code="${esc(code)}" data-name="${esc(name)}">分析</button>
-            <button type="button" class="gms-op-btn rsa-watchlist-one" data-code="${esc(code)}" data-name="${esc(name)}" data-perm="channel.watchlist.tab.default.btn.add" title="加入自选股">自选</button>
+          <td class="rsa-date">${esc((r.date || '').slice(0, 10) || '--')}</td>
+          ${rocTd(r.roc_63)}
+          ${rocTd(r.roc_126)}
+          ${rocTd(r.roc_189)}
+          ${rocTd(r.roc_252)}
+          <td class="rsa-num">${esc(fmtRaw(r.rs_raw))}</td>
+          <td class="rsa-num">${r.universe_size != null ? esc(r.universe_size) : '--'}</td>
+          <td class="rsa-col-ops">
+            <div class="rsa-ops">
+              <button type="button" class="rsa-op rsa-op--primary rsa-analyze-one" data-code="${esc(code)}" data-name="${esc(name)}" title="新标签打开个股分析" aria-label="分析 ${label}">分析</button>
+              <a class="rsa-op" href="${esc(traceHref)}" target="_blank" rel="noopener" title="RS 信号追溯" aria-label="追溯 ${label}">追溯</a>
+              <button type="button" class="rsa-op rsa-watchlist-one" data-code="${esc(code)}" data-name="${esc(name)}" data-perm="channel.watchlist.tab.default.btn.add" title="加入自选股" aria-label="${label} 加入自选">自选</button>
+            </div>
           </td>
         </tr>`;
       })

@@ -1047,6 +1047,15 @@ body.ops-map .main-content .pattern-bq-strong {
     color: var(--ops-route) !important;
 }
 
+body.ops-map .main-content .ms-smc-inactive {
+    border: 1px dashed rgba(217, 226, 236, 0.22) !important;
+    background: transparent !important;
+}
+
+body.ops-map .main-content .ms-smc-inactive > summary {
+    color: var(--ops-ink-muted) !important;
+}
+
 /* 波段趋势说明 */
 body.ops-map .main-content .ms-analysis,
 body.ops-map .main-content .ms-result-wrap,

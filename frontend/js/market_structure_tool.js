@@ -286,6 +286,36 @@ const MarketStructureTool = {
         return zones;
     },
 
+    _isInactiveSmcStatus(status) {
+        const s = String(status || '');
+        return s === 'mitigated' || s === 'filled';
+    },
+
+    /** 活跃行直接展示；mitigated / filled 行收进默认折叠的 details */
+    _renderSmcTable(title, headHtml, items, rowFn) {
+        if (!items.length) return '';
+        const active = items.filter((x) => !this._isInactiveSmcStatus(x && x.status));
+        const inactive = items.filter((x) => this._isInactiveSmcStatus(x && x.status));
+        const tableOf = (rows) =>
+            `<table class="ms-points-table ms-smc-table"><thead><tr>${headHtml}</tr></thead><tbody>` +
+            rows.map(rowFn).join('') +
+            '</tbody></table>';
+        let html = `<div class="ms-subtitle">${title}</div>`;
+        if (active.length) {
+            html += tableOf(active);
+        } else {
+            html += '<p class="ms-muted ms-smc-empty">暂无活跃记录</p>';
+        }
+        if (inactive.length) {
+            html +=
+                `<details class="ms-smc-inactive">` +
+                `<summary>已失效（mitigated / filled）${inactive.length} 条</summary>` +
+                tableOf(inactive) +
+                `</details>`;
+        }
+        return html;
+    },
+
     renderSmcSection(smc) {
         if (!smc || !smc.ok) {
             return '<div class="ms-smc ms-muted">SMC：样本不足或暂无结构事件</div>';
@@ -293,45 +323,29 @@ const MarketStructureTool = {
         const last = smc.last_event;
         const badge = this.smcEventBadge(last);
         const summary = smc.summary ? `<p class="ms-summary">${this.esc(smc.summary)}</p>` : '';
-        let obTable = '';
-        const obs = smc.order_blocks || [];
-        if (obs.length) {
-            obTable =
-                '<div class="ms-subtitle">订单块 OB</div>' +
-                '<table class="ms-points-table ms-smc-table"><thead><tr>' +
-                '<th>方向</th><th>区间</th><th>状态</th><th>来源</th><th>日期</th>' +
-                '</tr></thead><tbody>';
-            obs.forEach((b) => {
-                const dir = b.direction === 'bullish' ? '看涨' : '看跌';
-                obTable +=
-                    `<tr><td>${dir}</td>` +
-                    `<td>${b.low != null ? Number(b.low).toFixed(2) : '--'} – ` +
-                    `${b.high != null ? Number(b.high).toFixed(2) : '--'}</td>` +
-                    `<td class="${this.statusCls(b.status)}">${this.esc(b.status || '--')}</td>` +
-                    `<td>${this.esc(b.source_event || b.event_type || '--')}</td>` +
-                    `<td>${this.esc(b.bar_date || '--')}</td></tr>`;
-            });
-            obTable += '</tbody></table>';
-        }
-        let fvgTable = '';
-        const fvgs = smc.fvgs || [];
-        if (fvgs.length) {
-            fvgTable =
-                '<div class="ms-subtitle">公允价值缺口 FVG</div>' +
-                '<table class="ms-points-table ms-smc-table"><thead><tr>' +
-                '<th>方向</th><th>区间</th><th>状态</th><th>形成</th>' +
-                '</tr></thead><tbody>';
-            fvgs.forEach((f) => {
-                const dir = f.direction === 'bullish' ? '看涨' : '看跌';
-                fvgTable +=
-                    `<tr><td>${dir}</td>` +
-                    `<td>${f.low != null ? Number(f.low).toFixed(2) : '--'} – ` +
-                    `${f.high != null ? Number(f.high).toFixed(2) : '--'}</td>` +
-                    `<td class="${this.statusCls(f.status)}">${this.esc(f.status || '--')}</td>` +
-                    `<td>${this.esc(f.end_date || f.start_date || '--')}</td></tr>`;
-            });
-            fvgTable += '</tbody></table>';
-        }
+        const obTable = this._renderSmcTable(
+            '订单块 OB',
+            '<th>方向</th><th>区间</th><th>状态</th><th>来源</th><th>日期</th>',
+            smc.order_blocks || [],
+            (b) =>
+                `<tr><td>${b.direction === 'bullish' ? '看涨' : '看跌'}</td>` +
+                `<td>${b.low != null ? Number(b.low).toFixed(2) : '--'} – ` +
+                `${b.high != null ? Number(b.high).toFixed(2) : '--'}</td>` +
+                `<td class="${this.statusCls(b.status)}">${this.esc(b.status || '--')}</td>` +
+                `<td>${this.esc(b.source_event || b.event_type || '--')}</td>` +
+                `<td>${this.esc(b.bar_date || '--')}</td></tr>`
+        );
+        const fvgTable = this._renderSmcTable(
+            '公允价值缺口 FVG',
+            '<th>方向</th><th>区间</th><th>状态</th><th>形成</th>',
+            smc.fvgs || [],
+            (f) =>
+                `<tr><td>${f.direction === 'bullish' ? '看涨' : '看跌'}</td>` +
+                `<td>${f.low != null ? Number(f.low).toFixed(2) : '--'} – ` +
+                `${f.high != null ? Number(f.high).toFixed(2) : '--'}</td>` +
+                `<td class="${this.statusCls(f.status)}">${this.esc(f.status || '--')}</td>` +
+                `<td>${this.esc(f.end_date || f.start_date || '--')}</td></tr>`
+        );
         const bias = smc.structure_bias
             ? `<span class="ms-muted">结构偏置 ${this.esc(smc.structure_bias)}</span>`
             : '';

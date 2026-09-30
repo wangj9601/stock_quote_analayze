@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/analysis.css?v=20260927-smc">
+    <link rel="stylesheet" href="css/analysis.css?v=20260930-uto">
     <link rel="stylesheet" href="css/recommend.css?v=20260913d">
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
@@ -24,8 +24,8 @@
             } catch (e) { /* ignore */ }
         })();
     </script>
-    <link rel="stylesheet" href="css/analysis-ops.css?v=20260925q">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260927-smc">
+    <link rel="stylesheet" href="css/analysis-ops.css?v=20260930-uto">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20260930-smcfold">
 </head>
 
 <body data-channel="analyze" class="ops-map">
@@ -325,50 +325,58 @@
                             勾选后可「批量个股分析」或「加入自选」。数据来自采集流水线，非实时全市场现算。
                         </p>
                         <div class="rsa-toolbar">
-                            <div class="rsa-market">
-                                <label><input type="radio" name="rsaMarket" value="CN" checked> A股</label>
-                                <label><input type="radio" name="rsaMarket" value="HK"> 港股</label>
+                            <div class="rsa-filters">
+                                <div class="rsa-market" role="radiogroup" aria-label="市场">
+                                    <label><input type="radio" name="rsaMarket" value="CN" checked> A股</label>
+                                    <label><input type="radio" name="rsaMarket" value="HK"> 港股</label>
+                                </div>
+                                <input type="search" id="rsaKeyword" class="rsa-input" placeholder="代码/名称" autocomplete="off" aria-label="代码或名称">
+                                <input type="date" id="rsaDate" class="rsa-input" title="留空=最新预计算日" aria-label="基准日">
+                                <select id="rsaMinRating" class="rsa-input" title="最低 RS 评级" aria-label="最低 RS 评级">
+                                    <option value="">最低评级（全部）</option>
+                                    <option value="90">≥90 很强</option>
+                                    <option value="70">≥70 偏强</option>
+                                    <option value="50">≥50 中性+</option>
+                                </select>
+                                <div class="rsa-boards" id="rsaBoardWrap" title="可多选；不选=不限板型">
+                                    <span class="rsa-boards-label">A股板块</span>
+                                    <label><input type="checkbox" name="rsaCnBoard" value="MAIN"> 主板</label>
+                                    <label><input type="checkbox" name="rsaCnBoard" value="CYB"> 创业板</label>
+                                    <label><input type="checkbox" name="rsaCnBoard" value="SZ_SME"> 中小板</label>
+                                    <label><input type="checkbox" name="rsaCnBoard" value="KCB"> 科创板</label>
+                                    <label><input type="checkbox" name="rsaCnBoard" value="BJ"> 北证</label>
+                                </div>
+                                <button type="button" class="btn btn-primary" id="rsaQueryBtn" data-perm="channel.analyze.tab.rs.btn.query">查询</button>
                             </div>
-                            <input type="search" id="rsaKeyword" class="rsa-input" placeholder="代码/名称" autocomplete="off">
-                            <input type="date" id="rsaDate" class="rsa-input" title="留空=最新预计算日">
-                            <select id="rsaMinRating" class="rsa-input" title="最低 RS 评级">
-                                <option value="">最低评级（全部）</option>
-                                <option value="90">≥90 很强</option>
-                                <option value="70">≥70 偏强</option>
-                                <option value="50">≥50 中性+</option>
-                            </select>
-                            <div class="rsa-boards" id="rsaBoardWrap" title="可多选；不选=不限板型">
-                                <span class="rsa-boards-label">A股板块</span>
-                                <label><input type="checkbox" name="rsaCnBoard" value="MAIN"> 主板</label>
-                                <label><input type="checkbox" name="rsaCnBoard" value="CYB"> 创业板</label>
-                                <label><input type="checkbox" name="rsaCnBoard" value="SZ_SME"> 中小板</label>
-                                <label><input type="checkbox" name="rsaCnBoard" value="KCB"> 科创板</label>
-                                <label><input type="checkbox" name="rsaCnBoard" value="BJ"> 北证</label>
+                            <div class="rsa-actions">
+                                <div class="rsa-actions-group">
+                                    <button type="button" class="btn btn-secondary" id="rsaSelectPageBtn" title="全选当前页">全选本页</button>
+                                    <button type="button" class="btn btn-secondary" id="rsaClearSelectBtn" title="清空勾选">清空勾选</button>
+                                </div>
+                                <div class="rsa-actions-group">
+                                    <button type="button" class="btn btn-primary" id="rsaBatchAnalyzeBtn" data-perm="channel.analyze.tab.rs.btn.batch" title="对新标签批量打开个股分析" disabled>批量个股分析</button>
+                                    <button type="button" class="btn btn-secondary" id="rsaBatchWatchlistBtn" data-perm="channel.watchlist.tab.default.btn.add" title="将勾选股票批量加入自选股" disabled>加入自选</button>
+                                </div>
+                                <span id="rsaMeta" class="rsa-meta" aria-live="polite">尚未查询</span>
                             </div>
-                            <button type="button" class="btn btn-primary" id="rsaQueryBtn" data-perm="channel.analyze.tab.rs.btn.query">查询</button>
-                            <button type="button" class="btn btn-secondary" id="rsaSelectPageBtn" title="全选当前页">全选本页</button>
-                            <button type="button" class="btn btn-secondary" id="rsaClearSelectBtn" title="清空勾选">清空勾选</button>
-                            <button type="button" class="btn btn-primary" id="rsaBatchAnalyzeBtn" data-perm="channel.analyze.tab.rs.btn.batch" title="对新标签批量打开个股分析" disabled>批量个股分析</button>
-                            <button type="button" class="btn btn-secondary" id="rsaBatchWatchlistBtn" data-perm="channel.watchlist.tab.default.btn.add" title="将勾选股票批量加入自选股" disabled>加入自选</button>
-                            <span id="rsaMeta" class="rsa-meta">尚未查询</span>
                         </div>
                         <div class="rsa-table-wrap">
                             <table class="rsa-table results-table">
                                 <thead>
                                     <tr>
-                                        <th class="rsa-col-check"><input type="checkbox" id="rsaSelectAllCb" title="全选/取消全选本页"></th>
-                                        <th>RS</th>
+                                        <th class="rsa-col-check"><input type="checkbox" id="rsaSelectAllCb" title="全选/取消全选本页" aria-label="全选本页"></th>
+                                        <th class="rsa-num">RS</th>
                                         <th>强弱</th>
                                         <th>代码</th>
                                         <th>名称</th>
                                         <th>基准日</th>
-                                        <th>近63日</th>
-                                        <th>近126日</th>
-                                        <th>近189日</th>
-                                        <th>近252日</th>
-                                        <th>RS_Raw</th>
-                                        <th>宇宙</th>
-                                        <th>操作</th>
+                                        <th class="rsa-num">近63日</th>
+                                        <th class="rsa-num">近126日</th>
+                                        <th class="rsa-num">近189日</th>
+                                        <th class="rsa-num">近252日</th>
+                                        <th class="rsa-num">RS_Raw</th>
+                                        <th class="rsa-num" title="参与排名的股票总数">样本数</th>
+                                        <th class="rsa-col-ops">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody id="rsaResultsBody">
@@ -393,9 +401,9 @@
                 <div class="tab-panel" id="trade-observe">
                     <div class="uto-workbench" data-perm="channel.analyze.tab.trade_observe">
                         <p class="uto-desc">汇总各策略与个股分析加入的交易观察 / 正式交易，可用来源筛选；股票代码点击弹出个股分析。</p>
-                        <div class="uto-subtabs" role="tablist">
-                            <button type="button" class="uto-subtab active" data-uto-sub="observe">观察列表</button>
-                            <button type="button" class="uto-subtab" data-uto-sub="formal">正式交易</button>
+                        <div class="uto-subtabs" role="tablist" aria-label="交易列表">
+                            <button type="button" class="uto-subtab active" data-uto-sub="observe" role="tab" aria-selected="true" aria-controls="utoObserveWrap">观察列表</button>
+                            <button type="button" class="uto-subtab" data-uto-sub="formal" role="tab" aria-selected="false" aria-controls="utoFormalWrap">正式交易</button>
                         </div>
                         <div class="uto-toolbar">
                             <div class="uto-toolbar-group">
@@ -416,9 +424,7 @@
                             </div>
                             <span id="utoCount" class="uto-count"></span>
                         </div>
-                        <div id="utoObserveWrap" class="uto-panel">
-                            <div id="utoObserveError" class="uto-error" hidden></div>
-                            <div id="utoObserveLoading" class="uto-loading" hidden>加载中…</div>
+                        <div id="utoObserveWrap" class="uto-panel" role="tabpanel">
                             <div class="results-table-wrapper">
                                 <table class="results-table uto-table uto-table--observe">
                                     <colgroup>
@@ -449,9 +455,7 @@
                                 </table>
                             </div>
                         </div>
-                        <div id="utoFormalWrap" class="uto-panel" hidden>
-                            <div id="utoFormalError" class="uto-error" hidden></div>
-                            <div id="utoFormalLoading" class="uto-loading" hidden>加载中…</div>
+                        <div id="utoFormalWrap" class="uto-panel" role="tabpanel" hidden>
                             <div class="results-table-wrapper">
                                 <table class="results-table uto-table uto-table--formal">
                                     <colgroup>
@@ -488,6 +492,18 @@
                                 </table>
                             </div>
                         </div>
+                        <dialog id="utoDialog" class="uto-dialog" aria-labelledby="utoDialogTitle">
+                            <form method="dialog" class="uto-dialog-form" novalidate>
+                                <h3 class="uto-dialog-title" id="utoDialogTitle"></h3>
+                                <p class="uto-dialog-desc"></p>
+                                <div class="uto-dialog-fields"></div>
+                                <p class="uto-dialog-preview" aria-live="polite" hidden></p>
+                                <div class="uto-dialog-actions">
+                                    <button type="button" class="btn btn-secondary uto-dialog-cancel" onclick="this.closest('dialog').close()">取消</button>
+                                    <button type="submit" class="btn btn-primary uto-dialog-ok">确定</button>
+                                </div>
+                            </form>
+                        </dialog>
                     </div>
                 </div>
 
@@ -1678,15 +1694,15 @@
     <script src="js/leader_mid_analysis.js"></script>
     <script src="js/kde_levels_tool.js?v=20260919a"></script>
     <script src="js/pattern_tool.js?v=20260921d"></script>
-    <script src="js/market_structure_tool.js?v=20260927-smc"></script>
+    <script src="js/market_structure_tool.js?v=20260930-smcfold"></script>
     <script src="js/gann_trend_tool.js?v=20260917c"></script>
     <script src="js/stock_analysis_pdf.js?v=20260929-rr"></script>
     <script src="js/stock_analysis_png.js"></script>
     <script src="js/stock_trade_plan.js?v=20260929-rr"></script>
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_multi_strategy.js?v=20260927-smc"></script>
-    <script src="js/rs_rating_analysis.js?v=20260924-no-thirdparty"></script>
-    <script src="js/trade_observe.js"></script>
+    <script src="js/rs_rating_analysis.js?v=20260930-rsa"></script>
+    <script src="js/trade_observe.js?v=20260930-uto"></script>
     <script src="js/recommend.js?v=20260914a"></script>
     <script src="js/market_analysis.js?v=20260925a"></script>
     <script src="js/daily_review.js?v=20260920f"></script>

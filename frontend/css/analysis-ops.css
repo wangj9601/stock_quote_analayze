@@ -381,6 +381,226 @@ body.ops-map[data-channel="analyze"] .link-btn {
     color: var(--ops-gold) !important;
 }
 
+/* —— 个股相对强度分析 —— */
+body.ops-map[data-channel="analyze"] .rsa-actions {
+    border-top-color: var(--color-border);
+}
+
+body.ops-map[data-channel="analyze"] .rsa-meta,
+body.ops-map[data-channel="analyze"] .rsa-boards-label,
+body.ops-map[data-channel="analyze"] .rsa-page-info {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table-wrap {
+    border-color: var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-tone-strong,
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-tone-good {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-tone-mid {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-tone-weak {
+    color: var(--ops-ink-muted) !important;
+    font-weight: 500;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-col-ops {
+    background: var(--ops-ground-elevated) !important;
+    box-shadow: -1px 0 0 var(--color-border);
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table thead th.rsa-col-ops {
+    background: linear-gradient(var(--ops-table-head), var(--ops-table-head)), var(--ops-ground-elevated) !important;
+    box-shadow: -1px 0 0 var(--color-border);
+}
+
+body.ops-map[data-channel="analyze"] .rsa-table tbody tr:hover td.rsa-col-ops {
+    background: linear-gradient(var(--ops-table-row-hover), var(--ops-table-row-hover)), var(--ops-ground-elevated) !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-op {
+    font-family: var(--font-mark);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ops-ink);
+    background: transparent;
+    border-color: rgba(217, 226, 236, 0.28);
+    border-radius: 1px;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-op:hover:not(:disabled) {
+    color: var(--ops-gold);
+    border-color: var(--ops-gold);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map[data-channel="analyze"] .rsa-op:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+body.ops-map[data-channel="analyze"] .rsa-op--primary {
+    color: var(--ops-gold);
+    border-color: rgba(201, 162, 39, 0.55);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map[data-channel="analyze"] .rsa-op--primary:hover:not(:disabled) {
+    border-color: var(--ops-gold);
+    background: rgba(201, 162, 39, 0.2);
+}
+
+body.ops-map[data-channel="analyze"] .rsa-op.is-added {
+    color: var(--ops-ink-muted);
+    border-color: transparent;
+    background: transparent;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-op--danger:hover:not(:disabled) {
+    color: var(--ops-alert);
+    border-color: var(--ops-alert);
+    background: rgba(194, 59, 59, 0.12);
+}
+
+/* —— 交易观察：工作台内不再套面板 —— */
+body.ops-map[data-channel="analyze"] .uto-workbench .uto-toolbar {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 0 12px !important;
+    margin-bottom: 12px;
+}
+
+body.ops-map[data-channel="analyze"] .uto-workbench .uto-panel {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-panel .results-table-wrapper {
+    background: transparent !important;
+    border-color: var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-count,
+body.ops-map[data-channel="analyze"] .uto-source-label,
+body.ops-map[data-channel="analyze"] .uto-table .empty-state,
+body.ops-map[data-channel="analyze"] .uto-ops-none,
+body.ops-map[data-channel="analyze"] .uto-status-closed {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-table .empty-state.uto-empty--error {
+    color: #e07070 !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-table td,
+body.ops-map[data-channel="analyze"] .uto-table .uto-name-text {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-table a.stock-code {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-src {
+    font-family: var(--font-mark);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ops-ink-muted);
+    border-color: rgba(217, 226, 236, 0.2);
+}
+
+body.ops-map[data-channel="analyze"] .uto-status-open {
+    color: var(--ops-gold) !important;
+    border-color: rgba(201, 162, 39, 0.45);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map[data-channel="analyze"] .uto-table .uto-pnl-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-table .uto-pnl-down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map[data-channel="analyze"] .uto-dialog {
+    background: var(--ops-ground-elevated);
+    color: var(--ops-ink);
+    border-color: var(--color-border);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+}
+
+body.ops-map[data-channel="analyze"] .uto-dialog-title {
+    font-family: var(--font-mark);
+    letter-spacing: 0.06em;
+    color: var(--ops-ink);
+}
+
+body.ops-map[data-channel="analyze"] .uto-dialog-desc,
+body.ops-map[data-channel="analyze"] .uto-field-hint,
+body.ops-map[data-channel="analyze"] .uto-dialog-preview {
+    color: var(--ops-ink-muted);
+}
+
+body.ops-map[data-channel="analyze"] .uto-field-label {
+    color: var(--ops-ink);
+}
+
+body.ops-map[data-channel="analyze"] .uto-field input:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+body.ops-map[data-channel="analyze"] .uto-dialog-preview .uto-pnl-up {
+    color: var(--color-rise);
+}
+
+body.ops-map[data-channel="analyze"] .uto-dialog-preview .uto-pnl-down {
+    color: var(--color-fall);
+}
+
+body.ops-map[data-channel="analyze"] .uto-dialog .uto-dialog-ok--danger {
+    color: #fff !important;
+    background: var(--ops-alert) !important;
+    border-color: var(--ops-alert) !important;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-actions .btn:disabled {
+    color: var(--ops-ink-muted) !important;
+    border-color: rgba(217, 226, 236, 0.18) !important;
+    background: transparent !important;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+@media (max-width: 767px) {
+    body.ops-map[data-channel="analyze"] .rsa-table td.rsa-col-ops,
+    body.ops-map[data-channel="analyze"] .rsa-table thead th.rsa-col-ops {
+        box-shadow: none;
+    }
+}
+
 @media (max-width: 767px) {
     body.ops-map[data-channel="analyze"] .analysis-tabs > .tab-nav {
         flex-wrap: nowrap !important;
