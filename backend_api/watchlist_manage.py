@@ -2,9 +2,10 @@ from typing import List, Optional
 import io
 import re
 import math
+import logging
 from datetime import datetime
 import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, func, and_
@@ -19,6 +20,8 @@ from .models import (
 from .database import get_db
 from .auth import get_current_user
 from .permissions import require_permission
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
@@ -210,19 +213,24 @@ def _latest_quotes_by_codes(db: Session, model, codes: list):
 
 @router.get("", response_model=None)
 async def get_watchlist(
+    limit: Optional[int] = Query(None, ge=1, le=2000, description="只返回最近加入的前 N 条（含行情）"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """获取自选股列表（仅从实时行情表读取）"""
     try:
         user_id = current_user.id
-        print(f"[watchlist] 请求用户ID: {user_id}")
-        watchlist_rows = db.query(Watchlist).filter(
+        query = db.query(Watchlist).filter(
             Watchlist.user_id == user_id
-        ).order_by(desc(Watchlist.created_at)).all()
-        print(f"[watchlist] 查询到自选股代码: {[row.stock_code for row in watchlist_rows]}")
+        ).order_by(desc(Watchlist.created_at))
+        if limit:
+            query = query.limit(limit)
+        watchlist_rows = query.all()
+        logger.debug(
+            "[watchlist] 用户ID=%s limit=%s 自选股代码=%s",
+            user_id, limit, [row.stock_code for row in watchlist_rows],
+        )
         if not watchlist_rows:
-            print("[watchlist] 用户无自选股，返回空列表")
             return JSONResponse({'success': True, 'data': []})
 
         codes = [row.stock_code for row in watchlist_rows]
@@ -259,7 +267,7 @@ async def get_watchlist(
         if missing_a:
             for q in _latest_quotes_by_codes(db, StockRealtimeQuote, missing_a):
                 quote_map_a.setdefault(q.code, q)
-        print(f"[watchlist] A股行情数量: 当日={len(quotes_today_a)} 合计={len(quote_map_a)}")
+        logger.debug("[watchlist] A股行情数量: 当日=%s 合计=%s", len(quotes_today_a), len(quote_map_a))
 
         quotes_today_hk = db.query(StockRealtimeQuoteHK).filter(
             StockRealtimeQuoteHK.code.in_(unique_codes),
@@ -270,7 +278,7 @@ async def get_watchlist(
         if missing_hk:
             for q in _latest_quotes_by_codes(db, StockRealtimeQuoteHK, missing_hk):
                 quote_map_hk.setdefault(q.code, q)
-        print(f"[watchlist] 港股行情数量: 当日={len(quotes_today_hk)} 合计={len(quote_map_hk)}")
+        logger.debug("[watchlist] 港股行情数量: 当日=%s 合计=%s", len(quotes_today_hk), len(quote_map_hk))
 
         for row in watchlist_rows:
             code = row.stock_code
@@ -280,7 +288,7 @@ async def get_watchlist(
             if not q:
                 q_hk = quote_map_hk.get(code)
                 if q_hk:
-                    print(f"[watchlist] {code} 从港股表获取行情数据 trade_date={getattr(q_hk, 'trade_date', None)}")
+                    logger.debug("[watchlist] %s 从港股表获取行情 trade_date=%s", code, getattr(q_hk, 'trade_date', None))
                     # 使用港股数据，字段映射
                     watchlist.append({
                         'code': code,
@@ -307,7 +315,7 @@ async def get_watchlist(
             
             # 使用A股数据或空数据
             if not q:
-                print(f"[watchlist] {code} 无行情数据，但仍返回自选股记录")
+                logger.debug("[watchlist] %s 无行情数据，但仍返回自选股记录", code)
             watchlist.append({
                 'code': code,
                 'name': names.get(code, '') or row.stock_name or code,
@@ -337,12 +345,39 @@ async def get_watchlist(
                 'circulating_market_value': safe_float(getattr(q, 'circulating_market_value', None)) if q else None,
                 'update_time': getattr(q, 'update_time', None).isoformat() if q and getattr(q, 'update_time', None) else None
             })
-        print(f"[watchlist] 最终返回watchlist条数: {len(watchlist)}")
-        if watchlist:
-            print(f"[watchlist] 返回示例: {watchlist[0]}")
+        logger.debug("[watchlist] 最终返回条数: %s", len(watchlist))
         return JSONResponse({'success': True, 'data': watchlist})
     except Exception as e:
-        print(f"[watchlist] 异常: {str(e)}")
+        logger.exception("[watchlist] 获取自选股列表异常")
+        return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
+
+
+@router.get("/codes", response_model=None)
+async def get_watchlist_codes(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """轻量接口：仅返回自选股代码/名称/分组（按加入时间倒序、按代码去重），不查行情。"""
+    try:
+        rows = db.query(
+            Watchlist.stock_code, Watchlist.stock_name, Watchlist.group_name
+        ).filter(
+            Watchlist.user_id == current_user.id
+        ).order_by(desc(Watchlist.created_at)).all()
+        seen = set()
+        data = []
+        for code, name, group_name in rows:
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            data.append({
+                'code': code,
+                'name': name or code,
+                'group_name': group_name or 'default',
+            })
+        return JSONResponse({'success': True, 'data': data})
+    except Exception as e:
+        logger.exception("[watchlist] 获取自选股代码异常")
         return JSONResponse({'success': False, 'message': str(e)}, status_code=500)
 
 @router.get("/groups", response_model=List[WatchlistGroupInDB])

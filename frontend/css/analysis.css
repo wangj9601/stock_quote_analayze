@@ -4322,7 +4322,12 @@ html.analysis-popup-window .analysis-tabs {
 .dr-workbench { padding: 0.75rem; margin: 0 -0.25rem; background: #f4f6f8; border-radius: 12px; }
 .dr-desc { color: #64748b; margin: 0 0 0.75rem; font-size: 0.88rem; line-height: 1.5; }
 .dr-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; margin-bottom: 0.85rem; padding: 0.65rem 0.75rem; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; }
-.dr-status { color: #64748b; font-size: 0.9rem; }
+.dr-status { margin-left: auto; color: #64748b; font-size: 0.9rem; }
+.dr-status.is-busy { color: #1d4ed8; }
+.dr-status.is-ok { color: #334155; }
+.dr-status.is-error { color: #c23b3b; }
+.dr-toolbar .btn[aria-busy="true"] { cursor: progress; }
+.dr-table td.dr-empty-cell { color: #94a3b8; text-align: center; padding: 1rem 0.65rem; }
 .dr-metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 0.6rem; margin-bottom: 0.85rem; }
 .dr-metric { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 0.7rem 0.75rem; }
 .dr-metric span { display: block; font-size: 0.72rem; color: #64748b; letter-spacing: 0.01em; }
@@ -4417,14 +4422,14 @@ html.analysis-popup-window .analysis-tabs {
   border-radius: 2px;
 }
 .dr-md-fold details > summary::after {
-  content: "Ã¥Â±ÂÃ¥Â¼Â";
+  content: "展开";
   margin-left: 0.55rem;
   font-size: 0.78rem;
   font-weight: 500;
   color: #64748b;
 }
 .dr-md-fold details[open] > summary { margin-bottom: 0.65rem; }
-.dr-md-fold details[open] > summary::after { content: "Ã¦ÂÂ¶Ã¨ÂµÂ·"; }
+.dr-md-fold details[open] > summary::after { content: "收起"; }
 .dr-md-preview { background: transparent; color: #0f172a; padding: 0.15rem 0 0.25rem; overflow: visible; max-height: none; white-space: normal; font-size: 0.92rem; line-height: 1.65; }
 .dr-md-preview h1 { font-size: 1.28rem; margin: 0 0 0.7rem; }
 .dr-md-preview h2 { font-size: 1.05rem; margin: 1.15rem 0 0.45rem; padding-bottom: 0.2rem; border-bottom: 1px solid #e2e8f0; }
@@ -4438,6 +4443,12 @@ html.analysis-popup-window .analysis-tabs {
 .dr-empty { color: #94a3b8; }
 @media (max-width: 900px) {
   .dr-editors, .dr-pair { grid-template-columns: 1fr; }
+}
+@media (max-width: 767px) {
+  .dr-toolbar label { flex: 1 1 100%; display: flex; align-items: center; gap: 0.5rem; }
+  .dr-toolbar label input[type="date"] { flex: 1; min-height: 40px; }
+  .dr-toolbar .btn { flex: 1 1 calc(33.333% - 0.5rem); min-height: 40px; }
+  .dr-status { margin-left: 0; flex-basis: 100%; }
 }
 
 .auction-stock-toolbar {

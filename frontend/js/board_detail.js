@@ -31,10 +31,10 @@
         const source = String(q.get('board_code_source') || 'tonghuashun').trim() || 'tonghuashun';
 
         const back = document.getElementById('boardDetailBackLink');
-        const closeBtn = document.getElementById('closeSectorDetailBtn');
+        const backText = document.getElementById('boardDetailBackText');
         const listHref = marketsListHref(kind);
         if (back) back.setAttribute('href', listHref);
-        if (closeBtn) closeBtn.setAttribute('href', listHref);
+        if (backText) backText.textContent = kind === 'concept' ? '返回概念板块' : '返回行业板块';
 
         document.title = (name || code || '板块详情') + ' - 股票分析';
 

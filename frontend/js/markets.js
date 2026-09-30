@@ -210,6 +210,11 @@ const MarketsPage = {
             sectorDetailModal.addEventListener('click', (e) => {
                 if (e.target === sectorDetailModal) this.hideSectorDetailModal();
             });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && sectorDetailModal.classList.contains('show')) {
+                    this.hideSectorDetailModal();
+                }
+            });
         }
     },
 
@@ -1517,6 +1522,7 @@ const MarketsPage = {
 
     hideSectorDetailModal() {
         this._sectorDetailCtx = null;
+        this._sectorDetailSeq = (this._sectorDetailSeq || 0) + 1;
         const modal = document.getElementById('sectorDetailModal');
         if (modal) modal.classList.remove('show');
     },
@@ -1610,6 +1616,12 @@ const MarketsPage = {
             sub.textContent = `${ui.label} · ${boardCode || '--'} · ${boardSource || 'tonghuashun'}`;
         }
         body.innerHTML = '<div class="sector-detail-loading">加载中...</div>';
+        const seq = (this._sectorDetailSeq || 0) + 1;
+        this._sectorDetailSeq = seq;
+        const closeBtn = document.getElementById('closeSectorDetailBtn');
+        if (closeBtn && !modal.classList.contains('is-standalone')) {
+            try { closeBtn.focus({ preventScroll: true }); } catch (_) { /* ignore */ }
+        }
 
         try {
             const params = new URLSearchParams({
@@ -1620,14 +1632,16 @@ const MarketsPage = {
             const response = await fetch(
                 `${this.API_BASE_URL}${ui.detailApiPrefix}${encodeURIComponent(boardCode)}/detail?${params}`
             );
-            const result = await response.json();
-            if (!result.success || !result.data) {
-                throw new Error(result.message || '详情加载失败');
+            const result = await response.json().catch(() => ({}));
+            if (this._sectorDetailSeq !== seq) return;
+            if (!response.ok || !result.success || !result.data) {
+                throw new Error(result.message || `详情加载失败（HTTP ${response.status}）`);
             }
             this.renderSectorDetail(result.data);
         } catch (err) {
+            if (this._sectorDetailSeq !== seq) return;
             console.error(err);
-            body.innerHTML = `<div class="sector-detail-error">${this.escapeHtml(err.message || '详情加载失败')}</div>`;
+            body.innerHTML = `<div class="sector-detail-error" role="alert">${this.escapeHtml(err.message || '详情加载失败')}</div>`;
         }
     },
 
@@ -1638,6 +1652,9 @@ const MarketsPage = {
         if (!body) return;
 
         if (title) title.textContent = d.board_name || d.board_code || '板块详情';
+        if (document.body && document.body.classList.contains('board-detail-page')) {
+            document.title = `${d.board_name || d.board_code || '板块详情'} - 股票分析`;
+        }
         if (sub) {
             const kindLabel = d.board_kind === 'concept' ? '概念板块' : '行业板块';
             sub.innerHTML = `${kindLabel} · ${this.escapeHtml(d.board_code || '--')} · ${this.escapeHtml(d.board_code_source_label || d.board_code_source || '')}${d.mapped_em_board_code ? ` · 映射东财 ${this.escapeHtml(d.mapped_em_board_code)}` : ''}${d.mapped_ths_board_code ? ` · 映射同花顺 ${this.escapeHtml(d.mapped_ths_board_code)}` : ''}${d.quote_board_code && d.quote_board_code !== d.board_code ? ` · 行情码 ${this.escapeHtml(d.quote_board_code)}` : ''}${d.board_trend_label ? this.boardEnvChipHtml(d, 'trend') : this.boardEnvChipHtml(d)}`;
@@ -1653,6 +1670,24 @@ const MarketsPage = {
         const leaders = this._normalizeSectorRoleList(d, 'leaders', 'leader');
         const mids = this._normalizeSectorRoleList(d, 'mids', 'mid');
         const rolesHtml = this._renderSectorRolesSection(leaders, mids);
+        const slopeRows = [
+            { lab: '120日', val: d.sector_slope_120, env: this.boardEnvChipHtml(d, '120') },
+            { lab: '60日（中线）', val: d.sector_slope, env: this.boardEnvChipHtml(d) },
+            { lab: '20日', val: d.sector_slope_20, env: this.boardEnvChipHtml(d, '20') },
+            { lab: '10日（短线）', val: d.sector_slope_short, env: this.boardEnvChipHtml(d, 'short') },
+            { lab: '5日', val: d.sector_slope_5, env: this.boardEnvChipHtml(d, '5') },
+        ].map((r) => `<tr>
+                <th scope="row">${r.lab}</th>
+                <td class="num ${this.getChangeClass(r.val)}">${this.formatSlope(r.val)}</td>
+                <td>${r.env}</td>
+            </tr>`).join('');
+        const slopeMeta = [
+            ['斜率来源', this.escapeHtml(this.formatSlopeSource(d.slope_source))],
+            ['60日 R²', this.formatR2(d.slope_r2)],
+            ['60日截至', this.escapeHtml(d.slope_asof_date || '--')],
+            ['10日截至', this.escapeHtml(d.slope_short_asof_date || '--')],
+            ['参与成分', d.member_count_used != null ? `${this.escapeHtml(String(d.member_count_used))} 只` : '--'],
+        ].map(([k, v]) => `<span class="sector-slope-meta-item"><span class="k">${k}</span><span class="v">${v}</span></span>`).join('');
 
         body.innerHTML = `
             <div class="sector-detail-grid">
@@ -1666,30 +1701,27 @@ const MarketsPage = {
                 ${item('成分股数量', d.member_count != null ? d.member_count : (d.stock_count != null ? d.stock_count : '--'))}
             </div>
             <div class="sector-detail-section">
-                <h3>板块斜率与强弱</h3>
-                
-                <div class="sector-detail-actions">
-                    <button type="button" class="btn btn-secondary sector-detail-slope-btn" title="仅重算当前板块斜率">重算斜率</button>
-                    <button type="button" class="btn btn-primary sector-detail-rpe-btn" title="进入比价效应策略选股（预选当前板块）">比价选股</button>
-                </div>
-                <div class="sector-detail-grid">
-                    ${item('120日斜率(ln)', this.formatSlope(d.sector_slope_120), this.getChangeClass(d.sector_slope_120))}
-                    ${item('120日环境', this.boardEnvChipHtml(d, '120'))}
-                    ${item('60日斜率(ln)', this.formatSlope(d.sector_slope), this.getChangeClass(d.sector_slope))}
-                    ${item('中线环境', this.boardEnvChipHtml(d))}
-                    ${item('20日斜率(ln)', this.formatSlope(d.sector_slope_20), this.getChangeClass(d.sector_slope_20))}
-                    ${item('20日环境', this.boardEnvChipHtml(d, '20'))}
-                    ${item('10日斜率(ln)', this.formatSlope(d.sector_slope_short), this.getChangeClass(d.sector_slope_short))}
-                    ${item('短线环境', this.boardEnvChipHtml(d, 'short'))}
-                    ${item('5日斜率(ln)', this.formatSlope(d.sector_slope_5), this.getChangeClass(d.sector_slope_5))}
-                    ${item('5日环境', this.boardEnvChipHtml(d, '5'))}
-                    ${item('斜率来源', this.formatSlopeSource(d.slope_source))}
-                    ${item('60日 R²', this.formatR2(d.slope_r2))}
-                    ${item('60日asof', d.slope_asof_date || '--')}
-                    ${item('10日asof', d.slope_short_asof_date || '--')}
-                    ${item('member_count_used', d.member_count_used != null ? d.member_count_used : '--')}
+                <div class="sector-detail-section-head">
+                    <h3>板块斜率与强弱</h3>
+                    <div class="sector-detail-actions">
+                        <button type="button" class="btn btn-secondary sector-detail-slope-btn" title="仅重算当前板块斜率">重算斜率</button>
+                        <button type="button" class="btn btn-primary sector-detail-rpe-btn" title="进入比价效应策略选股（预选当前板块）">比价选股</button>
+                    </div>
                 </div>
                 <div class="sector-detail-summary">${this.boardTrendSummaryHtml(d)}</div>
+                <div class="sector-slope-table-wrap">
+                    <table class="sector-slope-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">窗口</th>
+                                <th scope="col" class="num" title="ln(指数) 日斜率">斜率 (ln)</th>
+                                <th scope="col">环境</th>
+                            </tr>
+                        </thead>
+                        <tbody>${slopeRows}</tbody>
+                    </table>
+                </div>
+                <div class="sector-slope-meta">${slopeMeta}</div>
                 <div class="sector-slope-trend-wrap">
                     <div class="sector-slope-trend-head">
                         <span class="sector-slope-trend-title">斜率趋势</span>
@@ -1716,10 +1748,7 @@ const MarketsPage = {
                     <div class="sector-detail-loading">涨停分析加载中…</div>
                 </div>
             </div>
-            <div class="sector-detail-section">
-                <h3>更新时间</h3>
-                <div class="sector-detail-meta">${this.escapeHtml(d.update_time || '--')}</div>
-            </div>
+            <div class="sector-detail-foot">行情更新于 ${this.escapeHtml(d.update_time || '--')}</div>
         `;
 
         const kind = (d.board_kind === 'concept') ? 'concept' : 'industry';
@@ -1782,14 +1811,31 @@ const MarketsPage = {
         }
     },
 
+    _isOpsTheme() {
+        return !!(document.body && document.body.classList.contains('ops-map'));
+    },
+
     _slopeTrendWindowMeta() {
+        // 深色底需提亮，否则 60/120 日线与底色对比不足
+        const dark = this._isOpsTheme();
         return [
-            { w: 5, label: '5日', color: '#f59e0b' },
-            { w: 10, label: '10日', color: '#8b5cf6' },
-            { w: 20, label: '20日', color: '#06b6d4' },
-            { w: 60, label: '60日', color: '#2563eb' },
-            { w: 120, label: '120日', color: '#dc2626' },
+            { w: 5, label: '5日', color: dark ? '#f5b544' : '#f59e0b' },
+            { w: 10, label: '10日', color: dark ? '#a78bfa' : '#8b5cf6' },
+            { w: 20, label: '20日', color: dark ? '#22d3ee' : '#06b6d4' },
+            { w: 60, label: '60日', color: dark ? '#6ea8ff' : '#2563eb' },
+            { w: 120, label: '120日', color: dark ? '#f0857d' : '#dc2626' },
         ];
+    },
+
+    _slopeChartTheme() {
+        if (this._isOpsTheme()) {
+            return {
+                grid: 'rgba(217, 226, 236, 0.10)',
+                zero: 'rgba(217, 226, 236, 0.38)',
+                axis: '#8b9aab',
+            };
+        }
+        return { grid: '#e2e8f0', zero: '#94a3b8', axis: '#64748b' };
     },
 
     renderSectorSlopeTrend(host, data) {
@@ -1813,7 +1859,7 @@ const MarketsPage = {
         const legend = meta.map((m) => {
             const n = (seriesMap[String(m.w)] || []).length;
             const on = active.has(m.w);
-            return `<button type="button" class="sector-slope-legend-btn${on ? ' is-on' : ''}" data-win="${m.w}" style="--leg:${m.color}" ${n ? '' : 'disabled'}>
+            return `<button type="button" class="sector-slope-legend-btn${on ? ' is-on' : ''}" data-win="${m.w}" style="--leg:${m.color}" aria-pressed="${on ? 'true' : 'false'}" title="${on ? '隐藏' : '显示'}${m.label}线（${n || 0} 个点）" ${n ? '' : 'disabled'}>
                 <span class="sector-slope-legend-swatch"></span>${m.label}<span class="sector-slope-legend-n">${n || 0}</span>
             </button>`;
         }).join('');
@@ -1848,6 +1894,8 @@ const MarketsPage = {
                     active.add(w);
                 }
                 this.renderSectorSlopeTrend(host, this._sectorSlopeTrendData || data);
+                const again = host.querySelector(`.sector-slope-legend-btn[data-win="${w}"]`);
+                if (again) again.focus();
             });
         });
 
@@ -1863,6 +1911,7 @@ const MarketsPage = {
         if (!canvas) return;
         const seriesMap = (data && data.series) || {};
         const meta = this._slopeTrendWindowMeta().filter((m) => activeWins.has(m.w));
+        const theme = this._slopeChartTheme();
         const box = canvas.parentElement;
         const cssW = Math.max(280, (box && box.clientWidth) || 640);
         const cssH = 220;
@@ -1888,7 +1937,7 @@ const MarketsPage = {
         });
         const dates = [...dateSet].sort();
         if (!dates.length) {
-            ctx.fillStyle = '#94a3b8';
+            ctx.fillStyle = theme.axis;
             ctx.font = '13px sans-serif';
             ctx.fillText('无有效点', pad.l, pad.t + 20);
             if (footEl) footEl.textContent = '';
@@ -1913,7 +1962,7 @@ const MarketsPage = {
             });
         });
         if (!hasVal) {
-            ctx.fillStyle = '#94a3b8';
+            ctx.fillStyle = theme.axis;
             ctx.font = '13px sans-serif';
             ctx.fillText('无有效斜率', pad.l, pad.t + 20);
             return;
@@ -1931,7 +1980,7 @@ const MarketsPage = {
         const xAt = (i) => pad.l + (dates.length === 1 ? plotW / 2 : (plotW * i) / (dates.length - 1));
         const yAt = (v) => pad.t + plotH * (1 - (v - ymin) / (ymax - ymin));
 
-        ctx.strokeStyle = '#e2e8f0';
+        ctx.strokeStyle = theme.grid;
         ctx.lineWidth = 1;
         for (let g = 0; g <= 4; g++) {
             const y = pad.t + (plotH * g) / 4;
@@ -1940,14 +1989,14 @@ const MarketsPage = {
             ctx.lineTo(pad.l + plotW, y);
             ctx.stroke();
             const val = ymax - ((ymax - ymin) * g) / 4;
-            ctx.fillStyle = '#94a3b8';
+            ctx.fillStyle = theme.axis;
             ctx.font = '10px ui-monospace, Consolas, monospace';
             ctx.textAlign = 'right';
             ctx.fillText(val.toFixed(4), pad.l - 6, y + 3);
         }
         if (ymin < 0 && ymax > 0) {
             const y0 = yAt(0);
-            ctx.strokeStyle = '#94a3b8';
+            ctx.strokeStyle = theme.zero;
             ctx.setLineDash([4, 4]);
             ctx.beginPath();
             ctx.moveTo(pad.l, y0);
@@ -1986,14 +2035,15 @@ const MarketsPage = {
             ctx.fill();
         });
 
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = theme.axis;
         ctx.font = '10px sans-serif';
-        ctx.textAlign = 'center';
         const tickIdx = dates.length === 1
             ? [0]
             : [0, Math.floor((dates.length - 1) / 2), dates.length - 1];
+        const lastIdx = dates.length - 1;
         [...new Set(tickIdx)].forEach((i) => {
             const label = String(dates[i] || '').slice(5);
+            ctx.textAlign = dates.length === 1 ? 'center' : (i === 0 ? 'left' : (i === lastIdx ? 'right' : 'center'));
             ctx.fillText(label, xAt(i), cssH - 8);
         });
 
@@ -2077,14 +2127,15 @@ const MarketsPage = {
                 <select class="sector-limit-up-mode">${modeOpts}</select>
             </label>
             <label class="sector-limit-up-min-wrap" title="当日涨停家数达到该阈值视为板块启动">
-                启动阈值≥
-                <input type="number" class="sector-limit-up-min" min="1" max="50" value="${this.escapeHtml(String(minCnt))}">
+                启动阈值 ≥
+                <input type="number" class="sector-limit-up-min" min="1" max="50" inputmode="numeric" value="${this.escapeHtml(String(minCnt))}">
+                家
             </label>
             <button type="button" class="btn btn-secondary btn-sm sector-limit-up-reload">重算</button>
         </div>`;
 
         const waveHtml = `<div class="sector-limit-up-wave">
-            <div><strong>本轮起涨点</strong>：${waveStart ? this.escapeHtml(waveStart) : '—'}${waveReason ? ` · ${this.escapeHtml(waveReason)}` : ''}</div>
+            <div class="sector-limit-up-wave-main"><span class="k">本轮起涨点</span><span class="v">${waveStart ? this.escapeHtml(waveStart) : '—'}</span>${waveReason ? `<span class="r">${this.escapeHtml(waveReason)}</span>` : ''}</div>
             <div class="sector-limit-up-wave-meta">
                 扫描窗近 ${this.escapeHtml(String(days))} 日${scanStart ? `（自 ${this.escapeHtml(scanStart)}）` : ''} ·
                 成分 ${this.escapeHtml(String(cons))} 只 ·
@@ -2115,7 +2166,7 @@ const MarketsPage = {
             const first = s.first_limit_up_date || '--';
             return `<tr>
                 <td class="sector-limit-up-check">
-                    <input type="checkbox" class="sector-limit-up-cb" data-code="${this.escapeHtml(code)}" data-name="${this.escapeHtml(name)}" value="${this.escapeHtml(code)}">
+                    <input type="checkbox" class="sector-limit-up-cb" data-code="${this.escapeHtml(code)}" data-name="${this.escapeHtml(name)}" value="${this.escapeHtml(code)}" aria-label="选择 ${this.escapeHtml(`${code} ${name}`.trim())}">
                 </td>
                 <td>${nameCell}</td>
                 <td class="num">${this.escapeHtml(String(cnt))}</td>
@@ -2132,17 +2183,18 @@ const MarketsPage = {
                 <button type="button" class="btn btn-secondary btn-sm sector-limit-up-select-all" title="全选本列表">全选</button>
                 <button type="button" class="btn btn-secondary btn-sm sector-limit-up-clear" title="取消勾选">清空</button>
                 <button type="button" class="btn btn-primary btn-sm sector-limit-up-batch" title="将勾选股票批量打开交易分析">批量分析</button>
+                <span class="sector-limit-up-count" aria-live="polite">共 ${this.escapeHtml(String(stocks.length))} 只</span>
             </div>
             <div class="sector-limit-up-table-wrap">
                 <table class="sector-limit-up-table">
                     <thead>
                         <tr>
-                            <th class="sector-limit-up-check"></th>
-                            <th>股票</th>
-                            <th class="num">自起涨板数</th>
-                            <th class="num">最高连板</th>
-                            <th>最近涨停</th>
-                            <th>起涨后首次</th>
+                            <th class="sector-limit-up-check" scope="col"><span class="visually-hidden">选择</span></th>
+                            <th scope="col">股票</th>
+                            <th scope="col" class="num">自起涨板数</th>
+                            <th scope="col" class="num">最高连板</th>
+                            <th scope="col">最近涨停</th>
+                            <th scope="col">起涨后首次</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -2154,14 +2206,23 @@ const MarketsPage = {
         const selectAllBtn = host.querySelector('.sector-limit-up-select-all');
         const clearBtn = host.querySelector('.sector-limit-up-clear');
         const batchBtn = host.querySelector('.sector-limit-up-batch');
+        const countEl = host.querySelector('.sector-limit-up-count');
+        const syncCount = () => {
+            const n = host.querySelectorAll('.sector-limit-up-cb:checked').length;
+            if (batchBtn) batchBtn.textContent = n ? `批量分析（${n}）` : '批量分析';
+            if (countEl) countEl.textContent = n ? `已选 ${n} / ${stocks.length} 只` : `共 ${stocks.length} 只`;
+        };
+        host.querySelectorAll('.sector-limit-up-cb').forEach((el) => el.addEventListener('change', syncCount));
         if (selectAllBtn) {
             selectAllBtn.addEventListener('click', () => {
                 host.querySelectorAll('.sector-limit-up-cb').forEach((el) => { el.checked = true; });
+                syncCount();
             });
         }
         if (clearBtn) {
             clearBtn.addEventListener('click', () => {
                 host.querySelectorAll('.sector-limit-up-cb').forEach((el) => { el.checked = false; });
+                syncCount();
             });
         }
         if (batchBtn) {
@@ -2191,6 +2252,15 @@ const MarketsPage = {
         if (btn) btn.addEventListener('click', reload);
         const modeEl = host.querySelector('.sector-limit-up-mode');
         if (modeEl) modeEl.addEventListener('change', reload);
+        const minEl = host.querySelector('.sector-limit-up-min');
+        if (minEl) {
+            minEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    reload();
+                }
+            });
+        }
     },
 
     openSectorLimitUpBatchAnalysis(host) {
@@ -2225,6 +2295,22 @@ const MarketsPage = {
         const abs = Math.abs(yi);
         const txt = abs >= 100 ? yi.toFixed(1) : yi.toFixed(2);
         return `${yi > 0 ? '+' : ''}${txt}亿`;
+    },
+
+    /** 流入/流出为绝对额，不带正负号 */
+    formatFundAmountYi(yuan) {
+        if (yuan == null || yuan === '' || Number.isNaN(Number(yuan))) return '--';
+        const yi = Math.abs(Number(yuan)) / 1e8;
+        return `${yi >= 100 ? yi.toFixed(1) : yi.toFixed(2)}亿`;
+    },
+
+    formatFundFlowSource(src) {
+        const s = String(src || '').trim();
+        if (s === 'ths_fund_flow' || s === 'ths') return '同花顺';
+        if (s === 'aggregate') return '成分股汇总';
+        if (s === 'board_fund_flow_daily') return '板块资金日表';
+        if (/^em/.test(s)) return '东方财富';
+        return s || '--';
     },
 
     async loadSectorFundFlow(kind, boardCode, boardSource) {
@@ -2313,15 +2399,18 @@ const MarketsPage = {
         }).join('');
 
         host.innerHTML = `
-            <div class="sector-detail-grid">
+            <div class="sector-detail-grid sector-ff-grid">
                 ${item('净流入', this.formatFundFlowYi(net), this.getChangeClass(net))}
-                ${item('流入', this.formatFundFlowYi(inflow), 'positive')}
-                ${item('流出', this.formatFundFlowYi(outflow), 'negative')}
+                ${item('流入', this.formatFundAmountYi(inflow), 'positive')}
+                ${item('流出', this.formatFundAmountYi(outflow), 'negative')}
                 ${item('数据日', this.escapeHtml(asof))}
-                ${item('来源', this.escapeHtml(src || '--'))}
             </div>
             ${tiersHtml}
-            <div class="sector-ff-chart" aria-label="近20日净流入">
+            <div class="sector-ff-chart-head">
+                <span>近 ${series.length} 日净流入</span>
+                <span class="sector-ff-chart-hint">红柱净流入 · 绿柱净流出 · 悬停看金额 · 来源 ${this.escapeHtml(this.formatFundFlowSource(src))}</span>
+            </div>
+            <div class="sector-ff-chart" role="img" aria-label="近${series.length}日净流入柱状图">
                 ${bars || '<div class="sector-detail-meta">暂无序列</div>'}
             </div>
         `;
@@ -3108,18 +3197,7 @@ const watchlistManager = {
                 return;
             }
 
-            // 调用后端API获取用户自选股列表
-            const res = await authFetch(`${API_BASE_URL}/api/watchlist`);
-            const result = await res.json();
-
-            if (result.success && result.data) {
-                // 更新本地缓存
-                this.userWatchlist.clear();
-                result.data.forEach(item => {
-                    this.userWatchlist.add(item.code);
-                });
-                console.log('自选股列表加载完成，共', this.userWatchlist.size, '只股票');
-            }
+            this.userWatchlist = await CommonUtils.watchlist.getCodeSet();
         } catch (error) {
             console.error('加载自选股列表失败:', error);
         }

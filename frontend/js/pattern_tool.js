@@ -87,11 +87,7 @@ const PatternTool = {
     if (!select || select.dataset.loaded === '1') return;
     if (!window.CommonUtils || !CommonUtils.checkLoginAndHandleExpiry()) return;
     try {
-      const resp = await authFetch(`${API_BASE_URL}/api/watchlist`);
-      if (!resp.ok) return;
-      const payload = await resp.json();
-      const items = payload.data || payload.items || payload || [];
-      const list = Array.isArray(items) ? items : [];
+      const list = await CommonUtils.watchlist.getItems();
       list.forEach((it) => {
         const code = it.stock_code || it.code || '';
         const name = it.stock_name || it.name || '';

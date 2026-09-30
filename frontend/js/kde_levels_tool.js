@@ -1220,13 +1220,7 @@ const KdeLevelsTool = {
         if (!CommonUtils.checkLoginAndHandleExpiry()) return;
 
         try {
-            const resp = await authFetch(`${API_BASE_URL}/api/watchlist`);
-            if (!resp.ok) return;
-            const payload = await resp.json();
-            const list = Array.isArray(payload)
-                ? payload
-                : (payload.data || payload.items || payload.stocks || []);
-            if (!Array.isArray(list)) return;
+            const list = await CommonUtils.watchlist.getItems();
             const seen = new Set();
             const opts = ['<option value="">-- 可选自选股 --</option>'];
             (list || []).forEach((item) => {

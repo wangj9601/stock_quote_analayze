@@ -5,6 +5,7 @@
   const API_BASE = (typeof Config !== "undefined" && Config.getApiBaseUrl)
     ? Config.getApiBaseUrl()
     : "";
+  const OBSERVE_PERM = "channel.analyze.tab.recommend.btn.observe";
 
   const state = {
     _inited: false,
@@ -12,6 +13,9 @@
     asof: null,
     brief: null,
     items: [],
+    seq: 0,
+    horizonSeq: 0,
+    observed: new Set(),
   };
 
   function fetchFn(url, options) {
@@ -21,9 +25,61 @@
     return fetch(url, opts);
   }
 
-  function showTableMessage(msg) {
+  function esc(v) {
+    return String(v == null ? "" : v)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function toast(msg, type) {
+    if (window.CommonUtils && typeof CommonUtils.showToast === "function") {
+      CommonUtils.showToast(msg, type || "info");
+    } else {
+      alert(msg);
+    }
+  }
+
+  async function readError(res, fallback) {
+    const json = await res.json().catch(() => null);
+    const detail = json && (json.detail || json.message);
+    if (typeof detail === "string" && detail) return detail;
+    if (Array.isArray(detail) && detail.length) return detail.map((d) => d.msg || String(d)).join("；");
+    return `${fallback}（HTTP ${res.status}）`;
+  }
+
+  function setBusy(btn, busy, busyText) {
+    if (!btn) return;
+    if (busy) {
+      if (!btn.dataset.idleText) btn.dataset.idleText = btn.textContent;
+      btn.disabled = true;
+      btn.setAttribute("aria-busy", "true");
+      if (busyText) btn.textContent = busyText;
+    } else {
+      btn.disabled = false;
+      btn.removeAttribute("aria-busy");
+      if (btn.dataset.idleText) btn.textContent = btn.dataset.idleText;
+    }
+  }
+
+  function showTableMessage(msg, isError) {
     const tbody = document.getElementById("recommendTbody");
-    if (tbody) tbody.innerHTML = `<tr><td colspan="13" class="empty">${msg}</td></tr>`;
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="13" class="empty${isError ? " empty--error" : ""}">${esc(msg)}</td></tr>`;
+    }
+    renderMeta(null);
+  }
+
+  function renderMeta(shown) {
+    const el = document.getElementById("recommendMeta");
+    if (!el) return;
+    const total = state.items.length;
+    if (shown == null || !total) {
+      el.textContent = "";
+      return;
+    }
+    el.textContent = shown === total ? `共 ${total} 条` : `筛选 ${shown} / ${total} 条`;
   }
 
   function authErrorMessage(status) {
@@ -99,20 +155,22 @@
     const score = it.recommend_score != null ? it.recommend_score : "-";
     const lines = scoreDetailLines(it);
     if (!lines.length) {
-      return `<span class="score-total">${score}</span>`;
+      return `<span class="score-total">${esc(score)}</span>`;
     }
-    const tip = scoreDetailText(it).replace(/"/g, "&quot;");
+    const tip = esc(scoreDetailText(it));
     const body = lines
       .map((x) => {
-        const val = x.v === "" || x.v == null ? "" : `<b>${x.v}</b>`;
-        return `<div class="score-line" title="${(x.tip || "").replace(/"/g, "&quot;")}">
-          <span class="score-k">${x.k}</span>${val}
-          <span class="score-tip">${x.tip || ""}</span>
+        const val = x.v === "" || x.v == null ? "<b></b>" : `<b>${esc(x.v)}</b>`;
+        return `<div class="score-line" title="${esc(x.tip)}">
+          <span class="score-k">${esc(x.k)}</span>${val}
+          <span class="score-tip">${esc(x.tip)}</span>
         </div>`;
       })
       .join("");
-    return `<span class="score-total" title="${tip}">${score}</span>
-      <div class="score-detail">${body}</div>`;
+    return `<details class="score-more">
+        <summary title="${tip}" aria-label="推荐分 ${esc(score)}，得分明细"><span class="score-total">${esc(score)}</span><span class="score-toggle" aria-hidden="true"></span></summary>
+        <div class="score-detail">${body}</div>
+      </details>`;
   }
 
   function zoneText(z) {
@@ -121,19 +179,19 @@
     if (z.low != null) bits.push(z.low);
     if (z.price != null) bits.push(z.price);
     if (z.high != null) bits.push(z.high);
-    return bits.length ? bits.join("~") : (z.label || "-");
+    return esc(bits.length ? bits.join("~") : (z.label || "-"));
   }
 
   function stanceTag(action, stance) {
     const a = action || "watch";
     const cls = a === "buy" ? "tag-buy" : a === "avoid" ? "tag-avoid" : "tag-watch";
-    return `<span class="tag ${cls}">${stance || a}</span>`;
+    return `<span class="tag ${cls}">${esc(stance || a)}</span>`;
   }
 
   function roleTag(role, label) {
     const r = role || "normal";
-    const cls = r === "leader" ? "tag-leader" : r === "mid" ? "tag-mid" : "";
-    return `<span class="tag ${cls}">${label || r}</span>`;
+    const cls = r === "leader" ? "tag-leader" : r === "mid" ? "tag-mid" : "tag-normal";
+    return `<span class="tag ${cls}">${esc(label || r)}</span>`;
   }
 
   async function loadAsofDates() {
@@ -142,7 +200,7 @@
         `${API_BASE}/api/recommend/asof-dates?horizon=${encodeURIComponent(state.horizon)}`
       );
       if (res.status === 401 || res.status === 403) {
-        showTableMessage(authErrorMessage(res.status));
+        showTableMessage(authErrorMessage(res.status), true);
         return;
       }
       const json = await res.json().catch(() => ({}));
@@ -168,21 +226,26 @@
       state.asof = dates[0];
     } catch (err) {
       console.error("[recommend] loadAsofDates", err);
-      showTableMessage("加载日期列表失败，请检查后端是否已启动");
+      showTableMessage("加载日期列表失败，请检查后端是否已启动", true);
     }
   }
 
   async function loadBrief() {
+    const seq = ++state.seq;
+    const btnRefresh = document.getElementById("btnRefresh");
+    setBusy(btnRefresh, true, "加载中…");
     showTableMessage("加载中…");
     let url = `${API_BASE}/api/recommend/brief?horizon=${encodeURIComponent(state.horizon)}`;
     if (state.asof) url += `&asof_date=${encodeURIComponent(state.asof)}`;
     try {
       const res = await fetchFn(url);
+      if (seq !== state.seq) return;
       if (res.status === 401 || res.status === 403) {
         state.brief = null;
         state.items = [];
         renderSummary();
-        showTableMessage(authErrorMessage(res.status));
+        renderRisk();
+        showTableMessage(authErrorMessage(res.status), true);
         return;
       }
       if (res.status === 404) {
@@ -193,8 +256,10 @@
         return;
       }
       const json = await res.json().catch(() => ({}));
+      if (seq !== state.seq) return;
       if (!res.ok || !json.success) {
-        showTableMessage((json && json.detail) || authErrorMessage(res.status));
+        const detail = json && (json.detail || json.message);
+        showTableMessage(typeof detail === "string" && detail ? detail : authErrorMessage(res.status), true);
         return;
       }
       state.brief = json.data;
@@ -202,8 +267,11 @@
       state.items = Array.isArray(state.brief.items) ? state.brief.items : [];
       render();
     } catch (err) {
+      if (seq !== state.seq) return;
       console.error("[recommend] loadBrief", err);
-      showTableMessage("加载简报失败，请检查网络或后端服务");
+      showTableMessage("加载简报失败，请检查网络或后端服务", true);
+    } finally {
+      if (seq === state.seq) setBusy(btnRefresh, false);
     }
   }
 
@@ -248,10 +316,14 @@
     const tbody = document.getElementById("recommendTbody");
     if (!tbody) return;
     const rows = filteredItems();
+    renderMeta(rows.length);
     if (!rows.length) {
-      tbody.innerHTML = `<tr><td colspan="13" class="empty">无匹配条目</td></tr>`;
+      const filtered = state.items.length > 0;
+      const msg = filtered ? "当前立场 / 角色筛选下无条目，可放宽筛选条件" : "该简报没有推荐条目";
+      tbody.innerHTML = `<tr><td colspan="13" class="empty">${msg}</td></tr>`;
       return;
     }
+    const allowObserve = canObserve();
     tbody.innerHTML = rows
       .map((it) => {
         const code = it.code || "";
@@ -259,22 +331,28 @@
         const strategies = (it.strategies || []).join(",") || "-";
         const industry = it.industry || it.board_name || it.board_code || "-";
         const regime = it.regime || ((it.evidence || {}).regime) || "-";
+        const summary = String(it.summary || "");
+        const summaryShort = summary.length > 80 ? `${summary.slice(0, 80)}…` : summary;
+        let opBtn = `<span class="ops-none">—</span>`;
+        if (state.observed.has(code)) {
+          opBtn = `<button type="button" class="rsa-op is-added" disabled>已加入</button>`;
+        } else if (allowObserve) {
+          opBtn = `<button type="button" class="rsa-op rsa-op--primary" data-act="observe" data-code="${esc(code)}" data-name="${esc(name)}" aria-label="将 ${esc(name || code)} 加入交易观察">加入观察</button>`;
+        }
         return `<tr>
-          <td class="code-cell"><span class="recommend-code">${code}</span></td>
-          <td>${name || "-"}</td>
+          <td class="code-cell"><span class="recommend-code">${esc(code)}</span></td>
+          <td class="name-cell">${esc(name || "-")}</td>
           <td>${stanceTag(it.action, it.stance)}</td>
           <td>${roleTag(it.role, it.role_label)}</td>
-          <td>${it.primary_strategy || "-"}</td>
-          <td>${strategies}</td>
-          <td title="场景">${regime}</td>
-          <td>${industry}</td>
+          <td>${esc(it.primary_strategy || "-")}</td>
+          <td>${esc(strategies)}</td>
+          <td>${esc(regime)}</td>
+          <td>${esc(industry)}</td>
           <td class="score-cell">${renderScoreCell(it)}</td>
-          <td>${zoneText(it.buy_zone)}</td>
-          <td>${zoneText(it.stop_zone)}</td>
-          <td>${(it.summary || "").slice(0, 80)}</td>
-          <td>
-            <button type="button" class="link-btn" data-act="observe" data-code="${code}" data-name="${name}" data-perm="channel.analyze.tab.recommend.btn.observe">加入观察</button>
-          </td>
+          <td class="num">${zoneText(it.buy_zone)}</td>
+          <td class="num">${zoneText(it.stop_zone)}</td>
+          <td class="summary-cell"${summary.length > 80 ? ` title="${esc(summary)}"` : ""}>${esc(summaryShort || "-")}</td>
+          <td class="col-ops">${opBtn}</td>
         </tr>`;
       })
       .join("");
@@ -292,7 +370,7 @@
     }
     section.hidden = false;
     list.innerHTML = risks
-      .map((r) => `<li>${r.code || ""} ${r.name || ""} — ${r.note || r.kind || ""}</li>`)
+      .map((r) => `<li><span class="risk-stock">${esc(r.name || "")}<span class="risk-code">${esc(r.code || "")}</span></span>${esc(r.note || r.kind || "")}</li>`)
       .join("");
   }
 
@@ -300,28 +378,53 @@
     renderSummary();
     renderTable();
     renderRisk();
-    if (window.PermissionEngine && PermissionEngine.applyDomPermissions) {
-      PermissionEngine.applyDomPermissions(document);
-    }
   }
 
-  async function addObserve(code, name) {
-    const res = await fetchFn(`${API_BASE}/api/recommend/add-observe`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        code,
-        name,
-        asof_date: state.asof,
-        horizon: state.horizon,
-      }),
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || json.success === false) {
-      alert((json && (json.detail || json.message)) || "加入观察失败");
-      return;
+  function canObserve() {
+    const pe = window.PermissionEngine;
+    if (!pe || typeof pe.has !== "function") return true;
+    if (!pe.permissions || pe.permissions.size === 0) return true;
+    return pe.has(OBSERVE_PERM);
+  }
+
+  async function addObserve(btn) {
+    const code = btn.getAttribute("data-code");
+    const name = btn.getAttribute("data-name");
+    setBusy(btn, true, "加入中…");
+    try {
+      const res = await fetchFn(`${API_BASE}/api/recommend/add-observe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          name,
+          asof_date: state.asof,
+          horizon: state.horizon,
+        }),
+      });
+      if (!res.ok) {
+        toast(await readError(res, "加入观察失败"), "error");
+        setBusy(btn, false);
+        return;
+      }
+      const json = await res.json().catch(() => ({}));
+      if (json.success === false) {
+        toast(json.detail || json.message || "加入观察失败", "error");
+        setBusy(btn, false);
+        return;
+      }
+      state.observed.add(code);
+      btn.removeAttribute("data-act");
+      btn.removeAttribute("aria-busy");
+      btn.classList.remove("rsa-op--primary");
+      btn.classList.add("is-added");
+      btn.textContent = "已加入";
+      toast(`已将 ${name || code} 加入交易观察`, "success");
+    } catch (err) {
+      console.error("[recommend] addObserve", err);
+      toast("加入观察失败，请检查网络或后端服务", "error");
+      setBusy(btn, false);
     }
-    alert("已加入交易观察");
   }
 
   function exportUrl(kind) {
@@ -330,28 +433,44 @@
     return url;
   }
 
-  async function downloadExport(kind) {
-    const res = await fetchFn(exportUrl(kind));
-    if (!res.ok) {
-      alert("导出失败");
+  async function downloadExport(kind, btn) {
+    if (!state.brief) {
+      toast("当前没有可导出的简报", "warning");
       return;
     }
-    const blob = await res.blob();
-    const a = document.createElement("a");
-    const cd = res.headers.get("Content-Disposition") || "";
-    const m = /filename=\"?([^\";]+)\"?/.exec(cd);
-    a.href = URL.createObjectURL(blob);
-    a.download = m ? m[1] : `recommend_${state.horizon}.${kind === "pdf" ? "pdf" : "xlsx"}`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    setBusy(btn, true, "导出中…");
+    try {
+      const res = await fetchFn(exportUrl(kind));
+      if (!res.ok) {
+        toast(await readError(res, "导出失败"), "error");
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = /filename=\"?([^\";]+)\"?/.exec(cd);
+      a.href = URL.createObjectURL(blob);
+      a.download = m ? m[1] : `recommend_${state.horizon}.${kind === "pdf" ? "pdf" : "xlsx"}`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (err) {
+      console.error("[recommend] export", err);
+      toast("导出失败，请检查网络或后端服务", "error");
+    } finally {
+      setBusy(btn, false);
+    }
   }
 
   async function switchHorizon(hz) {
+    const token = ++state.horizonSeq;
     state.horizon = hz;
     document.querySelectorAll(".horizon-tab").forEach((btn) => {
-      btn.classList.toggle("active", btn.getAttribute("data-horizon") === hz);
+      const on = btn.getAttribute("data-horizon") === hz;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
     });
     await loadAsofDates();
+    if (token !== state.horizonSeq) return;
     await loadBrief();
   }
 
@@ -382,16 +501,16 @@
     if (tbody) {
       tbody.addEventListener("click", (ev) => {
         const btn = ev.target.closest("[data-act=observe]");
-        if (!btn) return;
-        addObserve(btn.getAttribute("data-code"), btn.getAttribute("data-name"));
+        if (!btn || btn.disabled) return;
+        addObserve(btn);
       });
     }
     const btnRefresh = document.getElementById("btnRefresh");
     if (btnRefresh) btnRefresh.addEventListener("click", () => loadBrief());
     const btnX = document.getElementById("btnExportXlsx");
-    if (btnX) btnX.addEventListener("click", () => downloadExport("xlsx"));
+    if (btnX) btnX.addEventListener("click", () => downloadExport("xlsx", btnX));
     const btnP = document.getElementById("btnExportPdf");
-    if (btnP) btnP.addEventListener("click", () => downloadExport("pdf"));
+    if (btnP) btnP.addEventListener("click", () => downloadExport("pdf", btnP));
 
     await switchHorizon("daily");
   }

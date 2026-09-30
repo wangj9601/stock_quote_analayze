@@ -530,11 +530,6 @@
         align-items: stretch !important;
     }
 
-    body.ops-map[data-channel="analyze"] .recommend-toolbar .btn,
-    body.ops-map[data-channel="analyze"] .asof-label {
-        width: 100%;
-    }
-
     body.ops-map[data-channel="analyze"] .ma-toolbar,
     body.ops-map[data-channel="analyze"] .ba-toolbar {
         flex-direction: column;

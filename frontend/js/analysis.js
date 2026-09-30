@@ -195,7 +195,9 @@ const AnalysisPage = {
         if (!root || !panelId) return;
         this._reviewSub = panelId;
         root.querySelectorAll('.dr-subtab').forEach((btn) => {
-            btn.classList.toggle('active', btn.dataset.review === panelId);
+            const on = btn.dataset.review === panelId;
+            btn.classList.toggle('active', on);
+            btn.setAttribute('aria-selected', on ? 'true' : 'false');
         });
         root.querySelectorAll('.dr-subpanel').forEach((panel) => {
             panel.classList.toggle('active', panel.id === panelId);
@@ -255,7 +257,7 @@ const AnalysisPage = {
                             console.error('[recommend] init/reload failed', err);
                             const tbody = document.getElementById('recommendTbody');
                             if (tbody) {
-                                tbody.innerHTML = `<tr><td colspan="12" class="empty">策略推荐初始化失败，请刷新页面重试</td></tr>`;
+                                tbody.innerHTML = `<tr><td colspan="13" class="empty">策略推荐初始化失败，请刷新页面重试</td></tr>`;
                             }
                             return Promise.resolve();
                         }
@@ -264,14 +266,14 @@ const AnalysisPage = {
                         console.error('[recommend] async failed', err);
                         const tbody = document.getElementById('recommendTbody');
                         if (tbody) {
-                            tbody.innerHTML = `<tr><td colspan="12" class="empty">策略推荐加载异常</td></tr>`;
+                            tbody.innerHTML = `<tr><td colspan="13" class="empty">策略推荐加载异常</td></tr>`;
                         }
                     });
                 } else {
                     console.warn('[recommend] RecommendPage 未加载');
                     const tbody = document.getElementById('recommendTbody');
                     if (tbody) {
-                        tbody.innerHTML = `<tr><td colspan="12" class="empty">推荐模块脚本未加载，请强制刷新（Ctrl+F5）</td></tr>`;
+                        tbody.innerHTML = `<tr><td colspan="13" class="empty">推荐模块脚本未加载，请强制刷新（Ctrl+F5）</td></tr>`;
                     }
                 }
                 break;

@@ -214,17 +214,7 @@ const StockPage = {
                 return;
             }
 
-            // 调用后端API获取用户自选股列表
-            const res = await authFetch(`${API_BASE_URL}/api/watchlist`);
-            const result = await res.json();
-
-            if (result.success && result.data) {
-                // 检查当前股票是否在自选股列表中
-                this.isInWatchlist = result.data.some(item => item.code === this.stockCode);
-                console.log(`股票 ${this.stockCode} 自选股状态:`, this.isInWatchlist);
-            } else {
-                this.isInWatchlist = false;
-            }
+            this.isInWatchlist = await CommonUtils.watchlist.has(this.stockCode);
         } catch (error) {
             console.error('检查自选股状态失败:', error);
             this.isInWatchlist = false;

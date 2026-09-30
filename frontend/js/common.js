@@ -12,6 +12,13 @@ async function authFetch(url, options = {}) {
 
     const response = await fetch(url, options);
 
+    // 自选股任何写操作（增删、导入、分组调整）都让代码缓存失效，含失败响应（服务端可能已部分写入）
+    const method = String(options.method || 'GET').toUpperCase();
+    if (method !== 'GET' && String(url).includes('/api/watchlist')
+        && typeof CommonUtils !== 'undefined' && CommonUtils.watchlist) {
+        CommonUtils.watchlist.invalidate();
+    }
+
     // 检查401错误，自动处理token失效
     if (response.status === 401) {
         // 如果 options 中指定了 skipRedirect，则不跳转
@@ -235,7 +242,8 @@ const CommonUtils = {
                     'adminLoggedIn',
                     'adminData',
                     'userPermissions',
-                    'userRole'
+                    'userRole',
+                    'watchlistCodesCache'
                 ].forEach(function (k) {
                     try { localStorage.removeItem(k); } catch (e) {}
                 });
@@ -312,6 +320,109 @@ const CommonUtils = {
                     });
                 });
             }, 0);
+        }
+    },
+
+    /**
+     * 自选股代码缓存：仅代码/名称/分组，不含行情（行情请用 GET /api/watchlist）。
+     * 内存 + localStorage（按用户隔离，跨页面/跨标签复用），并发请求合并为一次。
+     */
+    watchlist: {
+        STORAGE_KEY: 'watchlistCodesCache',
+        TTL_MS: 2 * 60 * 1000,
+        _mem: null,
+        _inflight: null,
+        _inflightUserId: null,
+
+        _currentUserId() {
+            try {
+                const u = CommonUtils.auth.getUserInfo();
+                return u && u.id != null ? String(u.id) : null;
+            } catch (e) {
+                return null;
+            }
+        },
+
+        _readStorage(userId) {
+            try {
+                const raw = localStorage.getItem(this.STORAGE_KEY);
+                if (!raw) return null;
+                const obj = JSON.parse(raw);
+                if (!obj || String(obj.userId) !== userId || !Array.isArray(obj.items)) return null;
+                return obj;
+            } catch (e) {
+                return null;
+            }
+        },
+
+        _fresh(entry, userId) {
+            return !!entry && entry.userId === userId && (Date.now() - entry.at) < this.TTL_MS;
+        },
+
+        /**
+         * @param {{force?: boolean}} [opts]
+         * @returns {Promise<Array<{code: string, name: string, group_name: string}>>} 未登录或失败返回 []
+         */
+        async getItems(opts = {}) {
+            const userId = this._currentUserId();
+            if (!userId) return [];
+            if (!opts.force) {
+                if (this._fresh(this._mem, userId)) return this._mem.items;
+                const stored = this._readStorage(userId);
+                if (this._fresh(stored, userId)) {
+                    this._mem = { userId, at: stored.at, items: stored.items };
+                    return stored.items;
+                }
+                if (this._inflight && this._inflightUserId === userId) return this._inflight;
+            }
+            const task = (async () => {
+                try {
+                    const resp = await authFetch(`${API_BASE_URL}/api/watchlist/codes`, { skipRedirect: true });
+                    if (!resp.ok) return [];
+                    const payload = await resp.json().catch(() => ({}));
+                    const items = payload && payload.success && Array.isArray(payload.data) ? payload.data : [];
+                    // 请求期间若发生写操作（invalidate 会清空 _inflight），结果可能已过期，不落缓存
+                    if (this._inflight === task) {
+                        const entry = { userId, at: Date.now(), items };
+                        this._mem = entry;
+                        try {
+                            localStorage.setItem(this.STORAGE_KEY, JSON.stringify(entry));
+                        } catch (e) { /* 配额不足时仅用内存缓存 */ }
+                    }
+                    return items;
+                } catch (e) {
+                    console.warn('加载自选股代码失败:', e);
+                    return [];
+                } finally {
+                    if (this._inflight === task) {
+                        this._inflight = null;
+                        this._inflightUserId = null;
+                    }
+                }
+            })();
+            this._inflight = task;
+            this._inflightUserId = userId;
+            return task;
+        },
+
+        async getCodeSet(opts = {}) {
+            const items = await this.getItems(opts);
+            return new Set(items.map((it) => String(it.code)));
+        },
+
+        async has(code, opts = {}) {
+            if (!code) return false;
+            const set = await this.getCodeSet(opts);
+            return set.has(String(code));
+        },
+
+        invalidate() {
+            this._mem = null;
+            this._inflight = null;
+            this._inflightUserId = null;
+            try {
+                localStorage.removeItem(this.STORAGE_KEY);
+            } catch (e) { /* ignore */ }
         }
     },
 

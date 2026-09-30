@@ -602,13 +602,7 @@ const StockMultiStrategy = {
             return;
         }
         try {
-            const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
-            if (!resp.ok) return;
-            const payload = await resp.json();
-            const raw = Array.isArray(payload)
-                ? payload
-                : (payload.data || payload.items || payload.stocks || []);
-            if (!Array.isArray(raw)) return;
+            const raw = await CommonUtils.watchlist.getItems();
             const seen = new Set();
             const items = [];
             raw.forEach((item) => {
@@ -1745,21 +1739,11 @@ const StockMultiStrategy = {
                 this._userWatchlistCodes = set;
                 return;
             }
-            const resp = await authFetch(`${this.API_BASE_URL}/api/watchlist`);
-            if (!resp.ok) {
-                this._userWatchlistCodes = set;
-                return;
-            }
-            const payload = await resp.json().catch(() => ({}));
-            const raw = Array.isArray(payload)
-                ? payload
-                : (payload.data || payload.items || payload.stocks || []);
-            if (Array.isArray(raw)) {
-                raw.forEach((item) => {
-                    const code = this._normalizeObserveCode(item.code || item.stock_code);
-                    if (code) set.add(code);
-                });
-            }
+            const raw = await CommonUtils.watchlist.getItems({ force: !!force });
+            raw.forEach((item) => {
+                const code = this._normalizeObserveCode(item.code || item.stock_code);
+                if (code) set.add(code);
+            });
         } catch (e) {
             console.warn('加载自选股状态失败', e);
         }

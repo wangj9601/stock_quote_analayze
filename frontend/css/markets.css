@@ -1540,6 +1540,151 @@
     font-variant-numeric: tabular-nums;
 }
 
+.close-sector-detail svg {
+    display: block;
+}
+
+.sector-detail-section-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    margin-bottom: 10px;
+}
+
+.sector-detail-section-head h3 {
+    margin: 0;
+}
+
+.sector-detail-section-head .sector-detail-actions {
+    margin: 0;
+}
+
+.sector-slope-table-wrap {
+    margin-top: 12px;
+    overflow-x: auto;
+}
+
+.sector-slope-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.sector-slope-table th,
+.sector-slope-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.sector-slope-table thead th {
+    color: #64748b;
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.sector-slope-table tbody th {
+    font-weight: 500;
+}
+
+.sector-slope-table .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, "Courier New", monospace;
+}
+
+.sector-slope-table .sector-weak-chip {
+    margin-left: 0;
+}
+
+.sector-slope-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    margin-top: 8px;
+    font-size: 12px;
+    color: #64748b;
+}
+
+.sector-slope-meta-item .k::after {
+    content: "：";
+}
+
+.sector-slope-meta-item .v {
+    color: #334155;
+    font-variant-numeric: tabular-nums;
+}
+
+.sector-ff-chart-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin-top: 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.sector-ff-chart-hint {
+    font-size: 12px;
+    font-weight: 400;
+    color: #64748b;
+}
+
+.sector-ff-chart-head + .sector-ff-chart {
+    margin-top: 6px;
+}
+
+.sector-limit-up-wave-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+}
+
+.sector-limit-up-wave-main .k {
+    font-weight: 600;
+}
+
+.sector-limit-up-wave-main .v {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.sector-limit-up-wave-main .r {
+    color: #64748b;
+}
+
+.sector-limit-up-count {
+    margin-left: auto;
+    align-self: center;
+    font-size: 12px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+}
+
+.sector-limit-up-table .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+}
+
+.sector-detail-foot {
+    margin-top: 18px;
+    padding-top: 10px;
+    border-top: 1px solid var(--color-border);
+    font-size: 12px;
+    color: #64748b;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
 /* 搜索弹窗 */
 .search-modal {
     display: none !important;

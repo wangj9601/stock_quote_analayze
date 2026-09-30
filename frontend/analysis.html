@@ -10,10 +10,9 @@
     <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
-    <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/analysis.css?v=20260930-uto">
-    <link rel="stylesheet" href="css/analysis.css?v=20260929-dr-chip">
-    <link rel="stylesheet" href="css/recommend.css?v=20260913d">
+    <link rel="stylesheet" href="css/ops-responsive.css?v=20260930-rv">
+    <link rel="stylesheet" href="css/analysis.css?v=20260930-rv">
+    <link rel="stylesheet" href="css/recommend.css?v=20260930-rv">
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
     <script>
@@ -25,7 +24,7 @@
             } catch (e) { /* ignore */ }
         })();
     </script>
-    <link rel="stylesheet" href="css/analysis-ops.css?v=20260930-uto">
+    <link rel="stylesheet" href="css/analysis-ops.css?v=20260930-rv">
     <link rel="stylesheet" href="css/ops-surfaces.css?v=20260930-smcfold">
 </head>
 
@@ -516,49 +515,50 @@
                         <p class="recommend-score-formula" title="S_total = max(0, (0.7*S_base + 0.3*S_sr) * E_slope)">
                             S_total = max(0, (0.7·S_base + 0.3·S_sr)·E_slope)；S_base=共振+质量+立场+角色(+主题)
                         </p>
-                        <div class="page-actions recommend-toolbar">
-                            <label class="asof-label">
-                                asof
-                                <select id="asofSelect"></select>
-                            </label>
-                            <button type="button" class="btn" id="btnRefresh" data-perm="channel.analyze.tab.recommend">刷新</button>
-                            <button type="button" class="btn btn-primary" id="btnExportXlsx" data-perm="channel.analyze.tab.recommend.btn.export">导出 Excel</button>
-                            <button type="button" class="btn" id="btnExportPdf" data-perm="channel.analyze.tab.recommend.btn.export">导出 PDF</button>
+                        <div class="horizon-tabs" role="tablist" aria-label="推荐周期">
+                            <button type="button" class="horizon-tab active" role="tab" aria-selected="true" data-horizon="daily" data-perm="channel.analyze.tab.recommend.daily">每日推荐</button>
+                            <button type="button" class="horizon-tab" role="tab" aria-selected="false" data-horizon="weekly" data-perm="channel.analyze.tab.recommend.weekly">每周推荐</button>
+                            <button type="button" class="horizon-tab" role="tab" aria-selected="false" data-horizon="monthly" data-perm="channel.analyze.tab.recommend.monthly">每月推荐</button>
                         </div>
 
-                        <div class="horizon-tabs" role="tablist">
-                            <button type="button" class="horizon-tab active" data-horizon="daily" data-perm="channel.analyze.tab.recommend.daily">每日推荐</button>
-                            <button type="button" class="horizon-tab" data-horizon="weekly" data-perm="channel.analyze.tab.recommend.weekly">每周推荐</button>
-                            <button type="button" class="horizon-tab" data-horizon="monthly" data-perm="channel.analyze.tab.recommend.monthly">每月推荐</button>
+                        <div class="recommend-toolbar">
+                            <div class="recommend-filters">
+                                <label class="asof-label" title="简报快照截至日（asof）">截至日
+                                    <select id="asofSelect"></select>
+                                </label>
+                                <label>立场
+                                    <select id="filterAction">
+                                        <option value="">全部</option>
+                                        <option value="buy">买入/可执行</option>
+                                        <option value="watch">观察</option>
+                                        <option value="avoid">回避</option>
+                                    </select>
+                                </label>
+                                <label>角色
+                                    <select id="filterRole">
+                                        <option value="">全部</option>
+                                        <option value="leader">龙头</option>
+                                        <option value="mid">中军</option>
+                                        <option value="normal">普通</option>
+                                    </select>
+                                </label>
+                                <span class="recommend-meta" id="recommendMeta" aria-live="polite"></span>
+                            </div>
+                            <div class="recommend-actions">
+                                <button type="button" class="btn" id="btnRefresh" data-perm="channel.analyze.tab.recommend">刷新</button>
+                                <button type="button" class="btn btn-primary" id="btnExportXlsx" data-perm="channel.analyze.tab.recommend.btn.export">导出 Excel</button>
+                                <button type="button" class="btn" id="btnExportPdf" data-perm="channel.analyze.tab.recommend.btn.export">导出 PDF</button>
+                            </div>
                         </div>
 
-                        <section class="summary-bar" id="summaryBar">
+                        <section class="summary-bar" id="summaryBar" aria-label="简报摘要">
                             <div class="summary-item"><span class="k">环境</span><span class="v" id="sumMarket">-</span></div>
                             <div class="summary-item"><span class="k">场景</span><span class="v" id="sumRegime">-</span></div>
                             <div class="summary-item"><span class="k">可执行</span><span class="v" id="sumExec">-</span></div>
                             <div class="summary-item"><span class="k">观察</span><span class="v" id="sumWatch">-</span></div>
-                            <div class="summary-item"><span class="k">plan_for</span><span class="v" id="sumPlan">-</span></div>
+                            <div class="summary-item"><span class="k" title="plan_for：简报对应的计划区间">计划期</span><span class="v" id="sumPlan">-</span></div>
                             <div class="summary-item"><span class="k">发布窗</span><span class="v" id="sumWindow">-</span></div>
                             <div class="summary-item wide"><span class="k">说明</span><span class="v" id="sumNote">-</span></div>
-                        </section>
-
-                        <section class="filters">
-                            <label>立场
-                                <select id="filterAction">
-                                    <option value="">全部</option>
-                                    <option value="buy">买入/可执行</option>
-                                    <option value="watch">观察</option>
-                                    <option value="avoid">回避</option>
-                                </select>
-                            </label>
-                            <label>角色
-                                <select id="filterRole">
-                                    <option value="">全部</option>
-                                    <option value="leader">龙头</option>
-                                    <option value="mid">中军</option>
-                                    <option value="normal">普通</option>
-                                </select>
-                            </label>
                         </section>
 
                         <section class="table-wrap">
@@ -574,10 +574,10 @@
                                         <th>场景</th>
                                         <th>行业</th>
                                         <th>推荐分</th>
-                                        <th>买区</th>
-                                        <th>止损</th>
+                                        <th class="num">买区</th>
+                                        <th class="num">止损</th>
                                         <th>摘要</th>
-                                        <th>操作</th>
+                                        <th class="col-ops">操作</th>
                                     </tr>
                                 </thead>
                                 <tbody id="recommendTbody">
@@ -586,8 +586,8 @@
                             </table>
                         </section>
 
-                        <section class="risk-section" id="riskSection" hidden>
-                            <h2>结构风险观察</h2>
+                        <section class="risk-section" id="riskSection" aria-labelledby="riskSectionTitle" hidden>
+                            <h2 id="riskSectionTitle">结构风险观察</h2>
                             <ul id="riskList"></ul>
                         </section>
                     </div>
@@ -755,12 +755,12 @@
 
                 <!-- 复盘：每日 / 每周 / 每月 -->
                 <div class="tab-panel" id="market-review">
-                    <div class="dr-subnav" role="tablist">
-                        <button type="button" class="dr-subtab active" data-review="daily-review">每日复盘</button>
-                        <button type="button" class="dr-subtab" data-review="weekly-review">每周复盘</button>
-                        <button type="button" class="dr-subtab" data-review="monthly-review">每月复盘</button>
+                    <div class="dr-subnav" role="tablist" aria-label="复盘周期">
+                        <button type="button" class="dr-subtab active" role="tab" aria-selected="true" aria-controls="daily-review" data-review="daily-review">每日复盘</button>
+                        <button type="button" class="dr-subtab" role="tab" aria-selected="false" aria-controls="weekly-review" data-review="weekly-review">每周复盘</button>
+                        <button type="button" class="dr-subtab" role="tab" aria-selected="false" aria-controls="monthly-review" data-review="monthly-review">每月复盘</button>
                     </div>
-                <div class="dr-subpanel active" id="daily-review">
+                <div class="dr-subpanel active" id="daily-review" role="tabpanel">
                     <div class="dr-workbench" data-perm="channel.analyze.tab.market">
                         <p class="dr-desc">日终情绪复盘：量能 / 连板高度 / Lo·Hi·Sp / 硬门槛 / 主线（同花顺<strong>概念</strong>；行业仅当日赛道确认）；涨停连板优先东财涨停池，失败则回退日终涨幅代理。</p>
                         <div class="dr-toolbar">
@@ -770,7 +770,7 @@
                             <button type="button" class="btn btn-secondary" id="drSaveBtn">保存观点/建议</button>
                             <button type="button" class="btn btn-secondary" id="drExportBtn">导出 MD</button>
                             <button type="button" class="btn btn-secondary" id="drExportPdfBtn">导出 PDF</button>
-                            <span class="dr-status" id="drStatus"></span>
+                            <span class="dr-status" id="drStatus" role="status" aria-live="polite"></span>
                         </div>
                         <div class="dr-metrics" id="drMetrics"></div>
                         <section class="dr-section" id="drEnvSection">
@@ -791,7 +791,7 @@
                             <h3>五项硬门槛 <small id="drGatesRate"></small></h3>
                             <div class="dr-table-wrap">
                                 <table class="dr-table">
-                                    <thead><tr><th>序号</th><th>门槛</th><th>标准</th><th>今日</th><th>结果</th></tr></thead>
+                                    <thead><tr><th>序号</th><th>门槛</th><th>标准</th><th class="num">今日</th><th>结果</th></tr></thead>
                                     <tbody id="drGatesBody"><tr><td colspan="5">加载中…</td></tr></tbody>
                                 </table>
                             </div>
@@ -869,7 +869,7 @@
                             <p class="dr-summary" id="drMainlineSummary"></p>
                             <div class="dr-table-wrap">
                                 <table class="dr-table">
-                                    <thead><tr><th>概念板块</th><th>上榜</th><th>定性</th><th>今日</th><th>梯队</th></tr></thead>
+                                    <thead><tr><th>概念板块</th><th class="num">上榜</th><th>定性</th><th>今日</th><th>梯队</th></tr></thead>
                                     <tbody id="drMainlineBody"><tr><td colspan="5">加载中…</td></tr></tbody>
                                 </table>
                             </div>
@@ -897,14 +897,14 @@
                             <h3 class="dr-subhead">不追</h3>
                             <div class="dr-table-wrap">
                                 <table class="dr-table">
-                                    <thead><tr><th>个股</th><th>连板</th><th>封单(亿)</th><th>炸板</th><th>涨跌停</th><th>立场</th><th>次日</th></tr></thead>
+                                    <thead><tr><th>个股</th><th class="num">连板</th><th class="num">封单(亿)</th><th class="num">炸板</th><th>涨跌停</th><th>立场</th><th>次日</th></tr></thead>
                                     <tbody id="drNoChaseBody"><tr><td colspan="7">加载中…</td></tr></tbody>
                                 </table>
                             </div>
                             <h3 class="dr-subhead">可跟踪</h3>
                             <div class="dr-table-wrap">
                                 <table class="dr-table">
-                                    <thead><tr><th>个股</th><th>策略</th><th>立场</th><th>支撑</th><th>压力</th><th>明日触发</th><th>形态</th><th>MACD</th><th>RSI</th><th>KDJ</th><th>趋势</th></tr></thead>
+                                    <thead><tr><th>个股</th><th>策略</th><th>立场</th><th class="num">支撑</th><th class="num">压力</th><th>明日触发</th><th>形态</th><th>MACD</th><th class="num">RSI</th><th>KDJ</th><th>趋势</th></tr></thead>
                                     <tbody id="drTrackBody"><tr><td colspan="11">加载中…</td></tr></tbody>
                                 </table>
                             </div>
@@ -926,7 +926,7 @@
                             <p class="dr-summary">涨停后 1–6 日高位缩量蓄势；突破确认才可执行，蓄势阶段仅观察回踩支撑。</p>
                             <div class="dr-table-wrap">
                                 <table class="dr-table">
-                                    <thead><tr><th>个股</th><th>阶段</th><th>涨停日</th><th>整理日</th><th>支撑</th><th>上沿</th><th>立场</th><th>触发</th><th>得分</th></tr></thead>
+                                    <thead><tr><th>个股</th><th>阶段</th><th>涨停日</th><th class="num">整理日</th><th class="num">支撑</th><th class="num">上沿</th><th>立场</th><th>触发</th><th class="num">得分</th></tr></thead>
                                     <tbody id="drZhabBody"><tr><td colspan="9">加载中…</td></tr></tbody>
                                 </table>
                             </div>
@@ -934,11 +934,11 @@
                         <section class="dr-section dr-editors">
                             <div>
                                 <h3>观点与盘面分析</h3>
-                                <textarea id="drViewpoint" rows="5" placeholder="可编辑后保存"></textarea>
+                                <textarea id="drViewpoint" rows="5" placeholder="可编辑后保存" aria-label="观点与盘面分析"></textarea>
                             </div>
                             <div>
                                 <h3>操作建议</h3>
-                                <textarea id="drAdvice" rows="5" placeholder="可编辑后保存"></textarea>
+                                <textarea id="drAdvice" rows="5" placeholder="可编辑后保存" aria-label="操作建议"></textarea>
                             </div>
                         </section>
                         <section class="dr-section dr-md-fold">
@@ -950,7 +950,7 @@
                     </div>
                 </div>
 
-                <div class="dr-subpanel" id="weekly-review">
+                <div class="dr-subpanel" id="weekly-review" role="tabpanel">
                     <div class="dr-workbench" data-perm="channel.analyze.tab.market">
                         <p class="dr-desc">按自然周汇总已有每日复盘。个股是下周计划，不是把每日「明日个股」拼在一起，也不是按周五收盘价买入。</p>
                         <div class="dr-toolbar">
@@ -960,13 +960,13 @@
                             <button type="button" class="btn btn-secondary" id="wrSaveBtn">保存观点/建议</button>
                             <button type="button" class="btn btn-secondary" id="wrExportBtn">导出 MD</button>
                             <button type="button" class="btn btn-secondary" id="wrExportPdfBtn">导出 PDF</button>
-                            <span class="dr-status" id="wrStatus"></span>
+                            <span class="dr-status" id="wrStatus" role="status" aria-live="polite"></span>
                         </div>
                         <div id="wrBody"></div>
                     </div>
                 </div>
 
-                <div class="dr-subpanel" id="monthly-review">
+                <div class="dr-subpanel" id="monthly-review" role="tabpanel">
                     <div class="dr-workbench" data-perm="channel.analyze.tab.market">
                         <p class="dr-desc">按自然月汇总已有每日复盘。个股是下月计划，不是按月末收盘价买入。区间里没有日复盘的日期会列出来，不会自动逐日补算。</p>
                         <div class="dr-toolbar">
@@ -976,7 +976,7 @@
                             <button type="button" class="btn btn-secondary" id="mrSaveBtn">保存观点/建议</button>
                             <button type="button" class="btn btn-secondary" id="mrExportBtn">导出 MD</button>
                             <button type="button" class="btn btn-secondary" id="mrExportPdfBtn">导出 PDF</button>
-                            <span class="dr-status" id="mrStatus"></span>
+                            <span class="dr-status" id="mrStatus" role="status" aria-live="polite"></span>
                         </div>
                         <div id="mrBody"></div>
                     </div>
@@ -1704,11 +1704,11 @@
     <script src="js/stock_multi_strategy.js?v=20260927-smc"></script>
     <script src="js/rs_rating_analysis.js?v=20260930-rsa"></script>
     <script src="js/trade_observe.js?v=20260930-uto"></script>
-    <script src="js/recommend.js?v=20260914a"></script>
+    <script src="js/recommend.js?v=20260930-rv"></script>
     <script src="js/market_analysis.js?v=20260925a"></script>
-    <script src="js/daily_review.js?v=20260920f"></script>
-    <script src="js/period_review.js?v=20260921c"></script>
-    <script src="js/analysis.js?v=20260921b"></script>
+    <script src="js/daily_review.js?v=20260930-rv"></script>
+    <script src="js/period_review.js?v=20260930-rv"></script>
+    <script src="js/analysis.js?v=20260930-rv"></script>
 </body>
 
 </html>

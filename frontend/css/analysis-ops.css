@@ -586,12 +586,220 @@ body.ops-map[data-channel="analyze"] .uto-dialog .uto-dialog-ok--danger {
     border-color: var(--ops-alert) !important;
 }
 
-body.ops-map[data-channel="analyze"] .rsa-actions .btn:disabled {
+body.ops-map[data-channel="analyze"] .rsa-actions .btn:disabled,
+body.ops-map[data-channel="analyze"] .recommend-actions .btn:disabled,
+body.ops-map[data-channel="analyze"] .dr-toolbar .btn:disabled {
     color: var(--ops-ink-muted) !important;
     border-color: rgba(217, 226, 236, 0.18) !important;
     background: transparent !important;
     opacity: 0.6;
     cursor: not-allowed;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-actions .btn[aria-busy="true"],
+body.ops-map[data-channel="analyze"] .dr-toolbar .btn[aria-busy="true"] {
+    color: var(--ops-gold) !important;
+    border-color: rgba(201, 162, 39, 0.45) !important;
+    opacity: 1;
+    cursor: progress;
+}
+
+/* —— 策略推荐 —— */
+body.ops-map[data-channel="analyze"] .recommend-meta,
+body.ops-map[data-channel="analyze"] .recommend-filters label,
+body.ops-map[data-channel="analyze"] .recommend-table .ops-none,
+body.ops-map[data-channel="analyze"] .score-cell .score-toggle,
+body.ops-map[data-channel="analyze"] .risk-section .risk-code {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .horizon-tab:focus-visible,
+body.ops-map[data-channel="analyze"] .score-cell .score-more > summary:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus) !important;
+}
+
+body.ops-map[data-channel="analyze"] .score-cell .score-more > summary:hover .score-toggle {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map[data-channel="analyze"] .score-cell .score-total {
+    color: var(--ops-ink) !important;
+}
+
+/* 摘要条：发丝分隔的一整块，不再是七个小卡片 */
+body.ops-map[data-channel="analyze"] #summaryBar {
+    gap: 1px;
+    background: var(--color-border);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+}
+
+body.ops-map[data-channel="analyze"] #summaryBar .summary-item {
+    background: var(--ops-ground-elevated) !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+body.ops-map[data-channel="analyze"] #summaryBar .summary-item .v {
+    font-variant-numeric: tabular-nums;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table .tag {
+    background: rgba(0, 0, 0, 0.3) !important;
+    border-color: rgba(217, 226, 236, 0.22) !important;
+    border-radius: 1px;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table .tag-buy {
+    background: rgba(194, 59, 59, 0.16) !important;
+    border-color: rgba(194, 59, 59, 0.45) !important;
+    color: var(--color-rise) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table .tag-watch,
+body.ops-map[data-channel="analyze"] .recommend-table .tag-mid {
+    background: rgba(47, 111, 237, 0.14) !important;
+    border-color: rgba(47, 111, 237, 0.42) !important;
+    color: var(--ops-route) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table .tag-avoid {
+    background: rgba(47, 158, 107, 0.12) !important;
+    border-color: rgba(47, 158, 107, 0.38) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table .tag-leader {
+    background: var(--ops-overlay-film) !important;
+    border-color: rgba(201, 162, 39, 0.5) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map[data-channel="analyze"] .recommend-table .empty.empty--error {
+    color: #e07070 !important;
+}
+
+body.ops-map[data-channel="analyze"] .risk-section li {
+    border-bottom-color: rgba(217, 226, 236, 0.1);
+}
+
+/* —— 复盘：区块是唯一的面板层，外层工作台与工具栏不再套卡片 —— */
+body.ops-map[data-channel="analyze"] .dr-workbench {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-workbench .dr-toolbar {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 0 12px !important;
+    margin-bottom: 14px;
+}
+
+body.ops-map[data-channel="analyze"] .dr-desc,
+body.ops-map[data-channel="analyze"] .dr-status,
+body.ops-map[data-channel="analyze"] .dr-status.is-busy,
+body.ops-map[data-channel="analyze"] .dr-empty,
+body.ops-map[data-channel="analyze"] .dr-table td.dr-empty-cell,
+body.ops-map[data-channel="analyze"] .dr-metric span,
+body.ops-map[data-channel="analyze"] .dr-metric em,
+body.ops-map[data-channel="analyze"] .dr-md-fold details > summary::after {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-status.is-ok {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-status.is-error {
+    color: #e07070 !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-section > h3:not(.dr-subhead),
+body.ops-map[data-channel="analyze"] .dr-editors h3,
+body.ops-map[data-channel="analyze"] .dr-md-fold details > summary {
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-section > h3:not(.dr-subhead)::before,
+body.ops-map[data-channel="analyze"] .dr-md-fold details > summary::before {
+    display: none;
+}
+
+body.ops-map[data-channel="analyze"] .dr-section > h3 small {
+    margin-left: 0.4rem;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-md-fold details > summary:focus-visible,
+body.ops-map[data-channel="analyze"] .dr-editors textarea:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-table-wrap {
+    border-color: var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-table td.is-ok {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-table td.is-bad {
+    color: var(--ops-alert) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-board-link,
+body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-stock-link {
+    color: var(--ops-gold) !important;
+    text-decoration: none !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-board-link:hover,
+body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-board-link:focus-visible,
+body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-stock-link:hover,
+body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-stock-link:focus-visible {
+    text-decoration: underline !important;
+    text-underline-offset: 3px;
+}
+
+body.ops-map[data-channel="analyze"] .dr-section .dr-md-preview {
+    background: transparent !important;
+    border: none !important;
+    padding: 0.15rem 0 0.25rem !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-md-preview h2,
+body.ops-map[data-channel="analyze"] .dr-md-preview hr {
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-md-preview blockquote {
+    background: rgba(217, 226, 236, 0.05) !important;
+    border-left: 1px solid rgba(217, 226, 236, 0.35) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-md-preview blockquote p {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-md-preview code {
+    background: rgba(0, 0, 0, 0.32) !important;
+    color: var(--ops-ink) !important;
 }
 
 @media (max-width: 767px) {

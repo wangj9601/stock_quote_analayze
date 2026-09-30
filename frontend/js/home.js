@@ -190,11 +190,11 @@ function updateIndexDisplay(indicesData, containerId) {
 async function loadWatchlist() {
     try {
         console.log('加载自选股数据...');
-        const response = await authFetch(`${API_BASE_URL}/api/watchlist`);
+        const response = await authFetch(`${API_BASE_URL}/api/watchlist?limit=3`);
         const result = await response.json();
         
         if (result.success && result.data) {
-            updateWatchlistDisplay(result.data.slice(0, 3)); // 只显示前3个
+            updateWatchlistDisplay(result.data.slice(0, 3));
             console.log('自选股数据加载成功');
         } else {
             throw new Error('API返回错误');

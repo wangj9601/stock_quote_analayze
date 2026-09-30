@@ -10,8 +10,8 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/markets.css">
-    <link rel="stylesheet" href="css/markets-ops.css?v=20260929-board">
+    <link rel="stylesheet" href="css/markets.css?v=20260930-bd">
+    <link rel="stylesheet" href="css/markets-ops.css?v=20260930-bd">
     <link rel="stylesheet" href="css/ops-surfaces.css?v=20260929-dr-chip">
 </head>
 <body class="ops-map" data-channel="quotes">
@@ -709,13 +709,15 @@
 
     <!-- 行业板块详情弹窗 -->
     <div class="sector-detail-modal" id="sectorDetailModal">
-        <div class="sector-detail-content">
+        <div class="sector-detail-content" role="dialog" aria-modal="true" aria-labelledby="sectorDetailTitle">
             <div class="sector-detail-header">
                 <div>
                     <h2 id="sectorDetailTitle">板块详情</h2>
                     <div class="sector-detail-sub" id="sectorDetailSub"></div>
                 </div>
-                <button type="button" class="close-sector-detail" id="closeSectorDetailBtn" aria-label="关闭">×</button>
+                <button type="button" class="close-sector-detail" id="closeSectorDetailBtn" aria-label="关闭板块详情" title="关闭（Esc）">
+                    <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>
+                </button>
             </div>
             <div class="sector-detail-body" id="sectorDetailBody">
                 <div class="sector-detail-loading">加载中...</div>
@@ -735,7 +737,7 @@
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script src="js/stock_trade_link.js"></script>
-    <script src="js/markets.js?v=20260924-no-thirdparty"></script>
+    <script src="js/markets.js?v=20260930-bd"></script>
     <script src="js/hk_markets.js"></script>
     <script>
         // 市场标签页切换逻辑

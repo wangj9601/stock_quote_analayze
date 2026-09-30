@@ -600,24 +600,35 @@ body.ops-map .sector-weak-chip {
     letter-spacing: 0.04em;
 }
 
-body.ops-map .sector-weak-chip.weak {
+/* 环境标签与斜率数值同一口径：走强=涨色，走弱=跌色，正常=中性 */
+body.ops-map .sector-weak-chip.strong {
     color: var(--color-rise) !important;
     background: rgba(194, 59, 59, 0.14) !important;
-    border-color: rgba(194, 59, 59, 0.35) !important;
+    border-color: rgba(194, 59, 59, 0.4) !important;
 }
 
-body.ops-map .sector-weak-chip.ok,
-body.ops-map .sector-weak-chip.strong {
+body.ops-map .sector-weak-chip.weak {
+    color: var(--color-fall) !important;
+    background: rgba(47, 158, 107, 0.12) !important;
+    border-color: rgba(47, 158, 107, 0.4) !important;
+}
+
+body.ops-map .sector-weak-chip.ok {
+    color: var(--ops-ink) !important;
+    background: rgba(217, 226, 236, 0.06) !important;
+    border-color: rgba(217, 226, 236, 0.24) !important;
+}
+
+body.ops-map .sector-weak-chip.mixed {
     color: var(--ops-gold) !important;
     background: var(--ops-overlay-film) !important;
     border-color: rgba(201, 162, 39, 0.35) !important;
 }
 
-body.ops-map .sector-weak-chip.mixed,
 body.ops-map .sector-weak-chip.unknown {
     color: var(--ops-ink-muted) !important;
-    background: rgba(217, 226, 236, 0.06) !important;
-    border-color: rgba(217, 226, 236, 0.2) !important;
+    background: transparent !important;
+    border-color: rgba(217, 226, 236, 0.16) !important;
 }
 
 /* 板块详情内层：禁浅底浅字 / 厚左边框 / 白胶囊 */
@@ -683,7 +694,7 @@ body.ops-map .sector-slope-legend-btn .sector-slope-legend-n {
 }
 
 body.ops-map .sector-limit-up-link,
-body.ops-map .sector-detail-body a:not(.btn):not(.board-detail-back):not(.close-sector-detail) {
+body.ops-map .sector-detail-body a:not(.btn):not(.board-detail-back):not(.close-sector-detail):not(.ba-role-pill) {
     color: var(--ops-route) !important;
 }
 
@@ -751,6 +762,388 @@ body.ops-map .ba-role-pill--mid {
     background: rgba(47, 111, 237, 0.16) !important;
     border: 1px solid rgba(47, 111, 237, 0.4) !important;
     color: #6a9ef4 !important;
+}
+
+/* ========== 板块详情（行情中心弹层 + board_detail 独立页共用） ==========
+   用 #sectorDetailBody 提权，压过 ops-surfaces 的 [class*="-item"] 通配 (0,5,1) */
+body.ops-map #sectorDetailModal .sector-detail-content {
+    --sd-surface: var(--ops-surface, var(--ops-ground-elevated));
+}
+
+body.ops-map #closeSectorDetailBtn {
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ops-ink-muted) !important;
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.2) !important;
+    border-radius: 1px !important;
+    flex-shrink: 0;
+}
+
+body.ops-map #closeSectorDetailBtn:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map #sectorDetailTitle {
+    font-family: var(--font-mark);
+    letter-spacing: 0.05em;
+    color: var(--ops-ink) !important;
+    font-size: 1.375rem;
+    margin: 0 0 6px;
+}
+
+body.ops-map #sectorDetailSub .sector-weak-chip {
+    vertical-align: 1px;
+}
+
+/* 节奏：区块之间发丝线分隔，替代一层层盒子 */
+body.ops-map #sectorDetailBody .sector-detail-section {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border);
+}
+
+body.ops-map #sectorDetailBody .sector-detail-section h3 {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    margin: 0 0 10px;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-section-head h3 {
+    margin: 0;
+}
+
+/* 指标格：单块发丝线网格，不再是漂浮小卡 */
+body.ops-map #sectorDetailBody .sector-detail-grid {
+    gap: 1px;
+    background: var(--color-border);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 0;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-item {
+    background: var(--sd-surface) !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 9px 12px;
+    align-items: baseline;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-item .label {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-item .value {
+    font-family: var(--font-mark);
+    font-size: 0.9375rem;
+    letter-spacing: 0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-item .value:not(.positive):not(.negative) {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-actions .btn {
+    min-height: 34px;
+    padding: 6px 14px !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+    border-radius: 1px !important;
+}
+
+/* 综合走势：去底色盒，保留一道发丝框 */
+body.ops-map #sectorDetailBody .sector-detail-summary {
+    background: transparent !important;
+    padding: 10px 12px !important;
+}
+
+body.ops-map #sectorDetailBody .sector-trend-summary-body {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    color: var(--ops-ink) !important;
+    line-height: 1.65;
+}
+
+body.ops-map #sectorDetailBody .sector-trend-summary-head .sector-weak-chip {
+    margin-left: 0;
+}
+
+/* 斜率表 */
+body.ops-map #sectorDetailBody .sector-slope-table th,
+body.ops-map #sectorDetailBody .sector-slope-table td {
+    border-bottom: 1px solid rgba(217, 226, 236, 0.08);
+    background: transparent !important;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-table thead th {
+    color: var(--ops-ink-muted) !important;
+    background: var(--ops-table-head, rgba(217, 226, 236, 0.05)) !important;
+    border-bottom-color: var(--color-border);
+    font-weight: 500;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-table tbody th {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-table td.num {
+    font-family: var(--font-mark);
+    font-size: 0.9375rem;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-table tbody tr:hover > * {
+    background: var(--ops-table-row-hover, rgba(217, 226, 236, 0.04)) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-meta {
+    color: var(--ops-ink-muted);
+}
+
+body.ops-map #sectorDetailBody .sector-slope-meta-item .k {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-meta-item .v {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.02em;
+}
+
+/* 斜率趋势：去外框，最新值改一行发丝线格 */
+body.ops-map #sectorDetailBody .sector-slope-trend-wrap {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin-top: 18px;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-latest {
+    gap: 1px;
+    background: var(--color-border);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-latest-item {
+    background: var(--sd-surface) !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-latest-val {
+    font-family: var(--font-mark);
+    letter-spacing: 0.02em;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-chart-box {
+    background: rgba(0, 0, 0, 0.18) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-legend-btn .sector-slope-legend-swatch {
+    border-radius: 1px;
+    box-shadow: none;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-legend-btn:not(.is-on) {
+    opacity: 0.6;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-legend-btn.is-on {
+    color: var(--ops-ink) !important;
+    border-color: color-mix(in srgb, var(--leg) 55%, transparent) !important;
+    background: color-mix(in srgb, var(--leg) 12%, transparent) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-slope-legend-btn:focus-visible,
+body.ops-map #sectorDetailBody .sector-limit-up-controls select:focus-visible,
+body.ops-map #sectorDetailBody .sector-limit-up-controls input:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+body.ops-map #sectorDetailBody .sector-slope-chart-foot {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* 资金流 */
+body.ops-map #sectorDetailBody .sector-ff-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+body.ops-map #sectorDetailBody .sector-ff-grid .sector-detail-item {
+    flex-direction: column;
+    gap: 2px;
+    justify-content: flex-start;
+}
+
+body.ops-map #sectorDetailBody .sector-ff-grid .sector-detail-item .value {
+    text-align: left;
+}
+
+body.ops-map #sectorDetailBody .sector-ff-chart-head {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-ff-chart-hint {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-ff-chart {
+    border-top: none !important;
+    border-bottom: 1px solid var(--color-border);
+    padding-top: 0;
+}
+
+body.ops-map #sectorDetailBody .sector-ff-bar {
+    border-radius: 1px 1px 0 0;
+}
+
+body.ops-map #sectorDetailBody .sector-fund-flow-tiers {
+    margin: 10px 0 0;
+}
+
+body.ops-map #sectorDetailBody .sector-fund-flow-tiers > .sector-detail-grid {
+    margin-top: 8px;
+}
+
+/* 龙头 / 中军：去外框，胶囊文字不再被链接色覆盖 */
+body.ops-map #sectorDetailBody .ba-short-roles {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+body.ops-map #sectorDetailBody a.ba-role-pill--leader {
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+    border-color: rgba(201, 162, 39, 0.45) !important;
+}
+
+body.ops-map #sectorDetailBody a.ba-role-pill--mid {
+    color: #8fb6ff !important;
+}
+
+body.ops-map #sectorDetailBody a.ba-role-pill:hover,
+body.ops-map #sectorDetailBody a.ba-role-pill:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+    text-decoration: none !important;
+}
+
+/* 涨停分析 */
+body.ops-map #sectorDetailBody .sector-limit-up-controls select,
+body.ops-map #sectorDetailBody .sector-limit-up-controls input {
+    background: var(--ops-ground, #0f1419) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.24) !important;
+    border-radius: 1px !important;
+    min-height: 32px;
+    padding: 4px 8px !important;
+    color-scheme: dark;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-controls input {
+    width: 60px;
+    font-family: var(--font-mark);
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-controls label {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-wave {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 4px 0 12px;
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-wave-main .k,
+body.ops-map #sectorDetailBody .sector-limit-up-wave-main .v {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-wave-main .v {
+    font-family: var(--font-mark);
+    color: var(--ops-gold) !important;
+    letter-spacing: 0.03em;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-wave-main .r,
+body.ops-map #sectorDetailBody .sector-limit-up-wave-meta,
+body.ops-map #sectorDetailBody .sector-limit-up-hint,
+body.ops-map #sectorDetailBody .sector-limit-up-count {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-table-wrap {
+    background: transparent !important;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-table td.num {
+    font-family: var(--font-mark);
+    font-size: 0.875rem;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-table tbody tr:hover > td {
+    background: var(--ops-table-row-hover, rgba(217, 226, 236, 0.04)) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-cb {
+    accent-color: var(--ops-gold);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+}
+
+body.ops-map #sectorDetailBody .sector-limit-up-link:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+/* 状态与页脚：禁浅底 */
+body.ops-map #sectorDetailBody .sector-detail-meta {
+    background: transparent !important;
+    padding: 6px 0 !important;
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-error {
+    color: #e07070 !important;
+}
+
+body.ops-map #sectorDetailBody .sector-detail-foot {
+    border-top-color: var(--color-border);
+    color: var(--ops-ink-muted) !important;
+}
+
+@media (max-width: 640px) {
+    body.ops-map #sectorDetailBody .sector-ff-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    body.ops-map #sectorDetailBody .sector-detail-section-head {
+        align-items: flex-start;
+    }
+
+    body.ops-map #sectorDetailBody .sector-limit-up-count {
+        margin-left: 0;
+        flex-basis: 100%;
+    }
 }
 
 body.ops-map .sector-card-actions {

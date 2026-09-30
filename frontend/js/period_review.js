@@ -1,18 +1,21 @@
 // 每周 / 每月复盘
 function createPeriodReview(kind, prefix) {
     const nxt = kind === 'month' ? '下月' : '下周';
+    const panelId = kind === 'month' ? 'monthly-review' : 'weekly-review';
     return {
         API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
         kind,
         prefix,
         data: null,
+        _loadedAnchor: null,
+        _seq: 0,
 
         init() {
             const dateEl = document.getElementById(prefix + 'TradeDate');
             if (dateEl && !dateEl.value) {
                 const d = new Date();
                 d.setDate(d.getDate() - 1);
-                dateEl.value = d.toISOString().slice(0, 10);
+                dateEl.value = localDate(d);
             }
             this._bind('LoadBtn', () => this.load());
             this._bind('ComputeBtn', () => this.compute());
@@ -35,9 +38,31 @@ function createPeriodReview(kind, prefix) {
             return (el && el.value) || '';
         },
 
-        setStatus(text) {
+        setStatus(text, tone) {
             const el = document.getElementById(this.prefix + 'Status');
-            if (el) el.textContent = text || '';
+            if (!el) return;
+            el.textContent = text || '';
+            el.classList.remove('is-busy', 'is-ok', 'is-error');
+            if (tone) el.classList.add(`is-${tone}`);
+        },
+
+        lockToolbar(suffix, busyText) {
+            const bar = document.querySelector(`#${panelId} .dr-toolbar`);
+            const btns = bar ? Array.from(bar.querySelectorAll('button')) : [];
+            const active = document.getElementById(this.prefix + suffix);
+            const idle = active ? active.textContent : '';
+            btns.forEach((b) => { b.disabled = true; });
+            if (active) {
+                active.setAttribute('aria-busy', 'true');
+                if (busyText) active.textContent = busyText;
+            }
+            return () => {
+                btns.forEach((b) => { b.disabled = false; });
+                if (active) {
+                    active.removeAttribute('aria-busy');
+                    active.textContent = idle;
+                }
+            };
         },
 
         query() {
@@ -45,44 +70,70 @@ function createPeriodReview(kind, prefix) {
         },
 
         async load() {
-            this.setStatus('加载中…');
+            const seq = ++this._seq;
+            const anchor = this.anchor();
+            this.setStatus('加载中…', 'busy');
+            const unlock = this.lockToolbar('LoadBtn', '加载中…');
             try {
                 const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
                 const resp = await fetchFn(`${this.API_BASE_URL}/api/market_review/period?${this.query()}`);
                 const payload = await resp.json().catch(() => ({}));
+                if (seq !== this._seq) return;
                 if (!resp.ok || !payload.success) {
                     this.data = null;
                     this.render(null);
-                    this.setStatus(payload.message || '暂无快照，请先点击「重算」');
+                    const noSnap = resp.status === 404;
+                    this.setStatus(noSnap ? '该区间暂无复盘快照，可点击「重算」汇总已有日复盘' : (payload.message || `加载失败（${resp.status}）`), noSnap ? '' : 'error');
                     return;
                 }
                 this.data = payload.data || {};
                 this.render(this.data);
-                this.setStatus(`已加载 ${this.data.period_key || this.anchor()}`);
+                this._loadedAnchor = anchor;
+                this.setStatus(`已加载 ${this.data.period_key || anchor}`, 'ok');
             } catch (e) {
-                this.setStatus(e.message || '加载失败');
+                if (seq !== this._seq) return;
+                this.setStatus(e.message || '加载失败，请检查网络或后端服务', 'error');
+            } finally {
+                unlock();
             }
         },
 
         async compute() {
-            this.setStatus('正在汇总已有日复盘…');
+            const seq = ++this._seq;
+            const anchor = this.anchor();
+            this.setStatus('正在汇总已有日复盘…', 'busy');
+            const unlock = this.lockToolbar('ComputeBtn', '重算中…');
             try {
                 const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
                 const resp = await fetchFn(`${this.API_BASE_URL}/api/market_review/period?${this.query()}`, { method: 'POST' });
                 const payload = await resp.json().catch(() => ({}));
                 if (!resp.ok || !payload.success) throw new Error(payload.message || '重算失败');
+                if (seq !== this._seq) return;
                 this.data = payload.data || {};
                 this.render(this.data);
-                this.setStatus(`已重算 ${this.data.period_key || ''}`);
+                this._loadedAnchor = anchor;
+                this.setStatus(`已重算 ${this.data.period_key || ''}`, 'ok');
             } catch (e) {
-                this.setStatus(e.message || '重算失败');
+                if (seq !== this._seq) return;
+                this.setStatus(e.message || '重算失败', 'error');
+            } finally {
+                unlock();
             }
         },
 
         async save() {
             const viewpoint = document.getElementById(this.prefix + 'Viewpoint');
             const advice = document.getElementById(this.prefix + 'Advice');
-            this.setStatus('保存中…');
+            if (!this.data || !viewpoint || !advice) {
+                this.setStatus('该区间暂无复盘快照，请先「加载」或「重算」再保存', 'error');
+                return;
+            }
+            if (this._loadedAnchor !== this.anchor()) {
+                this.setStatus(`日期已改为 ${this.anchor()}，当前显示的是 ${this.data.period_key || this._loadedAnchor}，请先「加载」再保存`, 'error');
+                return;
+            }
+            this.setStatus('保存中…', 'busy');
+            const unlock = this.lockToolbar('SaveBtn', '保存中…');
             try {
                 const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
                 const resp = await fetchFn(`${this.API_BASE_URL}/api/market_review/period?${this.query()}`, {
@@ -97,14 +148,17 @@ function createPeriodReview(kind, prefix) {
                 if (!resp.ok || !payload.success) throw new Error(payload.message || '保存失败');
                 this.data = payload.data || {};
                 this.render(this.data);
-                this.setStatus('观点/建议已保存');
+                this.setStatus(`${this.data.period_key || ''} 观点/建议已保存`.trim(), 'ok');
             } catch (e) {
-                this.setStatus(e.message || '保存失败');
+                this.setStatus(e.message || '保存失败', 'error');
+            } finally {
+                unlock();
             }
         },
 
         async exportFile(ext) {
-            this.setStatus(ext === 'pdf' ? '正在生成 PDF…' : '正在生成 Markdown…');
+            this.setStatus(ext === 'pdf' ? '正在生成 PDF…' : '正在生成 Markdown…', 'busy');
+            const unlock = this.lockToolbar(ext === 'pdf' ? 'ExportPdfBtn' : 'ExportBtn', '导出中…');
             try {
                 const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
                 const path = ext === 'pdf' ? 'period/export.pdf' : 'period/export.md';
@@ -117,9 +171,11 @@ function createPeriodReview(kind, prefix) {
                 const blob = await resp.blob();
                 const filename = this._downloadName(resp, `period_review_${this.anchor()}.${ext}`);
                 this._saveBlob(blob, filename);
-                this.setStatus(`已下载 ${filename}`);
+                this.setStatus(`已下载 ${filename}`, 'ok');
             } catch (e) {
-                this.setStatus(e.message || '导出失败');
+                this.setStatus(e.message || '导出失败', 'error');
+            } finally {
+                unlock();
             }
         },
 
@@ -145,7 +201,8 @@ function createPeriodReview(kind, prefix) {
             const root = document.getElementById(this.prefix + 'Body');
             if (!root) return;
             if (!data) {
-                root.innerHTML = '<p class="dr-summary">暂无该区间快照。</p>';
+                this._loadedAnchor = null;
+                root.innerHTML = '<section class="dr-section"><p class="dr-empty">暂无该区间快照。可点击「重算」汇总区间内已有的日复盘。</p></section>';
                 return;
             }
             const picks = data.picks || {};
@@ -263,19 +320,28 @@ function deltaText(pair, unit, digits) {
     return `${show(a)} → ${show(b)}（${sign}${show(diff)}${unit || ''}）`;
 }
 
+function localDate(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 function stock(row) {
     const code = row.code || '';
     const name = row.name || code || '—';
-    if (!code) return esc(name);
+    if (!code) return `<span class="dr-stock">${esc(name)}</span>`;
     const href = `stock.html?code=${encodeURIComponent(code)}&name=${encodeURIComponent(name)}`;
-    return `<a href="${href}">${esc(name)}</a> <span class="dr-code">${esc(code)}</span>`;
+    return `<span class="dr-stock"><a class="dr-stock-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(name)}</a><span class="dr-code">${esc(code)}</span></span>`;
 }
 
+const NUM_HEADERS = ['期初收盘', '期末收盘', '区间涨跌%', '高度', '连板', '成交(万亿)', '达标天数', '上榜天数', '封单(亿)'];
+
 function table(headers, rows) {
-    const th = headers.map((h) => `<th>${esc(h)}</th>`).join('');
+    const numAt = headers.map((h) => NUM_HEADERS.indexOf(h) >= 0);
+    const cls = (i) => (numAt[i] ? ' class="num"' : '');
+    const th = headers.map((h, i) => `<th${cls(i)}>${esc(h)}</th>`).join('');
     const body = rows.length
-        ? rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')
-        : `<tr><td colspan="${headers.length}">暂无</td></tr>`;
+        ? rows.map((r) => `<tr>${r.map((c, i) => `<td${cls(i)}>${c}</td>`).join('')}</tr>`).join('')
+        : `<tr><td colspan="${headers.length}" class="dr-empty-cell">暂无</td></tr>`;
     return `<div class="dr-table-wrap"><table class="dr-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 

@@ -2,6 +2,8 @@
 const DailyReviewPage = {
     API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
     _loaded: false,
+    _loadedDate: null,
+    _seq: 0,
     data: null,
 
     init() {
@@ -10,7 +12,7 @@ const DailyReviewPage = {
             const d = new Date();
             // 默认昨天（日终复盘）
             d.setDate(d.getDate() - 1);
-            dateEl.value = d.toISOString().slice(0, 10);
+            dateEl.value = this.localDate(d);
         }
         const loadBtn = document.getElementById('drLoadBtn');
         const computeBtn = document.getElementById('drComputeBtn');
@@ -45,34 +47,69 @@ const DailyReviewPage = {
         return (el && el.value) || '';
     },
 
+    localDate(d) {
+        const p = (n) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    },
+
+    // 请求期间锁定工具栏，防止重复提交；返回解锁函数
+    lockToolbar(activeBtnId, busyText) {
+        const bar = document.querySelector('#daily-review .dr-toolbar');
+        const btns = bar ? Array.from(bar.querySelectorAll('button')) : [];
+        const active = document.getElementById(activeBtnId);
+        const idle = active ? active.textContent : '';
+        btns.forEach((b) => { b.disabled = true; });
+        if (active) {
+            active.setAttribute('aria-busy', 'true');
+            if (busyText) active.textContent = busyText;
+        }
+        return () => {
+            btns.forEach((b) => { b.disabled = false; });
+            if (active) {
+                active.removeAttribute('aria-busy');
+                active.textContent = idle;
+            }
+        };
+    },
+
     async load() {
         const d = this.tradeDate();
-        this.setStatus('加载中…');
+        const seq = ++this._seq;
+        this.setStatus('加载中…', 'busy');
+        const unlock = this.lockToolbar('drLoadBtn', '加载中…');
         try {
             const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
             const resp = await fetchFn(
                 `${this.API_BASE_URL}/api/market_review/daily?trade_date=${encodeURIComponent(d)}`
             );
             const payload = await resp.json().catch(() => ({}));
+            if (seq !== this._seq) return;
             if (!resp.ok || !payload.success) {
-                this.setStatus(payload.message || '暂无快照，请先点击「重算」');
                 this.data = null;
                 this.renderEmpty();
+                const noSnap = resp.status === 404;
+                this.setStatus(noSnap ? `${d} 暂无复盘快照，可点击「重算」生成` : (payload.message || `加载失败（${resp.status}）`), noSnap ? '' : 'error');
                 return;
             }
             this.data = payload.data || {};
             this.render(this.data);
-            this.setStatus(`已加载 ${d}（口径 ${this.data.limit_source || '--'}）`);
+            this._loadedDate = d;
+            this.setStatus(`已加载 ${d}（口径 ${this.data.limit_source || '--'}）`, 'ok');
             this._loaded = true;
         } catch (e) {
+            if (seq !== this._seq) return;
             console.warn('[daily-review] load failed', e);
-            this.setStatus(e.message || '加载失败');
+            this.setStatus(e.message || '加载失败，请检查网络或后端服务', 'error');
+        } finally {
+            unlock();
         }
     },
 
     async compute() {
         const d = this.tradeDate();
-        this.setStatus('正在重算（可能需数十秒）…');
+        const seq = ++this._seq;
+        this.setStatus('正在重算（可能需数十秒）…', 'busy');
+        const unlock = this.lockToolbar('drComputeBtn', '重算中…');
         try {
             const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
             const resp = await fetchFn(
@@ -83,19 +120,32 @@ const DailyReviewPage = {
             if (!resp.ok || !payload.success) {
                 throw new Error(payload.message || `重算失败 ${resp.status}`);
             }
+            if (seq !== this._seq) return;
             this.data = payload.data || {};
             this.render(this.data);
-            this.setStatus(`重算完成 ${d} · ${this.data.limit_source || ''} · 季节 ${this.data.season || ''}`);
+            this._loadedDate = d;
+            this.setStatus(`重算完成 ${d} · ${this.data.limit_source || ''} · 季节 ${this.data.season || ''}`, 'ok');
         } catch (e) {
+            if (seq !== this._seq) return;
             console.warn('[daily-review] compute failed', e);
-            this.setStatus(e.message || '重算失败');
+            this.setStatus(e.message || '重算失败', 'error');
+        } finally {
+            unlock();
         }
     },
 
     async save() {
         const d = this.tradeDate();
+        if (!this.data || this._loadedDate !== d) {
+            this.setStatus(this._loadedDate
+                ? `交易日已改为 ${d}，当前显示的是 ${this._loadedDate}，请先「加载」再保存`
+                : `${d} 暂无复盘快照，请先「加载」或「重算」再保存`, 'error');
+            return;
+        }
         const viewpoint = (document.getElementById('drViewpoint') || {}).value || '';
         const advice = (document.getElementById('drAdvice') || {}).value || '';
+        this.setStatus('保存中…', 'busy');
+        const unlock = this.lockToolbar('drSaveBtn', '保存中…');
         try {
             const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
             const resp = await fetchFn(
@@ -112,15 +162,18 @@ const DailyReviewPage = {
             }
             this.data = payload.data || {};
             this.render(this.data);
-            this.setStatus('观点/建议已保存');
+            this.setStatus(`${d} 观点/建议已保存`, 'ok');
         } catch (e) {
-            this.setStatus(e.message || '保存失败');
+            this.setStatus(e.message || '保存失败', 'error');
+        } finally {
+            unlock();
         }
     },
 
     async exportMd() {
         const d = this.tradeDate();
-        this.setStatus('正在生成 Markdown…');
+        this.setStatus('正在生成 Markdown…', 'busy');
+        const unlock = this.lockToolbar('drExportBtn', '导出中…');
         try {
             const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
             const resp = await fetchFn(
@@ -136,15 +189,18 @@ const DailyReviewPage = {
             this._saveBlob(blob, filename);
             const text = await blob.text();
             this.setMarkdownPreview(text);
-            this.setStatus(`已下载 ${filename}`);
+            this.setStatus(`已下载 ${filename}`, 'ok');
         } catch (e) {
-            this.setStatus(e.message || '导出失败');
+            this.setStatus(e.message || '导出失败', 'error');
+        } finally {
+            unlock();
         }
     },
 
     async exportPdf() {
         const d = this.tradeDate();
-        this.setStatus('正在生成 PDF…');
+        this.setStatus('正在生成 PDF…', 'busy');
+        const unlock = this.lockToolbar('drExportPdfBtn', '导出中…');
         try {
             const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
             const resp = await fetchFn(
@@ -158,9 +214,11 @@ const DailyReviewPage = {
             const blob = await resp.blob();
             const filename = this._downloadName(resp, `daily_review_${d}.pdf`);
             this._saveBlob(blob, filename);
-            this.setStatus(`已下载 ${filename}`);
+            this.setStatus(`已下载 ${filename}`, 'ok');
         } catch (e) {
-            this.setStatus(e.message || 'PDF 导出失败');
+            this.setStatus(e.message || 'PDF 导出失败', 'error');
+        } finally {
+            unlock();
         }
     },
 
@@ -187,20 +245,31 @@ const DailyReviewPage = {
         URL.revokeObjectURL(a.href);
     },
 
-    setStatus(msg) {
+    setStatus(msg, tone) {
         const el = document.getElementById('drStatus');
-        if (el) el.textContent = msg || '';
+        if (!el) return;
+        el.textContent = msg || '';
+        el.classList.remove('is-busy', 'is-ok', 'is-error');
+        if (tone) el.classList.add(`is-${tone}`);
     },
 
     renderEmpty() {
+        this._loadedDate = null;
         const metrics = document.getElementById('drMetrics');
         if (metrics) metrics.innerHTML = '<p class="dr-empty">暂无数据</p>';
-        const gates = document.getElementById('drGatesBody');
-        if (gates) gates.innerHTML = '<tr><td colspan="5">暂无</td></tr>';
-        const main = document.getElementById('drMainlineBody');
-        if (main) main.innerHTML = '<tr><td colspan="5">暂无</td></tr>';
-        const ind = document.getElementById('drIndustryConfirmBody');
-        if (ind) ind.innerHTML = '<tr><td colspan="4">暂无</td></tr>';
+        this.fillBody('drGatesBody', 5, []);
+        this.fillBody('drMainlineBody', 5, []);
+        this.fillBody('drIndustryConfirmBody', 4, []);
+        const rateEl = document.getElementById('drGatesRate');
+        if (rateEl) rateEl.textContent = '';
+        ['drTrendSummary', 'drMainlineSummary'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = '';
+        });
+        ['drViewpoint', 'drAdvice'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
         const indSum = document.getElementById('drIndustryConfirmSummary');
         if (indSum) indSum.textContent = '';
         this.fillBody('drIndexBody', 6, []);
@@ -264,7 +333,7 @@ const DailyReviewPage = {
         if (!el) return;
         el.innerHTML = htmlRows && htmlRows.length
             ? htmlRows.join('')
-            : `<tr><td colspan="${cols}">暂无</td></tr>`;
+            : `<tr><td colspan="${cols}" class="dr-empty-cell">暂无</td></tr>`;
     },
 
     breadthPair(row) {
@@ -469,9 +538,9 @@ const DailyReviewPage = {
             (picks.no_chase || []).map(
                 (r) => `<tr>
                     <td>${this.stockCell(r)}</td>
-                    <td>${r.board_count == null ? '--' : r.board_count}</td>
-                    <td>${this.fmt(r.seal_yi)}</td>
-                    <td>${r.break_count == null ? '--' : r.break_count}</td>
+                    <td class="num">${r.board_count == null ? '--' : this.escapeHtml(r.board_count)}</td>
+                    <td class="num">${this.fmt(r.seal_yi)}</td>
+                    <td class="num">${r.break_count == null ? '--' : this.escapeHtml(r.break_count)}</td>
                     <td>${this.escapeHtml(r.limit_band || '--')}</td>
                     <td>${this.escapeHtml(r.stance || '--')}</td>
                     <td>${this.escapeHtml(r.trigger || '--')}</td>
@@ -488,12 +557,12 @@ const DailyReviewPage = {
                     <td>${this.stockCell(r)}</td>
                     <td>${this.escapeHtml((r.strategies || []).join('、') || '--')}</td>
                     <td>${this.escapeHtml(stance)}</td>
-                    <td>${this.fmt(r.p_sup)}</td>
-                    <td>${this.fmt(r.p_res)}</td>
+                    <td class="num">${this.fmt(r.p_sup)}</td>
+                    <td class="num">${this.fmt(r.p_res)}</td>
                     <td>${this.escapeHtml(r.trigger || '--')}</td>
                     <td>${this.escapeHtml(r.pattern || '--')}</td>
                     <td>${this.escapeHtml(r.macd || '--')}</td>
-                    <td>${this.fmt(r.rsi)}</td>
+                    <td class="num">${this.fmt(r.rsi)}</td>
                     <td>${this.escapeHtml(r.kdj || '--')}</td>
                     <td>${this.escapeHtml(r.trend || '--')}</td>
                 </tr>`;
@@ -533,12 +602,12 @@ const DailyReviewPage = {
                     <td>${this.stockCell(r)}</td>
                     <td>${this.escapeHtml(stage)}</td>
                     <td>${this.escapeHtml(r.zt_date || '--')}</td>
-                    <td>${r.consol_days == null ? '--' : r.consol_days}</td>
-                    <td>${this.fmt(r.box_low != null ? r.box_low : r.zt_mid)}</td>
-                    <td>${this.fmt(r.box_high)}</td>
+                    <td class="num">${r.consol_days == null ? '--' : this.escapeHtml(r.consol_days)}</td>
+                    <td class="num">${this.fmt(r.box_low != null ? r.box_low : r.zt_mid)}</td>
+                    <td class="num">${this.fmt(r.box_high)}</td>
                     <td>${this.escapeHtml(r.stance || '--')}</td>
                     <td>${this.escapeHtml(r.trigger || '--')}</td>
-                    <td>${this.fmt(r.score)}</td>
+                    <td class="num">${this.fmt(r.score)}</td>
                 </tr>`;
             })
         );
@@ -615,13 +684,13 @@ const DailyReviewPage = {
                 ? gates
                       .map(
                           (g) => `<tr>
-                    <td>${g.id}</td><td>${g.name || ''}</td><td>${g.standard || ''}</td>
-                    <td>${this.fmt(g.value)}</td>
+                    <td>${this.escapeHtml(g.id)}</td><td>${this.escapeHtml(g.name || '')}</td><td>${this.escapeHtml(g.standard || '')}</td>
+                    <td class="num">${this.fmt(g.value)}</td>
                     <td class="${g.passed ? 'is-ok' : 'is-bad'}">${g.passed ? '达标' : '不达标'}</td>
                   </tr>`
                       )
                       .join('')
-                : '<tr><td colspan="5">暂无</td></tr>';
+                : '<tr><td colspan="5" class="dr-empty-cell">暂无</td></tr>';
         }
         const rateEl = document.getElementById('drGatesRate');
         if (rateEl) rateEl.textContent = (data.hard_gates && data.hard_gates.rate) || '--';
@@ -634,14 +703,14 @@ const DailyReviewPage = {
                       .map(
                           (r) => `<tr>
                     <td>${this.boardLinkHtml(r.board_type || 'concept', r)}</td>
-                    <td>${r.hits_10d}</td>
+                    <td class="num">${this.escapeHtml(r.hits_10d)}</td>
                     <td>${this.escapeHtml(r.tier_label || '')}</td>
                     <td>${this.escapeHtml(r.today_status || '')}</td>
                     <td>${this.escapeHtml(r.echelon || '')}</td>
                   </tr>`
                       )
                       .join('')
-                : '<tr><td colspan="5">暂无</td></tr>';
+                : '<tr><td colspan="5" class="dr-empty-cell">暂无</td></tr>';
         }
         const mSum = document.getElementById('drMainlineSummary');
         if (mSum) mSum.textContent = (data.mainline_json && data.mainline_json.summary) || '';
@@ -661,7 +730,7 @@ const DailyReviewPage = {
                   </tr>`
                       )
                       .join('')
-                : '<tr><td colspan="4">暂无</td></tr>';
+                : '<tr><td colspan="4" class="dr-empty-cell">暂无</td></tr>';
         }
         const iSum = document.getElementById('drIndustryConfirmSummary');
         if (iSum) iSum.textContent = ind.summary || '';
