@@ -1178,7 +1178,85 @@ body.ops-map .main-content .kde-levels-meta {
     color: var(--ops-ink-muted) !important;
 }
 
-/* ========== 13) 手机：双栏改单栏 ========== */
+/* ========== 13) 复盘 · 连板梯队芯片（禁浅底浅字） ========== */
+body.ops-map .dr-ladder {
+    gap: 0.5rem !important;
+}
+
+body.ops-map .dr-chip {
+    background: rgba(217, 226, 236, 0.06) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    border-radius: 1px !important;
+    color: var(--ops-ink-muted) !important;
+    padding: 0.3rem 0.65rem !important;
+    gap: 0.4rem !important;
+}
+
+body.ops-map .dr-chip b,
+body.ops-map .dr-chip strong {
+    color: var(--ops-ink) !important;
+    font-weight: 700 !important;
+}
+
+body.ops-map .dr-chip--hot {
+    background: rgba(194, 59, 59, 0.16) !important;
+    border-color: rgba(194, 59, 59, 0.45) !important;
+    color: #f0b4b4 !important;
+}
+
+body.ops-map .dr-chip--hot b,
+body.ops-map .dr-chip--hot strong,
+body.ops-map .dr-chip--hot .dr-stock,
+body.ops-map .dr-chip--hot .dr-stock-link,
+body.ops-map .dr-chip--hot a.dr-stock-link {
+    color: #f7d4d4 !important;
+}
+
+body.ops-map .dr-chip .dr-code,
+body.ops-map .dr-chip--hot .dr-code {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .dr-chip .dr-stock-link,
+body.ops-map .dr-chip a.dr-stock-link {
+    color: var(--ops-ink) !important;
+    text-decoration: none !important;
+    font-weight: 600 !important;
+}
+
+body.ops-map .dr-chip .dr-stock-link:hover,
+body.ops-map .dr-chip .dr-stock-link:focus,
+body.ops-map .dr-chip a.dr-stock-link:hover,
+body.ops-map .dr-chip a.dr-stock-link:focus {
+    color: var(--ops-gold) !important;
+    text-decoration: underline !important;
+}
+
+body.ops-map .dr-chip--hot .dr-stock-link:hover,
+body.ops-map .dr-chip--hot .dr-stock-link:focus,
+body.ops-map .dr-chip--hot a.dr-stock-link:hover,
+body.ops-map .dr-chip--hot a.dr-stock-link:focus {
+    color: #ffd7d7 !important;
+}
+
+body.ops-map .dr-subhead {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .dr-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map .dr-down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .dr-flat,
+body.ops-map .dr-code {
+    color: var(--ops-ink-muted) !important;
+}
+
+/* ========== 14) 手机：双栏改单栏 ========== */
 @media (max-width: 767px) {
     body.ops-map .finance-grid,
     body.ops-map .ssa-rs-rocs,

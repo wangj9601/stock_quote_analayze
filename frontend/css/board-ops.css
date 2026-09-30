@@ -1,42 +1,83 @@
-/* Board detail — ops-map */
+/* Board detail — ops-map standalone page shell */
+
 body.ops-map.board-detail-page,
 body.ops-map[data-channel="quotes"].board-detail-page {
     color: var(--ops-ink);
 }
 
-body.ops-map .board-detail-toolbar,
-body.ops-map .sector-detail-content,
-body.ops-map .sector-detail-header,
-body.ops-map .sector-detail-modal {
-    background: var(--ops-ground-elevated) !important;
-    border-color: var(--color-border) !important;
-    color: var(--ops-ink) !important;
+/* 工具条：透明底，勿抬成白卡 */
+body.ops-map.board-detail-page .board-detail-toolbar {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin-bottom: 12px !important;
 }
 
-body.ops-map .board-detail-back,
-body.ops-map .close-sector-detail {
+body.ops-map.board-detail-page .board-detail-back,
+body.ops-map.board-detail-page .close-sector-detail {
     color: var(--ops-gold) !important;
-    border: 1px solid rgba(201, 162, 39, 0.4);
-    border-radius: 2px;
-    padding: 8px 12px;
-    text-decoration: none;
+    background: var(--ops-overlay-film) !important;
+    border: 1px solid rgba(201, 162, 39, 0.4) !important;
+    border-radius: 1px !important;
+    padding: 8px 12px !important;
+    text-decoration: none !important;
     min-height: 44px;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    line-height: 1.2;
 }
 
-body.ops-map #sectorDetailTitle {
+body.ops-map.board-detail-page .board-detail-back:hover,
+body.ops-map.board-detail-page .board-detail-back:focus,
+body.ops-map.board-detail-page .close-sector-detail:hover,
+body.ops-map.board-detail-page .close-sector-detail:focus {
+    background: rgba(201, 162, 39, 0.2) !important;
+    color: var(--ops-gold) !important;
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+/* 独立页：去掉弹层阴影与大圆角，用抬升面 */
+body.ops-map.board-detail-page .sector-detail-modal.is-standalone {
+    background: transparent !important;
+    padding: 0 !important;
+}
+
+body.ops-map.board-detail-page .sector-detail-modal.is-standalone .sector-detail-content {
+    max-width: 960px !important;
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+
+body.ops-map.board-detail-page .sector-detail-header {
+    background: transparent !important;
+    border-bottom: 1px solid var(--color-border) !important;
+}
+
+body.ops-map.board-detail-page #sectorDetailTitle {
     font-family: var(--font-mark);
     letter-spacing: 0.05em;
     color: var(--ops-ink) !important;
 }
 
-body.ops-map .ops-force-pair {
+body.ops-map.board-detail-page .sector-detail-sub {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map.board-detail-page .ops-force-pair {
     margin: 12px 0;
 }
 
 @media (max-width: 767px) {
-    body.ops-map .board-detail-main .container {
+    body.ops-map.board-detail-page .board-detail-main .container {
         padding: 12px !important;
+    }
+
+    body.ops-map.board-detail-page .sector-detail-modal.is-standalone .sector-detail-content {
+        border-radius: 2px !important;
     }
 }
