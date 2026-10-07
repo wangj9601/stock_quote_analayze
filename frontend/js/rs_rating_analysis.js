@@ -53,6 +53,7 @@
     rows: [],
     selected: new Map(), // code -> { code, name, market }
     loaded: false,
+    loading: false,
     binding: false,
     watchlistBusy: false,
   };
@@ -220,7 +221,15 @@
     if (next) next.disabled = state.page >= pages;
   }
 
+  function setQueryBusy(on) {
+    const btn = document.getElementById('rsaQueryBtn');
+    if (!btn) return;
+    if (on) btn.setAttribute('aria-busy', 'true');
+    else btn.removeAttribute('aria-busy');
+  }
+
   async function load(opts) {
+    if (state.loading) return;
     const options = opts || {};
     if (options.resetPage) state.page = 1;
     state.market = currentMarket();
@@ -231,6 +240,8 @@
     }
     const qs = buildQueryFixed().toString();
     const url = `${apiUrl('/api/analysis/rs-ratings')}?${qs}`;
+    state.loading = true;
+    setQueryBusy(true);
     try {
       const resp = await authFetch(url);
       const data = await resp.json().catch(() => ({}));
@@ -262,6 +273,9 @@
         body.innerHTML = `<tr><td colspan="13" class="empty-state">${esc(msg)}</td></tr>`;
       }
       toast(msg, 'error');
+    } finally {
+      state.loading = false;
+      setQueryBusy(false);
     }
   }
 

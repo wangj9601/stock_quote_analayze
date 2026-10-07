@@ -142,37 +142,49 @@ const StockMultiStrategy = {
         void this.ensureUserWatchlistCodes().then(() => this.updateWatchlistBtn());
     },
 
+    /**
+     * 委托绑定主力入场工具按钮。
+     * 会话 Tab 恢复会 innerHTML 重写 #ssaMainForceBlock，直接绑在节点上的监听会丢失。
+     */
     bindMainForceTools() {
         if (this._mfeToolsBound) return;
-        const fetchBtn = document.getElementById('ssaMainForceFetchBtn');
-        const toggleBtn = document.getElementById('ssaMainForceImportToggle');
-        if (!fetchBtn && !toggleBtn) return;
         this._mfeToolsBound = true;
-        if (fetchBtn) {
-            fetchBtn.addEventListener('click', () => this.fetchMainForceData());
-        }
-        if (toggleBtn) {
-            toggleBtn.addEventListener('click', () => this.toggleMainForceImport(null));
-        }
-        const cancelBtn = document.getElementById('ssaMainForceImportCancel');
-        if (cancelBtn) {
-            cancelBtn.addEventListener('click', () => this.toggleMainForceImport(false));
-        }
-        const submitBtn = document.getElementById('ssaMainForceImportSubmit');
-        if (submitBtn) {
-            submitBtn.addEventListener('click', () => this.submitMainForceImport());
-        }
-        const tpl = document.getElementById('ssaMainForceImportTpl');
-        if (tpl) {
-            tpl.addEventListener('click', (e) => {
+        document.addEventListener('click', (e) => {
+            const t = e.target && e.target.closest ? e.target.closest(
+                '#ssaMainForceFetchBtn, #ssaMainForceImportToggle, #ssaMainForceImportCancel, #ssaMainForceImportSubmit, #ssaMainForceImportTpl'
+            ) : null;
+            if (!t) return;
+            if (!t.closest('#ssaMainForceBlock')) return;
+            const id = t.id;
+            if (id === 'ssaMainForceFetchBtn') {
+                e.preventDefault();
+                void this.fetchMainForceData();
+                return;
+            }
+            if (id === 'ssaMainForceImportToggle') {
+                e.preventDefault();
+                this.toggleMainForceImport(null);
+                return;
+            }
+            if (id === 'ssaMainForceImportCancel') {
+                e.preventDefault();
+                this.toggleMainForceImport(false);
+                return;
+            }
+            if (id === 'ssaMainForceImportSubmit') {
+                e.preventDefault();
+                void this.submitMainForceImport();
+                return;
+            }
+            if (id === 'ssaMainForceImportTpl') {
                 e.preventDefault();
                 window.open(
                     `${this.API_BASE_URL}/api/stock_fund_flow/em/import/template`,
                     '_blank',
                     'noopener'
                 );
-            });
-        }
+            }
+        });
     },
 
     _currentAnalysisCode() {
@@ -1741,8 +1753,9 @@ const StockMultiStrategy = {
         this._restoreDom(session.dom);
         // innerHTML 恢复会丢掉 KDE/VP「应用」监听，需按当前标的重新绑定
         this._rebindLevelsControls();
-        // RS「展开近期历史」改为 document 事件委托，恢复 DOM 后无需再绑
+        // RS / 主力入场工具已改为 document 事件委托，恢复 DOM 后无需再绑
         this._bindRsHistoryDelegation();
+        this.bindMainForceTools();
         this.updateExportBtn();
         this.updateTradeObserveBtn();
         this.updateGannTradeObserveBtn();

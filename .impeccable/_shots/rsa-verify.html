@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>rsa checked-row verify (scratch)</title>
+<link rel="stylesheet" href="file:///E:/wangxw/work/stock_quote_analayze/frontend/css/design-tokens.css">
+<link rel="stylesheet" href="file:///E:/wangxw/work/stock_quote_analayze/frontend/css/ops-data.css">
+<link rel="stylesheet" href="file:///E:/wangxw/work/stock_quote_analayze/frontend/css/analysis.css">
+<link rel="stylesheet" href="file:///E:/wangxw/work/stock_quote_analayze/frontend/css/analysis-ops.css">
+<link rel="stylesheet" href="file:///E:/wangxw/work/stock_quote_analayze/frontend/css/ops-surfaces.css">
+<style>body{padding:24px;background:var(--ops-ground)}</style>
+</head>
+<body class="ops-map" data-channel="analyze">
+<div class="tab-panel active">
+  <div class="rsa-workbench">
+    <div class="rsa-toolbar">
+      <div class="rsa-filters">
+        <div class="rsa-market" role="radiogroup" aria-label="市场">
+          <label><input type="radio" name="rsaMarket" value="CN" checked> A股</label>
+          <label><input type="radio" name="rsaMarket" value="HK"> 港股</label>
+        </div>
+        <input type="search" id="rsaKeyword" class="rsa-input" placeholder="代码/名称">
+        <input type="date" id="rsaDate" class="rsa-input">
+        <select id="rsaMinRating" class="rsa-input"><option>最低评级（全部）</option></select>
+        <div class="rsa-boards" id="rsaBoardWrap" role="group" aria-label="A股板块筛选">
+          <span class="rsa-boards-label">A股板块</span>
+          <label><input type="checkbox" name="rsaCnBoard" value="MAIN" checked> 主板</label>
+          <label><input type="checkbox" name="rsaCnBoard" value="CYB"> 创业板</label>
+        </div>
+        <button type="button" class="btn btn-primary" id="rsaQueryBtn">查询</button>
+      </div>
+    </div>
+    <div class="rsa-table-wrap">
+      <table class="rsa-table results-table">
+        <thead><tr>
+          <th class="rsa-col-check"><input type="checkbox" id="rsaSelectAllCb"></th>
+          <th class="rsa-num">RS</th><th>强弱</th><th>代码</th><th>名称</th><th>基准日</th>
+          <th class="rsa-num">近63日</th><th class="rsa-num">RS_Raw</th><th class="rsa-col-ops">操作</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="rsa-col-check"><input type="checkbox" class="rsa-row-cb" checked></td>
+            <td class="rsa-num rsa-rating rsa-tone-strong">99</td>
+            <td>很强</td><td>688485</td><td>九州一轨（勾选行）</td><td class="rsa-date">2026-09-30</td>
+            <td class="rsa-num rsa-up">+64.6%</td><td class="rsa-num">3.0683</td>
+            <td class="rsa-col-ops"><div class="rsa-ops"><button type="button" class="rsa-op rsa-op--primary">分析</button><a class="rsa-op">追溯</a><button type="button" class="rsa-op">自选</button></div></td>
+          </tr>
+          <tr>
+            <td class="rsa-col-check"><input type="checkbox" class="rsa-row-cb"></td>
+            <td class="rsa-num rsa-rating rsa-tone-mid">58</td>
+            <td>中性偏强</td><td>600519</td><td>未勾选行</td><td class="rsa-date">2026-09-30</td>
+            <td class="rsa-num rsa-down">-3.7%</td><td class="rsa-num">1.2345</td>
+            <td class="rsa-col-ops"><div class="rsa-ops"><button type="button" class="rsa-op rsa-op--primary">分析</button><a class="rsa-op">追溯</a><button type="button" class="rsa-op">自选</button></div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</body>
+</html>

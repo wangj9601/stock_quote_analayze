@@ -359,6 +359,7 @@ body.ops-map[data-channel="analyze"] .filters label {
 
 body.ops-map[data-channel="analyze"] select,
 body.ops-map[data-channel="analyze"] input[type="text"],
+body.ops-map[data-channel="analyze"] input[type="search"],
 body.ops-map[data-channel="analyze"] input[type="date"],
 body.ops-map[data-channel="analyze"] input[type="number"] {
     background: rgba(0, 0, 0, 0.25) !important;
@@ -477,6 +478,37 @@ body.ops-map[data-channel="analyze"] .rsa-op--danger:hover:not(:disabled) {
     background: rgba(194, 59, 59, 0.12);
 }
 
+/* RSA 勾选/单选：作战板上的可读性（金 accent，与行情页板块勾选同语法） */
+body.ops-map[data-channel="analyze"] .rsa-market input[type="radio"],
+body.ops-map[data-channel="analyze"] .rsa-boards input[type="checkbox"],
+body.ops-map[data-channel="analyze"] .rsa-col-check input[type="checkbox"] {
+    accent-color: var(--ops-gold);
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    cursor: pointer;
+    vertical-align: -2px;
+}
+
+body.ops-map[data-channel="analyze"] .rsa-market input:focus-visible,
+body.ops-map[data-channel="analyze"] .rsa-boards input:focus-visible,
+body.ops-map[data-channel="analyze"] .rsa-col-check input:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus);
+}
+
+/* 勾选行：金色薄醋酸片（金 = 激活语义），含右侧固定操作列 */
+body.ops-map[data-channel="analyze"] .rsa-table tbody tr:has(.rsa-row-cb:checked) > td {
+    background: rgba(201, 162, 39, 0.07) !important;
+}
+
+/* RS 主指标数字：关键数值走标记字阶梯（与 index-value 同语法） */
+body.ops-map[data-channel="analyze"] .rsa-table td.rsa-rating {
+    font-family: var(--font-mark);
+    font-size: 1.02rem;
+    letter-spacing: 0.02em;
+}
+
 /* —— 交易观察：工作台内不再套面板 —— */
 body.ops-map[data-channel="analyze"] .uto-workbench .uto-toolbar {
     background: transparent !important;
@@ -587,6 +619,7 @@ body.ops-map[data-channel="analyze"] .uto-dialog .uto-dialog-ok--danger {
 }
 
 body.ops-map[data-channel="analyze"] .rsa-actions .btn:disabled,
+body.ops-map[data-channel="analyze"] .rsa-pager .btn:disabled,
 body.ops-map[data-channel="analyze"] .recommend-actions .btn:disabled,
 body.ops-map[data-channel="analyze"] .dr-toolbar .btn:disabled {
     color: var(--ops-ink-muted) !important;
@@ -596,6 +629,8 @@ body.ops-map[data-channel="analyze"] .dr-toolbar .btn:disabled {
     cursor: not-allowed;
 }
 
+body.ops-map[data-channel="analyze"] .rsa-filters .btn[aria-busy="true"],
+body.ops-map[data-channel="analyze"] .rsa-actions .btn[aria-busy="true"],
 body.ops-map[data-channel="analyze"] .recommend-actions .btn[aria-busy="true"],
 body.ops-map[data-channel="analyze"] .dr-toolbar .btn[aria-busy="true"] {
     color: var(--ops-gold) !important;
