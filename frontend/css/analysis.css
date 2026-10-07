@@ -2190,7 +2190,8 @@ body.ssa-png-capturing details,
 }
 body.ssa-png-capturing details > *:not(summary),
 .ssa-png-shot details > *:not(summary),
-.ssa-png-shot .ms-weekly-body {
+.ssa-png-shot .ms-weekly-body,
+.ssa-png-shot .ms-daily-points-body {
     display: block !important;
 }
 body.ssa-png-capturing .ms-zigzag-wrap,
@@ -2404,6 +2405,98 @@ body.ssa-png-capturing .ms-zigzag-svg,
 .ssa-fund-flow-table th { color: #64748b; font-weight: 600; background: #f8fafc; }
 .ssa-fund-flow-table td.is-up { color: #dc2626; }
 .ssa-fund-flow-table td.is-down { color: #16a34a; }
+.ssa-main-force-host { margin-top: 4px; }
+.ssa-mfe-verdict { color: #0f172a; }
+.ssa-main-force-card .ssa-fund-flow-metric strong { word-break: break-all; }
+.ssa-main-force-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
+.ssa-mfe-import {
+    margin: 0 0 12px;
+    padding: 14px 16px;
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 2px;
+    background: var(--ops-ground-elevated, #f8fafc);
+}
+.ssa-mfe-import-lead {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--ops-ink-muted, #64748b);
+    line-height: 1.5;
+}
+.ssa-mfe-import-lead code {
+    font-size: 12px;
+}
+.ssa-mfe-import-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    align-items: center;
+    margin-bottom: 10px;
+}
+.ssa-mfe-import-label,
+.ssa-mfe-import-file {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ops-ink, #0f172a);
+}
+.ssa-mfe-import-label select {
+    min-height: 32px;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 2px;
+    color: inherit;
+}
+.ssa-mfe-import-file input[type="file"] {
+    max-width: 16rem;
+    color: inherit;
+}
+.ssa-mfe-import-tpl {
+    font-size: 13px;
+    color: var(--ops-route, #2f6fed);
+    text-underline-offset: 3px;
+}
+.ssa-mfe-import textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 7.5rem;
+    padding: 8px 10px;
+    margin: 0 0 10px;
+    resize: vertical;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 2px;
+    color: var(--ops-ink, #0f172a);
+    font-size: 13px;
+    line-height: 1.45;
+}
+.ssa-mfe-import textarea::placeholder {
+    color: var(--ops-ink-muted, #8b9aab);
+}
+.ssa-mfe-import-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.ssa-mfe-import-status {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--ops-ink-muted, #64748b);
+}
+.ssa-mfe-import-status.is-error { color: var(--color-rise, #c23b3b); }
+.ssa-mfe-import-status.is-ok { color: var(--ops-ink, #0f172a); }
+.ssa-mfe-import-status.is-loading { color: var(--ops-route, #2f6fed); }
+.ssa-mfe-empty p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--ops-ink, #0f172a);
+}
 .ssa-fund-flow-hint,
 .ssa-fund-flow-empty {
     margin: 10px 0 0;
@@ -2579,6 +2672,9 @@ body.ssa-png-capturing .ms-zigzag-svg,
     font-size: 13px;
 }
 .ms-weekly-body {
+    margin-top: 8px;
+}
+.ms-daily-points-body {
     margin-top: 8px;
 }
 .ms-details-static-title {

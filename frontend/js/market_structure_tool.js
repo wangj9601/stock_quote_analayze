@@ -493,8 +493,10 @@ const MarketStructureTool = {
             smcHtml +
             analysisHtml +
             weeklyBlock +
-            `<div class="ms-subtitle">近端摆动点（HH/HL/LH/LL）·日线</div>` +
-            table +
+            `<details class="ms-weekly-details ms-daily-points-details">` +
+            `<summary>近端摆动点（HH/HL/LH/LL）·日线</summary>` +
+            `<div class="ms-daily-points-body">${table}</div>` +
+            `</details>` +
             `<p class="ms-disclaimer">规则模板，非投资建议；SMC 与形态短期三态并列，不互相覆盖；不入策略硬筛；周线逆势提示不否决 URT/GMS 正式买点。</p>` +
             `</div>`;
     },

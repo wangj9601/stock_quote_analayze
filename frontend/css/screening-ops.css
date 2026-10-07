@@ -778,10 +778,295 @@ body.ops-map .gms-price-plan-hint {
     border-radius: 2px !important;
 }
 
+/* —— 通道突破（CSB）列表与明细 —— */
+body.ops-map #csb-content .csb-cn-board-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    align-items: center;
+    padding: 8px 0 4px;
+}
+
+body.ops-map #csb-content .csb-cn-board-label,
+body.ops-map #csb-content .csb-cn-board-hint,
+body.ops-map #csb-content .csb-data-date-hint {
+    color: var(--ops-ink-muted) !important;
+    font-size: 0.8125rem;
+}
+
+body.ops-map #csb-content .csb-cn-board-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--ops-ink) !important;
+    font-size: 0.875rem;
+}
+
+body.ops-map #csb-content .csb-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+}
+
+body.ops-map #csb-content .csb-signal-tag {
+    display: inline-block;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border: 1px solid rgba(217, 226, 236, 0.28);
+    border-radius: 1px;
+    color: var(--ops-ink-muted);
+    background: transparent;
+}
+
+body.ops-map #csb-content .csb-signal-tag--csb-breakout,
+body.ops-map #csb-content .csb-signal-tag--csb-lps {
+    color: var(--ops-gold);
+    border-color: rgba(201, 162, 39, 0.45);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map #csb-content .csb-signal-tag--csb-probe {
+    color: var(--ops-route);
+    border-color: rgba(47, 111, 237, 0.4);
+    background: rgba(47, 111, 237, 0.1);
+}
+
+body.ops-map #csb-content .csb-action-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+body.ops-map #csb-content .csb-trade-observe-add.is-added,
+body.ops-map #csb-content .gms-op-btn.is-added {
+    color: var(--ops-ink-muted) !important;
+    border-color: rgba(217, 226, 236, 0.22) !important;
+    background: rgba(217, 226, 236, 0.06) !important;
+    cursor: default;
+}
+
+body.ops-map #csb-content .csb-score-detail-toggle.active {
+    color: var(--ops-gold) !important;
+    border-color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map #csb-content tr.csb-signal-row.is-detail-open td {
+    background: rgba(201, 162, 39, 0.06) !important;
+}
+
+body.ops-map #csb-content .csb-score-detail-row {
+    background: transparent !important;
+}
+
+body.ops-map #csb-content .csb-score-detail-cell {
+    padding: 0 !important;
+    border-left: none !important;
+    background: var(--ops-ground-elevated) !important;
+}
+
+body.ops-map #csb-content .csb-detail-panel {
+    display: block;
+    padding: 14px 16px 16px;
+    border-top: 1px solid rgba(201, 162, 39, 0.35);
+    color: var(--ops-ink);
+}
+
+body.ops-map #csb-content .csb-detail-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+body.ops-map #csb-content .csb-detail-hero-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 10px;
+}
+
+body.ops-map #csb-content .csb-detail-brand {
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--ops-ink);
+}
+
+body.ops-map #csb-content .csb-chip {
+    display: inline-flex;
+    align-items: center;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 3px 9px;
+    border: 1px solid rgba(217, 226, 236, 0.28);
+    border-radius: 1px;
+    color: var(--ops-ink-muted);
+    background: rgba(0, 0, 0, 0.2);
+}
+
+body.ops-map #csb-content .csb-chip--signal,
+body.ops-map #csb-content .csb-chip--score {
+    color: var(--ops-gold);
+    border-color: rgba(201, 162, 39, 0.45);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map #csb-content .csb-detail-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    font-size: 0.8125rem;
+    color: var(--ops-ink-muted);
+}
+
+body.ops-map #csb-content .csb-detail-signal-full {
+    margin: 2px 0 0;
+    font-size: 0.875rem;
+    color: var(--ops-ink);
+}
+
+body.ops-map #csb-content .csb-detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 18px;
+    margin-bottom: 14px;
+}
+
+body.ops-map #csb-content .csb-detail-section {
+    margin: 0;
+    min-width: 0;
+}
+
+body.ops-map #csb-content .csb-detail-section-title {
+    margin: 0 0 8px;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ops-gold);
+}
+
+body.ops-map #csb-content .csb-detail-lead {
+    margin: 0 0 8px;
+    font-size: 0.8125rem;
+    line-height: 1.45;
+    color: var(--ops-ink-muted);
+}
+
+body.ops-map #csb-content .csb-detail-table-wrap {
+    overflow-x: auto;
+}
+
+body.ops-map #csb-content .csb-detail-table {
+    width: 100%;
+    margin-top: 0;
+}
+
+body.ops-map #csb-content .csb-detail-table th,
+body.ops-map #csb-content .csb-detail-table td {
+    border-color: rgba(217, 226, 236, 0.12) !important;
+    padding: 6px 10px !important;
+    color: var(--ops-ink) !important;
+    vertical-align: top;
+}
+
+body.ops-map #csb-content .csb-detail-table th {
+    background: rgba(0, 0, 0, 0.22) !important;
+    color: var(--ops-ink-muted) !important;
+    font-weight: 600;
+}
+
+body.ops-map #csb-content .csb-score-total-row td {
+    color: var(--ops-gold) !important;
+    font-weight: 600;
+    border-top: 1px solid rgba(201, 162, 39, 0.35) !important;
+}
+
+body.ops-map #csb-content .csb-pill {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 1px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border: 1px solid transparent;
+}
+
+body.ops-map #csb-content .csb-pill--pass {
+    color: var(--ops-gold);
+    background: var(--ops-overlay-film);
+    border-color: rgba(201, 162, 39, 0.4);
+}
+
+body.ops-map #csb-content .csb-pill--fail {
+    color: var(--ops-ink-muted);
+    background: rgba(217, 226, 236, 0.06);
+    border-color: rgba(217, 226, 236, 0.18);
+}
+
+body.ops-map #csb-content .csb-pill--mute {
+    color: var(--ops-ink-muted);
+    background: transparent;
+    border-color: rgba(217, 226, 236, 0.14);
+}
+
+/* 历史页等复用明细面板时的抬升面语法（不依赖 #csb-content） */
+body.ops-map .csb-detail-panel {
+    color: var(--ops-ink);
+}
+
+body.ops-map .csb-detail-panel .csb-detail-section-title {
+    margin: 0 0 8px;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--ops-gold);
+}
+
+body.ops-map .csb-detail-panel .csb-chip--signal,
+body.ops-map .csb-detail-panel .csb-chip--score {
+    color: var(--ops-gold);
+    border-color: rgba(201, 162, 39, 0.45);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map .csb-detail-panel .csb-pill--pass {
+    color: var(--ops-gold);
+    background: var(--ops-overlay-film);
+    border-color: rgba(201, 162, 39, 0.4);
+}
+
+body.ops-map .csb-detail-panel .csb-pill--fail,
+body.ops-map .csb-detail-panel .csb-pill--mute,
+body.ops-map .csb-detail-panel .csb-detail-lead,
+body.ops-map .csb-detail-panel .csb-detail-hero-meta {
+    color: var(--ops-ink-muted);
+}
+
 /* —— 手机：策略条与操作条 —— */
 @media (max-width: 768px) {
     body.ops-map .screening-container {
         padding: 0.75rem 0.75rem 5.5rem;
+    }
+
+    body.ops-map #csb-content .csb-detail-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+    }
+
+    body.ops-map #csb-content .csb-action-links {
+        justify-content: flex-start;
     }
 
     body.ops-map .screening-header h1 {

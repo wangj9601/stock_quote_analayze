@@ -40,6 +40,8 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_rs_rating_cn,
     exec_rs_rating_hk,
     exec_ths_fund_flow_daily,
+    exec_em_stock_fund_flow_daily,
+    exec_tushare_moneyflow_daily,
     exec_board_fund_flow_daily,
     exec_zt_pool_em_daily,
     exec_market_daily_review,
@@ -228,6 +230,28 @@ NODE_DEFS: List[CollectionNodeDef] = [
         exec_ths_fund_flow_daily,
         param_schema=_TRADE_DATE_SCHEMA,
         description="stock_fund_flow_individual(即时) → stock_fund_flow_daily（可指定交易日）",
+    ),
+    _n(
+        "em_stock_fund_flow_daily",
+        "东财个股主力资金流日采",
+        "cn",
+        exec_em_stock_fund_flow_daily,
+        param_schema=_TRADE_DATE_SCHEMA,
+        description=(
+            "stock_individual_fund_flow → stock_fund_flow_em_daily（主力/四档；"
+            "活跃池增量；可指定交易日；EM_FUND_FLOW_* 环境变量限速）"
+        ),
+    ),
+    _n(
+        "tushare_moneyflow_daily",
+        "Tushare个股资金流向日采",
+        "cn",
+        exec_tushare_moneyflow_daily,
+        param_schema=_TRADE_DATE_SCHEMA,
+        description=(
+            "pro.moneyflow(trade_date) 全市场单日写入 stock_fund_flow_em_daily；"
+            "特大+大单≈主力；金额万元→元；需 TUSHARE_TOKEN（约 2000 积分）"
+        ),
     ),
     _n(
         "zt_pool_em_daily",

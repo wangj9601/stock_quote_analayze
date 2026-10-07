@@ -976,6 +976,32 @@ body {
     padding: 1.5rem;
 }
 
+.flow-em-section {
+    margin-top: 1.25rem;
+}
+
+.flow-em-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 0.35rem;
+}
+
+.flow-em-hint,
+.flow-em-mfe {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0 0 0.75rem;
+    line-height: 1.45;
+}
+
+.flow-em-mfe {
+    color: #334155;
+    padding: 0.65rem 0.85rem;
+    background: #f8fafc;
+    border-radius: 6px;
+}
+
 /* 搜索弹窗样式 */
 .search-modal {
     position: fixed;

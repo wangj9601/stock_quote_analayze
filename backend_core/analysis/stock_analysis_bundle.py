@@ -100,6 +100,33 @@ def _compute_fund_flow(db: Session, code: str) -> Dict[str, Any]:
     }
 
 
+def _compute_main_force_entry(db: Session, code: str) -> Dict[str, Any]:
+    from backend_api.stock.stock_fund_flow import compute_main_force_entry_response
+    from backend_api.utils.equity_code import is_hk_equity_code
+
+    if is_hk_equity_code(code):
+        return {
+            "ok": False,
+            "data": None,
+            "error": "主力入场判定一期仅支持 A 股",
+            "payload": None,
+        }
+    body = compute_main_force_entry_response(db, code, days=60)
+    if not body.get("success"):
+        return {
+            "ok": False,
+            "data": None,
+            "error": body.get("message") or "主力入场判定暂不可用",
+            "payload": body,
+        }
+    return {
+        "ok": True,
+        "data": body.get("data") or {},
+        "error": None,
+        "payload": body,
+    }
+
+
 def _compute_auction(
     db: Session,
     code: str,
@@ -783,6 +810,9 @@ def build_stock_analysis_bundle(
     def job_ff(s: Session) -> Dict[str, Any]:
         return _compute_fund_flow(s, code_n)
 
+    def job_mfe(s: Session) -> Dict[str, Any]:
+        return _compute_main_force_entry(s, code_n)
+
     def job_auction(s: Session) -> Dict[str, Any]:
         return _compute_auction(s, code_n, trade_date=asof_for_details)
 
@@ -812,6 +842,7 @@ def build_stock_analysis_bundle(
         ("strategy", job_strategy),
         ("rs", job_rs),
         ("fund_flow", job_ff),
+        ("main_force_entry", job_mfe),
         ("auction", job_auction),
         ("levels", job_levels),
         ("pattern", job_pattern),
@@ -832,6 +863,9 @@ def build_stock_analysis_bundle(
 
     rs = results.get("rs") or _err_section("相对强度加载失败")
     fund_flow = results.get("fund_flow") or _err_section("资金流向加载失败")
+    main_force_entry = results.get("main_force_entry") or _err_section(
+        "主力入场判定暂不可用"
+    )
     auction = results.get("auction") or _err_section("集合竞价加载失败")
     levels = results.get("levels") or _err_section("阻力支撑计算失败")
     pattern = results.get("pattern") or _err_section("形态识别失败")
@@ -934,6 +968,7 @@ def build_stock_analysis_bundle(
         "realtime": (strategy_data or {}).get("realtime") if strategy_data else None,
         "rs": rs,
         "fund_flow": fund_flow,
+        "main_force_entry": main_force_entry,
         "auction": auction,
         "levels": levels,
         "pattern": pattern,

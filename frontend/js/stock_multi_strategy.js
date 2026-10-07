@@ -93,6 +93,7 @@ const StockMultiStrategy = {
         this.updateTradeObserveBtn();
         this.bindScrollFab();
         this._bindRsHistoryDelegation();
+        this.bindMainForceTools();
         void this.ensureUserWatchlistCodes().then(() => this.updateWatchlistBtn());
     },
 
@@ -137,7 +138,211 @@ const StockMultiStrategy = {
         this.updateExportBtn();
         this.updateTradeObserveBtn();
         this._bindRsHistoryDelegation();
+        this.bindMainForceTools();
         void this.ensureUserWatchlistCodes().then(() => this.updateWatchlistBtn());
+    },
+
+    bindMainForceTools() {
+        if (this._mfeToolsBound) return;
+        const fetchBtn = document.getElementById('ssaMainForceFetchBtn');
+        const toggleBtn = document.getElementById('ssaMainForceImportToggle');
+        if (!fetchBtn && !toggleBtn) return;
+        this._mfeToolsBound = true;
+        if (fetchBtn) {
+            fetchBtn.addEventListener('click', () => this.fetchMainForceData());
+        }
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => this.toggleMainForceImport(null));
+        }
+        const cancelBtn = document.getElementById('ssaMainForceImportCancel');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', () => this.toggleMainForceImport(false));
+        }
+        const submitBtn = document.getElementById('ssaMainForceImportSubmit');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', () => this.submitMainForceImport());
+        }
+        const tpl = document.getElementById('ssaMainForceImportTpl');
+        if (tpl) {
+            tpl.addEventListener('click', (e) => {
+                e.preventDefault();
+                window.open(
+                    `${this.API_BASE_URL}/api/stock_fund_flow/em/import/template`,
+                    '_blank',
+                    'noopener'
+                );
+            });
+        }
+    },
+
+    _currentAnalysisCode() {
+        if (this.lastStock && this.lastStock.code) {
+            return String(this.lastStock.code).trim();
+        }
+        const el = document.getElementById('ssaStockCode');
+        const raw = el ? String(el.value || '').trim() : '';
+        return raw.split(/\s+/)[0] || '';
+    },
+
+    toggleMainForceImport(show) {
+        const panel = document.getElementById('ssaMainForceImportPanel');
+        if (!panel) return;
+        const next = show == null ? panel.hidden : !!show;
+        panel.hidden = !next;
+        if (next) {
+            const ta = document.getElementById('ssaMainForceImportText');
+            if (ta && ta.focus) ta.focus();
+        }
+    },
+
+    _setMainForceImportStatus(message, kind) {
+        const el = document.getElementById('ssaMainForceImportStatus');
+        if (!el) return;
+        if (!message) {
+            el.hidden = true;
+            el.textContent = '';
+            el.className = 'ssa-mfe-import-status';
+            return;
+        }
+        el.hidden = false;
+        el.textContent = message;
+        el.className = 'ssa-mfe-import-status' + (kind ? ` is-${kind}` : '');
+    },
+
+    async fetchMainForceData() {
+        const code = this._currentAnalysisCode();
+        if (!code) {
+            CommonUtils.showToast('请先分析一只股票', 'warning');
+            return;
+        }
+        const btn = document.getElementById('ssaMainForceFetchBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = '拉取中…';
+        }
+        this.setBlockLoading('ssaMainForceBlock', 'ssaMainForceStatus', '正在拉取东财，失败将回退 Tushare…');
+        try {
+            const q = new URLSearchParams({
+                code,
+                source: 'auto',
+                days: '120',
+                sync: 'true',
+            });
+            const resp = await this._authFetchTimeout(
+                `${this.API_BASE_URL}/api/stock_fund_flow/main_force/collect?${q.toString()}`,
+                { method: 'POST' },
+                120000
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (!payload.success) {
+                throw new Error(payload.message || '拉取失败');
+            }
+            const src = (payload.data && payload.data.source) || 'em';
+            const n = (payload.data && payload.data.upserted) || 0;
+            CommonUtils.showToast(`已写入 ${n} 日（${src}）`, 'success');
+            await this.reloadMainForceEntry();
+        } catch (e) {
+            const msg = (e && e.message) || '拉取失败';
+            this.setBlockError('ssaMainForceStatus', msg);
+            CommonUtils.showToast(msg, 'error');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '拉取数据';
+            }
+        }
+    },
+
+    async submitMainForceImport() {
+        const code = this._currentAnalysisCode();
+        if (!code) {
+            CommonUtils.showToast('请先分析一只股票', 'warning');
+            return;
+        }
+        const fileEl = document.getElementById('ssaMainForceImportFile');
+        const textEl = document.getElementById('ssaMainForceImportText');
+        const unitEl = document.getElementById('ssaMainForceImportUnit');
+        const file = fileEl && fileEl.files && fileEl.files[0];
+        const text = textEl ? String(textEl.value || '').trim() : '';
+        if (!file && !text) {
+            this._setMainForceImportStatus('请选择文件或粘贴表格', 'error');
+            return;
+        }
+        const submitBtn = document.getElementById('ssaMainForceImportSubmit');
+        if (submitBtn) submitBtn.disabled = true;
+        this._setMainForceImportStatus('正在写入…', 'loading');
+        try {
+            const fd = new FormData();
+            fd.append('code', code);
+            fd.append('amount_unit', (unitEl && unitEl.value) || 'auto');
+            if (text) fd.append('text', text);
+            if (file) fd.append('file', file);
+            const resp = await this._authFetchTimeout(
+                `${this.API_BASE_URL}/api/stock_fund_flow/em/import`,
+                { method: 'POST', body: fd },
+                60000
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (!payload.success) {
+                throw new Error(payload.message || '导入失败');
+            }
+            const n = (payload.data && payload.data.upserted) || 0;
+            this._setMainForceImportStatus(`已写入 ${n} 日，正在重算…`, 'ok');
+            CommonUtils.showToast(`已导入 ${n} 日分档数据`, 'success');
+            await this.reloadMainForceEntry();
+            this.toggleMainForceImport(false);
+        } catch (e) {
+            const msg = (e && e.message) || '导入失败';
+            this._setMainForceImportStatus(msg, 'error');
+            CommonUtils.showToast(msg, 'error');
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    },
+
+    async reloadMainForceEntry() {
+        const code = this._currentAnalysisCode();
+        const mfeBlock = document.getElementById('ssaMainForceBlock');
+        const mfeHost = document.getElementById('ssaMainForceHost');
+        if (!code || !mfeHost) return;
+        if (mfeBlock) mfeBlock.hidden = false;
+        this.setBlockLoading('ssaMainForceBlock', 'ssaMainForceStatus', '正在重算主力入场…');
+        try {
+            const resp = await this._authFetchTimeout(
+                `${this.API_BASE_URL}/api/stock_fund_flow/main_force_entry?code=${encodeURIComponent(code)}&days=60`,
+                {},
+                30000
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (payload.success && payload.data) {
+                this.lastMainForceEntry = { ok: true, data: payload.data, error: null };
+                this.renderMainForceEntry(mfeHost, payload.data);
+                this.setBlockOk('ssaMainForceStatus', '');
+                const st = document.getElementById('ssaMainForceStatus');
+                if (st) st.hidden = true;
+            } else {
+                this.lastMainForceEntry = {
+                    ok: false,
+                    data: null,
+                    error: payload.message || '仍无分档数据',
+                };
+                this.renderMainForceEmpty(mfeHost, payload.message || '仍无分档数据');
+                const st = document.getElementById('ssaMainForceStatus');
+                if (st) st.hidden = true;
+            }
+        } catch (e) {
+            this.renderMainForceEmpty(mfeHost, (e && e.message) || '重算失败');
+        }
+    },
+
+    renderMainForceEmpty(host, message) {
+        if (!host) return;
+        const msg = message || '暂无主力分档数据';
+        host.innerHTML = `
+            <div class="ssa-mfe-empty">
+              <p>${this.esc(msg)}</p>
+              <p class="ssa-fund-flow-hint">点「拉取数据」会先走东财，失败再走 Tushare moneyflow；也可「导入数据」上传 CSV。同花顺净额不能替代分档主力。</p>
+            </div>`;
     },
 
     /** 嵌入模式：由详情页传入 code/name 触发分析。 */
@@ -1454,6 +1659,9 @@ const StockMultiStrategy = {
             fundFlowHost: pick('ssaFundFlowHost'),
             fundFlowBlock: pick('ssaFundFlowBlock'),
             fundFlowStatus: pick('ssaFundFlowStatus'),
+            mainForceHost: pick('ssaMainForceHost'),
+            mainForceBlock: pick('ssaMainForceBlock'),
+            mainForceStatus: pick('ssaMainForceStatus'),
             auctionHost: pick('ssaAuctionHost'),
             auctionBlock: pick('ssaAuctionBlock'),
             auctionStatus: pick('ssaAuctionStatus'),
@@ -1493,6 +1701,9 @@ const StockMultiStrategy = {
         apply('ssaFundFlowHost', dom.fundFlowHost);
         apply('ssaFundFlowBlock', dom.fundFlowBlock);
         apply('ssaFundFlowStatus', dom.fundFlowStatus);
+        apply('ssaMainForceHost', dom.mainForceHost);
+        apply('ssaMainForceBlock', dom.mainForceBlock);
+        apply('ssaMainForceStatus', dom.mainForceStatus);
         apply('ssaAuctionHost', dom.auctionHost);
         apply('ssaAuctionBlock', dom.auctionBlock);
         apply('ssaAuctionStatus', dom.auctionStatus);
@@ -2143,13 +2354,14 @@ const StockMultiStrategy = {
     },
 
     hideResultBlocks() {
-        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaFundFlowBlock', 'ssaPaSection', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
+        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaFundFlowBlock', 'ssaMainForceBlock', 'ssaPaSection', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
         const planHost = document.getElementById('ssaTradePlanHost');
         const rsHost = document.getElementById('ssaRsHost');
         const fundFlowHost = document.getElementById('ssaFundFlowHost');
+        const mainForceHost = document.getElementById('ssaMainForceHost');
         const levelsHost = document.getElementById('ssaLevelsHost');
         const patternHost = document.getElementById('ssaPatternHost');
         const swingHost = document.getElementById('ssaSwingHost');
@@ -2157,18 +2369,20 @@ const StockMultiStrategy = {
         if (planHost) planHost.innerHTML = '';
         if (rsHost) rsHost.innerHTML = '';
         if (fundFlowHost) fundFlowHost.innerHTML = '';
+        if (mainForceHost) mainForceHost.innerHTML = '';
         if (levelsHost) levelsHost.innerHTML = '';
         if (patternHost) patternHost.innerHTML = '';
         if (swingHost) swingHost.innerHTML = '';
         if (gannHost) gannHost.innerHTML = '';
         const rsStatus = document.getElementById('ssaRsStatus');
         const fundFlowStatus = document.getElementById('ssaFundFlowStatus');
+        const mainForceStatus = document.getElementById('ssaMainForceStatus');
         const levelsStatus = document.getElementById('ssaLevelsStatus');
         const patternStatus = document.getElementById('ssaPatternStatus');
         const swingStatus = document.getElementById('ssaSwingStatus');
         const gannStatus = document.getElementById('ssaGannStatus');
         const planStatus = document.getElementById('ssaTradePlanStatus');
-        [rsStatus, fundFlowStatus, levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
+        [rsStatus, fundFlowStatus, mainForceStatus, levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
             if (status) {
                 status.textContent = '';
                 status.hidden = false;
@@ -2397,6 +2611,13 @@ const StockMultiStrategy = {
             error: ffRaw.error || (ffRaw.ok ? null : '资金流向加载失败'),
         };
 
+        const mfeRaw = data.main_force_entry || {};
+        const mainForceEntry = {
+            ok: !!mfeRaw.ok,
+            data: mfeRaw.data || null,
+            error: mfeRaw.error || (mfeRaw.ok ? null : '主力入场判定暂不可用'),
+        };
+
         const aqRaw = data.auction || {};
         const auction = {
             ok: !!aqRaw.ok,
@@ -2487,6 +2708,7 @@ const StockMultiStrategy = {
             tradeDate,
             rs,
             fundFlow,
+            mainForceEntry,
             auction,
             levels,
             pattern,
@@ -2519,6 +2741,13 @@ const StockMultiStrategy = {
                 ok: bundle.fundFlow.ok,
                 data: bundle.fundFlow.data,
                 error: bundle.fundFlow.error,
+            }
+            : null;
+        this.lastMainForceEntry = bundle.mainForceEntry
+            ? {
+                ok: bundle.mainForceEntry.ok,
+                data: bundle.mainForceEntry.data,
+                error: bundle.mainForceEntry.error,
             }
             : null;
         this.lastAuction = bundle.auction
@@ -2612,6 +2841,26 @@ const StockMultiStrategy = {
             } else {
                 fundFlowHost.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc((bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用')}</p>`;
                 this.setBlockError('ssaFundFlowStatus', (bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用');
+            }
+        }
+
+        // 主力入场
+        const mfeBlock = document.getElementById('ssaMainForceBlock');
+        const mfeHost = document.getElementById('ssaMainForceHost');
+        if (mfeBlock && mfeHost) {
+            mfeBlock.hidden = false;
+            if (bundle.mainForceEntry && bundle.mainForceEntry.ok && bundle.mainForceEntry.data) {
+                this.renderMainForceEntry(mfeHost, bundle.mainForceEntry.data);
+                this.setBlockOk('ssaMainForceStatus', '');
+                const st = document.getElementById('ssaMainForceStatus');
+                if (st) st.hidden = true;
+            } else {
+                this.renderMainForceEmpty(
+                    mfeHost,
+                    (bundle.mainForceEntry && bundle.mainForceEntry.error) || '暂无东财/Tushare 分档数据'
+                );
+                const st = document.getElementById('ssaMainForceStatus');
+                if (st) st.hidden = true;
             }
         }
 
@@ -3258,6 +3507,66 @@ const StockMultiStrategy = {
                 </table>
               </div>
               <p class="ssa-fund-flow-hint">口径：同花顺/文件采集入库的流入、流出、净额（元）。「区间净流入合计」= 区间内每日净流入代数和（含正负）。详情页「资金流向」Tab 可查看近 20 日图表。</p>
+            </div>`;
+    },
+
+    renderMainForceEntry(host, data) {
+        if (!host) return;
+        const d = data || {};
+        const w = d.latest_window || null;
+        const sum = d.series_summary || {};
+        const fmtYi = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return '--';
+            const yi = Number(v) / 1e8;
+            const sign = yi > 0 ? '+' : '';
+            return `${sign}${yi.toFixed(2)}亿`;
+        };
+        const fmtPx = (v) => {
+            if (v == null || !Number.isFinite(Number(v))) return '--';
+            return Number(v).toFixed(2);
+        };
+        const fmtPct = (v) => {
+            if (v == null || !Number.isFinite(Number(v))) return '--';
+            const n = Number(v);
+            const sign = n > 0 ? '+' : '';
+            return `${sign}${n.toFixed(2)}%`;
+        };
+        const clsYi = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return '';
+            return Number(v) >= 0 ? 'is-up' : 'is-down';
+        };
+        const verdict = d.verdict_label || d.verdict || '--';
+        const srcMap = { em: '东财', tushare: 'Tushare', manual: '手工' };
+        const srcLabel = d.series_source
+            ? String(d.series_source).split('+').map((s) => srcMap[s.trim()] || s.trim()).filter(Boolean).join(' + ')
+            : '';
+        const winHtml = w
+            ? `<div class="ssa-fund-flow-summary">
+                <div class="ssa-fund-flow-metric"><span>入场窗口</span><strong>${this.esc(w.start_date || '--')} ~ ${this.esc(w.end_date || '--')}</strong></div>
+                <div class="ssa-fund-flow-metric"><span>窗口主力净额</span><strong class="${clsYi(w.main_net_sum)}">${fmtYi(w.main_net_sum)}</strong></div>
+                <div class="ssa-fund-flow-metric"><span>成本重心</span><strong>${fmtPx(w.cost_center)}</strong></div>
+                <div class="ssa-fund-flow-metric"><span>价位区间</span><strong>${fmtPx(w.price_low)} ~ ${fmtPx(w.price_high)}</strong></div>
+                <div class="ssa-fund-flow-metric"><span>相对现价</span><strong class="${clsYi(w.vs_last_close_pct)}">${fmtPct(w.vs_last_close_pct)}</strong></div>
+                <div class="ssa-fund-flow-metric"><span>VP POC</span><strong>${fmtPx(w.vp_poc)}</strong></div>
+              </div>`
+            : `<p class="ssa-fund-flow-empty">近 ${this.esc(String(d.lookback_days || 60))} 日未识别连续入场窗口</p>`;
+        const sideBits = [];
+        if (d.ths_net_aligned === true) sideBits.push('同花顺净额同向');
+        if (d.ths_net_aligned === false) sideBits.push('同花顺净额背离');
+        if (d.board_resonance === true) sideBits.push('板块主力同向');
+        if (d.board_resonance === false) sideBits.push('板块主力背离');
+        host.innerHTML = `
+            <div class="ssa-fund-flow-card ssa-main-force-card">
+              <div class="ssa-fund-flow-meta">
+                <span>结论 <strong class="ssa-mfe-verdict">${this.esc(verdict)}</strong></span>
+                <span>回看 ${this.esc(String(d.days_used || d.lookback_days || 0))} 日</span>
+                <span>区间净额 ${fmtYi(sum.main_net_sum)}</span>
+                <span>入场日 ${this.esc(String(sum.entry_days != null ? sum.entry_days : '--'))}</span>
+                ${srcLabel ? `<span>来源 ${this.esc(srcLabel)}</span>` : ''}
+              </div>
+              ${winHtml}
+              ${sideBits.length ? `<p class="ssa-fund-flow-meta">${this.esc(sideBits.join(' · '))}</p>` : ''}
+              <p class="ssa-fund-flow-hint">${this.esc(d.disclaimer || '订单分档代理，非机构身份；价位为加权均价近似，非筹码分布')}</p>
             </div>`;
     },
 

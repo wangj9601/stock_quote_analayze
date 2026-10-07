@@ -737,6 +737,59 @@ def exec_ths_fund_flow_daily(ctx: WorkflowContext) -> NodeResult:
         return NodeResult.fail(str(e), message="同花顺资金流入流出日采失败")
 
 
+def exec_em_stock_fund_flow_daily(ctx: WorkflowContext) -> NodeResult:
+    """东财个股主力/分档资金流日采；活跃池增量 upsert。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过东财个股主力资金流日采")
+    try:
+        from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
+            collect_em_stock_fund_flow_daily,
+        )
+
+        trade_date = _resolve_node_trade_date(ctx)
+        # 指定交易日时只落该日；日常跑近几日
+        result = collect_em_stock_fund_flow_daily(trade_date=trade_date)
+        if isinstance(result, dict) and result.get("success") is False:
+            return NodeResult.fail(
+                result.get("error") or "东财个股资金流采集失败",
+                message="东财个股主力资金流日采失败",
+            )
+        return NodeResult.ok(
+            "东财个股主力资金流日采完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("东财个股主力资金流日采异常")
+        return NodeResult.fail(str(e), message="东财个股主力资金流日采失败")
+
+
+def exec_tushare_moneyflow_daily(ctx: WorkflowContext) -> NodeResult:
+    """Tushare moneyflow 全市场单日补档，写入 stock_fund_flow_em_daily。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过 Tushare 个股资金流向")
+    try:
+        from backend_core.data_collectors.tushare.moneyflow import (
+            collect_tushare_moneyflow_for_date,
+        )
+
+        trade_date = _resolve_node_trade_date(ctx)
+        if not trade_date:
+            trade_date = datetime.now().strftime("%Y-%m-%d")
+        result = collect_tushare_moneyflow_for_date(trade_date)
+        if isinstance(result, dict) and result.get("success") is False:
+            return NodeResult.fail(
+                result.get("error") or "Tushare moneyflow 采集失败",
+                message="Tushare 个股资金流向日采失败",
+            )
+        return NodeResult.ok(
+            "Tushare 个股资金流向日采完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("Tushare 个股资金流向日采异常")
+        return NodeResult.fail(str(e), message="Tushare 个股资金流向日采失败")
+
+
 def exec_board_fund_flow_daily(ctx: WorkflowContext) -> NodeResult:
     """板块资金流向；可指定交易日补历史。"""
     if not _has_explicit_trade_date(ctx) and cn_session_closed_today():

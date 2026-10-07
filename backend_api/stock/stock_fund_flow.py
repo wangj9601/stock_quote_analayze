@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Query, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Query, BackgroundTasks, File, Form, UploadFile, Depends
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from fastapi import Depends
 from datetime import datetime
 from typing import Optional
 
@@ -63,9 +62,391 @@ async def get_history(code: str = Query(None, description="股票代码")):
         )
 
 
+def _query_em_daily_rows(db: Session, code: str, days: int = 60) -> list:
+    """从 stock_fund_flow_em_daily 读分档序列（升序）。"""
+    code_n = normalize_ths_code(code) or normalize_equity_code(code) or str(code).strip()
+    days = max(1, min(int(days or 60), 250))
+    rows = db.execute(
+        text(
+            """
+            SELECT code, trade_date,
+                   main_net_inflow, main_net_inflow_pct,
+                   super_large_net_inflow, super_large_net_inflow_pct,
+                   large_net_inflow, large_net_inflow_pct,
+                   mid_net_inflow, mid_net_inflow_pct,
+                   small_net_inflow, small_net_inflow_pct,
+                   close_price, change_percent, source, updated_at
+            FROM stock_fund_flow_em_daily
+            WHERE code = :code
+            ORDER BY trade_date DESC
+            LIMIT :lim
+            """
+        ),
+        {"code": code_n, "lim": days},
+    ).mappings().all()
+    out = [dict(r) for r in rows]
+    out.reverse()
+    return out
+
+
+@router.get("/em/daily")
+async def get_em_daily(
+    code: str = Query(..., description="股票代码"),
+    days: int = Query(60, ge=1, le=250, description="回看交易日数"),
+    db: Session = Depends(get_db),
+):
+    """读取东财个股主力/分档资金流日表（本地入库）。"""
+    if is_hk_equity_code(code):
+        return JSONResponse(
+            {"success": False, "message": "东财主力分档仅支持 A 股"},
+            status_code=400,
+        )
+    try:
+        series = _query_em_daily_rows(db, code, days=days)
+        if not series:
+            return JSONResponse(
+                {
+                    "success": False,
+                    "message": "暂无东财资金流分档数据（需日终采集或回填）",
+                },
+                status_code=404,
+            )
+        return {
+            "success": True,
+            "data": {
+                "code": series[0].get("code") or code,
+                "days_requested": days,
+                "series_source": "stock_fund_flow_em_daily",
+                "series": series,
+                "disclaimer": "东财订单分档净流入，非机构身份",
+            },
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"查询东财资金流失败: {e}"},
+            status_code=500,
+        )
+
+
+def compute_main_force_entry_response(
+    db: Session, code: str, days: int = 60
+) -> dict:
+    """供 API 与 analysis bundle 复用。"""
+    from backend_core.analysis.main_force_entry import compute_main_force_entry
+
+    code_n = normalize_ths_code(code) or normalize_equity_code(code) or str(code).strip()
+    days = max(5, min(int(days or 60), 250))
+    em_series = _query_em_daily_rows(db, code_n, days=days)
+    if not em_series:
+        return {
+            "success": False,
+            "message": "暂无东财资金流分档数据（需日终采集或回填）",
+        }
+
+    first = em_series[0]["trade_date"]
+    last = em_series[-1]["trade_date"]
+    quotes = db.execute(
+        text(
+            """
+            SELECT CAST(date AS VARCHAR(10)) AS trade_date,
+                   open, high, low, close, volume, amount
+            FROM historical_quotes
+            WHERE code = :code
+              AND CAST(date AS VARCHAR(10)) >= :d0
+              AND CAST(date AS VARCHAR(10)) <= :d1
+            ORDER BY date
+            """
+        ),
+        {"code": code_n, "d0": first, "d1": last},
+    ).mappings().all()
+    quote_rows = [dict(r) for r in quotes]
+
+    ths_rows = db.execute(
+        text(
+            """
+            SELECT trade_date, net_amount
+            FROM stock_fund_flow_daily
+            WHERE code = :code AND trade_date >= :d0 AND trade_date <= :d1
+            """
+        ),
+        {"code": code_n, "d0": first, "d1": last},
+    ).mappings().all()
+    ths_map = {
+        str(r["trade_date"])[:10]: safe_float(r["net_amount"])
+        for r in ths_rows
+        if r.get("trade_date") is not None
+    }
+
+    board_nets = []
+    try:
+        board_rows = db.execute(
+            text(
+                """
+                SELECT b.main_net_inflow
+                FROM board_fund_flow_daily b
+                INNER JOIN industry_board_constituents c
+                  ON c.board_code = b.board_code
+                 AND c.stock_code = :code
+                WHERE CAST(b.trade_date AS VARCHAR(10)) >= :d0
+                  AND CAST(b.trade_date AS VARCHAR(10)) <= :d1
+                  AND b.board_kind = 'industry'
+                ORDER BY b.trade_date DESC
+                LIMIT 5
+                """
+            ),
+            {"code": code_n, "d0": first, "d1": last},
+        ).mappings().all()
+        board_nets = [
+            safe_float(r["main_net_inflow"])
+            for r in board_rows
+            if safe_float(r["main_net_inflow"]) is not None
+        ]
+    except Exception:
+        board_nets = []
+
+    data = compute_main_force_entry(
+        code=code_n,
+        em_rows=em_series,
+        quote_rows=quote_rows,
+        ths_net_by_date=ths_map,
+        board_main_nets=board_nets or None,
+        lookback_days=days,
+    )
+    sources = sorted(
+        {
+            str(r.get("source") or "").strip()
+            for r in em_series
+            if str(r.get("source") or "").strip()
+        }
+    )
+    data["series_source"] = "+".join(sources) if sources else "stock_fund_flow_em_daily"
+    return {"success": True, "data": data}
+
+
+@router.get("/main_force_entry")
+async def get_main_force_entry(
+    code: str = Query(..., description="股票代码"),
+    days: int = Query(60, ge=5, le=250, description="回看交易日数"),
+    db: Session = Depends(get_db),
+):
+    """主力入场判定：时间窗口 + 净流入加权均价 + VP 旁证。"""
+    if is_hk_equity_code(code):
+        return JSONResponse(
+            {"success": False, "message": "主力入场判定一期仅支持 A 股"},
+            status_code=400,
+        )
+    try:
+        body = compute_main_force_entry_response(db, code, days=days)
+        if not body.get("success"):
+            return JSONResponse(body, status_code=404)
+        return body
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"主力入场判定失败: {e}"},
+            status_code=500,
+        )
+
+
+@router.post("/em/collect")
+async def trigger_em_collect(
+    background_tasks: BackgroundTasks,
+    code: Optional[str] = Query(None, description="单票代码；不传则活跃池批量"),
+    trade_date: Optional[str] = Query(None, description="仅落该交易日 YYYY-MM-DD"),
+    sync: bool = Query(False, description="true 则同步执行"),
+    max_codes: int = Query(0, ge=0, description="批量时最多票数，0=不限制"),
+):
+    """触发东财个股主力/分档资金流采集写入 stock_fund_flow_em_daily。"""
+    from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
+        collect_em_stock_fund_flow_daily,
+        collect_em_stock_fund_flow_for_code,
+    )
+
+    if trade_date:
+        try:
+            datetime.strptime(trade_date, "%Y-%m-%d")
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+                status_code=400,
+            )
+
+    if code:
+        code_n = normalize_ths_code(code) or str(code).strip()
+
+        def _one():
+            return collect_em_stock_fund_flow_for_code(
+                code_n,
+                min_date=trade_date,
+                max_date=trade_date,
+                keep_last_n=None if not trade_date else None,
+            )
+
+        if sync:
+            try:
+                return {"success": True, "data": _one()}
+            except Exception as e:
+                return JSONResponse(
+                    {"success": False, "message": f"采集失败: {e}"}, status_code=500
+                )
+        background_tasks.add_task(_one)
+        return {"success": True, "message": f"东财资金流采集已在后台启动: {code_n}"}
+
+    def _batch():
+        return collect_em_stock_fund_flow_daily(
+            trade_date=trade_date,
+            max_codes=max_codes or None,
+        )
+
+    if sync:
+        try:
+            return {"success": True, "data": _batch()}
+        except Exception as e:
+            return JSONResponse(
+                {"success": False, "message": f"采集失败: {e}"}, status_code=500
+            )
+    background_tasks.add_task(_batch)
+    return {"success": True, "message": "东财资金流批量采集已在后台启动"}
+
+
+@router.post("/main_force/collect")
+async def collect_main_force_series(
+    background_tasks: BackgroundTasks,
+    code: str = Query(..., description="股票代码"),
+    source: str = Query("auto", description="auto | em | tushare"),
+    days: int = Query(120, ge=5, le=250),
+    sync: bool = Query(True, description="默认同步，便于分析页立即重算"),
+):
+    """补主力分档：auto 先东财，失败再 Tushare moneyflow。"""
+    if is_hk_equity_code(code):
+        return JSONResponse(
+            {"success": False, "message": "主力分档仅支持 A 股"},
+            status_code=400,
+        )
+    from backend_core.data_collectors.tushare.moneyflow import collect_main_force_for_code
+
+    src = (source or "auto").strip().lower()
+
+    def _run():
+        return collect_main_force_for_code(code, source=src, days=days)
+
+    if sync:
+        try:
+            result = _run()
+            if not result.get("success"):
+                return JSONResponse(
+                    {
+                        "success": False,
+                        "message": result.get("error") or "采集失败",
+                        "data": result,
+                    },
+                    status_code=404,
+                )
+            return {"success": True, "data": result}
+        except Exception as e:
+            return JSONResponse(
+                {"success": False, "message": f"采集失败: {e}"}, status_code=500
+            )
+    background_tasks.add_task(_run)
+    return {"success": True, "message": f"主力分档采集已在后台启动: {code} ({src})"}
+
+
+@router.get("/em/import/template")
+async def em_import_template():
+    from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
+        IMPORT_TEMPLATE_CSV,
+    )
+
+    body = (
+        "\ufeff"
+        + "# 东财分档模板（金额默认元）。也可导入 Tushare moneyflow 导出（buy_elg_amount 等，单位万元，系统自动换算）。\n"
+        + IMPORT_TEMPLATE_CSV
+    )
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": "attachment; filename=em_fund_flow_import_template.csv"
+        },
+    )
+
+
+@router.post("/em/import")
+async def import_em_daily(
+    code: str = Form(..., description="股票代码"),
+    amount_unit: str = Form("auto", description="auto | yuan | wan | yi"),
+    text: Optional[str] = Form(None, description="粘贴的 CSV / JSON"),
+    file: Optional[UploadFile] = File(None),
+):
+    """手动导入东财分档或 Tushare moneyflow 表，UPSERT 到 stock_fund_flow_em_daily。"""
+    if is_hk_equity_code(code):
+        return JSONResponse(
+            {"success": False, "message": "主力分档仅支持 A 股"},
+            status_code=400,
+        )
+    from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
+        parse_import_bytes,
+        parse_import_table,
+        upsert_rows,
+    )
+    from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
+        normalize_code as em_norm,
+    )
+    from backend_core.database.db import SessionLocal
+
+    code_n = em_norm(code) or str(code).strip()
+    rows = []
+    try:
+        if file is not None and file.filename:
+            content = await file.read()
+            if content:
+                rows = parse_import_bytes(
+                    code_n,
+                    content,
+                    filename=file.filename or "",
+                    amount_unit=amount_unit,
+                )
+        if not rows and text:
+            rows = parse_import_table(code_n, text, amount_unit=amount_unit)
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"解析失败: {e}"},
+            status_code=400,
+        )
+    if not rows:
+        return JSONResponse(
+            {"success": False, "message": "未解析到有效行，请检查表头与日期列"},
+            status_code=400,
+        )
+    session = SessionLocal()
+    try:
+        n = upsert_rows(session, rows)
+        session.commit()
+        return {
+            "success": True,
+            "data": {
+                "code": code_n,
+                "upserted": n,
+                "first_date": rows[0]["trade_date"],
+                "last_date": rows[-1]["trade_date"],
+                "source": rows[0].get("source") or "manual",
+            },
+        }
+    except Exception as e:
+        session.rollback()
+        return JSONResponse(
+            {"success": False, "message": f"写入失败: {e}"},
+            status_code=500,
+        )
+    finally:
+        session.close()
+
+
 @router.get("/today")
-async def get_today(code: str = Query(None, description="股票代码")):
-    """获取个股东财资金流向历史数据（净流入口径）。"""
+async def get_today(
+    code: str = Query(None, description="股票代码"),
+    db: Session = Depends(get_db),
+):
+    """获取个股东财资金流向历史（优先读库 stock_fund_flow_em_daily，缺数再打东财）。"""
     print(f"[get_stock_fund_flow_today] 输入参数: code={code}")
     if not code:
         print("[get_stock_fund_flow_today] 缺少参数code")
@@ -73,6 +454,29 @@ async def get_today(code: str = Query(None, description="股票代码")):
             {"success": False, "message": "缺少股票代码参数code"}, status_code=400
         )
     try:
+        # 优先本地东财日表
+        try:
+            series = _query_em_daily_rows(db, code, days=120)
+            if series:
+                result = [
+                    {
+                        "date": r.get("trade_date"),
+                        "code": r.get("code") or code,
+                        "main_net_inflow": safe_float(r.get("main_net_inflow")),
+                        "large_net_inflow": safe_float(r.get("large_net_inflow")),
+                        "super_large_net_inflow": safe_float(
+                            r.get("super_large_net_inflow")
+                        ),
+                        "mid_net_inflow": safe_float(r.get("mid_net_inflow")),
+                        "small_net_inflow": safe_float(r.get("small_net_inflow")),
+                        "source": "stock_fund_flow_em_daily",
+                    }
+                    for r in series
+                ]
+                return {"success": True, "data": result, "series_source": "db"}
+        except Exception as db_ex:
+            print(f"[get_stock_fund_flow_today] 读库失败，回退东财: {db_ex}")
+
         df = None
         for market in ("sh", "sz", "bj"):
             try:
@@ -107,9 +511,13 @@ async def get_today(code: str = Query(None, description="股票代码")):
                     "code": code,
                     "main_net_inflow": safe_float(row.get("主力净流入-净额")),
                     "large_net_inflow": safe_float(row.get("大单净流入-净额")),
+                    "super_large_net_inflow": safe_float(row.get("超大单净流入-净额")),
+                    "mid_net_inflow": safe_float(row.get("中单净流入-净额")),
+                    "small_net_inflow": safe_float(row.get("小单净流入-净额")),
+                    "source": "em_live",
                 }
             )
-        return {"success": True, "data": result}
+        return {"success": True, "data": result, "series_source": "em_live"}
     except Exception as e:
         print(f"[get_stock_fund_flow_today] 查询个股资金流向历史数据异常: {e}")
         import traceback

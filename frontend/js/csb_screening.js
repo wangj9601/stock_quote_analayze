@@ -3,6 +3,9 @@
  */
 (function () {
   let lastSignalRows = [];
+  /** @type {Set<string>} CN:code */
+  let observeCodeSet = new Set();
+  let observeCodesLoaded = false;
 
   function apiBase() {
     if (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) {
@@ -41,6 +44,14 @@
     return data;
   }
 
+  function toast(msg, type) {
+    if (window.CommonUtils && typeof CommonUtils.showToast === 'function') {
+      CommonUtils.showToast(msg, type || 'info');
+      return;
+    }
+    if (type === 'error') console.error(msg);
+  }
+
   function showErr(msg) {
     const el = document.getElementById('csbError');
     if (!el) return;
@@ -75,6 +86,27 @@
       CSB_DISTRIBUTE: '派发',
     };
     return map[s] || s || '-';
+  }
+
+  function observeKey(code) {
+    const c = String(code || '').trim();
+    return c ? `CN:${c}` : '';
+  }
+
+  function isObserved(code) {
+    const key = observeKey(code);
+    return key ? observeCodeSet.has(key) : false;
+  }
+
+  async function loadObserveCodes() {
+    try {
+      const data = await api('/api/stock/trade-observe/codes?source=csb');
+      observeCodeSet = new Set(Array.isArray(data) ? data : []);
+      observeCodesLoaded = true;
+    } catch (_) {
+      // 未登录时忽略，按钮仍显示「观察」
+      observeCodesLoaded = false;
+    }
   }
 
   function stockAnalysisHref(code, name) {
@@ -164,6 +196,39 @@
     }
   }
 
+  function resolveSignalDate(row) {
+    const raw = row && (row.signal_date || row.trade_date || row.date || row.search_date);
+    if (!raw) return null;
+    const s = String(raw).trim().slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+  }
+
+  function buildObserveSnapshot(row) {
+    return {
+      source: 'csb',
+      signal_type: row.signal_type || null,
+      score: row.score != null ? Number(row.score) : null,
+      close: row.close != null ? Number(row.close) : null,
+      channel_lower: row.channel_lower != null ? Number(row.channel_lower) : null,
+      channel_upper: row.channel_upper != null ? Number(row.channel_upper) : null,
+      squeeze_days: row.squeeze_days != null ? Number(row.squeeze_days) : null,
+      squeeze_pct: row.squeeze_pct != null ? Number(row.squeeze_pct) : null,
+      entry_kind: row.entry_kind || null,
+      entry_low: row.entry_low != null ? Number(row.entry_low) : null,
+      suggested_position: row.suggested_position != null ? Number(row.suggested_position) : null,
+      signal_date: resolveSignalDate(row),
+    };
+  }
+
+  function observeButtonHtml(row, index) {
+    const code = String(row.code || '').trim();
+    const added = isObserved(code);
+    const cls = `gms-op-btn gms-op-btn--primary csb-trade-observe-add${added ? ' is-added' : ''}`;
+    const label = added ? '已观察' : '观察';
+    const title = added ? '已在交易观察列表（通道突破）' : '加入统一交易观察（来源：通道突破）';
+    return `<button type="button" class="${cls}" data-row="${index}" data-code="${esc(code)}" title="${esc(title)}" ${added ? 'disabled' : ''}>${label}</button>`;
+  }
+
   function renderSignalRows(rows, opts = {}) {
     const body = document.getElementById('csbResultsBody');
     if (!body) return;
@@ -182,30 +247,118 @@
         const codeCell = r.code
           ? `<a class="stock-code gms-stock-code-link" href="${esc(analysisHref)}" target="_blank" rel="noopener noreferrer" title="打开个股分析">${esc(r.code)}</a>`
           : '';
+        const sig = signalTypeLabel(r.signal_type);
+        const sigCls = String(r.signal_type || '').toLowerCase().replace(/_/g, '-');
         const ops = [
-          `<button type="button" class="gms-op-btn csb-score-detail-toggle" data-row="${index}" title="展开/收起信号计算明细">明细</button>`,
+          observeButtonHtml(r, index),
+          `<button type="button" class="gms-op-btn csb-score-detail-toggle" data-row="${index}" title="展开/收起信号计算明细" aria-expanded="false">明细</button>`,
           `<a href="${histHref}" class="gms-op-btn" target="_blank" rel="noopener noreferrer" title="该股历史信号">历史</a>`,
         ];
         let detailHtml = '<div class="gms-score-detail-inner">明细组件未加载</div>';
         if (window.CsbScoreDetail && typeof window.CsbScoreDetail.buildHtml === 'function') {
           detailHtml = window.CsbScoreDetail.buildHtml(r);
         }
-        return `<tr data-csb-row="${index}">
+        return `<tr class="csb-signal-row" data-csb-row="${index}">
           <td class="gms-col-code">${codeCell}</td>
           <td>${esc(r.name || '')}</td>
-          <td>${esc(signalTypeLabel(r.signal_type))}</td>
-          <td>${fmt(r.score, 1)}</td>
-          <td>${fmt(r.close)}</td>
-          <td>${fmt(r.channel_lower)}</td>
-          <td>${fmt(r.channel_upper)}</td>
-          <td>${r.squeeze_days != null ? String(r.squeeze_days) : '-'}</td>
-          <td class="gms-col-actions"><div class="action-links">${ops.join('')}</div></td>
+          <td><span class="csb-signal-tag csb-signal-tag--${esc(sigCls)}">${esc(sig)}</span></td>
+          <td class="csb-num">${fmt(r.score, 1)}</td>
+          <td class="csb-num">${fmt(r.close)}</td>
+          <td class="csb-num">${fmt(r.channel_lower)}</td>
+          <td class="csb-num">${fmt(r.channel_upper)}</td>
+          <td class="csb-num">${r.squeeze_days != null ? String(r.squeeze_days) : '-'}</td>
+          <td class="gms-col-actions"><div class="action-links csb-action-links">${ops.join('')}</div></td>
         </tr>
-        <tr class="gms-score-detail-row csb-score-detail-row" data-detail-for="${index}" style="display:none;">
-          <td colspan="9" class="gms-score-detail-cell">${detailHtml}</td>
+        <tr class="gms-score-detail-row csb-score-detail-row" data-detail-for="${index}" hidden>
+          <td colspan="9" class="gms-score-detail-cell csb-score-detail-cell">${detailHtml}</td>
         </tr>`;
       })
       .join('');
+  }
+
+  async function addTradeObserve(rowIndex, btnEl) {
+    const row = lastSignalRows[rowIndex];
+    if (!row || !row.code) {
+      toast('未找到该行信号数据，请刷新筛选后重试', 'warning');
+      return;
+    }
+    const user = (window.CommonUtils && CommonUtils.auth) ? CommonUtils.auth.getUserInfo() : null;
+    if (!user || !user.id) {
+      toast('请先登录后再加入交易观察', 'warning');
+      window.location.href = 'login.html';
+      return;
+    }
+    const code = String(row.code || '').trim();
+    const key = observeKey(code);
+    if (isObserved(code)) {
+      toast('已在交易观察列表中', 'info');
+      if (btnEl) {
+        btnEl.textContent = '已观察';
+        btnEl.classList.add('is-added');
+        btnEl.disabled = true;
+      }
+      return;
+    }
+    try {
+      if (btnEl) {
+        btnEl.disabled = true;
+        btnEl.textContent = '加入中...';
+      }
+      await api('/api/stock/trade-observe/add', {
+        method: 'POST',
+        body: JSON.stringify({
+          code,
+          market: 'CN',
+          name: row.name || code,
+          source: 'csb',
+          signal_date: resolveSignalDate(row),
+          snapshot: buildObserveSnapshot(row),
+          extra: {
+            source: 'csb',
+            signal_type: row.signal_type || null,
+            entry_kind: row.entry_kind || null,
+          },
+        }),
+      });
+      if (key) observeCodeSet.add(key);
+      toast(`已加入交易观察：${row.name || code}`, 'success');
+      if (btnEl) {
+        btnEl.textContent = '已观察';
+        btnEl.classList.add('is-added');
+        btnEl.disabled = true;
+        btnEl.title = '已在交易观察列表（通道突破）';
+      }
+    } catch (e) {
+      toast(e.message || '加入交易观察失败', 'error');
+      await loadObserveCodes();
+      const still = isObserved(code);
+      if (btnEl) {
+        if (still) {
+          btnEl.textContent = '已观察';
+          btnEl.classList.add('is-added');
+          btnEl.disabled = true;
+        } else {
+          btnEl.textContent = '观察';
+          btnEl.classList.remove('is-added');
+          btnEl.disabled = false;
+        }
+      }
+    }
+  }
+
+  function toggleDetail(rowIndex, btnEl) {
+    const tbody = document.getElementById('csbResultsBody');
+    const detailRow = tbody?.querySelector(`tr.csb-score-detail-row[data-detail-for="${rowIndex}"]`);
+    const signalRow = tbody?.querySelector(`tr.csb-signal-row[data-csb-row="${rowIndex}"]`);
+    if (!detailRow) return;
+    const willShow = detailRow.hasAttribute('hidden');
+    detailRow.toggleAttribute('hidden', !willShow);
+    if (btnEl) {
+      btnEl.classList.toggle('active', willShow);
+      btnEl.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+      btnEl.textContent = willShow ? '收起' : '明细';
+    }
+    if (signalRow) signalRow.classList.toggle('is-detail-open', willShow);
   }
 
   async function refreshSignals() {
@@ -214,6 +367,9 @@
     showErr('');
     if (loading) loading.style.display = 'flex';
     try {
+      if (!observeCodesLoaded) {
+        await loadObserveCodes();
+      }
       const scope = document.getElementById('csbScope').value || 'market';
       const date = document.getElementById('csbDate').value || '';
       const entryOnly = document.getElementById('csbEntryOnly').checked;
@@ -322,6 +478,7 @@
     if (!root) return;
 
     syncScopeUI();
+    void loadObserveCodes();
     document.getElementById('csbScope')?.addEventListener('change', () => syncScopeUI());
     document.getElementById('csbRefreshBtn')?.addEventListener('click', () => refreshSignals());
     document.getElementById('csbStockCode')?.addEventListener('keydown', (e) => {
@@ -332,16 +489,20 @@
       refreshSignals();
     });
     document.getElementById('csbResultsBody')?.addEventListener('click', (e) => {
+      const observeBtn = e.target.closest('.csb-trade-observe-add');
+      if (observeBtn) {
+        e.preventDefault();
+        const rowIndex = parseInt(observeBtn.getAttribute('data-row') || '-1', 10);
+        if (Number.isFinite(rowIndex) && rowIndex >= 0) {
+          void addTradeObserve(rowIndex, observeBtn);
+        }
+        return;
+      }
       const detailBtn = e.target.closest('.csb-score-detail-toggle');
       if (!detailBtn) return;
       e.preventDefault();
       const rowIndex = detailBtn.getAttribute('data-row');
-      const tbody = document.getElementById('csbResultsBody');
-      const detailRow = tbody?.querySelector(`tr.csb-score-detail-row[data-detail-for="${rowIndex}"]`);
-      if (!detailRow) return;
-      const show = detailRow.style.display === 'none' || !detailRow.style.display;
-      detailRow.style.display = show ? 'table-row' : 'none';
-      detailBtn.classList.toggle('active', show);
+      toggleDetail(rowIndex, detailBtn);
     });
   }
 

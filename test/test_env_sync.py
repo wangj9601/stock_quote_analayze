@@ -70,10 +70,12 @@ def test_expand_modules_granular():
     assert expand_modules(["fund_flow"]) == [
         "stock_fund_flow_daily",
         "stock_fund_flow_daily_hk",
+        "stock_fund_flow_em_daily",
     ]
     assert expand_modules(["fund_info"]) == [
         "stock_fund_flow_daily",
         "stock_fund_flow_daily_hk",
+        "stock_fund_flow_em_daily",
     ]
     assert expand_modules(["stock_fund_flow_daily"]) == ["stock_fund_flow_daily"]
     assert "rs_ratings" in expand_modules(["computed_results"])
@@ -100,6 +102,7 @@ def test_expand_modules_granular():
     assert needs_date_range(["historical_quotes"]) is True
     assert needs_date_range(["stock_fund_flow_daily"]) is True
     assert needs_date_range(["stock_fund_flow_daily_hk"]) is True
+    assert needs_date_range(["stock_fund_flow_em_daily"]) is True
     assert needs_date_range(["rs_ratings"]) is True
     assert needs_date_range(["board_fund_flow_daily"]) is True
     assert needs_date_range(["stock_adj_factor"]) is False
@@ -111,6 +114,7 @@ def test_expand_modules_granular():
     assert "stock_fina_indicator" in ALL_RESOURCES
     assert "stock_fund_flow_daily" in ALL_RESOURCES
     assert "stock_fund_flow_daily_hk" in ALL_RESOURCES
+    assert "stock_fund_flow_em_daily" in ALL_RESOURCES
     assert "rs_ratings" in ALL_RESOURCES
     assert "market_daily_review" in ALL_RESOURCES
     assert "stock_adj_factor" not in expand_modules(None)
@@ -474,6 +478,145 @@ def test_computed_results_require_date_and_roundtrip(db):
     assert result2["created"] == 0
     assert result2["updated"] >= 4
     assert db.query(RSRatings).count() == 1
+
+
+def test_import_market_review_json_fields(db):
+    """复盘 jsonb 列须序列化后再写入，避免 PostgreSQL can't adapt dict / text[] 错型。"""
+    import json
+
+    from sqlalchemy import text
+
+    from backend_api.env_sync.bundle import empty_result
+    from backend_api.env_sync.services.computed_data import (
+        MAINLINE_FIELDS,
+        MAINLINE_JSON_FIELDS,
+        REVIEW_FIELDS,
+        REVIEW_JSON_FIELDS,
+        _import_raw_upsert,
+        _json_bind,
+    )
+
+    assert isinstance(_json_bind({"a": 1}), str)
+    assert json.loads(_json_bind(["涨幅Top15"])) == ["涨幅Top15"]
+    assert _json_bind(None) is None
+
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS market_daily_review (
+                trade_date VARCHAR(10) PRIMARY KEY,
+                vol_trillion FLOAT,
+                limit_up_count INTEGER,
+                cb_count INTEGER,
+                height INTEGER,
+                prev_cb_return FLOAT,
+                lo_value FLOAT,
+                hi_value FLOAT,
+                sp_value FLOAT,
+                lo_percentile FLOAT,
+                hi_percentile FLOAT,
+                sp_percentile FLOAT,
+                limit_source VARCHAR(32),
+                hard_gates TEXT,
+                season VARCHAR(16),
+                season_detail TEXT,
+                rules_json TEXT,
+                mainline_json TEXT,
+                viewpoint_md TEXT,
+                advice_md TEXT,
+                viewpoint_override BOOLEAN DEFAULT 0,
+                advice_override BOOLEAN DEFAULT 0,
+                computed_at TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS market_daily_mainline_hits (
+                trade_date VARCHAR(10) NOT NULL,
+                board_type VARCHAR(16) NOT NULL,
+                board_code VARCHAR(32) NOT NULL,
+                board_name VARCHAR(100),
+                hit BOOLEAN NOT NULL DEFAULT 1,
+                hit_reasons TEXT,
+                change_percent FLOAT,
+                limit_up_count INTEGER,
+                net_inflow FLOAT,
+                created_at TIMESTAMP,
+                PRIMARY KEY (trade_date, board_type, board_code)
+            )
+            """
+        )
+    )
+    db.commit()
+
+    result = empty_result()
+    _import_raw_upsert(
+        db,
+        "market_daily_review",
+        conflict_cols=["trade_date"],
+        fields=REVIEW_FIELDS,
+        rows=[
+            {
+                "trade_date": "2026-09-30",
+                "vol_trillion": 1.44,
+                "limit_up_count": 52,
+                "cb_count": 12,
+                "height": 7,
+                "hard_gates": {"rate": "1/5", "passed": 1},
+                "season": "夏",
+                "season_detail": {"season": "夏", "cb": 12},
+                "rules_json": {"tape": {"label": "平量观察"}},
+                "mainline_json": {"rows": [], "count": 0},
+                "viewpoint_md": "test",
+                "advice_md": "test",
+                "viewpoint_override": False,
+                "advice_override": False,
+                "computed_at": "2026-09-30 15:52:36",
+                "updated_at": "2026-09-30 15:52:36",
+            }
+        ],
+        result=result,
+        json_fields=set(REVIEW_JSON_FIELDS),
+    )
+    assert not result["errors"], result["errors"]
+
+    _import_raw_upsert(
+        db,
+        "market_daily_mainline_hits",
+        conflict_cols=["trade_date", "board_type", "board_code"],
+        fields=MAINLINE_FIELDS,
+        rows=[
+            {
+                "trade_date": "2026-09-30",
+                "board_type": "concept",
+                "board_code": "885927",
+                "board_name": "CRO概念",
+                "hit": True,
+                "hit_reasons": ["涨幅Top15", "资金流Top10"],
+                "change_percent": 3.4,
+                "created_at": "2026-09-30 15:52:31",
+            }
+        ],
+        result=result,
+        json_fields=set(MAINLINE_JSON_FIELDS),
+    )
+    assert not result["errors"], result["errors"]
+
+    hg = db.execute(
+        text("SELECT hard_gates FROM market_daily_review WHERE trade_date = '2026-09-30'")
+    ).scalar()
+    hr = db.execute(
+        text(
+            "SELECT hit_reasons FROM market_daily_mainline_hits "
+            "WHERE trade_date = '2026-09-30' AND board_code = '885927'"
+        )
+    ).scalar()
+    assert json.loads(hg)["rate"] == "1/5"
+    assert json.loads(hr) == ["涨幅Top15", "资金流Top10"]
 
 
 def test_iter_computed_results_push_chunks():

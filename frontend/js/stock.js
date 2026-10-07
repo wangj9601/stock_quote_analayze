@@ -50,6 +50,7 @@ const StockPage = {
     minuteChart: null,
     profitChart: null,
     flowChart: null,
+    flowEmChart: null,
     currentTab: 'analysis',
     currentChartType: 'kline',
     currentPeriod: '1d',
@@ -427,6 +428,7 @@ const StockPage = {
         // 切换到资金流向tab时，resize图表
         if (tabId === 'flow' && this.flowChart) {
             this.flowChart.resize();
+            if (this.flowEmChart) this.flowEmChart.resize();
         }
         // 根据标签加载相应数据
         this.loadTabData(tabId);
@@ -1051,6 +1053,25 @@ const StockPage = {
         };
 
         this.flowChart.setOption(option);
+        this.initFlowEmChart();
+    },
+
+    initFlowEmChart() {
+        const chartDom = document.getElementById('flowEmChart');
+        if (!chartDom || typeof echarts === 'undefined') return;
+        this.flowEmChart = echarts.init(chartDom);
+        this.flowEmChart.setOption({
+            backgroundColor: '#161c24',
+            grid: { left: '10%', right: '8%', top: '14%', bottom: '15%' },
+            xAxis: [{ type: 'category', data: [] }],
+            yAxis: [{ type: 'value', name: '金额(亿)' }],
+            series: [
+                { name: '主力净流入', type: 'bar', data: [], itemStyle: { color: '#c23b3b' } },
+                { name: '大单净流入', type: 'line', data: [], itemStyle: { color: '#e6a23c' } },
+            ],
+            tooltip: { trigger: 'axis' },
+            legend: { data: ['主力净流入', '大单净流入'] },
+        });
     },
 
     // 调整图表大小
@@ -1062,6 +1083,7 @@ const StockPage = {
                 this.minuteChart.resize();
             } else if (chartType === 'flow' && this.flowChart) {
                 this.flowChart.resize();
+                if (this.flowEmChart) this.flowEmChart.resize();
             }
         }, 100);
     },
@@ -2830,9 +2852,98 @@ const StockPage = {
                     { name: '净流入', data: net },
                 ],
             });
+            await this.loadEmFlowData();
         } catch (e) {
             console.error(e);
             CommonUtils.showToast('资金流向请求异常', 'error');
+        }
+    },
+
+    async loadEmFlowData() {
+        const emSection = document.getElementById('flowEmSection');
+        const summaryEl = document.getElementById('flowEmMfeSummary');
+        const hintEl = document.getElementById('flowEmHint');
+        if (!this.flowEmChart && document.getElementById('flowEmChart')) {
+            this.initFlowEmChart();
+        }
+        if (!this.flowEmChart) return;
+        const fmtYi = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return null;
+            return Number(v) / 1e8;
+        };
+        try {
+            const [emResp, mfeResp] = await Promise.all([
+                fetch(`${API_BASE_URL}/api/stock_fund_flow/em/daily?code=${encodeURIComponent(this.stockCode)}&days=60`),
+                fetch(`${API_BASE_URL}/api/stock_fund_flow/main_force_entry?code=${encodeURIComponent(this.stockCode)}&days=60`),
+            ]);
+            const emPayload = await emResp.json();
+            const mfePayload = await mfeResp.json();
+            if (!emPayload.success || !emPayload.data) {
+                if (emSection) emSection.style.opacity = '0.7';
+                if (hintEl) hintEl.textContent = (emPayload && emPayload.message) || '暂无东财分档数据（需日终采集或回填）';
+                this.flowEmChart.setOption({
+                    xAxis: [{ data: [] }],
+                    series: [{ name: '主力净流入', data: [] }, { name: '大单净流入', data: [] }],
+                });
+                if (summaryEl) summaryEl.style.display = 'none';
+                return;
+            }
+            if (emSection) emSection.style.opacity = '1';
+            const series = Array.isArray(emPayload.data.series) ? emPayload.data.series : [];
+            const dates = series.map((r) => r.trade_date || '');
+            const main = series.map((r) => {
+                const y = fmtYi(r.main_net_inflow);
+                return y == null ? null : Number(y.toFixed(4));
+            });
+            const large = series.map((r) => {
+                const y = fmtYi(r.large_net_inflow);
+                return y == null ? null : Number(y.toFixed(4));
+            });
+
+            let markArea = [];
+            let mfeText = '';
+            if (mfePayload.success && mfePayload.data) {
+                const d = mfePayload.data;
+                const w = d.latest_window;
+                if (w && w.start_date && w.end_date) {
+                    markArea = [
+                        [
+                            { xAxis: w.start_date, itemStyle: { color: 'rgba(194, 59, 59, 0.12)' } },
+                            { xAxis: w.end_date },
+                        ],
+                    ];
+                }
+                const fmtPx = (v) => (v == null || Number.isNaN(Number(v)) ? '--' : Number(v).toFixed(2));
+                const fmtY = (v) => {
+                    if (v == null || Number.isNaN(Number(v))) return '--';
+                    const yi = Number(v) / 1e8;
+                    return `${yi > 0 ? '+' : ''}${yi.toFixed(2)}亿`;
+                };
+                mfeText = `结论：${d.verdict_label || d.verdict || '--'}`
+                    + (w ? ` · 窗口 ${w.start_date}~${w.end_date} · 成本重心 ${fmtPx(w.cost_center)} · 窗口净额 ${fmtY(w.main_net_sum)}` : '')
+                    + ` · ${d.disclaimer || ''}`;
+            }
+            if (summaryEl) {
+                if (mfeText) {
+                    summaryEl.style.display = 'block';
+                    summaryEl.textContent = mfeText;
+                } else {
+                    summaryEl.style.display = 'none';
+                }
+            }
+            if (hintEl) {
+                hintEl.textContent = '口径：东财订单分档（非机构身份）。高亮区间为最近入场窗口。';
+            }
+            this.flowEmChart.setOption({
+                xAxis: [{ data: dates }],
+                series: [
+                    { name: '主力净流入', data: main, markArea: { silent: true, data: markArea } },
+                    { name: '大单净流入', data: large },
+                ],
+            });
+        } catch (e) {
+            console.error(e);
+            if (hintEl) hintEl.textContent = '东财主力分档加载失败';
         }
     },
 

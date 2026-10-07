@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from datetime import date, datetime
@@ -122,6 +123,24 @@ MAINLINE_FIELDS = [
     "net_inflow",
     "created_at",
 ]
+
+# PostgreSQL jsonb 列：绑定参数须 json 文本 + CAST(... AS jsonb)
+# （与 backend_core.market_review.compute 写入路径一致；dict/list 不能直接适配）
+REVIEW_JSON_FIELDS = frozenset(
+    {"hard_gates", "season_detail", "rules_json", "mainline_json"}
+)
+MAINLINE_JSON_FIELDS = frozenset({"hit_reasons"})
+
+
+def _json_bind(value: Any) -> Any:
+    """将 dict/list 序列化为 JSON 字符串，供 CAST(:x AS jsonb) 使用。"""
+    if value is None:
+        return None
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, default=str)
 
 
 def max_computed_sync_days() -> int:
@@ -465,6 +484,7 @@ def _import_raw_upsert(
     fields: List[str],
     rows: List[Dict[str, Any]],
     result: Dict[str, Any],
+    json_fields: Optional[Set[str]] = None,
 ) -> None:
     if not table_exists(db, table):
         result["errors"].append(f"{table}: 目标库缺少表，请先执行迁移")
@@ -472,6 +492,7 @@ def _import_raw_upsert(
     if not rows:
         return
 
+    json_cols = set(json_fields or ())
     bind = db.get_bind()
     dialect = getattr(getattr(bind, "dialect", None), "name", "") or ""
     prepared: List[Dict[str, Any]] = []
@@ -485,6 +506,8 @@ def _import_raw_upsert(
                 break
             if f.endswith("_at") or f in ("computed_at", "updated_at", "collected_at"):
                 v = parse_dt(v)
+            elif f in json_cols:
+                v = _json_bind(v)
             row[f] = v
         if not ok:
             result["skipped"] += 1
@@ -494,9 +517,14 @@ def _import_raw_upsert(
     if not prepared:
         return
 
+    def _ph(f: str) -> str:
+        if dialect == "postgresql" and f in json_cols:
+            return f"CAST(:{f} AS jsonb)"
+        return f":{f}"
+
     if dialect == "postgresql":
         col_list = ", ".join(fields)
-        placeholders = ", ".join(f":{f}" for f in fields)
+        placeholders = ", ".join(_ph(f) for f in fields)
         updates = [f for f in fields if f not in conflict_cols]
         set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in updates) if updates else ""
         conflict = ", ".join(conflict_cols)
@@ -524,7 +552,7 @@ def _import_raw_upsert(
                 result["errors"].append(f"{table} bulk@{i}: {e}")
         return
 
-    # SQLite / 其它：逐行
+    # SQLite / 其它：逐行（json 列存文本）
     for row in prepared:
         try:
             with db.begin_nested():
@@ -768,6 +796,7 @@ def import_computed_results(
             fields=REVIEW_FIELDS,
             rows=items.get("market_daily_review") or [],
             result=result,
+            json_fields=set(REVIEW_JSON_FIELDS),
         )
 
     if "market_daily_mainline_hits" in want:
@@ -778,6 +807,7 @@ def import_computed_results(
             fields=MAINLINE_FIELDS,
             rows=items.get("market_daily_mainline_hits") or [],
             result=result,
+            json_fields=set(MAINLINE_JSON_FIELDS),
         )
 
     if "stock_recommend_brief" in want:

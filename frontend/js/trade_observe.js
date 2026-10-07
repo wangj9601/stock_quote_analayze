@@ -8,6 +8,7 @@ const UnifiedTradeObserve = {
         urt: 'URT',
         sbbr: 'SBBR',
         rpe: 'RPE',
+        csb: '通道突破',
         triple_volume: '3倍量',
         stock_analysis: '个股分析',
         gann_trend: '江恩趋势',

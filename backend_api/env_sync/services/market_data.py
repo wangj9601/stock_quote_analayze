@@ -25,6 +25,7 @@ from backend_api.models import (
     StockFinaIndicator,
     StockFundFlowDaily,
     StockFundFlowDailyHK,
+    StockFundFlowEmDaily,
 )
 from backend_api.utils.board_code_source import (
     DEFAULT_BOARD_CODE_SOURCE,
@@ -32,7 +33,11 @@ from backend_api.utils.board_code_source import (
 )
 
 QUOTE_TABLES = ("historical_quotes", "historical_quotes_hk")
-FUND_FLOW_TABLES = ("stock_fund_flow_daily", "stock_fund_flow_daily_hk")
+FUND_FLOW_TABLES = (
+    "stock_fund_flow_daily",
+    "stock_fund_flow_daily_hk",
+    "stock_fund_flow_em_daily",
+)
 ADJ_FACTOR_TABLES = ("stock_adj_factor",)
 FINA_TABLES = ("stock_fina_indicator",)
 BASIC_TABLES = ("stock_basic_info", "stock_basic_info_hk")
@@ -65,6 +70,26 @@ CN_FUND_FLOW_FIELDS = [
     "change_percent",
     "turnover_rate",
     "current_price",
+    "source",
+    "created_at",
+    "updated_at",
+]
+
+EM_FUND_FLOW_FIELDS = [
+    "code",
+    "trade_date",
+    "main_net_inflow",
+    "main_net_inflow_pct",
+    "super_large_net_inflow",
+    "super_large_net_inflow_pct",
+    "large_net_inflow",
+    "large_net_inflow_pct",
+    "mid_net_inflow",
+    "mid_net_inflow_pct",
+    "small_net_inflow",
+    "small_net_inflow_pct",
+    "close_price",
+    "change_percent",
     "source",
     "created_at",
     "updated_at",
@@ -1438,9 +1463,72 @@ def export_fund_flow(
             _row_dict(r, HK_FUND_FLOW_FIELDS) for r in q.all()
         ]
 
+    if "stock_fund_flow_em_daily" in want:
+        q = (
+            db.query(StockFundFlowEmDaily)
+            .filter(
+                StockFundFlowEmDaily.trade_date >= sd,
+                StockFundFlowEmDaily.trade_date <= ed,
+            )
+            .order_by(StockFundFlowEmDaily.trade_date, StockFundFlowEmDaily.code)
+        )
+        items["stock_fund_flow_em_daily"] = [
+            _row_dict(r, EM_FUND_FLOW_FIELDS) for r in q.all()
+        ]
+
     bundle = make_bundle(module="fund_flow", items=items, env_label=env_label)
     bundle["date_range"] = meta
     return bundle
+
+
+def _prepare_em_fund_flow_rows(
+    raw_rows: List[Dict],
+    result: Dict[str, Any],
+    *,
+    table: str = "stock_fund_flow_em_daily",
+) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    float_keys = [
+        "main_net_inflow",
+        "main_net_inflow_pct",
+        "super_large_net_inflow",
+        "super_large_net_inflow_pct",
+        "large_net_inflow",
+        "large_net_inflow_pct",
+        "mid_net_inflow",
+        "mid_net_inflow_pct",
+        "small_net_inflow",
+        "small_net_inflow_pct",
+        "close_price",
+        "change_percent",
+    ]
+    for raw in raw_rows:
+        code = str(raw.get("code") or "").strip()
+        trade_date = str(raw.get("trade_date") or "").strip()[:10]
+        if not code or not trade_date:
+            result["skipped"] += 1
+            continue
+
+        def _f(key: str) -> Optional[float]:
+            v = raw.get(key)
+            if v is None or v == "":
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        row: Dict[str, Any] = {
+            "code": code,
+            "trade_date": trade_date,
+            "source": (str(raw.get("source") or "").strip() or "em"),
+            "created_at": parse_dt(raw.get("created_at")),
+            "updated_at": parse_dt(raw.get("updated_at")),
+        }
+        for k in float_keys:
+            row[k] = _f(k)
+        prepared.append({k: row.get(k) for k in EM_FUND_FLOW_FIELDS})
+    return prepared
 
 
 def _prepare_fund_flow_rows(
@@ -1616,6 +1704,32 @@ def import_fund_flow(
                     prepared,
                     result,
                     table="stock_fund_flow_daily_hk",
+                )
+                db.commit()
+
+    if "stock_fund_flow_em_daily" in want:
+        prepared = _prepare_em_fund_flow_rows(
+            items.get("stock_fund_flow_em_daily") or [],
+            result,
+            table="stock_fund_flow_em_daily",
+        )
+        if prepared:
+            if is_pg:
+                _import_fund_flow_pg_bulk(
+                    db,
+                    prepared,
+                    EM_FUND_FLOW_FIELDS,
+                    result,
+                    table="stock_fund_flow_em_daily",
+                    model=StockFundFlowEmDaily,
+                )
+            else:
+                _import_fund_flow_orm(
+                    db,
+                    StockFundFlowEmDaily,
+                    prepared,
+                    result,
+                    table="stock_fund_flow_em_daily",
                 )
                 db.commit()
 

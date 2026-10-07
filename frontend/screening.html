@@ -6,12 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>选股 - 股票分析</title>
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/design-tokens.css?v=20260925u">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20261007a">
     <link rel="stylesheet" href="css/ops-shell.css">
-    <link rel="stylesheet" href="css/ops-data.css?v=20260925u">
+    <link rel="stylesheet" href="css/ops-data.css?v=20261007a">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/screening.css?v=20260925u">
-    <link rel="stylesheet" href="css/screening-ops.css?v=20260925u">
+    <link rel="stylesheet" href="css/screening.css?v=20261007-csb">
+    <link rel="stylesheet" href="css/screening-ops.css?v=20261007-csb">
     <link rel="stylesheet" href="css/ops-surfaces.css?v=20260925u">
 </head>
 
@@ -2041,7 +2041,7 @@
 
         <div id="csb-content" class="strategy-content" data-perm="channel.screening.tab.csb">
             <div class="gms-integrated-head">
-                <p class="gms-integrated-hint">CSB 通道粘合突破：MA 粘合 SETUP → 试探 PROBE / 突破 BREAKOUT 入场；全市场建议勾选「优先读预计算」或缩小至自选/板块/个股。</p>
+                <p class="gms-integrated-hint">CSB 通道粘合突破：MA 粘合 SETUP → 试探 PROBE / 突破 BREAKOUT / 回踩 LPS；列表「观察」写入统一交易观察（来源：通道突破）。全市场建议勾选「优先读预计算」或缩小至自选/板块/个股。</p>
             </div>
             <div class="params-section">
                 <div class="param-group">
@@ -2065,6 +2065,7 @@
                         <option value="CSB_SETUP">SETUP</option>
                         <option value="CSB_PROBE">PROBE</option>
                         <option value="CSB_BREAKOUT">BREAKOUT</option>
+                        <option value="CSB_LPS">LPS</option>
                     </select>
                 </div>
                 <div class="param-group">
@@ -2088,7 +2089,7 @@
                     <span class="param-field-hint">输入后按 Enter 或点「刷新筛选」</span>
                 </div>
                 <span id="csbSearchMeta" class="gms-meta-text"></span>
-                <span id="csbDataDateHint" class="gms-meta-text" style="margin-left:8px;color:#64748b;"></span>
+                <span id="csbDataDateHint" class="gms-meta-text csb-data-date-hint"></span>
             </div>
             <div id="csbIndustryBoardWrap" class="rpe-board-wrap" style="display:none;">
                 <span class="rpe-board-wrap-label">行业板块：</span>
@@ -2105,22 +2106,22 @@
                 </div>
             </div>
             <div id="csbBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
-            <div id="csbCnBoardWrap" style="display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:8px 0 4px 0;"
+            <div id="csbCnBoardWrap" class="csb-cn-board-wrap"
                 title="可多选；不勾选表示不限 A 股板型（等同全部）。">
-                <span style="color:#666; font-size:13px;">A股板型（可多选）：</span>
-                <label style="cursor:pointer;"><input type="checkbox" name="csbCnBoardSegment" value="MAIN" style="margin-right:5px;">主板</label>
-                <label style="cursor:pointer;"><input type="checkbox" name="csbCnBoardSegment" value="CYB" style="margin-right:5px;">创业板</label>
-                <label style="cursor:pointer;"><input type="checkbox" name="csbCnBoardSegment" value="SZ_SME" style="margin-right:5px;">中小板</label>
-                <label style="cursor:pointer;"><input type="checkbox" name="csbCnBoardSegment" value="KCB" style="margin-right:5px;">科创板</label>
-                <label style="cursor:pointer;"><input type="checkbox" name="csbCnBoardSegment" value="BJ" style="margin-right:5px;">北证</label>
-                <span style="color:#888; font-size:12px;">不选=不限板型</span>
+                <span class="csb-cn-board-label">A股板型（可多选）</span>
+                <label class="csb-cn-board-opt"><input type="checkbox" name="csbCnBoardSegment" value="MAIN">主板</label>
+                <label class="csb-cn-board-opt"><input type="checkbox" name="csbCnBoardSegment" value="CYB">创业板</label>
+                <label class="csb-cn-board-opt"><input type="checkbox" name="csbCnBoardSegment" value="SZ_SME">中小板</label>
+                <label class="csb-cn-board-opt"><input type="checkbox" name="csbCnBoardSegment" value="KCB">科创板</label>
+                <label class="csb-cn-board-opt"><input type="checkbox" name="csbCnBoardSegment" value="BJ">北证</label>
+                <span class="csb-cn-board-hint">不选=不限板型</span>
             </div>
             <div id="csbLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
             <div id="csbError" class="error-message" style="display:none;"></div>
-            <div class="results-container">
+            <div class="results-container csb-results-container">
                 <div class="results-header"><span id="csbResultsCount">共 0 只</span></div>
                 <div class="results-table-wrapper">
-                    <table class="results-table">
+                    <table class="results-table csb-results-table">
                         <thead>
                             <tr>
                                 <th>代码</th><th>名称</th><th>信号类型</th><th>得分</th><th>收盘</th>
@@ -2409,14 +2410,14 @@
     <script src="js/urt_score_detail.js"></script>
     <script src="js/rpe_score_detail.js"></script>
     <script src="js/sbbr_score_detail.js"></script>
-    <script src="js/csb_score_detail.js"></script>
+    <script src="js/csb_score_detail.js?v=20261007-csb"></script>
     <script src="js/board_roles_panel.js"></script>
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_trade_link.js?v=20260917a"></script>
     <script src="js/screening.js?v=20260928-urt-precompute"></script>
     <script src="js/sbbr_screening.js?v=20260918a"></script>
     <script src="js/rpe_screening.js?v=20260917a"></script>
-    <script src="js/csb_screening.js?v=20260915c"></script>
+    <script src="js/csb_screening.js?v=20261007-csb"></script>
 
     <!-- 比价效应：顶/底滚动（双圆形 FAB，仅 RPE Tab） -->
     <div class="rpe-scroll-fab" id="rpeScrollFab" data-scroll-fab hidden aria-hidden="true" aria-label="页面快速滚动">

@@ -580,6 +580,33 @@ body.ops-map .ssa-leader-board-meta {
     color: var(--ops-ink-muted) !important;
 }
 
+body.ops-map .ssa-mfe-import {
+    background: var(--ops-surface-inset) !important;
+    border: 1px solid var(--color-border) !important;
+    box-shadow: none !important;
+}
+body.ops-map .ssa-mfe-import-lead,
+body.ops-map .ssa-mfe-import-status,
+body.ops-map .ssa-mfe-empty .ssa-fund-flow-hint {
+    color: var(--ops-ink-muted) !important;
+}
+body.ops-map .ssa-mfe-empty p,
+body.ops-map .ssa-mfe-import-label,
+body.ops-map .ssa-mfe-verdict {
+    color: var(--ops-ink) !important;
+}
+body.ops-map .ssa-mfe-import select,
+body.ops-map .ssa-mfe-import textarea {
+    background: rgba(0, 0, 0, 0.28) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+    color-scheme: dark;
+}
+body.ops-map .ssa-mfe-import-tpl {
+    color: var(--ops-route) !important;
+}
+
 body.ops-map .ssa-form input,
 body.ops-map .ssa-form select,
 body.ops-map .ssa-toolbar input[type="date"] {

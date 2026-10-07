@@ -76,6 +76,42 @@
       <div class="ssa-block-status" id="ssaFundFlowStatus"></div>
       <div class="ssa-fund-flow-host" id="ssaFundFlowHost"></div>
     </section>
+    <section class="ssa-block" id="ssaMainForceBlock" hidden>
+      <div class="ssa-block-header">
+        <h4 class="ssa-block-title">主力入场</h4>
+        <div class="ssa-main-force-actions">
+          <button type="button" class="btn btn-secondary btn-sm" id="ssaMainForceFetchBtn"
+            title="先东财，失败则 Tushare moneyflow">拉取数据</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="ssaMainForceImportToggle">导入数据</button>
+        </div>
+      </div>
+      <div class="ssa-mfe-import" id="ssaMainForceImportPanel" hidden>
+        <p class="ssa-mfe-import-lead">东财分档表（金额默认元）或 Tushare moneyflow 导出（万元，自动识别 buy_elg_amount 等列）。同花顺净额不能替代。</p>
+        <div class="ssa-mfe-import-row">
+          <label class="ssa-mfe-import-label">金额单位
+            <select id="ssaMainForceImportUnit" aria-label="导入金额单位">
+              <option value="auto" selected>自动</option>
+              <option value="yuan">元</option>
+              <option value="wan">万元</option>
+              <option value="yi">亿元</option>
+            </select>
+          </label>
+          <label class="ssa-mfe-import-file">
+            <span>选择文件</span>
+            <input type="file" id="ssaMainForceImportFile" accept=".csv,.txt,.xlsx,.xls,.json">
+          </label>
+          <a class="ssa-mfe-import-tpl" id="ssaMainForceImportTpl" href="#">下载模板</a>
+        </div>
+        <textarea id="ssaMainForceImportText" rows="6" placeholder="或在此粘贴 CSV / JSON…"></textarea>
+        <div class="ssa-mfe-import-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="ssaMainForceImportSubmit">写入并重算</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="ssaMainForceImportCancel">取消</button>
+        </div>
+        <p class="ssa-mfe-import-status" id="ssaMainForceImportStatus" hidden></p>
+      </div>
+      <div class="ssa-block-status" id="ssaMainForceStatus"></div>
+      <div class="ssa-main-force-host" id="ssaMainForceHost"></div>
+    </section>
     <section class="ssa-block" id="ssaAuctionBlock" hidden>
       <h4 class="ssa-block-title">集合竞价</h4>
       <div class="ssa-block-status" id="ssaAuctionStatus"></div>

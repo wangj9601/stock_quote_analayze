@@ -7,9 +7,9 @@
     <title>个股详情 - 股票分析</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/design-tokens.css?v=20260925q">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20261007a">
     <link rel="stylesheet" href="css/ops-shell.css">
-    <link rel="stylesheet" href="css/ops-data.css?v=20260925q">
+    <link rel="stylesheet" href="css/ops-data.css?v=20261007a">
     <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/stock.css">
     <link rel="stylesheet" href="css/analysis.css?v=20260919a">
@@ -327,7 +327,7 @@
                         </div>
                     </div>
 
-                    <!-- 资金流向（本地入库：A股/港股日表） -->
+                    <!-- 资金流向（本地入库：A股/港股日表 + 东财主力分档） -->
                     <div class="tab-panel" id="flow">
                         <div class="flow-summary">
                             <div class="flow-item">
@@ -349,6 +349,14 @@
                         </div>
                         <div class="flow-chart">
                             <div id="flowChart" style="height: 400px;"></div>
+                        </div>
+                        <div class="flow-em-section" id="flowEmSection">
+                            <h4 class="flow-em-title">东财主力 / 大单净流入</h4>
+                            <p class="flow-em-hint" id="flowEmHint">口径：东财订单分档（非机构身份）。高亮区间为最近入场窗口。</p>
+                            <div id="flowEmMfeSummary" class="flow-em-mfe" style="display:none;"></div>
+                            <div class="flow-chart">
+                                <div id="flowEmChart" style="height: 360px;"></div>
+                            </div>
                         </div>
                     </div>
 

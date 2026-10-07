@@ -11,16 +11,17 @@ Create Date: 2026-10-07
 它的唯一作用是给版本账本定一个起点。原因：本项目在引入 Alembic 之前，
 schema 已经由两条历史路径建好：
 
-1. ``backend_api.models.Base.metadata.create_all()``（见 ``init_db.py``）—— 130 张表；
-2. ``migrations/*.py`` 里 84 个手写 SQL 脚本 —— 其中约 44 张表只有 SQL、没有 ORM 声明。
+1. ``backend_api.models.Base.metadata.create_all()``（见 ``init_db.py``）—— 125 张表；
+2. ``migrations/*.py`` 里 84 个手写脚本 —— 其中约 44 张表只有 SQL、没有 ORM 声明。
 
 既有库（引入时 171 张表）因此 **不需要、也不能** 再执行一遍建表 DDL，否则会
 ``DuplicateTable`` 报错。正确做法是「打标」而非「升级」：
 
-    .venv/Scripts/alembic.exe stamp 0001_baseline
+    python init_db.py --stamp     # 只写账本，不执行 DDL
 
 打标后 ``alembic_version`` 表记录 ``0001_baseline``，后续所有变更从 ``0002`` 起
-以增量方式接管。全新空库则是：先 ``python init_db.py`` 建好现状，再 stamp 本基线。
+以增量方式接管。全新空库则由 ``python init_db.py`` 一条命令完成
+（``create_all`` → 历史脚本 → ``stamp`` 本基线 → ``upgrade head``）。
 
 ## 为什么不做成"一次性建全表"的基线
 

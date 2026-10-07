@@ -49,6 +49,10 @@
 
     /* Selection / focus */
     --ops-focus: 0 0 0 2px var(--ops-ground), 0 0 0 4px var(--ops-gold);
+
+    /* 原生 date 日历图标：深底上提亮（Chromium/WebKit） */
+    --ops-date-picker-indicator-filter: invert(1) brightness(1.4);
+    --ops-date-picker-indicator-filter-hover: invert(1) brightness(1.65);
 }
 
 ::selection {
@@ -67,6 +71,35 @@ body.ops-map {
     color: var(--ops-ink);
     line-height: 1.5;
     font-size: 14px;
+    color-scheme: dark;
+}
+
+/* 日期/时间控件：原生日历弹出按钮在深作战板上须可读 */
+body.ops-map input[type="date"],
+body.ops-map input[type="datetime-local"],
+body.ops-map input[type="month"],
+body.ops-map input[type="week"],
+body.ops-map input[type="time"] {
+    color-scheme: dark;
+}
+
+body.ops-map input[type="date"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="month"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="week"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="time"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.92;
+    filter: var(--ops-date-picker-indicator-filter);
+}
+
+body.ops-map input[type="date"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="month"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="week"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="time"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+    filter: var(--ops-date-picker-indicator-filter-hover);
 }
 
 /* 各频道统一：无方格，仅极淡暗角（领地色除外） */

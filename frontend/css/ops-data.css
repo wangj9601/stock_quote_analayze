@@ -269,6 +269,10 @@ body.ops-map .secondary-btn {
 /* —— 输入 / 筛选条 —— */
 body.ops-map input[type="text"],
 body.ops-map input[type="date"],
+body.ops-map input[type="datetime-local"],
+body.ops-map input[type="month"],
+body.ops-map input[type="week"],
+body.ops-map input[type="time"],
 body.ops-map input[type="number"],
 body.ops-map select,
 body.ops-map textarea {
@@ -276,6 +280,15 @@ body.ops-map textarea {
     color: var(--ops-ink) !important;
     border: 1px solid rgba(217, 226, 236, 0.22) !important;
     border-radius: 2px !important;
+}
+
+/* 日历图标对比度：实现见 design-tokens.css（--ops-date-picker-indicator-*） */
+body.ops-map input[type="date"],
+body.ops-map input[type="datetime-local"],
+body.ops-map input[type="month"],
+body.ops-map input[type="week"],
+body.ops-map input[type="time"] {
+    color-scheme: dark;
 }
 
 body.ops-map input:focus,

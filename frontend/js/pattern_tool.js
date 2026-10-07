@@ -711,16 +711,16 @@ const PatternTool = {
       (/(元\/K线索引|元\/交易日|元\/枢轴)/.test(reason) ? '' : '元/K线索引(约交易日)');
     const slopeSuffix = slopeUnit ? String(slopeUnit) : '';
     if (levels.upper_slope != null && levels.upper_slope !== '') {
-      extras.push(`上沿斜率=${levels.upper_slope}${slopeSuffix}`);
+      extras.push(`上沿斜率=${this._fmtSlope(levels.upper_slope)}${slopeSuffix}`);
     } else {
       const m = reason.match(/上沿斜率=[^\s]+/);
-      if (m) extras.push(m[0]);
+      if (m) extras.push(this._fmtSlopeToken(m[0]));
     }
     if (levels.lower_slope != null && levels.lower_slope !== '') {
-      extras.push(`下沿斜率=${levels.lower_slope}${slopeSuffix}`);
+      extras.push(`下沿斜率=${this._fmtSlope(levels.lower_slope)}${slopeSuffix}`);
     } else {
       const m = reason.match(/下沿斜率=[^\s]+/);
-      if (m) extras.push(m[0]);
+      if (m) extras.push(this._fmtSlopeToken(m[0]));
     }
     return `${label}${simplified} ${parts.join(' ')}${extras.length ? ` ${extras.join(' ')}` : ''}`.trim();
   },
@@ -1401,6 +1401,19 @@ const PatternTool = {
     const x = Number(n);
     if (!Number.isFinite(x)) return '--';
     return x.toFixed(2);
+  },
+
+  /** 形态斜率展示：四舍五入到小数点后两位 */
+  _fmtSlope(n) {
+    return this._fmtPx(n);
+  },
+
+  /** 从 reason 抽出的「上/下沿斜率=…」片段：仅规整数值部分 */
+  _fmtSlopeToken(token) {
+    return String(token || '').replace(
+      /(上沿斜率|下沿斜率)=(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)/,
+      (_, label, num) => `${label}=${this._fmtSlope(num)}`
+    );
   },
 
   /** 置信度偏低或形成中 → 标注「观察中」 */

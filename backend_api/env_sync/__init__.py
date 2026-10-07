@@ -69,6 +69,7 @@ RESOURCE_QUOTES = [
 RESOURCE_FUND_FLOW = [
     "stock_fund_flow_daily",
     "stock_fund_flow_daily_hk",
+    "stock_fund_flow_em_daily",
 ]
 
 # —— 预计算 / 复盘结果（须日期范围；信号表建议先同步策略配置）——
@@ -374,6 +375,12 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
                 "code": "stock_fund_flow_daily_hk",
                 "name": "港股个股资金流",
                 "desc": "stock_fund_flow_daily_hk，按 trade_date 区间",
+                "requires_date_range": True,
+            },
+            {
+                "code": "stock_fund_flow_em_daily",
+                "name": "A股东财主力/分档资金流",
+                "desc": "stock_fund_flow_em_daily，按 trade_date 区间",
                 "requires_date_range": True,
             },
         ],

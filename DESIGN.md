@@ -87,6 +87,10 @@ components:
     textColor: "{colors.ops-ink}"
     rounded: "{rounded.panel}"
     padding: "6px 10px"
+  date-picker-indicator:
+    filter: "invert(1) brightness(1.4)"
+    filterHover: "invert(1) brightness(1.65)"
+    note: "原生 type=date 日历按钮；深底强制 color-scheme:dark + filter 提亮"
   tab-territory-active:
     backgroundColor: "{colors.ops-overlay-film}"
     textColor: "{colors.ops-gold}"
@@ -186,6 +190,8 @@ Operate 模式：顶栏（冰枫堂 + 频道）→ 可选策略叠层条 → 主
 ### Named Rules
 **The Hairline Rule.** 控件圆角 ≤ `2px`；全圆胶囊不是默认语法。
 
+**The Date Indicator Rule.** 作战板上原生日期/时间控件的日历图标必须与 `--ops-ink` 同级可读；默认浏览器深色图标不可见时，用 `color-scheme: dark` + filter 令牌统一修复，勿在各页单独糊补丁。
+
 ## Components
 
 实现落点：`frontend/css/design-tokens.css`、`ops-shell.css`、`ops-data.css`、`ops-surfaces.css`、各 `*-ops.css`。壳类名 `body.ops-map` + `data-channel`。
@@ -211,6 +217,8 @@ Operate 模式：顶栏（冰枫堂 + 频道）→ 可选策略叠层条 → 主
 - **Style:** `rgba(0,0,0,0.28)` 底 + 浅边 + 墨字
 - **Focus:** 金环 `--ops-focus`
 - **Radius:** `2px`
+- **Date / time:** `color-scheme: dark`；WebKit 日历弹出按钮用 `--ops-date-picker-indicator-filter`（`invert(1) brightness(1.4)`）提亮，禁止深底上残留近黑默认图标
+- **实现:** `frontend/css/design-tokens.css`（令牌 + 全局 `::-webkit-calendar-picker-indicator`）；`ops-data.css` 同步输入底色
 
 ### Navigation
 - **顶栏:** 冰枫堂署名恒定；频道字号大于正文；当前频道金色强调

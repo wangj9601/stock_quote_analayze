@@ -64,8 +64,19 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 
 1. … `cn_historical`（日 K；内部算 MA/RSI 等）→ 周期 K / 指数 / `cn_industry_board`
 2. `index_daily_cn` → `cn_board_historical`
-3. `ths_fund_flow_daily` → **`board_fund_flow_daily`**（板块资金流向；可指定 `trade_date` 补历史）
+3. `ths_fund_flow_daily` → **`em_stock_fund_flow_daily`**（东财个股主力/四档；活跃池增量；可指定 `trade_date`）→ **`tushare_moneyflow_daily`**（Tushare 全市场单日补档，失败可 continue）→ **`board_fund_flow_daily`**（板块资金流向；可指定 `trade_date` 补历史）
 4. **`zt_pool_em_daily`**（东财涨停股池；可指定交易日）→ **`market_daily_review`**（每日复盘指标落库）
+
+东财个股主力资金流说明：
+
+- 写入表：`stock_fund_flow_em_daily`（与同花顺 `stock_fund_flow_daily` 的流入/流出/净额**分表、分口径**）
+- 源：`ak.stock_individual_fund_flow`（按票拉取；全市场耗时长，日更默认只 upsert 近几日）
+- 环境变量：`EM_FUND_FLOW_SLEEP_SEC`（默认 0.35）、`EM_FUND_FLOW_MAX_CODES`（0=不限制）、`EM_FUND_FLOW_RECENT_DAYS`（日更保留末尾 N 日，默认 5）
+- 历史回填：`python test/backfill_em_stock_fund_flow_daily.py --codes 600519` 或 `--all --sleep 0.4`
+- 东财失败时：分析页「拉取数据」会回退 Tushare `moneyflow`；单日全市场也可跑节点 `tushare_moneyflow_daily`（`python migrations/add_tushare_moneyflow_workflow_node.py`）
+- 建表（Alembic）：`python scripts/db_migrate.py upgrade --yes`（revision `0002_em_fund_flow_daily`；幂等）
+- 流程缺节点时：`python migrations/add_em_fund_flow_workflow_node.py`（数据脚本，非 schema）
+- 产品口径：主力 = 东财订单分档净流入，**非**机构身份；「主力入场」见交易分析判定卡 / `GET /api/stock_fund_flow/main_force_entry`
 5. **`rs_rating_cn`**：A 股相对强度 RS Rating 全市场预计算  
    - 输入：不复权日 K + 库内 `stock_adj_factor` → **前复权**现算 ROC  
    - 输出：截面百分位写入 `rs_ratings`  
@@ -77,6 +88,8 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 
 ```bash
 python migrations/add_cn_close_workflow_extra_nodes.py
+python scripts/db_migrate.py upgrade --yes   # 含 stock_fund_flow_em_daily（0002）
+python migrations/add_em_fund_flow_workflow_node.py
 ```
 
 新增 RS 节点迁移（更早环境）：

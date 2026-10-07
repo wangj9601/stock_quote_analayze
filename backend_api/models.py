@@ -537,6 +537,29 @@ class StockFundFlowDaily(Base):
     updated_at = Column(DateTime)
 
 
+class StockFundFlowEmDaily(Base):
+    """东财个股资金流日序列：主力/超大/大/中/小单净流入（单位：元）。"""
+
+    __tablename__ = "stock_fund_flow_em_daily"
+    code = Column(StockCodeTextPK(), primary_key=True)
+    trade_date = Column(String(10), primary_key=True)
+    main_net_inflow = Column(Float)
+    main_net_inflow_pct = Column(Float)
+    super_large_net_inflow = Column(Float)
+    super_large_net_inflow_pct = Column(Float)
+    large_net_inflow = Column(Float)
+    large_net_inflow_pct = Column(Float)
+    mid_net_inflow = Column(Float)
+    mid_net_inflow_pct = Column(Float)
+    small_net_inflow = Column(Float)
+    small_net_inflow_pct = Column(Float)
+    close_price = Column(Float)
+    change_percent = Column(Float)
+    source = Column(String(20), default="em")
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+
 class BoardFundFlowDaily(Base):
     """行业/概念板块资金流日快照（单位：元；同花顺优先）。"""
 

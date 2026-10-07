@@ -19,7 +19,7 @@ router = APIRouter(prefix="/api/stock/trade-observe", tags=["trade-observe"])
 
 
 class TradeObserveAddRequest(BaseModel):
-    source: str = Field(..., description="gms|urt|sbbr|rpe|triple_volume|stock_analysis|gann_trend")
+    source: str = Field(..., description="gms|urt|sbbr|rpe|csb|triple_volume|stock_analysis|gann_trend|recommend")
     code: str = Field(..., min_length=1, max_length=20)
     market: Optional[str] = Field(None, description="CN 或 HK")
     name: Optional[str] = None
