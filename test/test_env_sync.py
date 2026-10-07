@@ -67,6 +67,19 @@ def test_expand_modules_granular():
     assert "gms_strategy_configs" in expand_modules(["strategy_configs"])
     assert expand_modules(["basic_info"]) == ["stock_basic_info", "stock_basic_info_hk"]
     assert expand_modules(["quotes"]) == ["historical_quotes", "historical_quotes_hk"]
+    assert expand_modules(["fund_flow"]) == [
+        "stock_fund_flow_daily",
+        "stock_fund_flow_daily_hk",
+    ]
+    assert expand_modules(["fund_info"]) == [
+        "stock_fund_flow_daily",
+        "stock_fund_flow_daily_hk",
+    ]
+    assert expand_modules(["stock_fund_flow_daily"]) == ["stock_fund_flow_daily"]
+    assert "rs_ratings" in expand_modules(["computed_results"])
+    assert "gms_signal_trace" in expand_modules(["computed_results"])
+    assert "stock_recommend_brief" in expand_modules(["computed_info"])
+    assert expand_modules(["rs_ratings"]) == ["rs_ratings"]
     assert expand_modules(["adj_factors"]) == ["stock_adj_factor"]
     assert expand_modules(["stock_adj_factor"]) == ["stock_adj_factor"]
     assert expand_modules(["fina_indicator"]) == ["stock_fina_indicator"]
@@ -85,6 +98,10 @@ def test_expand_modules_granular():
     assert expand_modules(["stock_basic"]) == ["stock_basic_info", "stock_basic_info_hk"]
     assert "frontend_permissions" not in expand_modules(None)
     assert needs_date_range(["historical_quotes"]) is True
+    assert needs_date_range(["stock_fund_flow_daily"]) is True
+    assert needs_date_range(["stock_fund_flow_daily_hk"]) is True
+    assert needs_date_range(["rs_ratings"]) is True
+    assert needs_date_range(["board_fund_flow_daily"]) is True
     assert needs_date_range(["stock_adj_factor"]) is False
     assert needs_date_range(["stock_fina_indicator"]) is False
     assert needs_date_range(["stock_basic_info"]) is False
@@ -92,8 +109,14 @@ def test_expand_modules_granular():
     assert "frontend_permissions" in ALL_RESOURCES
     assert "stock_adj_factor" in ALL_RESOURCES
     assert "stock_fina_indicator" in ALL_RESOURCES
+    assert "stock_fund_flow_daily" in ALL_RESOURCES
+    assert "stock_fund_flow_daily_hk" in ALL_RESOURCES
+    assert "rs_ratings" in ALL_RESOURCES
+    assert "market_daily_review" in ALL_RESOURCES
     assert "stock_adj_factor" not in expand_modules(None)
     assert "stock_fina_indicator" not in expand_modules(None)
+    assert "stock_fund_flow_daily" not in expand_modules(None)
+    assert "rs_ratings" not in expand_modules(None)
     try:
         expand_modules(["no_such"])
         assert False
@@ -247,6 +270,230 @@ def test_quotes_require_date_range(db):
     result = import_quotes(db, out["bundles"]["quotes"])
     assert result["created"] == 1
     assert db.query(HistoricalQuotes).count() == 1
+
+
+def test_fund_flow_require_date_range(db):
+    from backend_api.env_sync.services import export_modules
+    from backend_api.env_sync.services.market_data import import_fund_flow
+    from backend_api.models import StockFundFlowDaily, StockFundFlowDailyHK
+
+    try:
+        export_modules(db, ["stock_fund_flow_daily"])
+        assert False
+    except ValueError as e:
+        assert "start_date" in str(e)
+
+    db.add(
+        StockFundFlowDaily(
+            code="000001",
+            trade_date="2024-01-02",
+            name="平安银行",
+            inflow_amount=1e8,
+            outflow_amount=9e7,
+            net_amount=1e7,
+            turnover_amount=5e8,
+            source="ths",
+        )
+    )
+    db.add(
+        StockFundFlowDaily(
+            code="000001",
+            trade_date="2024-01-10",
+            name="平安银行",
+            inflow_amount=2e8,
+            outflow_amount=1e8,
+            net_amount=1e8,
+            turnover_amount=6e8,
+            source="ths",
+        )
+    )
+    db.add(
+        StockFundFlowDailyHK(
+            code="00700",
+            trade_date="2024-01-02",
+            name="腾讯控股",
+            inflow_amount=3e8,
+            outflow_amount=2e8,
+            net_amount=1e8,
+            turnover_amount=9e8,
+            outer_volume=1000,
+            inner_volume=800,
+            source="file",
+        )
+    )
+    db.commit()
+
+    out = export_modules(
+        db,
+        ["fund_flow"],
+        start_date="2024-01-01",
+        end_date="2024-01-05",
+    )
+    cn_rows = out["bundles"]["fund_flow"]["items"]["stock_fund_flow_daily"]
+    hk_rows = out["bundles"]["fund_flow"]["items"]["stock_fund_flow_daily_hk"]
+    assert len(cn_rows) == 1
+    assert cn_rows[0]["trade_date"] == "2024-01-02"
+    assert len(hk_rows) == 1
+    assert hk_rows[0]["code"] == "00700"
+
+    db.query(StockFundFlowDaily).delete()
+    db.query(StockFundFlowDailyHK).delete()
+    db.commit()
+    result = import_fund_flow(db, out["bundles"]["fund_flow"])
+    assert result["created"] == 2
+    assert db.query(StockFundFlowDaily).count() == 1
+    assert db.query(StockFundFlowDailyHK).count() == 1
+
+
+def test_iter_fund_flow_push_chunks():
+    from backend_api.env_sync.services.market_data import iter_fund_flow_push_chunks
+
+    cn_rows = [
+        {"code": f"{i:06d}", "trade_date": "2024-01-02", "net_amount": float(i)}
+        for i in range(10)
+    ]
+    hk_rows = [
+        {"code": f"{i:05d}", "trade_date": "2024-01-02", "net_amount": float(i)}
+        for i in range(5)
+    ]
+    bundle = {
+        "module": "fund_flow",
+        "items": {
+            "stock_fund_flow_daily": cn_rows,
+            "stock_fund_flow_daily_hk": hk_rows,
+        },
+    }
+    parts = iter_fund_flow_push_chunks(bundle, chunk_rows=4)
+    assert len(parts) == 5  # CN: 4+4+2, HK: 4+1
+    assert sum(len((p["items"].get("stock_fund_flow_daily") or [])) for p in parts) == 10
+    assert sum(len((p["items"].get("stock_fund_flow_daily_hk") or [])) for p in parts) == 5
+
+
+def test_computed_results_require_date_and_roundtrip(db):
+    from datetime import date
+
+    from backend_api.env_sync.services import export_modules
+    from backend_api.env_sync.services.computed_data import import_computed_results
+    from backend_api.models import (
+        BoardFundFlowDaily,
+        GMSSignalTrace,
+        GMSStrategyConfig,
+        RSRatings,
+        StockRecommendBrief,
+    )
+
+    try:
+        export_modules(db, ["rs_ratings"])
+        assert False
+    except ValueError as e:
+        assert "start_date" in str(e)
+
+    db.add(
+        GMSStrategyConfig(
+            name="gms-default",
+            config_params={"x": 1},
+            is_active=True,
+            is_default=True,
+            precompute_enabled=True,
+        )
+    )
+    db.flush()
+    cfg = db.query(GMSStrategyConfig).filter_by(name="gms-default").one()
+
+    db.add(
+        RSRatings(
+            code="000001",
+            date="2024-01-02",
+            market_type="CN",
+            rs_rating=88,
+            rs_raw=1.2,
+        )
+    )
+    db.add(
+        GMSSignalTrace(
+            code="000001",
+            date="2024-01-02",
+            market_type="CN",
+            config_id=cfg.id,
+            score_total=70.0,
+            left_buy_signal=True,
+        )
+    )
+    db.add(
+        BoardFundFlowDaily(
+            board_kind="industry",
+            board_code_source="tonghuashun",
+            board_code="BK0001",
+            trade_date=date(2024, 1, 2),
+            board_name="银行",
+            main_net_inflow=1e8,
+            source="ths_fund_flow",
+        )
+    )
+    db.add(
+        StockRecommendBrief(
+            horizon="daily",
+            asof_date=date(2024, 1, 2),
+            items_json=[{"code": "000001"}],
+            market_stance="neutral",
+        )
+    )
+    db.commit()
+
+    out = export_modules(
+        db,
+        [
+            "rs_ratings",
+            "gms_signal_trace",
+            "board_fund_flow_daily",
+            "stock_recommend_brief",
+        ],
+        start_date="2024-01-01",
+        end_date="2024-01-05",
+    )
+    bundle = out["bundles"]["computed_results"]
+    assert len(bundle["items"]["rs_ratings"]) == 1
+    assert bundle["items"]["gms_signal_trace"][0]["config_name"] == "gms-default"
+    assert len(bundle["items"]["board_fund_flow_daily"]) == 1
+    assert len(bundle["items"]["stock_recommend_brief"]) == 1
+
+    db.query(RSRatings).delete()
+    db.query(GMSSignalTrace).delete()
+    db.query(BoardFundFlowDaily).delete()
+    db.query(StockRecommendBrief).delete()
+    db.commit()
+
+    result = import_computed_results(db, bundle)
+    assert result["created"] >= 4
+    assert db.query(RSRatings).count() == 1
+    assert db.query(GMSSignalTrace).count() == 1
+    assert db.query(BoardFundFlowDaily).count() == 1
+    assert db.query(StockRecommendBrief).count() == 1
+    # 再导入应更新而非再增
+    result2 = import_computed_results(db, bundle)
+    assert result2["created"] == 0
+    assert result2["updated"] >= 4
+    assert db.query(RSRatings).count() == 1
+
+
+def test_iter_computed_results_push_chunks():
+    from backend_api.env_sync.services.computed_data import (
+        iter_computed_results_push_chunks,
+    )
+
+    bundle = {
+        "module": "computed_results",
+        "items": {
+            "rs_ratings": [{"code": f"{i:06d}", "date": "2024-01-02"} for i in range(5)],
+            "stock_recommend_brief": [
+                {"horizon": "daily", "asof_date": "2024-01-02"},
+                {"horizon": "weekly", "asof_date": "2024-01-02"},
+            ],
+        },
+    }
+    parts = iter_computed_results_push_chunks(bundle, chunk_rows=3)
+    assert len(parts) == 3  # rs 3+2, brief 2
+    assert sum(len((p["items"].get("rs_ratings") or [])) for p in parts) == 5
 
 
 def test_iter_adj_factor_push_chunks():

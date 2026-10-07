@@ -13,6 +13,9 @@ email-validator==2.1.0.post1
 # Py3.13：2.0.27 会在 typing 上与 3.13 冲突（SQLCoreOperations/TypingOnly）；需 2.0.31+
 sqlalchemy>=2.0.36,<2.1
 psycopg2-binary==2.9.10
+# 注意：schema 迁移工具 alembic 不在此处 —— 应用运行时不会 import 它。
+# 需要在服务器上执行迁移时单独安装：pip install alembic==1.13.1
+# 详见 docs/database/Alembic_guide.md
 
 # Python 3.13 + Windows：numpy 1.26 无 cp313 wheel，会走源码编译并依赖 VS/C 编译器；请使用带 wheel 的版本。
 pandas>=2.2.3,<3

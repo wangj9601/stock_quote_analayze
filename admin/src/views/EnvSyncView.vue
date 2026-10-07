@@ -4,12 +4,13 @@
       <template #header>
         <div class="card-head">
           <span>环境数据同步</span>
-          <el-tag type="info" size="small">策略/观察/基本信息/板块/行情/财务/权限</el-tag>
+          <el-tag type="info" size="small">策略/观察/行情/资金流/预计算复盘/财务/权限</el-tag>
         </div>
       </template>
       <p class="hint">
         本地发起 Pull（从生产拉取并写入本地）或 Push（导出本地写入生产）。生产端维护 Sync Key 并校验；
-        管理端只调本地包装接口，Key 不由浏览器直连生产。行情数据量大，勾选后必须指定日期范围。
+        管理端只调本地包装接口，Key 不由浏览器直连生产。行情、资金流与预计算/复盘数据量大，勾选后必须指定日期范围；
+        同步策略信号前建议先同步对应策略配置。
       </p>
     </el-card>
 
@@ -227,10 +228,10 @@ const adjSelected = computed(() =>
 const showDateRange = computed(() => quotesSelected.value || adjSelected.value)
 const dateRangeHint = computed(() => {
   if (quotesSelected.value && adjSelected.value) {
-    return '行情必须填日期（默认≤366天）；与行情同批时复权因子也按该区间。全库同步请单独勾选复权因子且不填日期。'
+    return '行情/资金流/预计算复盘必须填日期（默认≤366天）；同批时复权因子也按该区间。全库同步请单独勾选复权因子且不填日期。'
   }
   if (quotesSelected.value) {
-    return '行情必须填日期；单次跨度由 ENV_SYNC_QUOTE_MAX_DAYS 控制（默认 366 天）'
+    return '行情/资金流/预计算复盘必须填日期；跨度由 ENV_SYNC_*_MAX_DAYS 控制（默认 366 天）'
   }
   return '复权因子可不填=全库；填写则按 trade_date 过滤，跨度由 ENV_SYNC_ADJ_FACTOR_MAX_DAYS 控制（默认约 11 年）'
 })
@@ -280,7 +281,7 @@ function assertDateRange(): boolean {
   const hasEnd = !!endDate.value
   if (quotesSelected.value) {
     if (!hasStart || !hasEnd) {
-      ElMessage.warning('勾选行情时必须填写开始/结束日期')
+      ElMessage.warning('勾选行情、资金流或预计算/复盘时必须填写开始/结束日期')
       return false
     }
   } else if (adjSelected.value && (hasStart || hasEnd) && !(hasStart && hasEnd)) {

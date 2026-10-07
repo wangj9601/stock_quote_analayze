@@ -31,9 +31,17 @@ CN_CLOSE_TEMPLATE_NODES = [
     (11, "cn_index_historical", "A股指数历史归档"),
     (12, "index_daily_cn", "A股指数日线采集"),
     (13, "cn_board_historical", "同花顺板块历史归档"),
-    (14, "rs_rating_cn", "A股相对强度RS预计算"),
-    (15, "gms_signals_cn", "GMS信号预计算"),
-    (16, "urt_signals_cn", "URT信号预计算"),
+    (14, "ths_fund_flow_daily", "同花顺资金流入流出日采"),
+    (15, "board_fund_flow_daily", "板块资金流向历史"),
+    (16, "zt_pool_em_daily", "东财涨停股池历史"),
+    (17, "market_daily_review", "每日复盘指标"),
+    (18, "rs_rating_cn", "A股相对强度RS预计算"),
+    (19, "gms_signals_cn", "GMS信号预计算(A股)"),
+    (20, "urt_signals_cn", "URT信号预计算(A股)"),
+    (21, "csb_signals_cn", "CSB信号预计算(A股)"),
+    (22, "sbbr_signals_cn", "SBBR信号预计算(A股)"),
+    (23, "rpe_signals_cn", "RPE信号预计算(A股)"),
+    (24, "stock_recommend_brief", "个股推荐简报(日/周/月)"),
 ]
 
 

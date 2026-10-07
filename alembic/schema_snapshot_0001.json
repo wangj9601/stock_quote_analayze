@@ -1,0 +1,1108 @@
+{
+  "baseline_revision": "0001_baseline",
+  "generated_at": "2026-10-07T11:01:07",
+  "note": "引入 Alembic 时既有库的结构快照（不含 Alembic 自身的 alembic_version 表）。仅作审计参考，Alembic 不读取本文件。",
+  "table_count": 171,
+  "tables": {
+    "admins": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "annual_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "board_fund_flow_daily": {
+      "columns": 18,
+      "pk": [
+        "board_kind",
+        "board_code_source",
+        "board_code",
+        "trade_date"
+      ]
+    },
+    "boll_indicators": {
+      "columns": 7,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "collection_workflow_node_runs": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "collection_workflow_nodes": {
+      "columns": 10,
+      "pk": [
+        "id"
+      ]
+    },
+    "collection_workflow_runs": {
+      "columns": 10,
+      "pk": [
+        "run_id"
+      ]
+    },
+    "collection_workflows": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "concept_board_basic_info": {
+      "columns": 6,
+      "pk": [
+        "board_code"
+      ]
+    },
+    "concept_board_constituents": {
+      "columns": 4,
+      "pk": [
+        "board_code",
+        "stock_code"
+      ]
+    },
+    "concept_board_daily_metrics": {
+      "columns": 9,
+      "pk": [
+        "board_code",
+        "slope_asof_date",
+        "sector_slope_window"
+      ]
+    },
+    "concept_board_historical_quotes": {
+      "columns": 11,
+      "pk": [
+        "board_code",
+        "trade_date"
+      ]
+    },
+    "csb_backtest_tasks": {
+      "columns": 14,
+      "pk": [
+        "task_id"
+      ]
+    },
+    "csb_signal_trace": {
+      "columns": 17,
+      "pk": [
+        "id"
+      ]
+    },
+    "csb_strategy_configs": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "cupb_signal_trace": {
+      "columns": 23,
+      "pk": [
+        "id"
+      ]
+    },
+    "cupb_strategy_configs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "data_collection_log": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "dblb_signal_trace": {
+      "columns": 18,
+      "pk": [
+        "id"
+      ]
+    },
+    "dblb_strategy_configs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "dragon_tiger_hot_money": {
+      "columns": 9,
+      "pk": [
+        "trade_date",
+        "board_type",
+        "seq"
+      ]
+    },
+    "dragon_tiger_snapshot": {
+      "columns": 11,
+      "pk": [
+        "trade_date",
+        "board_type"
+      ]
+    },
+    "dragon_tiger_stock": {
+      "columns": 25,
+      "pk": [
+        "trade_date",
+        "board_type",
+        "seq"
+      ]
+    },
+    "email_send_logs": {
+      "columns": 10,
+      "pk": [
+        "id"
+      ]
+    },
+    "email_sender_config": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "env_sync_audit_logs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "env_sync_client_config": {
+      "columns": 5,
+      "pk": [
+        "id"
+      ]
+    },
+    "env_sync_server_config": {
+      "columns": 5,
+      "pk": [
+        "id"
+      ]
+    },
+    "formal_trades": {
+      "columns": 21,
+      "pk": [
+        "id"
+      ]
+    },
+    "frontend_permissions": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "frontend_roles": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "fund_basic_info": {
+      "columns": 12,
+      "pk": [
+        "code"
+      ]
+    },
+    "fund_historical_quotes": {
+      "columns": 16,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "fund_realtime_quote": {
+      "columns": 15,
+      "pk": [
+        "code",
+        "trade_date"
+      ]
+    },
+    "gms_backtest_tasks": {
+      "columns": 15,
+      "pk": [
+        "task_id"
+      ]
+    },
+    "gms_formal_trades": {
+      "columns": 19,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_job_runs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_precompute_runs": {
+      "columns": 10,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_runtime_config": {
+      "columns": 4,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_selection_snapshots": {
+      "columns": 7,
+      "pk": [
+        "trade_date",
+        "config_id",
+        "scope_key",
+        "param_hash"
+      ]
+    },
+    "gms_signal_trace": {
+      "columns": 38,
+      "pk": [
+        "code",
+        "date",
+        "market_type",
+        "config_id"
+      ]
+    },
+    "gms_strategy_configs": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_strategy_version_stocks": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_strategy_versions": {
+      "columns": 10,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_trace_recompute_tasks": {
+      "columns": 14,
+      "pk": [
+        "task_id"
+      ]
+    },
+    "gms_trade_observe_history": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "gms_trade_observe_stocks": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "historical_collect_operation_logs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "historical_quotes": {
+      "columns": 27,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "historical_quotes_hk": {
+      "columns": 27,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "hk_annual_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "hk_index_basic_info": {
+      "columns": 5,
+      "pk": [
+        "code"
+      ]
+    },
+    "hk_index_collect_operation_logs": {
+      "columns": 7,
+      "pk": [
+        "id"
+      ]
+    },
+    "hk_index_historical_quotes": {
+      "columns": 13,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "hk_index_realtime_quotes": {
+      "columns": 14,
+      "pk": [
+        "code",
+        "trade_date"
+      ]
+    },
+    "hk_monthly_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "hk_quarterly_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "hk_semiannual_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "hk_weekly_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "icost_indicators": {
+      "columns": 7,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "index_board_basic_info": {
+      "columns": 6,
+      "pk": [
+        "board_code"
+      ]
+    },
+    "index_board_constituents": {
+      "columns": 4,
+      "pk": [
+        "board_code",
+        "stock_code"
+      ]
+    },
+    "index_historical_quotes": {
+      "columns": 15,
+      "pk": [
+        "ts_code",
+        "trade_date"
+      ]
+    },
+    "index_realtime_quotes": {
+      "columns": 18,
+      "pk": [
+        "code",
+        "update_time",
+        "index_spot_type"
+      ]
+    },
+    "industry_board_basic_info": {
+      "columns": 6,
+      "pk": [
+        "board_code"
+      ]
+    },
+    "industry_board_code_map": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "industry_board_constituents": {
+      "columns": 4,
+      "pk": [
+        "board_code",
+        "stock_code"
+      ]
+    },
+    "industry_board_daily_metrics": {
+      "columns": 9,
+      "pk": [
+        "board_code",
+        "slope_asof_date",
+        "sector_slope_window"
+      ]
+    },
+    "industry_board_historical_quotes": {
+      "columns": 11,
+      "pk": [
+        "board_code",
+        "trade_date"
+      ]
+    },
+    "industry_board_realtime_quotes": {
+      "columns": 15,
+      "pk": [
+        "board_code",
+        "update_time"
+      ]
+    },
+    "kdj_indicators": {
+      "columns": 8,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "kgt_signal_trace": {
+      "columns": 21,
+      "pk": [
+        "id"
+      ]
+    },
+    "kgt_strategy_configs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "ma_indicators": {
+      "columns": 11,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "macd_indicators": {
+      "columns": 9,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "market_daily_mainline_hits": {
+      "columns": 10,
+      "pk": [
+        "trade_date",
+        "board_type",
+        "board_code"
+      ]
+    },
+    "market_daily_review": {
+      "columns": 24,
+      "pk": [
+        "trade_date"
+      ]
+    },
+    "market_period_review": {
+      "columns": 11,
+      "pk": [
+        "period_type",
+        "period_key"
+      ]
+    },
+    "mavol_indicators": {
+      "columns": 11,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "mean_frequency_resonance_indicators": {
+      "columns": 20,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "mkt_stk_basicinfo": {
+      "columns": 14,
+      "pk": []
+    },
+    "mkt_stk_basicinfo_hk": {
+      "columns": 13,
+      "pk": []
+    },
+    "monthly_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "news_categories": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "operation_logs": {
+      "columns": 13,
+      "pk": [
+        "id"
+      ]
+    },
+    "price_alerts": {
+      "columns": 10,
+      "pk": [
+        "id"
+      ]
+    },
+    "push_records": {
+      "columns": 14,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_alerts": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_backtest_results": {
+      "columns": 18,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_backtest_results_enhanced": {
+      "columns": 24,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_backtest_tasks": {
+      "columns": 14,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_backtest_tasks_enhanced": {
+      "columns": 23,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_equity_curves": {
+      "columns": 7,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_equity_curves_enhanced": {
+      "columns": 14,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_monitor_metrics": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_strategy_configs": {
+      "columns": 7,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_trade_records": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "pvfrs_trade_records_enhanced": {
+      "columns": 19,
+      "pk": [
+        "id"
+      ]
+    },
+    "quarterly_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "quote_data": {
+      "columns": 14,
+      "pk": [
+        "id"
+      ]
+    },
+    "quote_sync_tasks": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "realtime_collect_operation_logs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "role_permissions": {
+      "columns": 2,
+      "pk": [
+        "role_id",
+        "permission_id"
+      ]
+    },
+    "rpe_backtest_tasks": {
+      "columns": 13,
+      "pk": [
+        "id"
+      ]
+    },
+    "rpe_formal_trades": {
+      "columns": 22,
+      "pk": [
+        "id"
+      ]
+    },
+    "rpe_precompute_runs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "rpe_signal_trace": {
+      "columns": 25,
+      "pk": [
+        "id"
+      ]
+    },
+    "rpe_strategy_configs": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "rpe_trace_recompute_tasks": {
+      "columns": 13,
+      "pk": [
+        "task_id"
+      ]
+    },
+    "rpe_trade_observe_history": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "rpe_trade_observe_stocks": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "rs_ratings": {
+      "columns": 13,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "rs_ratings_hk": {
+      "columns": 12,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "rsi_indicators": {
+      "columns": 7,
+      "pk": [
+        "code",
+        "date",
+        "market_type"
+      ]
+    },
+    "sbbr_backtest_tasks": {
+      "columns": 13,
+      "pk": [
+        "id"
+      ]
+    },
+    "sbbr_formal_trades": {
+      "columns": 25,
+      "pk": [
+        "id"
+      ]
+    },
+    "sbbr_reserve_box": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "sbbr_signal_trace": {
+      "columns": 24,
+      "pk": [
+        "id"
+      ]
+    },
+    "sbbr_strategy_configs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    },
+    "sbbr_trace_recompute_tasks": {
+      "columns": 13,
+      "pk": [
+        "task_id"
+      ]
+    },
+    "sbbr_trade_observe_stocks": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "semiannual_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "sim_trade_accounts": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "sim_trade_orders": {
+      "columns": 13,
+      "pk": [
+        "id"
+      ]
+    },
+    "sim_trade_positions": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "stock_adj_factor": {
+      "columns": 5,
+      "pk": [
+        "code",
+        "trade_date",
+        "source"
+      ]
+    },
+    "stock_auction_benchmark": {
+      "columns": 11,
+      "pk": [
+        "trade_date",
+        "seq"
+      ]
+    },
+    "stock_auction_daily": {
+      "columns": 24,
+      "pk": [
+        "trade_date",
+        "code",
+        "auction_phase"
+      ]
+    },
+    "stock_basic_info": {
+      "columns": 15,
+      "pk": [
+        "code"
+      ]
+    },
+    "stock_basic_info_bak": {
+      "columns": 4,
+      "pk": []
+    },
+    "stock_basic_info_hk": {
+      "columns": 13,
+      "pk": [
+        "code"
+      ]
+    },
+    "stock_fina_indicator": {
+      "columns": 15,
+      "pk": [
+        "code",
+        "end_date"
+      ]
+    },
+    "stock_fund_flow_daily": {
+      "columns": 13,
+      "pk": [
+        "code",
+        "trade_date"
+      ]
+    },
+    "stock_fund_flow_daily_hk": {
+      "columns": 15,
+      "pk": [
+        "code",
+        "trade_date"
+      ]
+    },
+    "stock_news": {
+      "columns": 19,
+      "pk": [
+        "id"
+      ]
+    },
+    "stock_notice_report": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "stock_realtime_quote": {
+      "columns": 20,
+      "pk": [
+        "code",
+        "trade_date"
+      ]
+    },
+    "stock_realtime_quote_hk": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "trade_date"
+      ]
+    },
+    "stock_recommend_brief": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "stock_research_reports": {
+      "columns": 18,
+      "pk": [
+        "id"
+      ]
+    },
+    "stock_zt_pool_daily": {
+      "columns": 18,
+      "pk": [
+        "code",
+        "trade_date"
+      ]
+    },
+    "system_alerts": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "system_monitor_metrics": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "system_service_status": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "trade_execution_logs": {
+      "columns": 17,
+      "pk": [
+        "id"
+      ]
+    },
+    "trade_observe_history": {
+      "columns": 13,
+      "pk": [
+        "id"
+      ]
+    },
+    "trade_observe_stocks": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "trading_calendar": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "trading_journal_logs": {
+      "columns": 10,
+      "pk": [
+        "id"
+      ]
+    },
+    "trading_notes": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "triple_volume_observe_stocks": {
+      "columns": 14,
+      "pk": [
+        "id"
+      ]
+    },
+    "triple_volume_trade_observe_stocks": {
+      "columns": 9,
+      "pk": [
+        "id"
+      ]
+    },
+    "urt_backtest_tasks": {
+      "columns": 14,
+      "pk": [
+        "task_id"
+      ]
+    },
+    "urt_formal_trades": {
+      "columns": 19,
+      "pk": [
+        "id"
+      ]
+    },
+    "urt_signal_trace": {
+      "columns": 21,
+      "pk": [
+        "code",
+        "date",
+        "config_id"
+      ]
+    },
+    "urt_strategy_configs": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "urt_trace_recompute_tasks": {
+      "columns": 13,
+      "pk": [
+        "task_id"
+      ]
+    },
+    "urt_trade_observe_history": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "urt_trade_observe_stocks": {
+      "columns": 10,
+      "pk": [
+        "id"
+      ]
+    },
+    "user_gms_preferences": {
+      "columns": 3,
+      "pk": [
+        "user_id"
+      ]
+    },
+    "user_permissions": {
+      "columns": 4,
+      "pk": [
+        "user_id",
+        "permission_id"
+      ]
+    },
+    "user_push_configs": {
+      "columns": 11,
+      "pk": [
+        "id"
+      ]
+    },
+    "users": {
+      "columns": 12,
+      "pk": [
+        "id"
+      ]
+    },
+    "volume_shrink_breakout_signals": {
+      "columns": 26,
+      "pk": [
+        "id"
+      ]
+    },
+    "vsb_observe_stocks": {
+      "columns": 13,
+      "pk": [
+        "id"
+      ]
+    },
+    "watchlist": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "watchlist_groups": {
+      "columns": 4,
+      "pk": [
+        "id"
+      ]
+    },
+    "watchlist_history_collection_logs": {
+      "columns": 6,
+      "pk": [
+        "id"
+      ]
+    },
+    "weekly_quotes": {
+      "columns": 17,
+      "pk": [
+        "code",
+        "date"
+      ]
+    },
+    "zhab_signal_trace": {
+      "columns": 18,
+      "pk": [
+        "id"
+      ]
+    },
+    "zhab_strategy_configs": {
+      "columns": 8,
+      "pk": [
+        "id"
+      ]
+    }
+  }
+}

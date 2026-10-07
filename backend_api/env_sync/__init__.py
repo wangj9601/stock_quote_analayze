@@ -12,6 +12,8 @@ MODULE_TRADE_OBSERVE = "trade_observe"
 MODULE_STOCK_BASIC = "stock_basic"
 MODULE_BOARD_DATA = "board_data"
 MODULE_QUOTES = "quotes"
+MODULE_FUND_FLOW = "fund_flow"
+MODULE_COMPUTED_RESULTS = "computed_results"
 MODULE_ADJ_FACTORS = "adj_factors"
 MODULE_FINA_INDICATOR = "fina_indicator"
 MODULE_PERMISSIONS_RESOURCES = "permissions_resources"
@@ -63,6 +65,28 @@ RESOURCE_QUOTES = [
     "historical_quotes_hk",
 ]
 
+# —— 个股资金流（须日期范围）——
+RESOURCE_FUND_FLOW = [
+    "stock_fund_flow_daily",
+    "stock_fund_flow_daily_hk",
+]
+
+# —— 预计算 / 复盘结果（须日期范围；信号表建议先同步策略配置）——
+RESOURCE_COMPUTED = [
+    "rs_ratings",
+    "gms_signal_trace",
+    "urt_signal_trace",
+    "csb_signal_trace",
+    "sbbr_signal_trace",
+    "rpe_signal_trace",
+    "index_historical_quotes",
+    "board_fund_flow_daily",
+    "stock_zt_pool_daily",
+    "market_daily_review",
+    "market_daily_mainline_hits",
+    "stock_recommend_brief",
+]
+
 # —— 复权因子（日期可选：不填=全库；填写则按 trade_date 过滤）——
 RESOURCE_ADJ_FACTORS = [
     "stock_adj_factor",
@@ -80,8 +104,12 @@ RESOURCE_PERMISSIONS = [
     "role_permissions",
 ]
 
-# 行情必须带日期；复权因子/财务指标日期可选（不填全库）
-DATE_RANGE_REQUIRED = frozenset(RESOURCE_QUOTES)
+# 行情/资金流/预计算复盘必须带日期；复权因子/财务指标日期可选（不填全库）
+DATE_RANGE_REQUIRED = (
+    frozenset(RESOURCE_QUOTES)
+    | frozenset(RESOURCE_FUND_FLOW)
+    | frozenset(RESOURCE_COMPUTED)
+)
 DATE_RANGE_OPTIONAL = frozenset(RESOURCE_ADJ_FACTORS) | frozenset(RESOURCE_FINA)
 
 ALL_RESOURCES = (
@@ -90,6 +118,8 @@ ALL_RESOURCES = (
     + RESOURCE_BASIC
     + RESOURCE_BOARD
     + RESOURCE_QUOTES
+    + RESOURCE_FUND_FLOW
+    + RESOURCE_COMPUTED
     + RESOURCE_ADJ_FACTORS
     + RESOURCE_FINA
     + RESOURCE_PERMISSIONS
@@ -105,6 +135,8 @@ BUNDLE_RESOURCES: Dict[str, List[str]] = {
     MODULE_STOCK_BASIC: list(RESOURCE_BASIC),
     MODULE_BOARD_DATA: list(RESOURCE_BOARD),
     MODULE_QUOTES: list(RESOURCE_QUOTES),
+    MODULE_FUND_FLOW: list(RESOURCE_FUND_FLOW),
+    MODULE_COMPUTED_RESULTS: list(RESOURCE_COMPUTED),
     MODULE_ADJ_FACTORS: list(RESOURCE_ADJ_FACTORS),
     MODULE_FINA_INDICATOR: list(RESOURCE_FINA),
     MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
@@ -117,6 +149,8 @@ GROUP_EXPAND: Dict[str, List[str]] = {
     MODULE_STOCK_BASIC: list(RESOURCE_BASIC),
     MODULE_BOARD_DATA: list(RESOURCE_BOARD),
     MODULE_QUOTES: list(RESOURCE_QUOTES),
+    MODULE_FUND_FLOW: list(RESOURCE_FUND_FLOW),
+    MODULE_COMPUTED_RESULTS: list(RESOURCE_COMPUTED),
     MODULE_ADJ_FACTORS: list(RESOURCE_ADJ_FACTORS),
     MODULE_FINA_INDICATOR: list(RESOURCE_FINA),
     MODULE_PERMISSIONS_RESOURCES: list(RESOURCE_PERMISSIONS),
@@ -149,7 +183,9 @@ GROUP_EXPAND: Dict[str, List[str]] = {
     ],
     "basic_info": list(RESOURCE_BASIC),
     "board_info": list(RESOURCE_BOARD),
-    # quotes 已由 MODULE_QUOTES 覆盖
+    # quotes / fund_flow / computed_results 已由 MODULE_* 覆盖
+    "fund_info": list(RESOURCE_FUND_FLOW),
+    "computed_info": list(RESOURCE_COMPUTED),
     "fina_info": list(RESOURCE_FINA),
     "permissions": list(RESOURCE_PERMISSIONS),
 }
@@ -324,6 +360,104 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
         ],
     },
     {
+        "group": "fund_flow",
+        "name": "资金流数据（须指定日期范围）",
+        "requires_date_range": True,
+        "items": [
+            {
+                "code": "stock_fund_flow_daily",
+                "name": "A股个股资金流",
+                "desc": "stock_fund_flow_daily，按 trade_date 区间",
+                "requires_date_range": True,
+            },
+            {
+                "code": "stock_fund_flow_daily_hk",
+                "name": "港股个股资金流",
+                "desc": "stock_fund_flow_daily_hk，按 trade_date 区间",
+                "requires_date_range": True,
+            },
+        ],
+    },
+    {
+        "group": "computed",
+        "name": "预计算与复盘（须指定日期范围）",
+        "requires_date_range": True,
+        "items": [
+            {
+                "code": "rs_ratings",
+                "name": "A股相对强度RS",
+                "desc": "rs_ratings；信号类建议先同步策略配置",
+                "requires_date_range": True,
+            },
+            {
+                "code": "gms_signal_trace",
+                "name": "GMS信号预计算(A股)",
+                "desc": "gms_signal_trace（CN）；按 config_name 对齐",
+                "requires_date_range": True,
+            },
+            {
+                "code": "urt_signal_trace",
+                "name": "URT信号预计算",
+                "desc": "urt_signal_trace；按 config_name 对齐",
+                "requires_date_range": True,
+            },
+            {
+                "code": "csb_signal_trace",
+                "name": "CSB信号预计算(A股)",
+                "desc": "csb_signal_trace；按 config_name 对齐",
+                "requires_date_range": True,
+            },
+            {
+                "code": "sbbr_signal_trace",
+                "name": "SBBR信号预计算(A股)",
+                "desc": "sbbr_signal_trace（CN）；按 config_name 对齐",
+                "requires_date_range": True,
+            },
+            {
+                "code": "rpe_signal_trace",
+                "name": "RPE信号预计算(A股)",
+                "desc": "rpe_signal_trace（CN）；按 config_name 对齐",
+                "requires_date_range": True,
+            },
+            {
+                "code": "index_historical_quotes",
+                "name": "A股指数日线",
+                "desc": "index_historical_quotes，按 trade_date",
+                "requires_date_range": True,
+            },
+            {
+                "code": "board_fund_flow_daily",
+                "name": "板块资金流向历史",
+                "desc": "board_fund_flow_daily，按 trade_date",
+                "requires_date_range": True,
+            },
+            {
+                "code": "stock_zt_pool_daily",
+                "name": "东财涨停股池历史",
+                "desc": "stock_zt_pool_daily，按 trade_date",
+                "requires_date_range": True,
+            },
+            {
+                "code": "stock_recommend_brief",
+                "name": "个股推荐简报(日/周/月)",
+                "desc": "stock_recommend_brief，按 asof_date",
+                "requires_date_range": True,
+            },
+            {
+                "code": "market_daily_review",
+                "name": "每日复盘指标",
+                "desc": "market_daily_review，按 trade_date",
+                "requires_date_range": True,
+            },
+            {
+                "code": "market_daily_mainline_hits",
+                "name": "每日复盘主线命中",
+                "desc": "market_daily_mainline_hits（建议与复盘指标同批）",
+                "requires_date_range": True,
+            },
+        ],
+    },
+    {
         "group": "adj_factors",
         "name": "复权因子（日期可选，不填则全库）",
         "requires_date_range": False,
@@ -411,6 +545,8 @@ def split_resources(resources: Sequence[str]) -> Dict[str, List[str]]:
         "basic": [r for r in resources if r in RESOURCE_BASIC],
         "board": [r for r in resources if r in RESOURCE_BOARD],
         "quotes": [r for r in resources if r in RESOURCE_QUOTES],
+        "fund_flow": [r for r in resources if r in RESOURCE_FUND_FLOW],
+        "computed": [r for r in resources if r in RESOURCE_COMPUTED],
         "adj_factors": [r for r in resources if r in RESOURCE_ADJ_FACTORS],
         "fina": [r for r in resources if r in RESOURCE_FINA],
         "permissions": [r for r in resources if r in RESOURCE_PERMISSIONS],
@@ -478,6 +614,16 @@ def catalog_for_api() -> Dict[str, Any]:
                 "code": "quotes",
                 "name": "行情（全部）",
                 "desc": "A股+港股历史行情，须日期范围",
+            },
+            {
+                "code": "fund_flow",
+                "name": "资金流（全部）",
+                "desc": "A股+港股个股资金流日表，须日期范围",
+            },
+            {
+                "code": "computed_results",
+                "name": "预计算与复盘（全部）",
+                "desc": "RS/策略信号/指数日线/板块资金流/涨停池/复盘/简报，须日期范围",
             },
             {
                 "code": "adj_factors",

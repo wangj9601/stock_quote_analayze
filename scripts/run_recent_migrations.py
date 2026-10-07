@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-"""执行 migrations 目录下最近 N 天内修改过的 .py 迁移脚本。
+"""[已弃用] 执行 migrations 目录下最近 N 天内修改过的 .py 迁移脚本。
+
+.. deprecated::
+    本脚本自 2026-10-07 起弃用。schema 变更已改用 Alembic 管理：
+        python scripts/db_migrate.py status / check / upgrade
+    详见 docs/database/Alembic_guide.md 与 migrations/README.md。
+    保留本脚本仅供历史库应急补齐（如从旧备份恢复后补跑缺失脚本）。
 
 用法:
   python scripts/run_recent_migrations.py
@@ -15,9 +21,21 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+DEPRECATION_NOTICE = """
+========================================================================
+ [弃用提示] 该脚本按文件修改时间(mtime)排序执行，无版本账本、无回滚，
+            已被 Alembic 取代。新变更请用：
+                python scripts/db_migrate.py revision -m "说明"
+                python scripts/db_migrate.py check
+                python scripts/db_migrate.py upgrade
+            文档：docs/database/Alembic_guide.md
+            若确需继续（仅限补历史库），请加 --i-know-deprecated 跳过提示。
+========================================================================
+"""
+
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run recent migration scripts")
+    parser = argparse.ArgumentParser(description="Run recent migration scripts (DEPRECATED)")
     parser.add_argument("--days", type=int, default=2, help="回溯天数，默认 2")
     parser.add_argument(
         "--yes",
@@ -25,7 +43,23 @@ def main() -> int:
         action="store_true",
         help="跳过确认直接执行",
     )
+    parser.add_argument(
+        "--i-know-deprecated",
+        action="store_true",
+        help="确认已知晓弃用，不再提示",
+    )
     args = parser.parse_args()
+
+    if not args.i_know_deprecated:
+        print(DEPRECATION_NOTICE)
+        if not args.yes:
+            try:
+                if input("仍要继续吗？(Y/N): ").strip().upper() != "Y":
+                    print("已取消。建议改用：python scripts/db_migrate.py upgrade")
+                    return 0
+            except EOFError:
+                print("已取消（无交互输入）。")
+                return 0
 
     root = Path(__file__).resolve().parents[1]
     mig_dir = root / "migrations"

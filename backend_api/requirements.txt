@@ -13,6 +13,10 @@ email-validator==2.1.0.post1
 sqlalchemy>=2.0.36,<2.1
 psycopg2-binary==2.9.10
 
+# 数据库迁移工具（alembic.ini + alembic/ 目录；见 docs/database/Alembic_guide.md）
+# 仅用于执行迁移，应用运行时不会 import 它，因此不进 requirements-minimal.txt。
+alembic==1.13.1
+
 # 数据处理（本地完整安装亦建议与 minimal 一致，避免 Py3.13 无 wheel）
 pandas>=2.2.3,<3
 numpy>=2.1.0,<3
@@ -36,6 +40,5 @@ xhtml2pdf
 # 系统监控（admin/system_monitoring 经 backend_core.monitoring，需 psutil）
 psutil>=5.9.0
 
-# 可选（仓库内无直接 import；若你本地使用 Alembic CLI / 异步 SQLite 再装）
-# alembic==1.13.1
+# 可选（仓库内无直接 import；若本地使用异步 SQLite 再装）
 # aiosqlite==0.20.0

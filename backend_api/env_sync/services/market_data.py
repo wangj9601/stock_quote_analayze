@@ -23,6 +23,8 @@ from backend_api.models import (
     StockBasicInfo,
     StockBasicInfoHK,
     StockFinaIndicator,
+    StockFundFlowDaily,
+    StockFundFlowDailyHK,
 )
 from backend_api.utils.board_code_source import (
     DEFAULT_BOARD_CODE_SOURCE,
@@ -30,6 +32,7 @@ from backend_api.utils.board_code_source import (
 )
 
 QUOTE_TABLES = ("historical_quotes", "historical_quotes_hk")
+FUND_FLOW_TABLES = ("stock_fund_flow_daily", "stock_fund_flow_daily_hk")
 ADJ_FACTOR_TABLES = ("stock_adj_factor",)
 FINA_TABLES = ("stock_fina_indicator",)
 BASIC_TABLES = ("stock_basic_info", "stock_basic_info_hk")
@@ -43,11 +46,47 @@ BOARD_TABLES = (
 )
 
 DEFAULT_QUOTE_MAX_DAYS = 366
+# 个股资金流日表体量接近日 K，默认与行情同跨度；可用 ENV_SYNC_FUND_FLOW_MAX_DAYS 覆盖
+DEFAULT_FUND_FLOW_MAX_DAYS = 366
 # 复权因子体积远小于日 K：默认约 11 年（>10 年），可用环境变量覆盖
 DEFAULT_ADJ_FACTOR_MAX_DAYS = 4018
 # 财务报告期跨度默认约 15 年
 DEFAULT_FINA_MAX_DAYS = 5500
 UPSERT_CHUNK = 800
+
+CN_FUND_FLOW_FIELDS = [
+    "code",
+    "trade_date",
+    "name",
+    "inflow_amount",
+    "outflow_amount",
+    "net_amount",
+    "turnover_amount",
+    "change_percent",
+    "turnover_rate",
+    "current_price",
+    "source",
+    "created_at",
+    "updated_at",
+]
+
+HK_FUND_FLOW_FIELDS = [
+    "code",
+    "trade_date",
+    "name",
+    "inflow_amount",
+    "outflow_amount",
+    "net_amount",
+    "turnover_amount",
+    "change_percent",
+    "turnover_rate",
+    "current_price",
+    "outer_volume",
+    "inner_volume",
+    "source",
+    "created_at",
+    "updated_at",
+]
 
 FINA_FIELDS = [
     "code",
@@ -75,6 +114,18 @@ def max_quote_sync_days() -> int:
         return max(1, int(os.getenv("ENV_SYNC_QUOTE_MAX_DAYS") or DEFAULT_QUOTE_MAX_DAYS))
     except ValueError:
         return DEFAULT_QUOTE_MAX_DAYS
+
+
+def max_fund_flow_sync_days() -> int:
+    import os
+
+    try:
+        return max(
+            1,
+            int(os.getenv("ENV_SYNC_FUND_FLOW_MAX_DAYS") or DEFAULT_FUND_FLOW_MAX_DAYS),
+        )
+    except ValueError:
+        return DEFAULT_FUND_FLOW_MAX_DAYS
 
 
 def max_adj_factor_sync_days() -> int:
@@ -1342,6 +1393,267 @@ def iter_fina_indicator_push_chunks(
             "offset": i,
             "size": min(chunk_rows, total - i),
             "total": total,
+        }
+        out.append(part)
+    return out
+
+
+def export_fund_flow(
+    db: Session,
+    *,
+    start: date,
+    end: date,
+    tables: Optional[Set[str]] = None,
+    env_label: str = "local",
+) -> Dict[str, Any]:
+    """导出个股资金流日表（A股/港股）；trade_date 为 YYYY-MM-DD 字符串。"""
+    want = tables or set(FUND_FLOW_TABLES)
+    items: Dict[str, Any] = {}
+    sd, ed = start.isoformat(), end.isoformat()
+    meta = {"start_date": sd, "end_date": ed}
+
+    if "stock_fund_flow_daily" in want:
+        q = (
+            db.query(StockFundFlowDaily)
+            .filter(
+                StockFundFlowDaily.trade_date >= sd,
+                StockFundFlowDaily.trade_date <= ed,
+            )
+            .order_by(StockFundFlowDaily.trade_date, StockFundFlowDaily.code)
+        )
+        items["stock_fund_flow_daily"] = [
+            _row_dict(r, CN_FUND_FLOW_FIELDS) for r in q.all()
+        ]
+
+    if "stock_fund_flow_daily_hk" in want:
+        q = (
+            db.query(StockFundFlowDailyHK)
+            .filter(
+                StockFundFlowDailyHK.trade_date >= sd,
+                StockFundFlowDailyHK.trade_date <= ed,
+            )
+            .order_by(StockFundFlowDailyHK.trade_date, StockFundFlowDailyHK.code)
+        )
+        items["stock_fund_flow_daily_hk"] = [
+            _row_dict(r, HK_FUND_FLOW_FIELDS) for r in q.all()
+        ]
+
+    bundle = make_bundle(module="fund_flow", items=items, env_label=env_label)
+    bundle["date_range"] = meta
+    return bundle
+
+
+def _prepare_fund_flow_rows(
+    raw_rows: List[Dict],
+    fields: List[str],
+    result: Dict[str, Any],
+    *,
+    table: str,
+) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    for raw in raw_rows:
+        code = str(raw.get("code") or "").strip()
+        trade_date = str(raw.get("trade_date") or "").strip()[:10]
+        if not code or not trade_date:
+            result["skipped"] += 1
+            continue
+
+        def _f(key: str) -> Optional[float]:
+            v = raw.get(key)
+            if v is None or v == "":
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        row: Dict[str, Any] = {
+            "code": code,
+            "trade_date": trade_date,
+            "name": (str(raw.get("name") or "").strip() or None),
+            "inflow_amount": _f("inflow_amount"),
+            "outflow_amount": _f("outflow_amount"),
+            "net_amount": _f("net_amount"),
+            "turnover_amount": _f("turnover_amount"),
+            "change_percent": _f("change_percent"),
+            "turnover_rate": _f("turnover_rate"),
+            "current_price": _f("current_price"),
+            "source": (str(raw.get("source") or "").strip() or None),
+            "created_at": parse_dt(raw.get("created_at")),
+            "updated_at": parse_dt(raw.get("updated_at")),
+        }
+        if "outer_volume" in fields:
+            row["outer_volume"] = _f("outer_volume")
+            row["inner_volume"] = _f("inner_volume")
+        # 仅保留目标字段，避免多余键
+        prepared.append({k: row.get(k) for k in fields})
+    return prepared
+
+
+def _import_fund_flow_orm(
+    db: Session,
+    model: Any,
+    prepared: List[Dict[str, Any]],
+    result: Dict[str, Any],
+    *,
+    table: str,
+) -> None:
+    for row in prepared:
+        code, trade_date = row["code"], row["trade_date"]
+        try:
+            with db.begin_nested():
+                existing = (
+                    db.query(model)
+                    .filter(model.code == code, model.trade_date == trade_date)
+                    .first()
+                )
+                payload = {
+                    k: v for k, v in row.items() if k not in ("code", "trade_date")
+                }
+                if existing:
+                    for k, v in payload.items():
+                        setattr(existing, k, v)
+                    result["updated"] += 1
+                else:
+                    db.add(model(**row))
+                    result["created"] += 1
+        except Exception as e:
+            result["errors"].append(f"{table}/{code}/{trade_date}: {e}")
+
+
+def _import_fund_flow_pg_bulk(
+    db: Session,
+    prepared: List[Dict[str, Any]],
+    fields: List[str],
+    result: Dict[str, Any],
+    *,
+    table: str,
+    model: Any,
+) -> None:
+    col_list = ", ".join(fields)
+    placeholders = ", ".join(f":{f}" for f in fields)
+    update_cols = [f for f in fields if f not in ("code", "trade_date")]
+    set_clause = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+    sql = text(
+        f"""
+        INSERT INTO {table} ({col_list})
+        VALUES ({placeholders})
+        ON CONFLICT (code, trade_date) DO UPDATE SET
+            {set_clause}
+        """
+    )
+    for i in range(0, len(prepared), UPSERT_CHUNK):
+        chunk = prepared[i : i + UPSERT_CHUNK]
+        try:
+            db.connection().execute(sql, chunk)
+            result["updated"] += len(chunk)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            result["errors"].append(f"{table} bulk chunk@{i}: {e}; fallback orm")
+            _import_fund_flow_orm(db, model, chunk, result, table=table)
+            db.commit()
+
+
+def import_fund_flow(
+    db: Session,
+    bundle: Dict[str, Any],
+    *,
+    tables: Optional[Set[str]] = None,
+) -> Dict[str, Any]:
+    result = empty_result()
+    items = (bundle or {}).get("items") or {}
+    want = tables or set(FUND_FLOW_TABLES)
+
+    bind = db.get_bind()
+    dialect = getattr(getattr(bind, "dialect", None), "name", "") or ""
+    is_pg = dialect == "postgresql"
+
+    if "stock_fund_flow_daily" in want:
+        prepared = _prepare_fund_flow_rows(
+            items.get("stock_fund_flow_daily") or [],
+            CN_FUND_FLOW_FIELDS,
+            result,
+            table="stock_fund_flow_daily",
+        )
+        if prepared:
+            if is_pg:
+                _import_fund_flow_pg_bulk(
+                    db,
+                    prepared,
+                    CN_FUND_FLOW_FIELDS,
+                    result,
+                    table="stock_fund_flow_daily",
+                    model=StockFundFlowDaily,
+                )
+            else:
+                _import_fund_flow_orm(
+                    db, StockFundFlowDaily, prepared, result, table="stock_fund_flow_daily"
+                )
+                db.commit()
+
+    if "stock_fund_flow_daily_hk" in want:
+        prepared = _prepare_fund_flow_rows(
+            items.get("stock_fund_flow_daily_hk") or [],
+            HK_FUND_FLOW_FIELDS,
+            result,
+            table="stock_fund_flow_daily_hk",
+        )
+        if prepared:
+            if is_pg:
+                _import_fund_flow_pg_bulk(
+                    db,
+                    prepared,
+                    HK_FUND_FLOW_FIELDS,
+                    result,
+                    table="stock_fund_flow_daily_hk",
+                    model=StockFundFlowDailyHK,
+                )
+            else:
+                _import_fund_flow_orm(
+                    db,
+                    StockFundFlowDailyHK,
+                    prepared,
+                    result,
+                    table="stock_fund_flow_daily_hk",
+                )
+                db.commit()
+
+    return result
+
+
+def iter_fund_flow_push_chunks(
+    bundle: Dict[str, Any],
+    *,
+    chunk_rows: int,
+) -> List[Dict[str, Any]]:
+    """将 fund_flow bundle 按表、按行数切开，供 Push 分多次 POST。"""
+    chunk_rows = max(1, int(chunk_rows))
+    items = (bundle or {}).get("items") or {}
+    base = {k: v for k, v in bundle.items() if k != "items"}
+
+    parts: List[tuple] = []
+    for key in FUND_FLOW_TABLES:
+        rows = list(items.get(key) or [])
+        if not rows:
+            continue
+        for i in range(0, len(rows), chunk_rows):
+            parts.append((key, rows[i : i + chunk_rows], i, len(rows)))
+
+    if not parts:
+        return [bundle]
+
+    out: List[Dict[str, Any]] = []
+    for idx, (key, rows, offset, total) in enumerate(parts):
+        part = dict(base)
+        part["items"] = {key: rows}
+        part["chunk"] = {
+            "table": key,
+            "offset": offset,
+            "size": len(rows),
+            "total": total,
+            "part": idx + 1,
+            "parts": len(parts),
         }
         out.append(part)
     return out

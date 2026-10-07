@@ -62,22 +62,31 @@ ENABLE_LEGACY_COLLECTION_CRON=false
 
 推荐顺序（节选）：
 
-1. … `cn_historical`（日 K；内部算 MA/RSI 等）
-2. … 周期 K / 指数 / `cn_industry_board`
-3. **`rs_rating_cn`**：A 股相对强度 RS Rating 全市场预计算  
+1. … `cn_historical`（日 K；内部算 MA/RSI 等）→ 周期 K / 指数 / `cn_industry_board`
+2. `index_daily_cn` → `cn_board_historical`
+3. `ths_fund_flow_daily` → **`board_fund_flow_daily`**（板块资金流向；可指定 `trade_date` 补历史）
+4. **`zt_pool_em_daily`**（东财涨停股池；可指定交易日）→ **`market_daily_review`**（每日复盘指标落库）
+5. **`rs_rating_cn`**：A 股相对强度 RS Rating 全市场预计算  
    - 输入：不复权日 K + 库内 `stock_adj_factor` → **前复权**现算 ROC  
    - 输出：截面百分位写入 `rs_ratings`  
    - 建议：**每个交易日收盘链路跑一次**；休市跳过；改算法/补因子后需重跑  
-4. `gms_signals_cn` → `urt_signals_cn`
+6. `gms_signals_cn` → `urt_signals_cn` → `csb_signals_cn` → `sbbr_signals_cn` → `rpe_signals_cn`
+7. **`stock_recommend_brief`**：个股推荐简报（日/周/月）
 
-新增 RS 节点迁移：
+已有库若流程缺少上述节点，执行：
+
+```bash
+python migrations/add_cn_close_workflow_extra_nodes.py
+```
+
+新增 RS 节点迁移（更早环境）：
 
 ```bash
 python migrations/add_rs_ratings_table.py
 python migrations/add_rs_rating_workflow_node.py
 ```
 
-说明见 [`docs/indicators/股价相对强度_RS_Rating.md`](../indicators/股价相对强度_RS_Rating.md)。已有库若流程里尚无该节点，跑第二条迁移即可插入到 `cn_industry_board` 之后。
+说明见 [`docs/indicators/股价相对强度_RS_Rating.md`](../indicators/股价相对强度_RS_Rating.md)。
 
 ## 预置「港股收盘后标准流程」要点（RS）
 

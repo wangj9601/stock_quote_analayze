@@ -792,7 +792,7 @@
                     <p>1. 文件保存到服务器目录：<code class="bg-blue-100 px-1 rounded">backend_core/data/</code></p>
                     <p>2. 上传后自动重命名为 <code class="bg-blue-100 px-1 rounded">hk_fund_flow_YYYYMMDD.xlsx</code>（或 .xls / .csv）；同花顺导出的「伪 xls」文本亦可识别</p>
                     <p>3. 需含列：代码、名称、金额、外盘、内盘（涨幅%/现价等可选）；代码如 HK0001 会归一为 00001</p>
-                    <p>4. 采集流程节点 <code class="bg-blue-100 px-1 rounded">hk_fund_flow_daily</code> 按<strong>流程执行当日</strong>读取对应文件入库（自动节点逻辑不变）</p>
+                    <p>4. 采集流程节点 <code class="bg-blue-100 px-1 rounded">hk_fund_flow_daily</code> 默认识读<strong>执行当日</strong>文件；可在流程节点参数中指定交易日补采</p>
                     <p>5. 本页「开始采集」可按下方指定交易日独立入库（可补采历史日）</p>
                     <p>6. 今日港股休市时上传/采集均须手动选择交易日</p>
                   </div>

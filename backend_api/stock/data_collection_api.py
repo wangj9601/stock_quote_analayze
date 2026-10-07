@@ -2664,7 +2664,7 @@ async def collect_hk_fund_flow_manual(
     手动触发港股资金流向文件采集（可指定交易日）。
 
     读取 backend_core/data/hk_fund_flow_YYYYMMDD.* 并入库；
-    流程自动节点 hk_fund_flow_daily 仍只采执行当日，逻辑不变。
+    采集流程节点 hk_fund_flow_daily 也可通过节点参数 trade_date 指定交易日。
     """
     from datetime import date as date_cls
 

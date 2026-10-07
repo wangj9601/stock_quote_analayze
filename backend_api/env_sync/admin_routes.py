@@ -25,10 +25,12 @@ from backend_api.env_sync.config_store import (
 )
 from backend_api.env_sync.bundle import merge_results
 from backend_api.env_sync.services import export_modules, import_modules, normalize_modules
+from backend_api.env_sync.services.computed_data import iter_computed_results_push_chunks
 from backend_api.env_sync.services.market_data import (
     iter_adj_factor_push_chunks,
     iter_board_data_push_chunks,
     iter_fina_indicator_push_chunks,
+    iter_fund_flow_push_chunks,
 )
 from backend_api.models import User
 
@@ -469,8 +471,8 @@ def admin_push(
         merged_results: Dict[str, Any] = {}
         push_batches: List[str] = []
         row_chunk = _push_row_chunk_size()
-        # 大包分批：strategy / observe / basic / board / quotes / adj_factors / fina / permissions；
-        # adj_factors / board_data / fina_indicator 再按行切开，遇 502 自动对半拆。
+        # 大包分批：strategy / observe / basic / board / quotes / fund_flow / adj / fina / permissions；
+        # adj_factors / board_data / fina_indicator / fund_flow 再按行切开，遇 502 自动对半拆。
         # modules 仅带本 bundle 细项，避免把其它类 code 交给生产 expand_modules 白名单。
         for bundle_key, bundle_data in bundles.items():
             batch_mods = filter_modules_for_bundle(bundle_key, mods)
@@ -530,6 +532,50 @@ def admin_push(
                         f"fina_indicator[{ci + 1}/{len(chunk_bundles)}]"
                         if len(chunk_bundles) > 1
                         else "fina_indicator"
+                    )
+                    _push_bundle_adaptive(
+                        url=url,
+                        headers=headers,
+                        batch_mods=batch_mods,
+                        bundle_key=bundle_key,
+                        bundle_data=chunk_data,
+                        label=label,
+                        merged_results=merged_results,
+                        push_batches=push_batches,
+                    )
+                continue
+
+            if bundle_key == "fund_flow":
+                chunk_bundles = iter_fund_flow_push_chunks(
+                    bundle_data, chunk_rows=row_chunk
+                )
+                for ci, chunk_data in enumerate(chunk_bundles):
+                    label = (
+                        f"fund_flow[{ci + 1}/{len(chunk_bundles)}]"
+                        if len(chunk_bundles) > 1
+                        else "fund_flow"
+                    )
+                    _push_bundle_adaptive(
+                        url=url,
+                        headers=headers,
+                        batch_mods=batch_mods,
+                        bundle_key=bundle_key,
+                        bundle_data=chunk_data,
+                        label=label,
+                        merged_results=merged_results,
+                        push_batches=push_batches,
+                    )
+                continue
+
+            if bundle_key == "computed_results":
+                chunk_bundles = iter_computed_results_push_chunks(
+                    bundle_data, chunk_rows=row_chunk
+                )
+                for ci, chunk_data in enumerate(chunk_bundles):
+                    label = (
+                        f"computed_results[{ci + 1}/{len(chunk_bundles)}]"
+                        if len(chunk_bundles) > 1
+                        else "computed_results"
                     )
                     _push_bundle_adaptive(
                         url=url,

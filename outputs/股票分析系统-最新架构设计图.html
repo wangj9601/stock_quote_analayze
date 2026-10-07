@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>股票分析系统 · 最新架构设计图</title>
+<style>
+:root{
+  --ink:#1a1f26;--ink-2:#4a5563;--ink-3:#77828f;
+  --bg:#ffffff;--bg-2:#f7f8fa;--bg-3:#eef1f5;
+  --line:#dfe4ea;--line-2:#c8d0d9;
+  --gold:#c9a227;--gold-soft:#fdf6e3;
+  --blue:#185fa5;--blue-soft:#e6f1fb;
+  --teal:#0f6e56;--teal-soft:#e1f5ee;
+  --red:#a32d2d;--red-soft:#fcebeb;
+  --amber:#854f0b;--amber-soft:#faeeda;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg-2);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:14px;line-height:1.7;-webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:40px 28px 80px}
+header.doc{border-bottom:2px solid var(--gold);padding-bottom:20px;margin-bottom:32px}
+header.doc .eyebrow{font-size:12px;letter-spacing:.16em;color:var(--gold);font-weight:600;text-transform:uppercase}
+header.doc h1{margin:8px 0 6px;font-size:27px;font-weight:600;letter-spacing:.02em;line-height:1.3}
+header.doc .sub{color:var(--ink-2);font-size:14px}
+header.doc .meta{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+.pill{display:inline-block;padding:3px 10px;border:1px solid var(--line-2);border-radius:2px;
+  font-size:12px;color:var(--ink-2);background:#fff}
+nav.toc{background:#fff;border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin-bottom:32px}
+nav.toc .t{font-size:12px;letter-spacing:.1em;color:var(--ink-3);margin-bottom:10px}
+nav.toc ol{margin:0;padding-left:20px;columns:2;column-gap:32px}
+nav.toc li{margin:3px 0;font-size:13px}
+nav.toc a{color:var(--blue);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+section{margin-bottom:40px}
+h2{font-size:19px;font-weight:600;margin:0 0 6px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+h2 .num{color:var(--gold);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:15px;margin-right:8px}
+h3{font-size:15px;font-weight:600;margin:22px 0 8px;color:var(--ink)}
+p{margin:10px 0;color:var(--ink-2)}
+p strong,li strong{color:var(--ink)}
+.lead{color:var(--ink-2);margin:10px 0 18px}
+figure{margin:18px 0;background:#fff;border:1px solid var(--line);border-radius:8px;padding:18px 18px 12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{margin-top:10px;font-size:12px;color:var(--ink-3);border-top:1px dashed var(--line);padding-top:8px}
+.tw{overflow-x:auto;background:#fff;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{background:var(--bg-3);font-weight:600;color:var(--ink);white-space:nowrap;font-size:12px;letter-spacing:.02em}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--bg-2)}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;background:var(--bg-3);
+  padding:1px 5px;border-radius:3px;color:var(--ink)}
+.tag{display:inline-block;padding:1px 7px;border-radius:2px;font-size:11px;font-weight:500;white-space:nowrap}
+.tag.ok{background:var(--teal-soft);color:var(--teal)}
+.tag.warn{background:var(--amber-soft);color:var(--amber)}
+.tag.bad{background:var(--red-soft);color:var(--red)}
+.tag.info{background:var(--blue-soft);color:var(--blue)}
+.callout{border-left:3px solid var(--gold);background:var(--gold-soft);padding:12px 16px;
+  border-radius:0 6px 6px 0;margin:16px 0;font-size:13px;color:var(--ink-2)}
+.callout b{color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:16px 0}
+.card{background:#fff;border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+.card .k{font-size:12px;color:var(--ink-3);margin-bottom:4px}
+.card .v{font-size:20px;font-weight:600;color:var(--ink);line-height:1.2}
+.card .u{font-size:12px;color:var(--ink-3);margin-top:2px}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--line);
+  font-size:12px;color:var(--ink-3);text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <div class="eyebrow">冰枫堂 · 股票分析</div>
+  <h1>最新架构设计图</h1>
+  <div class="sub">以当前代码实况为准的全景梳理 —— 分层架构、数据流、部署拓扑与模块清单</div>
+  <div class="meta">
+    <span class="pill">生成于 2026-10-07</span>
+    <span class="pill">依据：代码实况 + PRODUCT.md + docs/design/系统设计.md</span>
+    <span class="pill">范围：backend_api · backend_core · frontend · admin</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="t">目录</div>
+  <ol>
+    <li><a href="#s1">一、分层架构总览</a></li>
+    <li><a href="#s2">二、数据流链路</a></li>
+    <li><a href="#s3">三、部署拓扑与端口</a></li>
+    <li><a href="#s4">四、模块清单</a></li>
+    <li><a href="#s5">五、自研策略清单</a></li>
+    <li><a href="#s6">六、核心定时任务</a></li>
+    <li><a href="#s7">七、与既有文档的差异纠偏</a></li>
+    <li><a href="#s8">八、待处理风险</a></li>
+  </ol>
+</nav>
+
+<section id="s1">
+  <h2><span class="num">01</span>分层架构总览</h2>
+  <p class="lead">系统是<strong>单仓库、多进程</strong>的单体多模块架构：三个 Web 服务 + 一个无端口的采集引擎 + 一个推送调度进程，共享同一个 PostgreSQL 库。</p>
+
+  <figure>
+    <svg viewBox="0 0 680 592" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>股票分析系统分层架构总览</title>
+      <desc>从 Nginx 接入、双前端、FastAPI 接口层、PostgreSQL 主库到 backend_core 采集与策略引擎，以及外部数据源与推送出口的六层结构。</desc>
+      <defs>
+        <marker id="ar1" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+      <rect x="40" y="40" width="600" height="36" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="340" y="58" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2C2C2A">Nginx 反向代理 :80/:443 · / → 8000 · /admin/ → 8001 · /api/ → 5000</text>
+      <line x1="185" y1="76" x2="185" y2="96" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <line x1="495" y1="76" x2="495" y2="96" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <rect x="40" y="96" width="290" height="72" rx="10" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="185" y="122" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#0C447C">用户站 MPA · frontend :8000</text>
+      <text x="185" y="144" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185FA5">原生 JS + ECharts · 28 个页面</text>
+      <rect x="350" y="96" width="290" height="72" rx="10" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="495" y="122" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#0C447C">管理端 SPA · admin :8001</text>
+      <text x="495" y="144" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185FA5">Vue 3 + TS + Vite + Element Plus</text>
+      <line x1="185" y1="168" x2="185" y2="188" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <line x1="495" y1="168" x2="495" y2="188" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <text x="340" y="180" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">REST · Bearer JWT</text>
+      <rect x="40" y="188" width="600" height="92" rx="12" fill="#E6F1FB" stroke="#85B7EB" stroke-width="0.5"/>
+      <text x="56" y="206" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">backend_api · 接口层（FastAPI :5000）</text>
+      <rect x="52" y="218" width="180" height="50" rx="8" fill="#FFFFFF" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="142" y="236" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">认证与权限</text>
+      <text x="142" y="254" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">JWT + 78 个权限码</text>
+      <rect x="252" y="218" width="180" height="50" rx="8" fill="#FFFFFF" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="342" y="236" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">用户站路由</text>
+      <text x="342" y="254" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">/api/* 行情·自选·选股</text>
+      <rect x="452" y="218" width="180" height="50" rx="8" fill="#FFFFFF" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="542" y="236" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">管理端路由</text>
+      <text x="542" y="254" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">/api/admin/* 运营</text>
+      <line x1="340" y1="280" x2="340" y2="300" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <text x="352" y="291" dominant-baseline="central" font-size="11" fill="#5F5E5A">SQLAlchemy 读写</text>
+      <rect x="40" y="300" width="600" height="52" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="340" y="318" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">PostgreSQL 主库 · stock_analysis</text>
+      <text x="340" y="338" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">SQLAlchemy ORM · 约 130 张表 · API 与 Core 共享</text>
+      <line x1="340" y1="352" x2="340" y2="372" stroke="#0F6E56" stroke-width="1.5" fill="none" marker-start="url(#ar1)" marker-end="url(#ar1)"/>
+      <text x="352" y="363" dominant-baseline="central" font-size="11" fill="#5F5E5A">采集入库 · 信号回写</text>
+      <rect x="40" y="372" width="600" height="124" rx="12" fill="#E1F5EE" stroke="#5DCAA5" stroke-width="0.5"/>
+      <text x="56" y="390" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">backend_core · 采集与策略引擎（独立进程，无 HTTP 端口）</text>
+      <rect x="52" y="404" width="130" height="80" rx="8" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="117" y="424" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">采集调度</text>
+      <text x="117" y="443" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">APScheduler</text>
+      <text x="117" y="460" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">cron 可配 .env</text>
+      <rect x="202" y="404" width="130" height="80" rx="8" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="267" y="424" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">策略引擎</text>
+      <text x="267" y="443" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">13 个自研策略</text>
+      <text x="267" y="460" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">GMS RPE URT CSB</text>
+      <rect x="352" y="404" width="130" height="80" rx="8" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="417" y="424" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">分析指标</text>
+      <text x="417" y="443" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">RS Rating · 形态</text>
+      <text x="417" y="460" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">龙头 / 中军</text>
+      <rect x="502" y="404" width="130" height="80" rx="8" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="567" y="424" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">复盘推送</text>
+      <text x="567" y="443" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">日报 · 推荐简报</text>
+      <text x="567" y="460" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">企微 · 邮件</text>
+      <line x1="133" y1="516" x2="133" y2="496" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <line x1="339" y1="516" x2="339" y2="496" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <line x1="545" y1="496" x2="545" y2="516" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar1)"/>
+      <rect x="40" y="516" width="186" height="56" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="133" y="538" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2C2C2A">AKShare</text>
+      <text x="133" y="556" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#5F5E5A">主数据源 · 行情资讯</text>
+      <rect x="246" y="516" width="186" height="56" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="339" y="538" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2C2C2A">TuShare</text>
+      <text x="339" y="556" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#5F5E5A">备用源 · 当前停用</text>
+      <rect x="452" y="516" width="186" height="56" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="545" y="538" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2C2C2A">企业微信 / SMTP</text>
+      <text x="545" y="556" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#5F5E5A">报告与信号推送</text>
+    </svg>
+    <figcaption>蓝＝接入与应用层，绿＝数据与引擎层，灰＝基础设施与外部系统。端口为用户站 8000 / 管理端 8001 / API 5000。</figcaption>
+  </figure>
+
+  <div class="grid">
+    <div class="card"><div class="k">Web 服务</div><div class="v">3</div><div class="u">用户站 · 管理端 · API</div></div>
+    <div class="card"><div class="k">后台进程</div><div class="v">2</div><div class="u">采集引擎 · 推送调度</div></div>
+    <div class="card"><div class="k">自研策略</div><div class="v">13</div><div class="u">+1 个通用多指标策略</div></div>
+    <div class="card"><div class="k">数据表</div><div class="v">≈130</div><div class="u">SQLAlchemy ORM 单库</div></div>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="num">02</span>数据流链路</h2>
+  <p class="lead">采集在 <strong>backend_core</strong> 独立进程内跑，策略在收盘后定时预计算并把结果落成信号表；<strong>backend_api</strong> 只读这些结果对外提供接口，互不阻塞。</p>
+
+  <figure>
+    <svg viewBox="0 0 680 524" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>股票分析系统数据流链路</title>
+      <desc>外部数据源经采集器、调度与清洗后入 PostgreSQL，收盘后由策略引擎预计算信号，最终分流到接口展示与报告推送。</desc>
+      <defs>
+        <marker id="ar2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+      <rect x="40" y="40" width="600" height="44" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="340" y="62" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#2C2C2A">① 外部数据源 · AKShare（主）/ TuShare（备用 · 停用）</text>
+      <line x1="340" y1="84" x2="340" y2="104" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar2)"/>
+      <rect x="40" y="104" width="600" height="64" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="340" y="126" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">② 采集器 · backend_core/data_collectors</text>
+      <text x="340" y="148" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">实时行情 · 历史行情 · 周/月/季/半年/年多周期 · 新闻公告</text>
+      <line x1="340" y1="168" x2="340" y2="188" stroke="#0F6E56" stroke-width="1.5" fill="none" marker-end="url(#ar2)"/>
+      <rect x="40" y="188" width="600" height="64" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="340" y="210" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">③ 调度编排 · APScheduler BlockingScheduler</text>
+      <text x="340" y="232" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">交易日历判定 · cron 由 .env 覆盖 · 可视化采集工作流热同步</text>
+      <line x1="340" y1="252" x2="340" y2="272" stroke="#0F6E56" stroke-width="1.5" fill="none" marker-end="url(#ar2)"/>
+      <rect x="40" y="272" width="600" height="64" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="340" y="294" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">④ PostgreSQL 入库</text>
+      <text x="340" y="316" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">行情 / 指标 / 板块 / 自选 / 资讯（约 130 张表，API 与 Core 共享）</text>
+      <line x1="340" y1="336" x2="340" y2="356" stroke="#0F6E56" stroke-width="1.5" fill="none" marker-end="url(#ar2)"/>
+      <rect x="40" y="356" width="600" height="64" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="340" y="378" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">⑤ 策略预计算（收盘后定时 · mon–fri）</text>
+      <text x="340" y="400" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">13 个自研策略 → gms / urt / sbbr / rpe / csb … 信号表与追溯表</text>
+      <path d="M340 420 L340 430 L185 430 L185 440" fill="none" stroke="#378ADD" stroke-width="1.5" marker-end="url(#ar2)"/>
+      <path d="M340 430 L495 430 L495 440" fill="none" stroke="#888780" stroke-width="1.5" marker-end="url(#ar2)"/>
+      <rect x="40" y="440" width="290" height="64" rx="8" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="185" y="462" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#0C447C">⑥a 接口读取 · backend_api</text>
+      <text x="185" y="484" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185FA5">REST /api/* → 用户站 ECharts / 管理端</text>
+      <rect x="350" y="440" width="290" height="64" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="495" y="462" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#2C2C2A">⑥b 报告与推送</text>
+      <text x="495" y="484" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#5F5E5A">复盘 / 推荐简报 / CSV → 企微 · 邮件</text>
+    </svg>
+    <figcaption>关键落点：采集入库模型 <code>backend_api/models.py</code>；策略预计算注册 <code>backend_core/data_collectors/main.py</code>；推送编排 <code>backend_core/scheduler/push_scheduler.py</code>。</figcaption>
+  </figure>
+</section>
+
+<section id="s3">
+  <h2><span class="num">03</span>部署拓扑与端口</h2>
+  <p class="lead">用户站与管理端<strong>同域部署</strong>：Nginx 按路径分流，<code>/admin/</code> 反代时剥掉前缀并对 SPA 深链回退到 <code>index.html</code>。两端登录态用不同的 localStorage 键名隔离。</p>
+
+  <figure>
+    <svg viewBox="0 0 680 444" role="img" xmlns="http://www.w3.org/2000/svg">
+      <title>部署拓扑与端口</title>
+      <desc>浏览器经 Nginx 访问前端静态服务、管理端静态服务与 FastAPI，后端与采集引擎共享 PostgreSQL。</desc>
+      <defs>
+        <marker id="ar3" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </marker>
+      </defs>
+      <rect x="40" y="40" width="600" height="40" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="340" y="60" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2C2C2A">浏览器 · 同域访问（/ 用户站 · /admin/ 管理端）</text>
+      <line x1="340" y1="80" x2="340" y2="100" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+      <rect x="40" y="100" width="600" height="44" rx="8" fill="#F1EFE8" stroke="#888780" stroke-width="0.5"/>
+      <text x="340" y="122" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#2C2C2A">Nginx :80 / :443 · TLS · 反代 · SPA 深链回退</text>
+      <line x1="135" y1="144" x2="135" y2="164" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+      <line x1="340" y1="144" x2="340" y2="164" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+      <line x1="545" y1="144" x2="545" y2="164" stroke="#5F5E5A" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+      <rect x="40" y="164" width="190" height="80" rx="8" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="135" y="186" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">frontend 静态服务</text>
+      <text x="135" y="206" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185FA5">:8000</text>
+      <text x="135" y="224" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">原生 MPA 静态文件</text>
+      <rect x="245" y="164" width="190" height="80" rx="8" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="340" y="186" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">admin 静态服务</text>
+      <text x="340" y="206" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185FA5">:8001</text>
+      <text x="340" y="224" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">admin/dist 构建产物</text>
+      <rect x="450" y="164" width="190" height="80" rx="8" fill="#E6F1FB" stroke="#378ADD" stroke-width="0.5"/>
+      <text x="545" y="186" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#0C447C">backend_api</text>
+      <text x="545" y="206" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#185FA5">:5000 · uvicorn</text>
+      <text x="545" y="224" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#185FA5">FastAPI · 多 worker</text>
+      <line x1="545" y1="244" x2="545" y2="264" stroke="#185FA5" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+      <rect x="40" y="264" width="600" height="60" rx="8" fill="#E1F5EE" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="340" y="286" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="500" fill="#085041">PostgreSQL · stock_analysis</text>
+      <text x="340" y="308" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#0F6E56">生产 :5432 / :8432 · 本地 :5446 · API 与 Core 共享同一库</text>
+      <line x1="185" y1="324" x2="185" y2="344" stroke="#0F6E56" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+      <line x1="495" y1="324" x2="495" y2="344" stroke="#0F6E56" stroke-width="1.5" fill="none" marker-end="url(#ar3)"/>
+      <rect x="40" y="344" width="290" height="80" rx="8" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="185" y="366" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">backend_core · 采集进程</text>
+      <text x="185" y="386" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">BlockingScheduler · 无 HTTP 端口</text>
+      <text x="185" y="404" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">systemd: stock-quote-core</text>
+      <rect x="350" y="344" width="290" height="80" rx="8" fill="#FFFFFF" stroke="#1D9E75" stroke-width="0.5"/>
+      <text x="495" y="366" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="500" fill="#085041">推送调度进程</text>
+      <text x="495" y="386" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">PushScheduler · 每 5 分钟刷新</text>
+      <text x="495" y="404" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#0F6E56">systemd: stock-quote-notify</text>
+    </svg>
+    <figcaption>Nginx 配置见 <code>docs/prod/nginx.conf</code>；Linux 单元见 <code>scripts/deploy/linux/stock-quote-*.service</code>；本地一键启动为 <code>start_web_services.bat</code>（不启动采集）。</figcaption>
+  </figure>
+
+  <div class="callout">
+    <b>同域登录隔离</b>：用户站用 <code>localStorage.access_token</code>，管理端用 <code>admin_token</code>，键名不同、互不清理；两个 JWT 共用同一密钥但 <code>users</code> 与 <code>admins</code> 分表。详见 <code>docs/prod/同域用户站与管理端登录说明.md</code>。
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="num">04</span>模块清单</h2>
+  <div class="tw">
+  <table>
+    <thead><tr><th>层</th><th>模块 / 路径</th><th>职责</th><th>关键技术</th></tr></thead>
+    <tbody>
+      <tr><td>接入</td><td><code>docs/prod/nginx.conf</code></td><td>反向代理、TLS、SPA 深链回退、静态缓存</td><td>Nginx</td></tr>
+      <tr><td>展示</td><td><code>frontend/</code></td><td>用户站 MPA：首页 / 自选 / 行情 / 选股 / 分析 / 资讯 / 我的 + 个股与策略追溯页</td><td>原生 HTML/CSS/JS、ECharts、fetch 封装 <code>authFetch</code></td></tr>
+      <tr><td>展示</td><td><code>admin/</code></td><td>管理端 SPA：用户与权限、行情、各策略管理、采集、监控、推送</td><td>Vue 3、TS、Vite、Element Plus、Pinia、Axios</td></tr>
+      <tr><td>接口</td><td><code>backend_api/main.py</code></td><td>FastAPI 唯一入口，注册全部路由与中间件</td><td>FastAPI、uvicorn</td></tr>
+      <tr><td>接口</td><td><code>auth.py</code> · <code>permissions.py</code> · <code>permission_registry_data.py</code></td><td>JWT 签发校验、角色/权限解析、78 个 <code>channel.*</code> 权限码注册表</td><td>bcrypt、python-jose</td></tr>
+      <tr><td>接口</td><td><code>models.py</code></td><td>全部 ORM 模型，约 130 张表</td><td>SQLAlchemy</td></tr>
+      <tr><td>接口</td><td><code>stock/</code> · <code>admin/</code></td><td>用户站路由（<code>/api/*</code>）与管理端路由（<code>/api/admin/*</code>）</td><td>APIRouter</td></tr>
+      <tr><td>接口</td><td><code>services/</code> · <code>env_sync/</code></td><td>推送、邮件、报表、审计、错误处理；本地↔生产数据同步</td><td>—</td></tr>
+      <tr><td>引擎</td><td><code>backend_core/data_collectors/</code></td><td>AKShare / TuShare 采集器、APScheduler 编排、可视化采集工作流</td><td>akshare、tushare、APScheduler</td></tr>
+      <tr><td>引擎</td><td><code>backend_core/strategies/</code></td><td>13 个自研策略的信号计算、追溯与定时预计算</td><td>pandas、numpy</td></tr>
+      <tr><td>引擎</td><td><code>analysis/</code> · <code>indicators/</code> · <code>board_metrics/</code> · <code>board_roles/</code></td><td>形态与支撑阻力、RS Rating、板块斜率、龙头/中军分类</td><td>—</td></tr>
+      <tr><td>引擎</td><td><code>market_review/</code> · <code>recommend/</code> · <code>reports/</code></td><td>每日复盘报告（含 PDF）、日/周/月推荐简报、CSV 报表</td><td>—</td></tr>
+      <tr><td>引擎</td><td><code>scheduler/</code> · <code>schedulers/</code> · <code>wechat/</code> · <code>monitoring/</code></td><td>推送调度、资讯调度、企业微信服务、系统监控告警</td><td>APScheduler、schedule</td></tr>
+      <tr><td>存储</td><td>PostgreSQL</td><td>唯一运行时主库，API 与 Core 共享</td><td>psycopg2、连接池</td></tr>
+      <tr><td>迁移</td><td><code>migrations/*.py</code> · <code>scripts/run_recent_migrations.py</code></td><td>手写 Python 迁移脚本（非 Alembic），按最近修改时间批量执行</td><td>—</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="s5">
+  <h2><span class="num">05</span>自研策略清单</h2>
+  <p>策略都在 <code>backend_core/strategies/</code> 下按短码分目录，各含信号计算、追溯与 <code>scheduled_precompute</code>。这是产品的核心差异化，短码命名需保持稳定。</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>短码</th><th>策略</th><th>短码</th><th>策略</th></tr></thead>
+    <tbody>
+      <tr><td><code>GMS</code></td><td>主力启动（含交易观察 / 正式交易）</td><td><code>CSB</code></td><td>通道突破</td></tr>
+      <tr><td><code>RPE</code></td><td>比价效应（含流动性分层）</td><td><code>VSB</code></td><td>3 倍量缩量突破</td></tr>
+      <tr><td><code>URT</code></td><td>上升趋势</td><td><code>PVFRS</code></td><td>量价频三维共振</td></tr>
+      <tr><td><code>SBBR</code></td><td>做小做底</td><td><code>CANSLIM</code></td><td>CANSLIM</td></tr>
+      <tr><td><code>CUPB</code></td><td>带柄杯底</td><td><code>DBLB</code></td><td>双底</td></tr>
+      <tr><td><code>KGT</code></td><td>袋鼠尾</td><td><code>ZHAB</code></td><td>涨停/炸板类</td></tr>
+      <tr><td colspan="2"><code>triple_volume_observe</code> 三倍量观察</td><td colspan="2"><code>multi_indicator_strategy</code> 多指标综合（通用框架）</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="num">06</span>核心定时任务</h2>
+  <p>全部由 <code>backend_core/data_collectors/main.py</code> 的 APScheduler 注册，cron 值可由 <code>.env</code> 的 <code>SCHED_*</code> 覆盖；<code>trading_calendar</code> 表用于休市跳过。以下为代码默认值。</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>时间</th><th>任务</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>15:31</td><td>AKShare 实时行情</td><td>交易日收盘后落当日快照</td></tr>
+      <tr><td>15:33 / 16:05</td><td>ETF 实时 / 历史</td><td>受 <code>ENABLE_ETF</code> 开关控制</td></tr>
+      <tr><td>16:02</td><td>TuShare 历史行情</td><td>备用源，当前默认停用</td></tr>
+      <tr><td>16:25</td><td>三倍量扫描</td><td>—</td></tr>
+      <tr><td>16:30</td><td>行业板块成分</td><td>—</td></tr>
+      <tr><td>16:45 / 17:20</td><td>URT 信号（A 股 / 港股）</td><td>mon–fri</td></tr>
+      <tr><td>18:00–19:20</td><td>A 股周/月/季/半年/年线</td><td>季/半年/年仅在周期末日真正生成</td></tr>
+      <tr><td>18:10–19:30</td><td>港股周/月/季/半年/年线</td><td>同上</td></tr>
+      <tr><td>18:20 / 18:50 / 19:10 / 19:25</td><td>GMS 信号（A / 港 / 自定义 / 自选）</td><td>mon–fri</td></tr>
+      <tr><td>19:30 / 19:40 / 19:50</td><td>SBBR / RPE / CSB 信号</td><td>mon–fri</td></tr>
+      <tr><td>09:30 / 15:30</td><td>推送调度</td><td>PushScheduler 每 5 分钟刷新 <code>user_push_configs</code></td></tr>
+      <tr><td>每 30 分 / 每小时 / 02:00</td><td>资讯采集 / 热搜更新 / 旧数据清理</td><td>资讯调度进程</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="num">07</span>与既有文档的差异纠偏</h2>
+  <p>通读过程中发现旧文档与代码实况有若干出入。<strong>以下一律以代码与今日更新的 <code>PRODUCT.md</code> 为准</strong>，本图采用的即为实况口径。</p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>项</th><th>旧文档说法</th><th>代码 / 现行实况</th><th>结论</th></tr></thead>
+    <tbody>
+      <tr><td>受众定位</td><td><code>docs/design/系统设计.md</code> §1.2：个人投资者、股票分析师</td><td><code>PRODUCT.md</code>：公司内部投研与员工，对外个人投资者【不是】第一受众</td><td><span class="tag bad">旧述过时</span></td></tr>
+      <tr><td>缓存</td><td>§11.3 / §12.3：PostgreSQL + <b>Redis 缓存</b></td><td>代码中未见 redis 依赖或配置</td><td><span class="tag warn">蓝图未落地</span></td></tr>
+      <tr><td>主库</td><td>§1.4 图：SQLite / PostgreSQL 并列</td><td>运行时统一走 PostgreSQL；<code>.db</code> 文件为空或遗留</td><td><span class="tag bad">已废弃 SQLite</span></td></tr>
+      <tr><td>定时表</td><td>§2.3：TuShare 历史 10:25、自选股 13:56</td><td><code>main.py</code> 默认：TuShare 历史 16:02、GMS 自选 19:25</td><td><span class="tag bad">以代码为准</span></td></tr>
+      <tr><td>采集频率</td><td>§2.1：实时行情每 15 分钟</td><td>现为收盘后 15:31 落当日快照 + 盘中多档 cron</td><td><span class="tag bad">以代码为准</span></td></tr>
+      <tr><td>应用入口</td><td>文档提到多个 main</td><td>生产入口唯一：<code>backend_api/main.py:app</code></td><td><span class="tag warn">其余为遗留</span></td></tr>
+      <tr><td>部署方式</td><td>§1.5 / §12.3：Docker + Nginx + Redis</td><td>实际为 Windows 批处理 / Linux systemd + Nginx，未见 Dockerfile；Redis 无</td><td><span class="tag bad">以实况为准</span></td></tr>
+      <tr><td>数据库迁移</td><td>未明确</td><td>手写 Python 脚本 + <code>run_recent_migrations.py</code>，无 Alembic 版本账本</td><td><span class="tag info">补充</span></td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section id="s8">
+  <h2><span class="num">08</span>待处理风险</h2>
+  <p>梳理架构时顺带发现的工程风险，按严重度排序。<b>为避免扩散，此处不复述任何密钥明文，只给位置。</b></p>
+  <div class="tw">
+  <table>
+    <thead><tr><th>风险</th><th>位置</th><th>说明</th><th>建议</th></tr></thead>
+    <tbody>
+      <tr><td><span class="tag bad">高</span> 数据库口令明文</td><td><code>deploy_config.json</code> 的 <code>database.password</code></td><td>明文存放且随仓库分发/打包</td><td>移出仓库，改由环境变量注入</td></tr>
+      <tr><td><span class="tag bad">高</span> 文档含明文口令</td><td><code>docs/prod/环境说明.md</code></td><td>运维文档里直接写了连接口令</td><td>改为占位符，口令走密钥管理</td></tr>
+      <tr><td><span class="tag bad">高</span> JWT 占位密钥</td><td><code>deploy_config.json</code> 的 <code>security.jwt_secret</code></td><td>仍为默认占位串</td><td>生产环境必须覆盖为强随机值</td></tr>
+      <tr><td><span class="tag warn">中</span> 固定默认重置密码</td><td><code>backend_api/admin/users.py</code> 中「重置密码」接口</td><td>重置后是固定常量口令</td><td>改为随机口令 + 首次登录强制修改</td></tr>
+      <tr><td><span class="tag warn">中</span> 迁移无版本账本</td><td><code>migrations/*.py</code>（60+）</td><td>按文件修改时间执行，可能漏跑或乱序</td><td>引入 Alembic 或迁移记录表</td></tr>
+      <tr><td><span class="tag warn">中</span> CORS 过宽</td><td><code>backend_api/main.py</code></td><td>白名单叠加局域网正则</td><td>生产环境收紧为明确域名</td></tr>
+      <tr><td><span class="tag info">低</span> 死代码误导</td><td><code>app_complete.py</code>、<code>main_enhanced.py</code>、<code>main_simple.py</code>、<code>market_routes_*.py</code></td><td>多个未使用的备用入口与旧路由文件</td><td>清理，避免新同学误读入口</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<footer>
+  股票分析系统 · 最新架构设计图 ｜ 数据来源：<code>backend_api/</code>、<code>backend_core/</code>、<code>frontend/</code>、<code>admin/</code>、<code>docs/design/系统设计.md</code>、<code>PRODUCT.md</code>、<code>DESIGN.md</code><br>
+  生成于 2026-10-07 · 以代码实况为准
+</footer>
+
+</div>
+</body>
+</html>

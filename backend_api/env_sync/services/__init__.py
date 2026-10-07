@@ -9,19 +9,27 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
 from backend_api.env_sync import expand_modules, needs_date_range, split_resources
+from backend_api.env_sync.services.computed_data import (
+    export_computed_results,
+    import_computed_results,
+    max_computed_sync_days,
+)
 from backend_api.env_sync.services.market_data import (
     export_adj_factors,
     export_board_data,
     export_fina_indicator,
+    export_fund_flow,
     export_quotes,
     export_stock_basic,
     import_adj_factors,
     import_board_data,
     import_fina_indicator,
+    import_fund_flow,
     import_quotes,
     import_stock_basic,
     max_adj_factor_sync_days,
     max_fina_sync_days,
+    max_fund_flow_sync_days,
     max_quote_sync_days,
     validate_date_range,
 )
@@ -58,17 +66,31 @@ def export_modules(
     resources = expand_modules(modules)
     parts = split_resources(resources)
     has_quotes = bool(parts["quotes"])
+    has_fund_flow = bool(parts["fund_flow"])
+    has_computed = bool(parts["computed"])
     has_adj = bool(parts["adj_factors"])
     has_fina = bool(parts["fina"])
 
-    # 行情强制日期（默认跨度 366 天）；复权因子/财务指标日期可选（不填=全库）
-    if has_quotes:
+    # 行情/资金流/预计算复盘强制日期（默认跨度 366 天）；复权因子/财务指标日期可选（不填=全库）
+    if has_quotes or has_fund_flow or has_computed:
+        lim = max_quote_sync_days()
+        if has_fund_flow:
+            lim = max(lim, max_fund_flow_sync_days())
+        if has_computed:
+            lim = max(lim, max_computed_sync_days())
+        labels = []
+        if has_quotes:
+            labels.append("行情")
+        if has_fund_flow:
+            labels.append("资金流")
+        if has_computed:
+            labels.append("预计算/复盘")
         date_range = validate_date_range(
             start_date,
             end_date,
             require=True,
-            max_days=max_quote_sync_days(),
-            label="行情",
+            max_days=lim,
+            label="/".join(labels),
         )
     elif has_adj or has_fina or start_date or end_date:
         # 复权与财务共用可选日期；跨度取更宽的上限，避免勾选财务时被复权上限误伤
@@ -141,6 +163,28 @@ def export_modules(
                 env_label=label,
             ),
         )
+    if parts["fund_flow"]:
+        bundles["fund_flow"] = _stage(
+            "fund_flow",
+            lambda: export_fund_flow(
+                db,
+                start=date_range["start"],
+                end=date_range["end"],
+                tables=set(parts["fund_flow"]),
+                env_label=label,
+            ),
+        )
+    if parts["computed"]:
+        bundles["computed_results"] = _stage(
+            "computed_results",
+            lambda: export_computed_results(
+                db,
+                start=date_range["start"],
+                end=date_range["end"],
+                tables=set(parts["computed"]),
+                env_label=label,
+            ),
+        )
     if parts["adj_factors"]:
         adj_start = date_range["start"]
         adj_end = date_range["end"]
@@ -194,7 +238,7 @@ def import_modules(
 ) -> Dict[str, Any]:
     """
     bundles: {
-      strategy_configs|trade_observe|stock_basic|board_data|quotes|adj_factors|fina_indicator|permissions_resources: SyncBundle
+      strategy_configs|trade_observe|stock_basic|board_data|quotes|fund_flow|computed_results|adj_factors|fina_indicator|permissions_resources: SyncBundle
     }
     modules: 可选，限制导入细项；为空则导入包内全部 items。
     """
@@ -225,6 +269,16 @@ def import_modules(
     if "quotes" in (bundles or {}):
         tables = set(parts["quotes"]) if parts else None
         results["quotes"] = import_quotes(db, bundles["quotes"], tables=tables)
+    if "fund_flow" in (bundles or {}):
+        tables = set(parts["fund_flow"]) if parts else None
+        results["fund_flow"] = import_fund_flow(
+            db, bundles["fund_flow"], tables=tables
+        )
+    if "computed_results" in (bundles or {}):
+        tables = set(parts["computed"]) if parts else None
+        results["computed_results"] = import_computed_results(
+            db, bundles["computed_results"], tables=tables
+        )
     if "adj_factors" in (bundles or {}):
         tables = set(parts["adj_factors"]) if parts else None
         results["adj_factors"] = import_adj_factors(

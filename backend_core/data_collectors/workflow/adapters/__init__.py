@@ -524,45 +524,6 @@ def _rs_rating_hk() -> Any:
     return result
 
 
-def _ths_fund_flow_daily() -> Any:
-    from backend_core.data_collectors.akshare.ths_fund_flow_daily import collect_ths_fund_flow_daily
-
-    return collect_ths_fund_flow_daily()
-
-
-def _zt_pool_em_daily() -> Any:
-    from backend_core.data_collectors.akshare.zt_pool_em import collect_zt_pool_em
-
-    # 失败不抛：返回 dict 供工作流记录；复盘节点可回退 hist_proxy
-    return collect_zt_pool_em()
-
-
-def _market_daily_review() -> Any:
-    from backend_core.market_review.compute import collect_and_build_review
-
-    # 工作流内不再重复采涨停池（应由前置节点完成）；此处仍允许池为空时回退
-    return collect_and_build_review(collect_zt=False, export_md=True)
-
-
-def _board_fund_flow_daily() -> Any:
-    from backend_core.data_collectors.akshare.board_fund_flow_daily import (
-        collect_board_fund_flow_daily,
-    )
-
-    return collect_board_fund_flow_daily()
-
-
-def _hk_fund_flow_daily() -> Any:
-    from backend_core.data_collectors.akshare.hk_fund_flow_from_file import (
-        collect_hk_fund_flow_from_file,
-    )
-
-    result = collect_hk_fund_flow_from_file()
-    if isinstance(result, dict) and not result.get("success"):
-        raise RuntimeError(result.get("error") or "港股资金流向文件采集失败")
-    return result
-
-
 def _fina_indicator_cn() -> Any:
     """A 股财务指标增量采集（CAN SLIM C/A）。Tushare 优先，可回退 AkShare。"""
     import logging
@@ -670,11 +631,6 @@ exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
 exec_csb_cn = _wrap_plain(_csb_cn, "CSB信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
-exec_ths_fund_flow_daily = _wrap_cn(_ths_fund_flow_daily, "同花顺资金流入流出日采")
-exec_zt_pool_em_daily = _wrap_cn(_zt_pool_em_daily, "东财涨停股池日采")
-exec_market_daily_review = _wrap_cn(_market_daily_review, "每日复盘指标")
-exec_board_fund_flow_daily = _wrap_cn(_board_fund_flow_daily, "板块资金流向日采")
-exec_hk_fund_flow_daily = _wrap_hk(_hk_fund_flow_daily, "港股资金流向文件日采")
 exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")
 exec_index_daily_cn = _wrap_plain(_index_daily_cn, "A股指数日线采集")
 exec_market_news = _wrap_plain(_market_news, "市场新闻采集")
@@ -707,8 +663,11 @@ exec_stock_recommend_brief_late = _wrap_plain(
 )
 
 
-def _resolve_macd_trade_date(ctx: WorkflowContext) -> Optional[str]:
+def _resolve_node_trade_date(ctx: WorkflowContext) -> Optional[str]:
+    """从节点参数 / 流程覆盖参数 / 上下文解析交易日（YYYY-MM-DD）。"""
     for src in (ctx.node_params, ctx.params):
+        if not src:
+            continue
         raw = src.get("trade_date") or src.get("end_date")
         if raw:
             return str(raw)[:10]
@@ -719,6 +678,132 @@ def _resolve_macd_trade_date(ctx: WorkflowContext) -> Optional[str]:
     return None
 
 
+def _has_explicit_trade_date(ctx: WorkflowContext) -> bool:
+    """节点或流程级是否显式指定了交易日（不含 ctx 默认当日）。"""
+    for src in (ctx.node_params, ctx.params):
+        if not src:
+            continue
+        if src.get("trade_date") or src.get("end_date"):
+            return True
+    return False
+
+
+# 兼容旧测试名
+_resolve_macd_trade_date = _resolve_node_trade_date
+
+
+def exec_hk_fund_flow_daily(ctx: WorkflowContext) -> NodeResult:
+    """港股资金流向文件日采；可经节点参数 trade_date 指定交易日（补采历史日）。"""
+    if not _has_explicit_trade_date(ctx) and hk_session_closed_today():
+        return NodeResult.skip("港股休市，跳过港股资金流向文件日采")
+    try:
+        from backend_core.data_collectors.akshare.hk_fund_flow_from_file import (
+            collect_hk_fund_flow_from_file,
+        )
+
+        trade_date = _resolve_node_trade_date(ctx)
+        result = collect_hk_fund_flow_from_file(trade_date=trade_date)
+        if isinstance(result, dict) and not result.get("success"):
+            return NodeResult.fail(
+                result.get("error") or "港股资金流向文件采集失败",
+                message="港股资金流向文件日采失败",
+            )
+        return NodeResult.ok(
+            "港股资金流向文件日采完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("港股资金流向文件日采异常")
+        return NodeResult.fail(str(e), message="港股资金流向文件日采失败")
+
+
+def exec_ths_fund_flow_daily(ctx: WorkflowContext) -> NodeResult:
+    """同花顺个股资金流日采；可指定交易日补历史。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过同花顺资金流入流出日采")
+    try:
+        from backend_core.data_collectors.akshare.ths_fund_flow_daily import (
+            collect_ths_fund_flow_daily,
+        )
+
+        trade_date = _resolve_node_trade_date(ctx)
+        result = collect_ths_fund_flow_daily(trade_date=trade_date)
+        return NodeResult.ok(
+            "同花顺资金流入流出日采完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("同花顺资金流入流出日采异常")
+        return NodeResult.fail(str(e), message="同花顺资金流入流出日采失败")
+
+
+def exec_board_fund_flow_daily(ctx: WorkflowContext) -> NodeResult:
+    """板块资金流向；可指定交易日补历史。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过板块资金流向历史")
+    try:
+        from backend_core.data_collectors.akshare.board_fund_flow_daily import (
+            collect_board_fund_flow_daily,
+        )
+
+        trade_date = _resolve_node_trade_date(ctx)
+        result = collect_board_fund_flow_daily(trade_date=trade_date)
+        if isinstance(result, dict) and result.get("success") is False:
+            return NodeResult.fail(
+                result.get("error") or "板块资金流向采集失败",
+                message="板块资金流向历史失败",
+            )
+        return NodeResult.ok(
+            "板块资金流向历史完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("板块资金流向历史异常")
+        return NodeResult.fail(str(e), message="板块资金流向历史失败")
+
+
+def exec_zt_pool_em_daily(ctx: WorkflowContext) -> NodeResult:
+    """东财涨停股池；可指定交易日补历史。失败不阻断后续复盘节点。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过东财涨停股池历史")
+    try:
+        from backend_core.data_collectors.akshare.zt_pool_em import collect_zt_pool_em
+
+        trade_date = _resolve_node_trade_date(ctx)
+        result = collect_zt_pool_em(trade_date=trade_date)
+        # 失败仍记 success，便于 on_failure=continue；结果里带 error
+        return NodeResult.ok(
+            "东财涨停股池历史完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("东财涨停股池历史异常")
+        return NodeResult.ok(
+            f"东财涨停股池历史异常（已跳过）: {e}",
+            data={"error": str(e)},
+        )
+
+
+def exec_market_daily_review(ctx: WorkflowContext) -> NodeResult:
+    """每日复盘指标落库；可指定交易日补历史。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过每日复盘指标")
+    try:
+        from backend_core.market_review.compute import collect_and_build_review
+
+        trade_date = _resolve_node_trade_date(ctx)
+        result = collect_and_build_review(
+            trade_date=trade_date, collect_zt=False, export_md=True
+        )
+        return NodeResult.ok(
+            "每日复盘指标完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("每日复盘指标异常")
+        return NodeResult.fail(str(e), message="每日复盘指标失败")
+
+
 def exec_macd_cn(ctx: WorkflowContext) -> NodeResult:
     """A股历史行情采集后的 MACD 日指标独立计算。"""
     if cn_session_closed_today():
@@ -726,7 +811,7 @@ def exec_macd_cn(ctx: WorkflowContext) -> NodeResult:
     try:
         from backend_core.data_collectors.indicators.macd_daily import run_macd_cn
 
-        trade_date = _resolve_macd_trade_date(ctx)
+        trade_date = _resolve_node_trade_date(ctx)
         result = run_macd_cn(trade_date=trade_date)
         if isinstance(result, dict) and result.get("failed", 0) > 0 and result.get("ok", 0) == 0:
             return NodeResult.fail(
@@ -746,7 +831,7 @@ def exec_macd_hk(ctx: WorkflowContext) -> NodeResult:
     try:
         from backend_core.data_collectors.indicators.macd_daily import run_macd_hk
 
-        trade_date = _resolve_macd_trade_date(ctx)
+        trade_date = _resolve_node_trade_date(ctx)
         result = run_macd_hk(trade_date=trade_date)
         if isinstance(result, dict) and result.get("failed", 0) > 0 and result.get("ok", 0) == 0:
             return NodeResult.fail(

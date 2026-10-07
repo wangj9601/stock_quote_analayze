@@ -98,6 +98,18 @@ _DATE_SCHEMA: Dict[str, Any] = {
     },
 }
 
+_TRADE_DATE_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "trade_date": {
+            "type": "string",
+            "title": "交易日(可选)",
+            "format": "date",
+            "description": "默认执行当日；补采历史日时指定；休市补采须指定",
+        }
+    },
+}
+
 
 def _n(
     key: str,
@@ -214,35 +226,50 @@ NODE_DEFS: List[CollectionNodeDef] = [
         "同花顺资金流入流出日采",
         "cn",
         exec_ths_fund_flow_daily,
-        description="stock_fund_flow_individual(即时) → stock_fund_flow_daily",
+        param_schema=_TRADE_DATE_SCHEMA,
+        description="stock_fund_flow_individual(即时) → stock_fund_flow_daily（可指定交易日）",
     ),
     _n(
         "zt_pool_em_daily",
-        "东财涨停股池日采",
+        "东财涨停股池历史",
         "cn",
         exec_zt_pool_em_daily,
-        description="stock_zt_pool_em → stock_zt_pool_daily（失败可跳过，复盘回退代理）",
+        param_schema=_TRADE_DATE_SCHEMA,
+        description="stock_zt_pool_em → stock_zt_pool_daily（可指定交易日；失败可跳过，复盘回退代理）",
     ),
     _n(
         "market_daily_review",
         "每日复盘指标",
         "strategy",
         exec_market_daily_review,
-        description="计算 Vol/CB/H/Lo/Hi/Sp/硬门槛/主线并写 market_daily_review（建议在涨停池之后）",
+        param_schema=_TRADE_DATE_SCHEMA,
+        description="计算 Vol/CB/H/Lo/Hi/Sp/硬门槛/主线并写 market_daily_review（可指定交易日；建议在涨停池之后）",
     ),
     _n(
         "board_fund_flow_daily",
-        "板块资金流向日采",
+        "板块资金流向历史",
         "cn",
         exec_board_fund_flow_daily,
-        description="同花顺行业/概念资金流 → board_fund_flow_daily（需在个股资金流之后）",
+        param_schema=_TRADE_DATE_SCHEMA,
+        description="同花顺行业/概念资金流 → board_fund_flow_daily（可指定交易日；需在个股资金流之后）",
     ),
     _n(
         "hk_fund_flow_daily",
         "港股资金流向文件日采",
         "hk",
         exec_hk_fund_flow_daily,
-        description="hk_fund_flow_YYYYMMDD → stock_fund_flow_daily_hk",
+        param_schema={
+            "type": "object",
+            "properties": {
+                "trade_date": {
+                    "type": "string",
+                    "title": "交易日(可选)",
+                    "format": "date",
+                    "description": "指定读取 hk_fund_flow_YYYYMMDD 文件；默认执行当日；休市补采须指定",
+                }
+            },
+        },
+        description="hk_fund_flow_YYYYMMDD → stock_fund_flow_daily_hk（可指定交易日）",
     ),
     _n("triple_volume_scan", "3倍量爆量扫描", "strategy", exec_triple_volume_scan),
     _n(

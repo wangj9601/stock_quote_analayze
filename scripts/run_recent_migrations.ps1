@@ -1,9 +1,14 @@
 #Requires -Version 4.0
 <#
 .SYNOPSIS
-  执行 migrations 目录下最近 N 天内修改过的 .py 迁移脚本。
+  [已弃用] 执行 migrations 目录下最近 N 天内修改过的 .py 迁移脚本。
   兼容 Windows PowerShell 4.0+（生产环境常见）。
   推荐优先使用: python scripts/run_recent_migrations.py
+.DESCRIPTION
+  自 2026-10-07 起，schema 变更已改用 Alembic 管理：
+      python scripts/db_migrate.py status / check / upgrade
+  详见 docs/database/Alembic_guide.md 与 migrations/README.md。
+  本脚本保留仅供历史库应急补齐。
 .PARAMETER Days
   回溯天数，默认 2。
 .PARAMETER Yes
@@ -23,6 +28,21 @@ if (-not (Test-Path (Join-Path $Root "migrations"))) {
     }
 }
 Set-Location $Root
+
+Write-Host "============================================================" -ForegroundColor Yellow
+Write-Host " [DEPRECATED] 该脚本按 mtime 排序执行，无版本账本、无回滚，已被 Alembic 取代。" -ForegroundColor Yellow
+Write-Host " 新变更请用: python scripts/db_migrate.py revision -m \`"说明\`"" -ForegroundColor Yellow
+Write-Host "             python scripts/db_migrate.py check / upgrade" -ForegroundColor Yellow
+Write-Host " 文档: docs/database/Alembic_guide.md" -ForegroundColor Yellow
+Write-Host "============================================================" -ForegroundColor Yellow
+Write-Host ""
+if (-not $Yes) {
+    $go = Read-Host "仍要继续吗？(Y/N)"
+    if ($go -notin @("Y", "y")) {
+        Write-Host "已取消。建议改用: python scripts/db_migrate.py upgrade"
+        exit 0
+    }
+}
 
 $migDir = Join-Path $Root "migrations"
 if (-not (Test-Path $migDir)) {

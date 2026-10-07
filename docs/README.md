@@ -11,6 +11,7 @@
 | [design/](design/) | 系统需求、总体设计与实现总览 |
 | [admin/](admin/) | 管理后台与用户使用手册 |
 | [data/](data/) | 数据采集、AKShare/ETF/港股、相关 API 说明 |
+| [database/](database/) | 数据库 schema 变更规范（[Alembic 迁移指南](database/Alembic_guide.md)） |
 | [notifications/](notifications/) | 推送通知、报表服务 |
 | [indicators/](indicators/) | 技术指标与无穷成本均线等 |
 | [features/](features/) | 成交量异动榜、行业板块、[支撑/阻力与形态识别算法](features/支撑阻力与形态识别_算法说明.md)（§1.1 四维闭环）、[形态识别工具](features/形态识别工具.md)（**4 族 / 12 种**日线形态清单）等 |
