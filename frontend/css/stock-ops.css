@@ -270,7 +270,7 @@ body.ops-map input[type="date"],
 body.ops-map input[type="text"],
 body.ops-map input[type="number"],
 body.ops-map select {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     color: var(--ops-ink) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     border-radius: 2px !important;

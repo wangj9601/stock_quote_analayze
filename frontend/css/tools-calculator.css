@@ -75,7 +75,7 @@ body.ops-map.tools-calc-page .form-group label {
 
 body.ops-map.tools-calc-page .form-group input,
 body.ops-map.tools-calc-page .form-group select {
-    background: rgba(0, 0, 0, 0.28);
+    background-color: rgba(0, 0, 0, 0.28);
     border: 1px solid rgba(217, 226, 236, 0.28);
     border-radius: 2px;
     color: var(--ops-ink);

@@ -247,7 +247,7 @@ body.ops-map[data-channel="watchlist"] input[type="text"],
 body.ops-map[data-channel="watchlist"] input[type="number"],
 body.ops-map[data-channel="watchlist"] select,
 body.ops-map[data-channel="watchlist"] textarea {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     color: var(--ops-ink) !important;
     border-radius: 2px !important;

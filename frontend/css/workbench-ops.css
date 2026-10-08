@@ -66,12 +66,12 @@ body.ops-map .history-card .toolbar input[type="text"],
 body.ops-map .toolbar input[type="date"],
 body.ops-map .toolbar input[type="text"],
 body.ops-map .toolbar select {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     color: var(--ops-ink) !important;
     border-radius: 2px !important;
     min-height: 36px;
-    padding: 6px 10px !important;
+    padding: 6px 1.75rem 6px 10px !important;
 }
 
 body.ops-map .gms-trace-card .toolbar-row button,
@@ -358,7 +358,7 @@ body.ops-map .gms-backtest-summary-item span {
 
 body.ops-map .gms-backtest-select,
 body.ops-map .gms-backtest-input-num {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     color: var(--ops-ink) !important;
     border-radius: 2px !important;

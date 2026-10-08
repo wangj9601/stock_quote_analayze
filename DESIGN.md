@@ -190,7 +190,7 @@ Operate 模式：顶栏（冰枫堂 + 频道）→ 可选策略叠层条 → 主
 ### Named Rules
 **The Hairline Rule.** 控件圆角 ≤ `2px`；全圆胶囊不是默认语法。
 
-**The Date Indicator Rule.** 作战板上原生日期/时间控件的日历图标必须与 `--ops-ink` 同级可读；默认浏览器深色图标不可见时，用 `color-scheme: dark` + filter 令牌统一修复，勿在各页单独糊补丁。
+**The Control Indicator Rule.** 作战板上原生日期/时间控件的日历图标，以及 `<select>` / `.ops-select` 下拉箭头，必须与 `--ops-ink` 同级可读。不要用 `invert` 滤镜硬拧系统图标（`color-scheme: dark` 下会越拧越暗）；统一换成 `--ops-date-picker-icon` / `--ops-select-chevron`（静止墨色、hover/焦点金色）SVG。实现集中在 `design-tokens.css`，`ops-surfaces.css` 末级重申；后续样式用 `background-color` 而非 `background` 简写。勿在各页单独糊补丁。
 
 ## Components
 

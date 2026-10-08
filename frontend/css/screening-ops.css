@@ -288,7 +288,7 @@ body.ops-map .params-section select.param-input,
 body.ops-map .params-section .param-input,
 body.ops-map .screening-container select,
 body.ops-map .screening-container input[type="date"] {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     color: var(--ops-ink) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     border-radius: 2px !important;
@@ -341,11 +341,14 @@ body.ops-map .ops-select-trigger {
 body.ops-map .ops-select-trigger::after {
     content: "";
     flex-shrink: 0;
-    width: 0;
-    height: 0;
-    border-left: 4px solid transparent;
-    border-right: 4px solid transparent;
-    border-top: 5px solid var(--ops-ink-muted);
+    width: 12px;
+    height: 8px;
+    margin-left: 4px;
+    background-image: var(--ops-select-chevron);
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 12px 8px;
+    border: none;
 }
 
 body.ops-map .ops-select.is-open .ops-select-trigger,
@@ -355,9 +358,9 @@ body.ops-map .ops-select-trigger:focus-visible {
     outline: none;
 }
 
-body.ops-map .ops-select.is-open .ops-select-trigger::after {
-    border-top: none;
-    border-bottom: 5px solid var(--ops-gold);
+body.ops-map .ops-select.is-open .ops-select-trigger::after,
+body.ops-map .ops-select-trigger:focus-visible::after {
+    background-image: var(--ops-select-chevron-focus);
 }
 
 body.ops-map .ops-select-menu {

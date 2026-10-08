@@ -277,13 +277,14 @@ body.ops-map input[type="time"],
 body.ops-map input[type="number"],
 body.ops-map select,
 body.ops-map textarea {
-    background: var(--ops-ground) !important;
+    /* background-color：勿用 background 简写，以免冲掉 select 箭头图 */
+    background-color: var(--ops-ground) !important;
     color: var(--ops-ink) !important;
     border: 1px solid rgba(217, 226, 236, 0.22) !important;
     border-radius: 2px !important;
 }
 
-/* 日历图标对比度：实现见 design-tokens.css（--ops-date-picker-indicator-*） */
+/* 日历图标对比度：实现见 design-tokens.css（--ops-date-picker-icon*） */
 body.ops-map input[type="date"],
 body.ops-map input[type="datetime-local"],
 body.ops-map input[type="month"],

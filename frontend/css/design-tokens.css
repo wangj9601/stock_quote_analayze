@@ -50,9 +50,14 @@
     /* Selection / focus */
     --ops-focus: 0 0 0 2px var(--ops-ground), 0 0 0 4px var(--ops-gold);
 
-    /* 原生 date 日历图标：深底上提亮（Chromium/WebKit） */
-    --ops-date-picker-indicator-filter: invert(1) brightness(1.4);
-    --ops-date-picker-indicator-filter-hover: invert(1) brightness(1.65);
+    /*
+     * 控件指示器：不用 invert 滤镜（color-scheme:dark 下系统图标已偏浅，invert 会拧暗）。
+     * 直接换成 --ops-ink / --ops-gold 的 SVG，尺寸固定，深底上必然可读。
+     */
+    --ops-date-picker-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Crect x='1.5' y='3' width='13' height='11.5' rx='1.5' stroke='%23d9e2ec' stroke-width='1.6'/%3E%3Cpath d='M1.5 6.5h13' stroke='%23d9e2ec' stroke-width='1.6'/%3E%3Cpath d='M5 1.5v3M11 1.5v3' stroke='%23d9e2ec' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    --ops-date-picker-icon-hover: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Crect x='1.5' y='3' width='13' height='11.5' rx='1.5' stroke='%23c9a227' stroke-width='1.6'/%3E%3Cpath d='M1.5 6.5h13' stroke='%23c9a227' stroke-width='1.6'/%3E%3Cpath d='M5 1.5v3M11 1.5v3' stroke='%23c9a227' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
+    --ops-select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23d9e2ec' d='M0 1h12L6 8z'/%3E%3C/svg%3E");
+    --ops-select-chevron-focus: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c9a227' d='M0 1h12L6 8z'/%3E%3C/svg%3E");
 }
 
 ::selection {
@@ -89,8 +94,17 @@ body.ops-map input[type="month"]::-webkit-calendar-picker-indicator,
 body.ops-map input[type="week"]::-webkit-calendar-picker-indicator,
 body.ops-map input[type="time"]::-webkit-calendar-picker-indicator {
     cursor: pointer;
-    opacity: 0.92;
-    filter: var(--ops-date-picker-indicator-filter);
+    opacity: 1 !important;
+    width: 1.15rem !important;
+    height: 1.15rem !important;
+    margin-left: 0.2rem;
+    padding: 0;
+    filter: none !important;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    color: transparent;
+    /* 简写 background 整块替换系统默认图标 */
+    background: var(--ops-date-picker-icon) center / 1.1rem 1.1rem no-repeat !important;
 }
 
 body.ops-map input[type="date"]::-webkit-calendar-picker-indicator:hover,
@@ -98,8 +112,29 @@ body.ops-map input[type="datetime-local"]::-webkit-calendar-picker-indicator:hov
 body.ops-map input[type="month"]::-webkit-calendar-picker-indicator:hover,
 body.ops-map input[type="week"]::-webkit-calendar-picker-indicator:hover,
 body.ops-map input[type="time"]::-webkit-calendar-picker-indicator:hover {
-    opacity: 1;
-    filter: var(--ops-date-picker-indicator-filter-hover);
+    opacity: 1 !important;
+    background: var(--ops-date-picker-icon-hover) center / 1.1rem 1.1rem no-repeat !important;
+}
+
+/* 原生 select 箭头：去掉系统三角，统一墨色 / 焦点金色 */
+body.ops-map select:not(.ops-select-native) {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    padding-right: 1.85rem !important;
+    background-image: var(--ops-select-chevron) !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.55rem center !important;
+    background-size: 12px 8px !important;
+}
+
+body.ops-map select:not(.ops-select-native)::-ms-expand {
+    display: none;
+}
+
+body.ops-map select:not(.ops-select-native):focus,
+body.ops-map select:not(.ops-select-native):focus-visible {
+    background-image: var(--ops-select-chevron-focus) !important;
 }
 
 /* 各频道统一：无方格，仅极淡暗角（领地色除外） */

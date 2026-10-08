@@ -394,7 +394,7 @@ body.ops-map .indicator-select,
 body.ops-map .ma-select,
 body.ops-map .ba-role-select,
 body.ops-map .uto-source-select {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     color: var(--ops-ink) !important;
     border-radius: 2px !important;
@@ -597,7 +597,7 @@ body.ops-map .ssa-mfe-verdict {
 }
 body.ops-map .ssa-mfe-import select,
 body.ops-map .ssa-mfe-import textarea {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     color: var(--ops-ink) !important;
     border-radius: 2px !important;
@@ -610,7 +610,7 @@ body.ops-map .ssa-mfe-import-tpl {
 body.ops-map .ssa-form input,
 body.ops-map .ssa-form select,
 body.ops-map .ssa-toolbar input[type="date"] {
-    background: rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 0, 0, 0.28) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     color: var(--ops-ink) !important;
     border-radius: 2px !important;
@@ -1302,4 +1302,44 @@ body.ops-map .dr-code {
     body.ops-map .ssa-fund-flow-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
+}
+
+/* ========== 15) 控件指示器重申（令牌见 design-tokens.css） ========== */
+body.ops-map input[type="date"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="month"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="week"]::-webkit-calendar-picker-indicator,
+body.ops-map input[type="time"]::-webkit-calendar-picker-indicator {
+    opacity: 1 !important;
+    width: 1.15rem !important;
+    height: 1.15rem !important;
+    filter: none !important;
+    -webkit-mask-image: none !important;
+    mask-image: none !important;
+    color: transparent;
+    background: var(--ops-date-picker-icon) center / 1.1rem 1.1rem no-repeat !important;
+}
+
+body.ops-map input[type="date"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="month"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="week"]::-webkit-calendar-picker-indicator:hover,
+body.ops-map input[type="time"]::-webkit-calendar-picker-indicator:hover {
+    background: var(--ops-date-picker-icon-hover) center / 1.1rem 1.1rem no-repeat !important;
+}
+
+body.ops-map select:not(.ops-select-native) {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    padding-right: 1.85rem !important;
+    background-image: var(--ops-select-chevron) !important;
+    background-repeat: no-repeat !important;
+    background-position: right 0.55rem center !important;
+    background-size: 12px 8px !important;
+}
+
+body.ops-map select:not(.ops-select-native):focus,
+body.ops-map select:not(.ops-select-native):focus-visible {
+    background-image: var(--ops-select-chevron-focus) !important;
 }

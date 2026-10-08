@@ -141,7 +141,7 @@ body.ops-map[data-channel="analyze"] .quick-analysis {
 body.ops-map[data-channel="analyze"] .ma-select,
 body.ops-map[data-channel="analyze"] .ma-table-wrap,
 body.ops-map[data-channel="analyze"] .ma-table th {
-    background: rgba(0, 0, 0, 0.22) !important;
+    background-color: rgba(0, 0, 0, 0.22) !important;
     color: var(--ops-ink) !important;
     border-color: var(--color-border) !important;
 }
@@ -362,7 +362,7 @@ body.ops-map[data-channel="analyze"] input[type="text"],
 body.ops-map[data-channel="analyze"] input[type="search"],
 body.ops-map[data-channel="analyze"] input[type="date"],
 body.ops-map[data-channel="analyze"] input[type="number"] {
-    background: rgba(0, 0, 0, 0.25) !important;
+    background-color: rgba(0, 0, 0, 0.25) !important;
     border: 1px solid rgba(217, 226, 236, 0.28) !important;
     color: var(--ops-ink) !important;
     border-radius: 2px !important;

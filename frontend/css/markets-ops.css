@@ -1046,7 +1046,7 @@ body.ops-map #sectorDetailBody a.ba-role-pill:focus-visible {
 /* 涨停分析 */
 body.ops-map #sectorDetailBody .sector-limit-up-controls select,
 body.ops-map #sectorDetailBody .sector-limit-up-controls input {
-    background: var(--ops-ground, #0f1419) !important;
+    background-color: var(--ops-ground, #0f1419) !important;
     color: var(--ops-ink) !important;
     border: 1px solid rgba(217, 226, 236, 0.24) !important;
     border-radius: 1px !important;
