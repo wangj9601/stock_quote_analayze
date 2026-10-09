@@ -82,7 +82,12 @@ def main() -> None:
         host="0.0.0.0",
         port=5000,
         reload=True,
-        reload_dirs=[str(PROJECT_ROOT / "backend_api")],
+        # 含 backend_core：采集/指标逻辑在此；排除 test/admin，避免误 reload 打断任务
+        reload_dirs=[
+            str(PROJECT_ROOT / "backend_api"),
+            str(PROJECT_ROOT / "backend_core"),
+        ],
+        reload_excludes=["*.xls", "*.xlsx", "*.csv", "*.pyc", "*__pycache__*"],
     )
 
 

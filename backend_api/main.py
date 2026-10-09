@@ -1322,11 +1322,19 @@ async def startup_event():
         raise
 
 if __name__ == "__main__":
+    from pathlib import Path as _Path
+
+    _project_root = _Path(__file__).resolve().parent.parent
     uvicorn.run(
-        "backend_api.main:app", 
-        host="0.0.0.0", 
-        port=5000, 
+        "backend_api.main:app",
+        host="0.0.0.0",
+        port=5000,
         reload=True,
+        reload_dirs=[
+            str(_project_root / "backend_api"),
+            str(_project_root / "backend_core"),
+        ],
+        reload_excludes=["*.xls", "*.xlsx", "*.csv", "*.pyc", "*__pycache__*"],
         timeout_keep_alive=300,
-        timeout_graceful_shutdown=300
+        timeout_graceful_shutdown=300,
     )

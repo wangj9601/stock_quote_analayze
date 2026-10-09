@@ -66,41 +66,50 @@ class MeanFrequencyResonanceCalculator:
         if dates is not None and len(dates) != len(closes):
             dates = None
 
+        # 先规范为 float64，避免脏类型导致后续列插入时 Index 推断异常
+        close_arr = np.asarray(closes, dtype=np.float64)
+        volume_arr = np.asarray(volumes, dtype=np.float64)
+        if close_arr.shape != volume_arr.shape or close_arr.ndim != 1:
+            return []
+
+        # 涨跌用 numpy 预计算后一次性组表（与原 pandas 比较一致：首日对 NaN 比较为 False→0.0）
+        prev_close = np.empty_like(close_arr)
+        prev_close[0] = np.nan
+        prev_close[1:] = close_arr[:-1]
+        with np.errstate(invalid='ignore'):
+            is_rising = (close_arr > prev_close).astype(np.float64)
+            is_falling = (close_arr < prev_close).astype(np.float64)
+
         df = pd.DataFrame({
-            'close': closes,
-            'volume': volumes
+            'close': close_arr,
+            'volume': volume_arr,
+            'is_rising': is_rising,
+            'is_falling': is_falling,
         })
-        
+
         # 1. 计算 MA20 (d)
         df['ma20'] = df['close'].rolling(window=window).mean()
-        
+
         # 2. 计算 MAVOL20 (m)
         df['mavol20'] = df['volume'].rolling(window=window).mean()
-        
+
         # 3. 计算 Delta (d20 - d1)
         # d20 是当前价格 (t), d1 是窗口起始价格 (t-19)
         # 实际上是价格在20天内的位移
         # shift(window-1) 取到的是窗口第一个值
         df['delta'] = df['close'] - df['close'].shift(window - 1)
-        
+
         # 4. 计算 即时偏离度 (d20 - d)
         df['instant_deviation'] = df['close'] - df['ma20']
-        
+
         # 5. 计算 进出效率 (m20 - m)
         df['efficiency'] = df['volume'] - df['mavol20']
-        
+
         # 6. 计算 Z (上涨天数) 和 F (下跌天数)
-        # 定义上涨为 Close > Prev Close
-        # 注意：这里需要 T 和 T-1，所以第一个 is_rising 是从索引 1 开始的
-        df['is_rising'] = (df['close'] > df['close'].shift(1)).astype(float)
-        df['is_falling'] = (df['close'] < df['close'].shift(1)).astype(float)
-        
-        # 滚动求和
-        # 如果 window=20，第 20 个点 (index 19) 的 z 将是 NaN，因为 is_rising[0] 是 NaN
-        # 第 21 个点 (index 20) 的 z 才是有效的（涵盖了 20 个完整的变动判断）
+        # 滚动求和：window=20 时 index 20 起才有完整 20 次涨跌判断
         df['z'] = df['is_rising'].rolling(window=window).sum()
         df['f'] = df['is_falling'].rolling(window=window).sum()
-        
+
         # d1 = 窗口起始价 (shift window-1)
         df['d1'] = df['close'].shift(window - 1)
 

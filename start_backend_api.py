@@ -64,7 +64,7 @@ if __name__ == "__main__":
         workers = 1
     print(f"[ENV] 运行环境: {'production(多worker)' if is_prod else 'development(--reload)'}")
     print(f"[ENV] 端口: {port}")
-    
+
     # Use -m uvicorn to avoid import issues and let uvicorn handle reloading properly
     if sys.platform == "win32":
         env.setdefault("PYTHONUTF8", "1")
@@ -82,8 +82,18 @@ if __name__ == "__main__":
         # 生产环境用多 worker 提升并发；注意 workers>1 为多进程（uvicorn 机制）
         cmd += ["--workers", str(workers)]
     else:
+        # 仅监视业务代码目录，避免 test/admin/文档等误触发热重载打断采集子进程
+        _reload_dirs = (
+            os.path.join(root_dir, "backend_api"),
+            os.path.join(root_dir, "backend_core"),
+        )
         cmd += ["--reload"]
-    
+        for _d in _reload_dirs:
+            cmd += ["--reload-dir", _d]
+        for _ex in ("*.xls", "*.xlsx", "*.csv", "*.pyc", "*__pycache__*"):
+            cmd += ["--reload-exclude", _ex]
+        print(f"[ENV] reload 目录: {', '.join(_reload_dirs)}")
+
     try:
         subprocess.run(cmd, env=env, cwd=root_dir)
     except KeyboardInterrupt:
