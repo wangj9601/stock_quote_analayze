@@ -289,28 +289,40 @@ def collect_main_force_for_code(
     source: str = "auto",
     days: int = 120,
 ) -> Dict[str, Any]:
-    """source=auto：先东财，失败再 Tushare moneyflow。"""
+    """source=auto：先 Tushare moneyflow，失败再东财。"""
     src = (source or "auto").strip().lower()
     if src not in ("auto", "em", "tushare"):
         return {"success": False, "error": "source 应为 auto / em / tushare", "upserted": 0}
 
-    em_err = None
-    if src in ("auto", "em"):
-        from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
-            collect_em_stock_fund_flow_for_code,
-        )
+    ts_err = None
+    if src in ("auto", "tushare"):
+        ts_res = collect_tushare_moneyflow_for_code(code, days=days)
+        if ts_res.get("success") and int(ts_res.get("upserted") or 0) > 0:
+            ts_res["source"] = "tushare"
+            return ts_res
+        ts_err = ts_res.get("error") or "tushare empty"
+        if src == "tushare":
+            return ts_res
 
-        res = collect_em_stock_fund_flow_for_code(code, keep_last_n=days)
-        if res.get("success") and int(res.get("upserted") or 0) > 0:
-            res["source"] = "em"
-            return res
-        em_err = res.get("error") or "eastmoney empty"
-        if src == "em":
-            return res
+    from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
+        collect_em_stock_fund_flow_for_code,
+    )
 
-    ts_res = collect_tushare_moneyflow_for_code(code, days=days)
-    if em_err:
-        ts_res["eastmoney_error"] = em_err
-    if src == "auto" and ts_res.get("success"):
-        ts_res["fallback"] = "tushare"
-    return ts_res
+    em_res = collect_em_stock_fund_flow_for_code(code, keep_last_n=days)
+    if ts_err:
+        em_res["tushare_error"] = ts_err
+    if em_res.get("success") and int(em_res.get("upserted") or 0) > 0:
+        em_res["source"] = "em"
+        if src == "auto":
+            em_res["fallback"] = "em"
+        return em_res
+    if src == "em":
+        return em_res
+    # auto 双源皆败：带回两侧错误信息
+    out = dict(em_res) if isinstance(em_res, dict) else {"success": False, "upserted": 0}
+    out.setdefault("success", False)
+    if ts_err:
+        out["tushare_error"] = ts_err
+    if not out.get("error"):
+        out["error"] = ts_err or "collect failed"
+    return out

@@ -81,7 +81,7 @@
         <h4 class="ssa-block-title">主力入场</h4>
         <div class="ssa-main-force-actions">
           <button type="button" class="btn btn-secondary btn-sm" id="ssaMainForceFetchBtn"
-            title="先东财，失败则 Tushare moneyflow">拉取数据</button>
+            title="先 Tushare moneyflow，失败则东财">拉取数据</button>
           <button type="button" class="btn btn-secondary btn-sm" id="ssaMainForceImportToggle">导入数据</button>
         </div>
       </div>

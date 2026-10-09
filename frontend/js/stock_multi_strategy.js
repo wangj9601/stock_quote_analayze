@@ -232,7 +232,7 @@ const StockMultiStrategy = {
             btn.disabled = true;
             btn.textContent = '拉取中…';
         }
-        this.setBlockLoading('ssaMainForceBlock', 'ssaMainForceStatus', '正在拉取东财，失败将回退 Tushare…');
+        this.setBlockLoading('ssaMainForceBlock', 'ssaMainForceStatus', '正在拉取 Tushare，失败将回退东财…');
         try {
             const q = new URLSearchParams({
                 code,
@@ -353,7 +353,7 @@ const StockMultiStrategy = {
         host.innerHTML = `
             <div class="ssa-mfe-empty">
               <p>${this.esc(msg)}</p>
-              <p class="ssa-fund-flow-hint">点「拉取数据」会先走东财，失败再走 Tushare moneyflow；也可「导入数据」上传 CSV。同花顺净额不能替代分档主力。</p>
+              <p class="ssa-fund-flow-hint">点「拉取数据」会先走 Tushare moneyflow，失败再走东财；也可「导入数据」上传 CSV。同花顺净额不能替代分档主力。</p>
             </div>`;
     },
 

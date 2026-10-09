@@ -316,7 +316,7 @@ async def collect_main_force_series(
     days: int = Query(120, ge=5, le=250),
     sync: bool = Query(True, description="默认同步，便于分析页立即重算"),
 ):
-    """补主力分档：auto 先东财，失败再 Tushare moneyflow。"""
+    """补主力分档：auto 先 Tushare moneyflow，失败再东财。"""
     if is_hk_equity_code(code):
         return JSONResponse(
             {"success": False, "message": "主力分档仅支持 A 股"},

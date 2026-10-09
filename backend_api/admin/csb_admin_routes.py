@@ -928,6 +928,30 @@ async def cancel_backtest(task_id: str):
     return {"success": ok}
 
 
+@router.post("/backtests/{task_id}/pause")
+async def pause_backtest(task_id: str):
+    from backend_core.strategies.csb import backtest_storage, backtest_worker
+
+    backtest_worker.request_pause(task_id)
+    ok = backtest_storage.pause_task(task_id)
+    if not ok:
+        backtest_worker.request_resume(task_id)
+    return {"success": ok}
+
+
+@router.post("/backtests/{task_id}/resume")
+async def resume_backtest(task_id: str):
+    from backend_core.strategies.csb import backtest_storage, backtest_worker
+
+    backtest_worker.request_resume(task_id)
+    ok = backtest_storage.resume_task(task_id)
+    if not ok:
+        row = backtest_storage.get_task(task_id)
+        if row and row.get("status") == "paused":
+            backtest_worker.request_pause(task_id)
+    return {"success": ok}
+
+
 @router.post("/backtests/{task_id}/rerun")
 async def rerun_backtest(task_id: str):
     from backend_core.strategies.csb import backtest_storage, backtest_worker
@@ -935,7 +959,7 @@ async def rerun_backtest(task_id: str):
     row = backtest_storage.get_task(task_id)
     if not row:
         raise HTTPException(status_code=404, detail="任务不存在")
-    if row.get("status") in ("pending", "running"):
+    if row.get("status") in ("pending", "running", "paused"):
         raise HTTPException(status_code=400, detail="任务仍在运行中")
     if not backtest_storage.reset_task_for_rerun(task_id):
         raise HTTPException(status_code=400, detail="无法重新执行")

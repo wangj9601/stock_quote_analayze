@@ -175,6 +175,14 @@ class CSBApiService {
     return this.request(`${PREFIX}/backtests/${taskId}/cancel`, { method: 'POST' })
   }
 
+  async pauseBacktest(taskId: string) {
+    return this.request(`${PREFIX}/backtests/${taskId}/pause`, { method: 'POST' })
+  }
+
+  async resumeBacktest(taskId: string) {
+    return this.request(`${PREFIX}/backtests/${taskId}/resume`, { method: 'POST' })
+  }
+
   async rerunBacktest(taskId: string) {
     return this.request(`${PREFIX}/backtests/${taskId}/rerun`, { method: 'POST' })
   }

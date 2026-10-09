@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import logging
+import os
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .config import (
@@ -14,10 +16,79 @@ from .config import (
     CSB_PROBE,
     CSB_SETUP,
 )
-from .data_loader import CSBDataLoader, _norm_code
+from .data_loader import CSBDataLoader, _norm_code, history_calendar_days_for_fetch
 from .entry_detector import detect_entry
 
 logger = logging.getLogger(__name__)
+
+ProgressCb = Callable[[int, int, str], None]
+CancelCheck = Callable[[], bool]
+
+
+def _screen_workers() -> int:
+    raw = (os.getenv("CSB_SCREEN_WORKERS") or "").strip()
+    if raw.isdigit():
+        return max(1, min(16, int(raw)))
+    n = os.cpu_count() or 4
+    return max(1, min(4, n))
+
+
+def _hits_for_stock_dates(
+    code: str,
+    name: str,
+    hist_asc: List[Dict[str, Any]],
+    dates: List[str],
+    cfg: Dict[str, Any],
+    *,
+    require_entry: bool = True,
+) -> List[Dict[str, Any]]:
+    """对已拉正序行情，按多个交易日截断评点。"""
+    if not hist_asc or not dates:
+        return []
+    wanted = {str(d)[:10] for d in dates}
+    date_to_end: Dict[str, int] = {}
+    for i, b in enumerate(hist_asc):
+        ds = str(b.get("date") or "")[:10]
+        if ds in wanted:
+            date_to_end[ds] = i
+    min_score = float(cfg.get("min_score") or 0)
+    out: List[Dict[str, Any]] = []
+    for d in dates:
+        end_i = date_to_end.get(str(d)[:10])
+        if end_i is None:
+            continue
+        try:
+            sub = hist_asc[: end_i + 1]
+            row = evaluate_one(sub, code=code, name=name, trade_date=d, config=cfg)
+        except Exception as e:
+            logger.debug("CSB range-screen skip %s %s: %s", code, d, e)
+            continue
+        if not row:
+            continue
+        if require_entry and not row.get("entry_signal"):
+            continue
+        if require_entry and float(row.get("score") or 0) < min_score:
+            continue
+        out.append(row)
+    return out
+
+
+def _filter_screen_row(
+    row: Optional[Dict[str, Any]],
+    *,
+    require_entry: bool,
+    require_setup: bool,
+    min_score: float,
+) -> Optional[Dict[str, Any]]:
+    if not row:
+        return None
+    if require_setup and not row.get("setup_ok"):
+        return None
+    if require_entry and not row.get("entry_signal"):
+        return None
+    if require_entry and float(row.get("score") or 0) < min_score:
+        return None
+    return row
 
 
 def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -228,6 +299,31 @@ class CSBStrategyEngine:
         self.config_manager = CSBConfigManager()
         self.config = config or self.config_manager.get_default_config()
 
+    def _load_hist_map(
+        self,
+        stock_rows: List[Tuple[str, str]],
+        start_s: str,
+        end_s: str,
+        *,
+        chunk_size: Optional[int] = None,
+    ) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+        codes = [str(c) for c, _n in stock_rows]
+        try:
+            return self.loader.load_bars_batch(
+                codes,
+                start_date=start_s,
+                end_date=end_s,
+                chunk_size=chunk_size,
+            )
+        except Exception as e:
+            try:
+                if getattr(self.loader, "_db", None) is not None:
+                    self.loader._db.rollback()
+            except Exception:
+                pass
+            logger.warning("CSB 批量拉行情失败，回退逐股: %s", e)
+            return None
+
     def evaluate_code(
         self,
         code: str,
@@ -275,9 +371,10 @@ class CSBStrategyEngine:
         require_entry: bool = False,
         require_setup: bool = False,
         max_results: Optional[int] = None,
-        progress_cb: Optional[Callable[[int, int, str], None]] = None,
-        cancel_check: Optional[Callable[[], bool]] = None,
+        progress_cb: Optional[ProgressCb] = None,
+        cancel_check: Optional[CancelCheck] = None,
     ) -> List[Dict[str, Any]]:
+        """全市场/池扫描：分块批量拉 K + 线程池评点（对齐 URT）。"""
         cfg = config or self.config
         scan = cfg.get("scan") or {}
         if max_results is not None:
@@ -289,28 +386,70 @@ class CSBStrategyEngine:
             except (TypeError, ValueError):
                 max_n = 0
         trade_date = self.loader.resolve_effective_trade_date(as_of_end_date)
-
-        results: List[Dict[str, Any]] = []
+        min_score = float(cfg.get("min_score") or 0)
+        cal_days = history_calendar_days_for_fetch(cfg)
+        start_s, end_s = CSBDataLoader.default_date_window(cal_days, trade_date)
+        n_chunk = CSBDataLoader.resolve_hist_batch_chunk_size(
+            start_date=start_s, end_date=end_s
+        )
+        workers = _screen_workers()
         total = len(stocks)
-        for i, (code, name) in enumerate(stocks):
+        results: List[Dict[str, Any]] = []
+
+        logger.info(
+            "CSB 全市场扫描 stocks=%s window=%s~%s batch_codes=%s workers=%s",
+            total,
+            start_s,
+            end_s,
+            n_chunk,
+            workers,
+        )
+
+        for i in range(0, total, n_chunk):
             if cancel_check and cancel_check():
                 break
-            if progress_cb and (i % 20 == 0 or i == total - 1):
-                progress_cb(i + 1, total, f"扫描 {code}")
-            try:
-                row = self.evaluate_code(code, name=name, date=trade_date, config=cfg)
-                if not row:
-                    continue
-                if require_setup and not row.get("setup_ok"):
-                    continue
-                if require_entry and not row.get("entry_signal"):
-                    continue
-                min_score = float(cfg.get("min_score") or 0)
-                if require_entry and float(row.get("score") or 0) < min_score:
-                    continue
-                results.append(row)
-            except Exception as e:
-                logger.debug("CSB evaluate %s failed: %s", code, e)
+            chunk = stocks[i : i + n_chunk]
+            hist_map = self._load_hist_map(chunk, start_s, end_s, chunk_size=n_chunk)
+            jobs: List[Tuple[str, str, List[Dict[str, Any]]]] = []
+            for code, name in chunk:
+                code_n = _norm_code(code)
+                if hist_map is not None:
+                    hist = list(hist_map.get(code_n) or hist_map.get(code) or [])
+                else:
+                    hist = self.loader.load_bars_range(
+                        code_n, start_date=start_s, end_date=end_s
+                    )
+                jobs.append((code_n, str(name or ""), hist))
+
+            def _run_job(item: Tuple[str, str, List[Dict[str, Any]]]) -> Optional[Dict[str, Any]]:
+                code, name, hist = item
+                try:
+                    sub = CSBDataLoader.truncate_bars_asof(hist, trade_date)
+                    row = evaluate_one(
+                        sub, code=code, name=name, trade_date=trade_date, config=cfg
+                    )
+                    return _filter_screen_row(
+                        row,
+                        require_entry=require_entry,
+                        require_setup=require_setup,
+                        min_score=min_score,
+                    )
+                except Exception as e:
+                    logger.debug("CSB evaluate %s failed: %s", code, e)
+                    return None
+
+            if workers <= 1 or len(jobs) <= 1:
+                chunk_rows = [_run_job(j) for j in jobs]
+            else:
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    chunk_rows = list(pool.map(_run_job, jobs))
+            for row in chunk_rows:
+                if row:
+                    results.append(row)
+            if progress_cb:
+                done = min(total, i + len(chunk))
+                progress_cb(done, total, f"扫描 {done}/{total}")
+
         results.sort(
             key=lambda r: (
                 1 if r.get("signal_type") == CSB_BREAKOUT else 0,
@@ -331,31 +470,92 @@ class CSBStrategyEngine:
         dates: List[str],
         *,
         require_entry: bool = True,
-        progress_cb: Optional[Callable[[int, int, str], None]] = None,
-        cancel_check: Optional[Callable[[], bool]] = None,
+        require_pass: Optional[bool] = None,
+        progress_cb: Optional[ProgressCb] = None,
+        cancel_check: Optional[CancelCheck] = None,
+        chunk_size: Optional[int] = None,
     ) -> Tuple[Dict[str, List[Dict[str, Any]]], bool]:
-        """按多个交易日扫描（每只股票拉一次 K 线，按日截断）。"""
-        hits_by_date: Dict[str, List[Dict[str, Any]]] = {d: [] for d in dates}
-        scan = self.config.get("scan") or {}
-        hist_n = int(scan.get("history_bars", 280))
-        total = len(stocks)
-        completed = True
+        """一次拉齐 [最早日-回看, 最晚日] 行情，内存中按日评点（对齐 URT）。
 
-        for si, (code, name) in enumerate(stocks):
+        require_pass：历史别名，等同 require_entry。
+        """
+        if require_pass is not None:
+            require_entry = bool(require_pass)
+
+        date_list = [str(d)[:10] for d in dates if str(d).strip()]
+        date_list = list(dict.fromkeys(date_list))
+        hits_by_date: Dict[str, List[Dict[str, Any]]] = {d: [] for d in date_list}
+        if not stocks or not date_list:
+            return hits_by_date, True
+
+        cfg = self.config
+        cal_days = history_calendar_days_for_fetch(cfg)
+        start_s, _ = CSBDataLoader.default_date_window(cal_days, min(date_list))
+        end_s = max(date_list)
+        n_chunk = CSBDataLoader.resolve_hist_batch_chunk_size(
+            start_date=start_s, end_date=end_s, chunk_size=chunk_size
+        )
+        workers = _screen_workers()
+        total = len(stocks)
+        done_stocks = 0
+
+        logger.info(
+            "CSB 区间扫描 stocks=%s days=%s window=%s~%s batch_codes=%s workers=%s",
+            total,
+            len(date_list),
+            start_s,
+            end_s,
+            n_chunk,
+            workers,
+        )
+        if progress_cb:
+            progress_cb(0, total, f"区间一次扫描 0/{total} 只（{len(date_list)} 个交易日）")
+
+        for i in range(0, total, n_chunk):
             if cancel_check and cancel_check():
-                completed = False
-                break
-            if progress_cb and (si % 10 == 0 or si == total - 1):
-                progress_cb(si + 1, total, f"加载 {code}")
-            bars_all = self.loader.load_bars(code, limit=hist_n + len(dates) + 5)
-            for d in dates:
-                sub = CSBDataLoader.truncate_bars_asof(bars_all, d)
-                row = evaluate_one(sub, code=code, name=name, trade_date=d, config=self.config)
-                if not row:
-                    continue
-                if require_entry and not row.get("entry_signal"):
-                    continue
-                if float(row.get("score") or 0) < float(self.config.get("min_score") or 0):
-                    continue
-                hits_by_date.setdefault(d, []).append(row)
-        return hits_by_date, completed
+                logger.info("CSB 区间扫描已取消 stocks_done=%s/%s", done_stocks, total)
+                return hits_by_date, False
+            chunk = stocks[i : i + n_chunk]
+            hist_map = self._load_hist_map(chunk, start_s, end_s, chunk_size=n_chunk)
+            jobs: List[Tuple[str, str, List[Dict[str, Any]]]] = []
+            for code, name in chunk:
+                code_n = _norm_code(code)
+                if hist_map is not None:
+                    hist = list(hist_map.get(code_n) or hist_map.get(code) or [])
+                else:
+                    try:
+                        hist = self.loader.load_bars_range(
+                            code_n, start_date=start_s, end_date=end_s
+                        )
+                    except Exception as e:
+                        logger.debug("CSB range fetch skip %s: %s", code_n, e)
+                        hist = []
+                jobs.append((code_n, str(name or ""), hist))
+
+            def _run_job(item: Tuple[str, str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+                code, name, hist = item
+                return _hits_for_stock_dates(
+                    code, name, hist, date_list, cfg, require_entry=require_entry
+                )
+
+            if workers <= 1 or len(jobs) <= 1:
+                chunk_hits = [_run_job(j) for j in jobs]
+            else:
+                with ThreadPoolExecutor(max_workers=workers) as pool:
+                    chunk_hits = list(pool.map(_run_job, jobs))
+            for hits in chunk_hits:
+                for h in hits:
+                    d = str(h.get("signal_date") or "")[:10]
+                    if d in hits_by_date:
+                        hits_by_date[d].append(h)
+            done_stocks += len(chunk)
+            if progress_cb:
+                progress_cb(
+                    done_stocks,
+                    total,
+                    f"区间一次扫描 {done_stocks}/{total} 只（{len(date_list)} 个交易日）",
+                )
+
+        for d in date_list:
+            hits_by_date[d].sort(key=lambda x: float(x.get("score") or 0), reverse=True)
+        return hits_by_date, True

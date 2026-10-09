@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from sqlalchemy import cast, String
 from sqlalchemy.orm import Session
 
 from .backtest_factor_report import (
@@ -64,14 +63,19 @@ def classify_target_hits(*, entry_price: float, max_high: float, target_lo: floa
     }
 
 
+def _date_str(value: Any) -> str:
+    """库内 date 多为 text(YYYY-MM-DD)，比较须用字符串，避免 text >= date。"""
+    return str(value)[:10]
+
+
 def _trading_dates(db: Session, start: str, end: str) -> List[str]:
     from backend_api.models import HistoricalQuotes
 
     rows = (
         db.query(HistoricalQuotes.date)
         .filter(
-            cast(HistoricalQuotes.date, String) >= str(start)[:10],
-            cast(HistoricalQuotes.date, String) <= str(end)[:10],
+            HistoricalQuotes.date >= _date_str(start),
+            HistoricalQuotes.date <= _date_str(end),
         )
         .distinct()
         .order_by(HistoricalQuotes.date)
@@ -110,7 +114,7 @@ def _future_bars(db: Session, code: str, after_date: str, limit: int) -> List[Di
             HistoricalQuotes.volume,
             HistoricalQuotes.turnover_rate,
         )
-        .filter(HistoricalQuotes.code == code, cast(HistoricalQuotes.date, String) > str(after_date)[:10])
+        .filter(HistoricalQuotes.code == code, HistoricalQuotes.date > _date_str(after_date))
         .order_by(HistoricalQuotes.date)
         .limit(int(limit))
         .all()
@@ -132,7 +136,7 @@ def _prior_bars(db: Session, code: str, end_date: str, limit: int = 40) -> List[
             HistoricalQuotes.volume,
             HistoricalQuotes.turnover_rate,
         )
-        .filter(HistoricalQuotes.code == code, cast(HistoricalQuotes.date, String) <= str(end_date)[:10])
+        .filter(HistoricalQuotes.code == code, HistoricalQuotes.date <= _date_str(end_date))
         .order_by(HistoricalQuotes.date.desc())
         .limit(int(limit))
         .all()
@@ -181,7 +185,7 @@ def _ensure_trace_for_backtest_range(
             progress_cb(min(progress_end - 1, pct), msg)
 
     hits_by_date, completed = engine.screen_universe_for_dates(
-        stocks, missing, require_pass=True, progress_cb=_range_progress, cancel_check=cancel_check
+        stocks, missing, require_entry=True, progress_cb=_range_progress, cancel_check=cancel_check
     )
     hit_total = 0
     done = 0

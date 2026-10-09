@@ -279,6 +279,7 @@ const statusType = computed(() => {
   if (s === 'completed') return 'success'
   if (s === 'failed') return 'danger'
   if (s === 'cancelled') return 'info'
+  if (s === 'paused') return 'warning'
   return 'primary'
 })
 
@@ -540,7 +541,7 @@ function displayProgress(p: any) {
 }
 
 function isActive(status?: string) {
-  return status === 'pending' || status === 'running'
+  return status === 'pending' || status === 'running' || status === 'paused'
 }
 
 async function load() {

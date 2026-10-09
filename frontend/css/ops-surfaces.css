@@ -568,6 +568,14 @@ body.ops-map .lm-board-picker-summary {
     color: var(--ops-ink) !important;
 }
 
+/* 实时分析标签：覆盖 .main-content span 的浅色字，避免浅底+浅字 */
+body.ops-map .main-content .ssa-meta-tag--live,
+body.ops-map .ssa-meta-tag--live {
+    color: var(--ops-gold) !important;
+    background: rgba(201, 162, 39, 0.16) !important;
+    border: 1px solid rgba(201, 162, 39, 0.5) !important;
+}
+
 body.ops-map .ssa-hint,
 body.ops-map .ssa-deeplink-hint,
 body.ops-map .ssa-plan-levels,

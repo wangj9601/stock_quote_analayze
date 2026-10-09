@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from typing import Optional, Set
 
 from backend_api.database import SessionLocal
@@ -15,12 +16,40 @@ from .backtest_runner import run_csb_backtest
 logger = logging.getLogger(__name__)
 
 _cancelled: Set[str] = set()
+_paused: Set[str] = set()
 _lock = threading.Lock()
+_PAUSE_POLL_SEC = 0.5
 
 
 def request_cancel(task_id: str) -> None:
     with _lock:
         _cancelled.add(task_id)
+        _paused.discard(task_id)
+
+
+def request_pause(task_id: str) -> None:
+    with _lock:
+        _paused.add(task_id)
+
+
+def request_resume(task_id: str) -> None:
+    with _lock:
+        _paused.discard(task_id)
+
+
+def control_check(task_id: str) -> bool:
+    """协作式控制：暂停时阻塞；取消时返回 True。"""
+    while True:
+        with _lock:
+            if task_id in _cancelled:
+                return True
+            is_paused = task_id in _paused
+        t = backtest_storage.get_task(task_id)
+        if t and t.get("status") == "cancelled":
+            return True
+        if not is_paused:
+            return False
+        time.sleep(_PAUSE_POLL_SEC)
 
 
 def _run_task(task_id: str) -> None:
@@ -40,11 +69,7 @@ def _run_task(task_id: str) -> None:
             backtest_storage.update_task_progress(task_id, percent, message, log_line=message)
 
         def cancel_check() -> bool:
-            with _lock:
-                if task_id in _cancelled:
-                    return True
-            t = backtest_storage.get_task(task_id)
-            return bool(t and t.get("status") == "cancelled")
+            return control_check(task_id)
 
         backtest_storage.update_task_progress(task_id, 0, "开始回测", log_line="开始回测")
         stock_pool = cfg.get("stock_pool")
@@ -98,6 +123,7 @@ def _run_task(task_id: str) -> None:
     finally:
         with _lock:
             _cancelled.discard(task_id)
+            _paused.discard(task_id)
         db.close()
 
 

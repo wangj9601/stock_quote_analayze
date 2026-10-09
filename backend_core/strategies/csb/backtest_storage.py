@@ -335,6 +335,48 @@ def cancel_task(task_id: str) -> bool:
         db.close()
 
 
+def pause_task(task_id: str) -> bool:
+    tid = normalize_task_id(task_id)
+    db = _session()
+    try:
+        row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
+        if not row or row.status != "running":
+            return False
+        row.status = "paused"
+        row.message = "已暂停"
+        logs = list(row.logs or [])
+        logs.append({"ts": datetime.utcnow().isoformat() + "Z", "message": "任务已暂停"})
+        row.logs = logs[-200:]
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def resume_task(task_id: str) -> bool:
+    tid = normalize_task_id(task_id)
+    db = _session()
+    try:
+        row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
+        if not row or row.status != "paused":
+            return False
+        row.status = "running"
+        row.message = "已恢复"
+        logs = list(row.logs or [])
+        logs.append({"ts": datetime.utcnow().isoformat() + "Z", "message": "任务已恢复"})
+        row.logs = logs[-200:]
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def delete_task(task_id: str) -> bool:
     tid = normalize_task_id(task_id)
     db = _session()
@@ -474,7 +516,7 @@ def count_running_tasks() -> int:
     try:
         return (
             db.query(CSBBacktestTask)
-            .filter(CSBBacktestTask.status.in_(("pending", "running")))
+            .filter(CSBBacktestTask.status.in_(("pending", "running", "paused")))
             .count()
         )
     finally:

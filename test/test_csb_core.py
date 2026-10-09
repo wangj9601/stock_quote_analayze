@@ -258,3 +258,42 @@ def test_lps_confirm():
     r = confirm_lps(today, bo, channel_upper=10.2, config=get_default_csb_config())
     assert r["entry_signal"] is True
 
+
+def test_date_window_and_batch_chunk():
+    from backend_core.strategies.csb.data_loader import (
+        CSBDataLoader,
+        history_calendar_days_for_fetch,
+    )
+
+    days = history_calendar_days_for_fetch(get_default_csb_config())
+    assert days >= 420
+    start, end = CSBDataLoader.default_date_window(days, "2024-06-30")
+    assert end == "2024-06-30"
+    assert start < end
+    n = CSBDataLoader.resolve_hist_batch_chunk_size(
+        start_date="2024-01-01", end_date="2024-06-30"
+    )
+    assert 1 <= n <= 120
+
+
+def test_hits_for_stock_dates_slices_asc_bars():
+    from backend_core.strategies.csb.strategy_engine import _hits_for_stock_dates
+
+    bars = _make_bars(280)
+    # 伪造末两日日期，确保可切片
+    bars[-2]["date"] = "2024-06-28"
+    bars[-1]["date"] = "2024-06-29"
+    cfg = get_default_csb_config()
+    cfg["min_score"] = 0
+    hits = _hits_for_stock_dates(
+        "000001",
+        "测试",
+        bars,
+        ["2024-06-28", "2024-06-29", "2024-06-30"],
+        cfg,
+        require_entry=False,
+    )
+    # 无 06-30 行情应跳过；前两日应有 evaluate 结果（未必是买点）
+    assert all(str(h.get("signal_date"))[:10] in ("2024-06-28", "2024-06-29") for h in hits)
+    assert len(hits) == 2
+

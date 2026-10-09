@@ -323,6 +323,7 @@
               <el-option label="全部" value="" />
               <el-option label="pending" value="pending" />
               <el-option label="running" value="running" />
+              <el-option label="paused" value="paused" />
               <el-option label="completed" value="completed" />
               <el-option label="failed" value="failed" />
               <el-option label="cancelled" value="cancelled" />
@@ -369,11 +370,23 @@
         <el-table-column label="完成时间" width="168">
           <template #default="{ row }">{{ formatDateTime(row.completed_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openDetail(row.task_id)">详情</el-button>
             <el-button link @click="exportCsv(row.task_id)" :disabled="!row.has_details_csv">导出</el-button>
-            <el-button link @click="rerun(row.task_id)" :disabled="['pending','running'].includes(row.status)">重跑</el-button>
+            <el-button link @click="rerun(row.task_id)" :disabled="['pending','running','paused'].includes(row.status)">重跑</el-button>
+            <el-button
+              v-if="row.status === 'running'"
+              link
+              type="warning"
+              @click="pause(row.task_id)"
+            >暂停</el-button>
+            <el-button
+              v-else-if="row.status === 'paused'"
+              link
+              type="success"
+              @click="resume(row.task_id)"
+            >恢复</el-button>
             <el-button link type="warning" @click="cancel(row.task_id)" :disabled="['completed','failed','cancelled'].includes(row.status)">取消</el-button>
             <el-button link type="danger" @click="remove(row.task_id)">删除</el-button>
           </template>
@@ -905,6 +918,34 @@ async function cancel(id: string) {
   await loadTasks()
 }
 
+async function pause(id: string) {
+  try {
+    const res: any = await csbApiService.pauseBacktest(id)
+    if (res?.success === false) {
+      ElMessage.warning('暂停失败（任务可能已结束）')
+    } else {
+      ElMessage.success('已暂停')
+    }
+    await loadTasks()
+  } catch (e: any) {
+    ElMessage.error(e.message || '暂停失败')
+  }
+}
+
+async function resume(id: string) {
+  try {
+    const res: any = await csbApiService.resumeBacktest(id)
+    if (res?.success === false) {
+      ElMessage.warning('恢复失败（任务可能已结束）')
+    } else {
+      ElMessage.success('已恢复')
+    }
+    await loadTasks()
+  } catch (e: any) {
+    ElMessage.error(e.message || '恢复失败')
+  }
+}
+
 async function rerun(id: string) {
   try {
     await csbApiService.rerunBacktest(id)
@@ -949,7 +990,7 @@ onMounted(async () => {
   await loadConfigs()
   await loadTasks()
   timer = window.setInterval(() => {
-    if (tasks.value.some((t) => t.status === 'running' || t.status === 'pending')) {
+    if (tasks.value.some((t) => ['pending', 'running', 'paused'].includes(t.status))) {
       loadTasks()
     }
   }, 4000)
