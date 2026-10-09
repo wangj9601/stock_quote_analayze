@@ -273,8 +273,8 @@ const DailyReviewPage = {
         const indSum = document.getElementById('drIndustryConfirmSummary');
         if (indSum) indSum.textContent = '';
         this.fillBody('drIndexBody', 6, []);
-        this.fillBody('drLeadersBody', 4, []);
-        this.fillBody('drLaggardsBody', 4, []);
+        this.fillCollapsibleSectorBody('drLeadersBody', [], 'up');
+        this.fillCollapsibleSectorBody('drLaggardsBody', [], 'down');
         this.fillBody('drCapitalInBody', 2, []);
         this.fillBody('drCapitalOutBody', 2, []);
         this.fillBody('drSealBody', 4, []);
@@ -328,12 +328,66 @@ const DailyReviewPage = {
         return zones[key] || '';
     },
 
+    /** 领涨/领跌默认展示条数，其余折叠 */
+    SECTOR_LIST_VISIBLE: 10,
+
     fillBody(id, cols, htmlRows) {
         const el = document.getElementById(id);
         if (!el) return;
+        el.classList.remove('is-expanded');
         el.innerHTML = htmlRows && htmlRows.length
             ? htmlRows.join('')
             : `<tr><td colspan="${cols}" class="dr-empty-cell">暂无</td></tr>`;
+    },
+
+    _clearSectorFoldBtn(tbodyId) {
+        const host = document.querySelector(`[data-dr-fold-for="${tbodyId}"]`);
+        if (host) host.remove();
+    },
+
+    /**
+     * 领涨/领跌：缺省显示涨跌幅前 N，其余行折叠，按钮展开/收起。
+     * @param {'up'|'down'} kind
+     */
+    fillCollapsibleSectorBody(tbodyId, rows, kind) {
+        const el = document.getElementById(tbodyId);
+        if (!el) return;
+        this._clearSectorFoldBtn(tbodyId);
+        el.classList.remove('is-expanded');
+        const list = Array.isArray(rows) ? rows : [];
+        const limit = this.SECTOR_LIST_VISIBLE;
+        const kindLabel = kind === 'down' ? '下跌' : '上涨';
+        if (!list.length) {
+            el.innerHTML = '<tr><td colspan="4" class="dr-empty-cell">暂无</td></tr>';
+            return;
+        }
+        const head = list.slice(0, limit);
+        const rest = list.slice(limit);
+        const rowHtml = (r, extra) => `<tr${extra ? ' class="dr-sector-extra"' : ''}>
+                <td>${this.boardLinkHtml('industry', r)}</td>
+                <td class="num">${this.signed(r.change_percent)}</td>
+                <td class="num">${this.signed(this.yiValue(r), 1)}</td>
+                <td class="num">${this.breadthPair(r)}</td>
+            </tr>`;
+        el.innerHTML =
+            head.map((r) => rowHtml(r, false)).join('') +
+            rest.map((r) => rowHtml(r, true)).join('');
+        if (!rest.length) return;
+        const wrap = el.closest('.dr-table-wrap');
+        if (!wrap || !wrap.parentElement) return;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'dr-sector-fold-btn';
+        btn.dataset.drFoldFor = tbodyId;
+        btn.setAttribute('aria-expanded', 'false');
+        const collapsedLabel = `展开其余 ${rest.length} 个${kindLabel}行业`;
+        btn.textContent = collapsedLabel;
+        btn.addEventListener('click', () => {
+            const open = el.classList.toggle('is-expanded');
+            btn.textContent = open ? '收起' : collapsedLabel;
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+        wrap.insertAdjacentElement('afterend', btn);
     },
 
     breadthPair(row) {
@@ -747,8 +801,8 @@ const DailyReviewPage = {
                 mainSide.textContent = '当日主线不明确。';
             }
         }
-        this.fillBody('drLeadersBody', 4, this.sectorRows(sector.leaders));
-        this.fillBody('drLaggardsBody', 4, this.sectorRows(sector.laggards));
+        this.fillCollapsibleSectorBody('drLeadersBody', sector.leaders, 'up');
+        this.fillCollapsibleSectorBody('drLaggardsBody', sector.laggards, 'down');
         const rot = sector.rotation || {};
         const rotEl = document.getElementById('drRotation');
         if (rotEl) {

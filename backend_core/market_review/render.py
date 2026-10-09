@@ -302,14 +302,18 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
             lines.append(f"**支线**：{'、'.join(sides)}。")
         lines.append("")
 
-        def _chg_table(title: str, rows: List[Dict[str, Any]]) -> None:
+        def _chg_table(title: str, rows: List[Dict[str, Any]], *, top_n: int = 10) -> None:
             if not rows:
                 return
+            shown = rows[:top_n]
             lines.append(f"## **{title}**")
             lines.append("")
+            if len(rows) > top_n:
+                lines.append(f"（共 {len(rows)} 个，报告仅列前 {top_n}）")
+                lines.append("")
             lines.append("| 板块 | 涨跌幅% | 净流入(亿) | 上涨/下跌 |")
             lines.append("| :--- | :--- | :--- | :--- |")
-            for row in rows:
+            for row in shown:
                 lines.append(
                     f"| {row.get('board_name') or row.get('board_code')} | "
                     f"{_fmt(row.get('change_percent'))} | {_yi_cell(row)} | {_breadth_cell(row)} |"

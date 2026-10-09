@@ -765,8 +765,26 @@ def filter_concept_rows(
     return shown
 
 
-def _query_industry_rank(db: Session, trade_date: str, *, bottom: bool, limit: int) -> List[Any]:
+# 同花顺行业约百级；UI 默认展示前 10，其余前端折叠，故后端取全量上涨/下跌
+_SECTOR_RANK_FETCH_LIMIT = 500
+SECTOR_LIST_UI_TOP_N = 10
+
+
+def _query_industry_rank(
+    db: Session,
+    trade_date: str,
+    *,
+    bottom: bool,
+    limit: int,
+    sign: Optional[str] = None,
+) -> List[Any]:
+    """行业涨跌幅排名。sign='up'|'down' 时仅取上涨/下跌板块。"""
     order = "ASC" if bottom else "DESC"
+    sign_sql = ""
+    if sign == "up":
+        sign_sql = "AND change_percent > 0"
+    elif sign == "down":
+        sign_sql = "AND change_percent < 0"
     try:
         return db.execute(
             text(
@@ -777,6 +795,7 @@ def _query_industry_rank(db: Session, trade_date: str, *, bottom: bool, limit: i
                   AND board_kind = 'industry'
                   AND board_code_source = 'tonghuashun'
                   AND change_percent IS NOT NULL
+                  {sign_sql}
                 ORDER BY change_percent {order} NULLS LAST
                 LIMIT :lim
                 """
@@ -865,13 +884,20 @@ def build_sector_pack(
     trade_date: str,
     industry_confirm: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """领涨/领跌、主线支线、轮动、资金方向。成分涨跌对不上则留空。"""
+    """领涨/领跌（全量上涨/下跌，按涨跌幅排序）、主线支线、轮动、资金方向。
+
+    前端默认展示前 SECTOR_LIST_UI_TOP_N，其余折叠；主线/支线仍取涨幅前 10 中净流入角色。
+    """
     d = trade_date[:10]
     dates = _trading_dates_on_or_before(db, d, 2)
     prev = dates[-2] if len(dates) >= 2 else None
 
-    gain_rows = _query_industry_rank(db, d, bottom=False, limit=10)
-    loss_rows = _query_industry_rank(db, d, bottom=True, limit=3)
+    gain_rows = _query_industry_rank(
+        db, d, bottom=False, limit=_SECTOR_RANK_FETCH_LIMIT, sign="up"
+    )
+    loss_rows = _query_industry_rank(
+        db, d, bottom=True, limit=_SECTOR_RANK_FETCH_LIMIT, sign="down"
+    )
     codes = [str(r[0]) for r in list(gain_rows) + list(loss_rows)]
     breadth = _board_breadth(db, d, codes)
     leaders = [
@@ -880,7 +906,7 @@ def build_sector_pack(
     laggards = [
         _industry_row(c, n, chg, net, breadth) for c, n, chg, net in loss_rows
     ]
-    # 领跌不应与领涨重复（全市场不足 13 个行业时）
+    # 领跌不应与领涨重复（极端行情下口径交叉时）
     lead_codes = {r["board_code"] for r in leaders}
     laggards = [r for r in laggards if r["board_code"] not in lead_codes]
 
@@ -888,6 +914,7 @@ def build_sector_pack(
         roles = split_industry_roles(leaders)
     else:
         roles = split_industry_roles((industry_confirm or {}).get("rows") or [])
+        # 回退时仅用于主线/支线；列表仍用 roles 的领涨前 10，避免把确认池整表当全市场
         leaders = roles["leaders"]
 
     main = roles["main"]

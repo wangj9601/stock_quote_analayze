@@ -76,7 +76,7 @@
       <template #header>当日结构</template>
       <p>{{ mainSideText }}</p>
       <h4>领涨行业</h4>
-      <el-table :data="sector.leaders || []" size="small" stripe border empty-text="暂无">
+      <el-table :data="visibleLeaders" size="small" stripe border empty-text="暂无">
         <el-table-column prop="board_name" label="板块" min-width="120" />
         <el-table-column label="涨跌幅%" width="90">
           <template #default="{ row }"><span :class="tone(row.change_percent)">{{ fmt(row.change_percent) }}</span></template>
@@ -88,8 +88,18 @@
           <template #default="{ row }">{{ pair(row) }}</template>
         </el-table-column>
       </el-table>
+      <el-button
+        v-if="leadersHidden > 0"
+        link
+        type="primary"
+        size="small"
+        class="dr-sector-fold"
+        @click="leadersExpanded = !leadersExpanded"
+      >
+        {{ leadersExpanded ? '收起' : `展开其余 ${leadersHidden} 个上涨行业` }}
+      </el-button>
       <h4>领跌行业</h4>
-      <el-table :data="sector.laggards || []" size="small" stripe border empty-text="暂无">
+      <el-table :data="visibleLaggards" size="small" stripe border empty-text="暂无">
         <el-table-column prop="board_name" label="板块" min-width="120" />
         <el-table-column label="涨跌幅%" width="90">
           <template #default="{ row }"><span :class="tone(row.change_percent)">{{ fmt(row.change_percent) }}</span></template>
@@ -101,6 +111,16 @@
           <template #default="{ row }">{{ pair(row) }}</template>
         </el-table-column>
       </el-table>
+      <el-button
+        v-if="laggardsHidden > 0"
+        link
+        type="primary"
+        size="small"
+        class="dr-sector-fold"
+        @click="laggardsExpanded = !laggardsExpanded"
+      >
+        {{ laggardsExpanded ? '收起' : `展开其余 ${laggardsHidden} 个下跌行业` }}
+      </el-button>
       <p class="muted">{{ rotationText }}</p>
       <h4>行业净流入前五</h4>
       <el-table :data="sector.capital_in || []" size="small" stripe border empty-text="暂无">
@@ -380,6 +400,23 @@ const industryConfirmSummary = computed(
   () => data.value?.mainline_json?.industry_confirm?.summary || ''
 )
 const sector = computed(() => data.value?.mainline_json?.sector || {})
+const SECTOR_LIST_VISIBLE = 10
+const leadersExpanded = ref(false)
+const laggardsExpanded = ref(false)
+const visibleLeaders = computed(() => {
+  const all = (sector.value?.leaders as any[]) || []
+  return leadersExpanded.value ? all : all.slice(0, SECTOR_LIST_VISIBLE)
+})
+const visibleLaggards = computed(() => {
+  const all = (sector.value?.laggards as any[]) || []
+  return laggardsExpanded.value ? all : all.slice(0, SECTOR_LIST_VISIBLE)
+})
+const leadersHidden = computed(() =>
+  Math.max(0, ((sector.value?.leaders as any[]) || []).length - SECTOR_LIST_VISIBLE)
+)
+const laggardsHidden = computed(() =>
+  Math.max(0, ((sector.value?.laggards as any[]) || []).length - SECTOR_LIST_VISIBLE)
+)
 const sentiment = computed(() => data.value?.rules_json?.sentiment || {})
 const picks = computed(() => data.value?.rules_json?.picks || {})
 const zhabRows = computed(() => {
@@ -632,6 +669,8 @@ function applyData(d: any) {
   viewpoint.value = d?.viewpoint_md || ''
   advice.value = d?.advice_md || ''
   markdown.value = d?.markdown || ''
+  leadersExpanded.value = false
+  laggardsExpanded.value = false
 }
 
 async function load() {

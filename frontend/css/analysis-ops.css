@@ -790,6 +790,20 @@ body.ops-map[data-channel="analyze"] .dr-table-wrap {
     border-radius: 2px !important;
 }
 
+body.ops-map[data-channel="analyze"] .dr-sector-fold-btn {
+    border-color: var(--color-border) !important;
+    background: rgba(217, 226, 236, 0.06) !important;
+    color: var(--ops-ink-muted) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map[data-channel="analyze"] .dr-sector-fold-btn:hover,
+body.ops-map[data-channel="analyze"] .dr-sector-fold-btn:focus-visible {
+    color: var(--ops-ink) !important;
+    border-color: rgba(217, 226, 236, 0.35) !important;
+    box-shadow: var(--ops-focus) !important;
+}
+
 body.ops-map[data-channel="analyze"] .dr-table td.is-ok {
     color: var(--color-fall) !important;
 }

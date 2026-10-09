@@ -4471,6 +4471,27 @@ html.analysis-popup-window .analysis-tabs {
 .dr-chip .dr-stock-link:hover,
 .dr-chip .dr-stock-link:focus { color: #c9a227; text-decoration: underline; }
 .dr-table-wrap { overflow-x: auto; overflow-y: visible; max-height: none; border: 1px solid #e2e8f0; border-radius: 8px; }
+/* 领涨/领跌：默认隐藏第 11 行起，展开 tbody.is-expanded 后显示 */
+.dr-table tbody:not(.is-expanded) tr.dr-sector-extra { display: none; }
+.dr-sector-fold-btn {
+  display: inline-flex;
+  align-items: center;
+  margin: 0.4rem 0 0.15rem;
+  padding: 0.28rem 0.65rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.8rem;
+  line-height: 1.3;
+  cursor: pointer;
+}
+.dr-sector-fold-btn:hover,
+.dr-sector-fold-btn:focus-visible {
+  border-color: #94a3b8;
+  color: #1e293b;
+  outline: none;
+}
 .dr-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 .dr-table th, .dr-table td { border-bottom: 1px solid #eef2f6; padding: 0.48rem 0.65rem; text-align: left; vertical-align: middle; }
 .dr-table th { background: #f8fafc; color: #475569; font-weight: 600; font-size: 0.78rem; }
