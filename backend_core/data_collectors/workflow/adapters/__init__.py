@@ -895,3 +895,37 @@ def exec_macd_hk(ctx: WorkflowContext) -> NodeResult:
     except Exception as e:
         logger.exception("港股MACD日算异常")
         return NodeResult.fail(str(e), message="港股MACD日算失败")
+
+
+def exec_cn_auction_final(ctx: WorkflowContext) -> NodeResult:
+    """A股集合竞价终态（final）全市场采集；同步短线风向标基准。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过集合竞价终态采集")
+    db = None
+    try:
+        from backend_api.database import SessionLocal
+        from backend_api.services.auction_service import collect_auction_snapshot
+
+        trade_date = _resolve_node_trade_date(ctx)
+        db = SessionLocal()
+        result = collect_auction_snapshot(
+            db,
+            stage="final",
+            trade_date=trade_date,
+            refresh_benchmark=True,
+        )
+        if isinstance(result, dict) and result.get("success") is False:
+            return NodeResult.fail(
+                result.get("message") or "集合竞价采集失败",
+                message="A股集合竞价终态采集失败",
+            )
+        return NodeResult.ok(
+            "A股集合竞价终态采集完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("A股集合竞价终态采集异常")
+        return NodeResult.fail(str(e), message="A股集合竞价终态采集失败")
+    finally:
+        if db is not None:
+            db.close()

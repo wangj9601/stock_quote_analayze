@@ -16,6 +16,16 @@ python migrations/add_collection_workflow_tables.py
 
 3. 管理端打开 **采集流程**（`/collection-workflows`），编辑预置「A股收盘后标准流程」或新建流程。
 
+### 预置「A股集合竞价终态采集」
+
+- 单节点 `cn_auction_final`：Fuyao `stage=final` 全市场快照 + 短线风向标基准 → `stock_auction_daily` / `stock_auction_benchmark`
+- 默认 cron：`mon-fri` **09:26**，`skip_on_holiday=CN`
+- 已有库补流程：
+
+```bash
+python migrations/add_auction_workflow_node.py
+```
+
 4. 切换到流程级定时、停用分散 cron（可选）：
 
 ```env

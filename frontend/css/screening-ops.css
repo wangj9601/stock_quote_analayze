@@ -489,6 +489,27 @@ body.ops-map .gms-table tbody tr:hover td {
     background: var(--ops-table-row-hover, rgba(47, 111, 237, 0.1)) !important;
 }
 
+/*
+ * sticky 操作列必须用不透明底（写在通用 transparent/hover 之后），
+ * 否则右侧固定列会透视到前面的 Δ/d、Δ/d₂₀ 等列，看起来像重叠。
+ */
+body.ops-map #resultsContainer-gms .results-table td.gms-col-actions,
+body.ops-map #resultsContainer-urt .results-table td.gms-col-actions {
+    background: var(--ops-ground-elevated) !important;
+    box-shadow: -6px 0 12px -6px rgba(0, 0, 0, 0.35);
+}
+
+body.ops-map #resultsContainer-gms .results-table thead th.gms-col-actions,
+body.ops-map #resultsContainer-urt .results-table thead th.gms-col-actions {
+    background: linear-gradient(var(--ops-table-head), var(--ops-table-head)), var(--ops-ground-elevated) !important;
+    box-shadow: -6px 0 12px -6px rgba(0, 0, 0, 0.35);
+}
+
+body.ops-map #resultsContainer-gms .results-table tbody tr:hover td.gms-col-actions,
+body.ops-map #resultsContainer-urt .results-table tbody tr:hover td.gms-col-actions {
+    background: linear-gradient(var(--ops-table-row-hover), var(--ops-table-row-hover)), var(--ops-ground-elevated) !important;
+}
+
 body.ops-map .results-table a.stock-code,
 body.ops-map .gms-table a.stock-code {
     color: var(--ops-route) !important;

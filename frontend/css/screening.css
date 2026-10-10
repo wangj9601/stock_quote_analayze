@@ -1650,15 +1650,17 @@
     text-align: center;
 }
 
-/* GMS 信号列表：略压缩列宽 + 表头两行 + 名称列限宽 + 操作列 sticky 贴右（横向滚动仍可见） */
+/* GMS 信号列表：列较多，用足够 min-width 触发横向滚动，避免末列被压扁叠到 sticky 操作列上 */
 #resultsContainer-gms .results-table-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
 }
 
 #resultsContainer-gms .results-table {
-    min-width: 1040px;
-    width: max(100%, 1040px);
+    /* 约 22 可见列 + 操作列；过小会导致末几列互相挤叠 */
+    min-width: 1980px;
+    width: max(100%, 1980px);
+    table-layout: auto;
 }
 
 #resultsContainer-gms .results-table th,
@@ -1672,8 +1674,8 @@
     white-space: normal;
     text-align: center;
     line-height: 1.2;
-    max-width: 3.2rem;
-    min-width: 2.8rem;
+    max-width: 4.2rem;
+    min-width: 3.2rem;
     font-weight: 600;
 }
 
@@ -1691,9 +1693,9 @@
 }
 
 /* Δ/d 表头略宽，避免两字折行难看 */
-#resultsContainer-gms .results-table thead th.gms-th-stack:nth-child(11) {
-    max-width: 4.5rem;
-    min-width: 3.8rem;
+#resultsContainer-gms .results-table thead th.gms-th-stack.gms-th-stack--wide {
+    max-width: 4.8rem;
+    min-width: 4rem;
 }
 
 #resultsContainer-gms .gms-col-code {
@@ -1748,7 +1750,8 @@ a.gms-stock-code-link:hover {
 }
 
 #resultsContainer-gms .gms-col-narrow {
-    max-width: 4.2rem;
+    min-width: 3.6rem;
+    max-width: 5rem;
     white-space: nowrap;
     text-align: center;
 }
@@ -1762,15 +1765,18 @@ a.gms-stock-code-link:hover {
 }
 
 #resultsContainer-gms .gms-col-price {
-    max-width: 4.5rem;
+    min-width: 3.8rem;
+    max-width: 4.8rem;
 }
 
 #resultsContainer-gms .gms-col-num {
-    max-width: 4.2rem;
+    min-width: 3.6rem;
+    max-width: 5rem;
 }
 
 #resultsContainer-gms .gms-col-pct {
-    max-width: 4rem;
+    min-width: 3.8rem;
+    max-width: 5rem;
 }
 
 #resultsContainer-urt .results-table td.support {

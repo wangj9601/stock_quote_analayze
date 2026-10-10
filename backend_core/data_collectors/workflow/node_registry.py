@@ -56,6 +56,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_watchlist_history,
     exec_stock_recommend_brief,
     exec_stock_recommend_brief_late,
+    exec_cn_auction_final,
 )
 from backend_core.data_collectors.workflow.adapters.api_nodes import (
     exec_cn_historical_akshare,
@@ -137,6 +138,17 @@ def _n(
 NODE_DEFS: List[CollectionNodeDef] = [
     # A股
     _n("cn_realtime", "A股实时行情", "cn", exec_cn_realtime, description="AkShare A股实时"),
+    _n(
+        "cn_auction_final",
+        "A股集合竞价终态",
+        "cn",
+        exec_cn_auction_final,
+        param_schema=_TRADE_DATE_SCHEMA,
+        description=(
+            "Fuyao 集合竞价 final 快照 + 短线风向标 → stock_auction_daily / "
+            "stock_auction_benchmark；建议交易日 09:26 定时跑一次"
+        ),
+    ),
     _n("cn_historical", "A股日K（实时表/Tushare）", "cn", exec_cn_historical),
     _n(
         "macd_cn",
