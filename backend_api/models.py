@@ -2186,6 +2186,23 @@ class EmailSendLog(Base):
 
     user = relationship("User", backref="email_send_logs")
 
+
+class UserLoginLog(Base):
+    """网站用户 / 管理端账号登录日志。"""
+
+    __tablename__ = "user_login_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel = Column(String(16), nullable=False, index=True)  # user | admin
+    user_id = Column(Integer, nullable=True, index=True)
+    username = Column(String(128), nullable=False, index=True)
+    success = Column(Boolean, nullable=False, index=True)
+    failure_reason = Column(String(500), nullable=True)
+    ip = Column(String(64), nullable=True)
+    user_agent = Column(String(512), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now, index=True)
+
+
 # 采集日历模型
 class TradingCalendar(Base):
     """

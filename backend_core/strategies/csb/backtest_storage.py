@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -17,6 +18,8 @@ from backend_api.database import SessionLocal
 from backend_api.models import CSBBacktestTask
 
 logger = logging.getLogger(__name__)
+
+_PARTIAL_DETAILS_MAGIC = b"CSB_PARTIAL_JSON\n"
 
 _CSB_DETAIL_FIELDS: List[str] = [
     "code", "name", "signal_date", "signal_type", "score",
@@ -94,6 +97,12 @@ def _dt_iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.isoformat() + "Z" if dt else None
 
 
+def _is_exportable_details(raw: Optional[bytes]) -> bool:
+    if not raw:
+        return False
+    return not bytes(raw).startswith(_PARTIAL_DETAILS_MAGIC)
+
+
 def _row_to_dict(row: CSBBacktestTask) -> Dict[str, Any]:
     return {
         "task_id": row.task_id,
@@ -109,7 +118,7 @@ def _row_to_dict(row: CSBBacktestTask) -> Dict[str, Any]:
         "summary": row.summary,
         "details_path": row.details_path,
         "error": row.error,
-        "has_details_csv": bool(row.details_csv_bytes),
+        "has_details_csv": _is_exportable_details(row.details_csv_bytes),
     }
 
 
@@ -377,6 +386,145 @@ def resume_task(task_id: str) -> bool:
         db.close()
 
 
+def save_checkpoint(task_id: str, checkpoint: Dict[str, Any]) -> bool:
+    tid = normalize_task_id(task_id)
+    if not tid or not isinstance(checkpoint, dict):
+        return False
+    db = _session()
+    try:
+        row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
+        if not row:
+            return False
+        cfg = dict(row.config) if isinstance(row.config, dict) else {}
+        cfg["checkpoint"] = dict(checkpoint)
+        row.config = cfg
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def get_checkpoint(task_id: str) -> Optional[Dict[str, Any]]:
+    row = get_task(task_id)
+    if not row:
+        return None
+    cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
+    cp = cfg.get("checkpoint")
+    return dict(cp) if isinstance(cp, dict) else None
+
+
+def clear_checkpoint(task_id: str) -> None:
+    tid = normalize_task_id(task_id)
+    if not tid:
+        return
+    db = _session()
+    try:
+        row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
+        if not row or not isinstance(row.config, dict):
+            return
+        cfg = dict(row.config)
+        if "checkpoint" in cfg:
+            cfg.pop("checkpoint", None)
+            row.config = cfg
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def prepare_checkpoint_resume(task_id: str) -> bool:
+    """进程重启后：paused → pending，保留 checkpoint，供新线程续跑。"""
+    tid = normalize_task_id(task_id)
+    db = _session()
+    try:
+        row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
+        if not row or row.status != "paused":
+            return False
+        row.status = "pending"
+        row.message = "检查点续跑排队中"
+        row.completed_at = None
+        row.error = None
+        logs = list(row.logs or [])
+        logs.append({"ts": datetime.utcnow().isoformat() + "Z", "message": "从检查点重新拉起任务"})
+        row.logs = logs[-200:]
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def save_partial_details(task_id: str, details_rows: List[Dict[str, Any]]) -> bool:
+    tid = normalize_task_id(task_id)
+    db = _session()
+    try:
+        row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
+        if not row:
+            return False
+        payload = json.dumps(details_rows or [], ensure_ascii=False, default=str).encode("utf-8")
+        row.details_csv_bytes = _PARTIAL_DETAILS_MAGIC + payload
+        db.commit()
+        return True
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+def load_partial_details(task_id: str) -> List[Dict[str, Any]]:
+    tid = normalize_task_id(task_id)
+    db = _session()
+    try:
+        row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
+        if not row or not row.details_csv_bytes:
+            return []
+        raw = bytes(row.details_csv_bytes)
+        if not raw.startswith(_PARTIAL_DETAILS_MAGIC):
+            return []
+        try:
+            data = json.loads(raw[len(_PARTIAL_DETAILS_MAGIC) :].decode("utf-8"))
+        except Exception:
+            return []
+        return data if isinstance(data, list) else []
+    finally:
+        db.close()
+
+
+def mark_zombie_running_tasks_failed(reason: str = "进程中断") -> int:
+    """启动时将残留 running 标为 failed；paused 保留以便手动恢复。"""
+    db = _session()
+    try:
+        rows = (
+            db.query(CSBBacktestTask)
+            .filter(CSBBacktestTask.status == "running")
+            .all()
+        )
+        n = 0
+        now = datetime.utcnow()
+        for row in rows:
+            row.status = "failed"
+            row.error = reason
+            row.message = reason
+            row.completed_at = now
+            n += 1
+        if n:
+            db.commit()
+        return n
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def delete_task(task_id: str) -> bool:
     tid = normalize_task_id(task_id)
     db = _session()
@@ -399,7 +547,12 @@ def get_details_csv(task_id: str) -> Optional[bytes]:
     db = _session()
     try:
         row = db.query(CSBBacktestTask).filter(CSBBacktestTask.task_id == tid).first()
-        return bytes(row.details_csv_bytes) if row and row.details_csv_bytes else None
+        if not row or not row.details_csv_bytes:
+            return None
+        raw = bytes(row.details_csv_bytes)
+        if raw.startswith(_PARTIAL_DETAILS_MAGIC):
+            return None
+        return raw
     finally:
         db.close()
 
@@ -422,7 +575,7 @@ def list_reports(limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
                 "name": r.name,
                 "created_at": _dt_iso(r.completed_at or r.created_at),
                 "summary": r.summary,
-                "has_details_csv": bool(r.details_csv_bytes),
+                "has_details_csv": _is_exportable_details(r.details_csv_bytes),
                 "config": r.config,
             }
             for r in rows
@@ -446,6 +599,10 @@ def reset_task_for_rerun(task_id: str) -> bool:
         row.details_csv_bytes = None
         row.started_at = None
         row.completed_at = None
+        if isinstance(row.config, dict) and "checkpoint" in row.config:
+            cfg = dict(row.config)
+            cfg.pop("checkpoint", None)
+            row.config = cfg
         logs = list(row.logs or [])
         logs.append({"ts": datetime.utcnow().isoformat() + "Z", "message": "任务重新执行"})
         row.logs = logs[-200:]

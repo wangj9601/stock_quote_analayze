@@ -139,7 +139,7 @@ const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
 
 const menuItems: MenuItem[] = [
   { path: '/dashboard', name: '仪表板', icon: DataBoard },
-  { path: '/access-management', name: '用户与权限', icon: Lock },
+  { path: '/access-management', name: '用户管理', icon: Lock },
   { path: '/quotes', name: '行情数据', icon: TrendCharts },
   { path: '/stock-basic', name: '股票基本信息', icon: Tickets },
   { path: '/board-constituents', name: '板块成分股维护', icon: Histogram },
@@ -178,6 +178,7 @@ const accessManagementPaths = new Set([
   '/users',
   '/roles',
   '/permissions',
+  '/login-logs',
 ])
 
 function isAccessManagementRoute(path: string) {
@@ -214,9 +215,10 @@ const currentPageName = computed(() => {
   if (route.path.match(/^\/roles\/\d+\/permissions$/)) return '角色权限配置'
   if (isAccessManagementRoute(route.path)) {
     const tab = route.query.tab
-    if (tab === 'roles') return '用户与权限 · 角色管理'
-    if (tab === 'permissions') return '用户与权限 · 权限资源'
-    return '用户与权限'
+    if (tab === 'roles') return '用户管理 · 角色管理'
+    if (tab === 'permissions') return '用户管理 · 权限资源'
+    if (tab === 'login-logs') return '用户管理 · 登录日志'
+    return '用户管理'
   }
   if (isSelectionResultsRoute()) {
     const tab = route.query.tab

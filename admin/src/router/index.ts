@@ -33,6 +33,10 @@ const routes = [
         component: () => import('@/views/AccessManagementView.vue')
       },
       {
+        path: 'login-logs',
+        redirect: { path: '/access-management', query: { tab: 'login-logs' } }
+      },
+      {
         path: 'users',
         redirect: { path: '/access-management', query: { tab: 'users' } }
       },

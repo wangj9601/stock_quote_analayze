@@ -959,6 +959,14 @@ if admin_permissions_router is not None:
 else:
     print("admin permissions路由未注册")
 
+# 注册登录日志查询路由
+try:
+    from .admin.login_logs import router as admin_login_logs_router
+    app.include_router(admin_login_logs_router)
+    print("admin login-logs路由注册成功")
+except Exception as e:
+    print(f"admin login-logs路由注册失败: {e}")
+
 # 注册日志查询路由
 if admin_logs_router is not None:
     app.include_router(admin_logs_router)
@@ -1300,6 +1308,16 @@ async def startup_event():
                 db.close()
         except Exception as e:
             logger.warning("权限注册表增量同步失败: %s", e)
+
+        # CSB：残留 running 标失败；paused 保留以便手动从检查点恢复
+        try:
+            from backend_core.strategies.csb import backtest_storage as csb_bt_storage
+
+            n = csb_bt_storage.mark_zombie_running_tasks_failed("进程中断，请重新执行或从暂停任务恢复")
+            if n:
+                logger.info("CSB 已将 %s 个残留 running 回测标为 failed", n)
+        except Exception as e:
+            logger.warning("CSB 残留回测任务清理失败: %s", e)
 
         # 启动 PVFRS 监控后台线程
         try:

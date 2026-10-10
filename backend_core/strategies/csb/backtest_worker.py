@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""CSB 回测后台 worker。"""
+"""CSB 回测后台 worker（支持协作暂停 + 检查点持久化续跑）。"""
 
 from __future__ import annotations
 
 import logging
 import threading
 import time
-from typing import Optional, Set
+from typing import Dict, Optional, Set
 
 from backend_api.database import SessionLocal
 
@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _cancelled: Set[str] = set()
 _paused: Set[str] = set()
+_active_threads: Dict[str, threading.Thread] = {}
 _lock = threading.Lock()
 _PAUSE_POLL_SEC = 0.5
 
@@ -37,6 +38,12 @@ def request_resume(task_id: str) -> None:
         _paused.discard(task_id)
 
 
+def is_task_alive(task_id: str) -> bool:
+    with _lock:
+        t = _active_threads.get(task_id)
+    return bool(t and t.is_alive())
+
+
 def control_check(task_id: str) -> bool:
     """协作式控制：暂停时阻塞；取消时返回 True。"""
     while True:
@@ -48,6 +55,7 @@ def control_check(task_id: str) -> bool:
         if t and t.get("status") == "cancelled":
             return True
         if not is_paused:
+            # DB 为 paused 且无线程侧标志时：进程重启前的残留，不在此处阻塞
             return False
         time.sleep(_PAUSE_POLL_SEC)
 
@@ -65,13 +73,31 @@ def _run_task(task_id: str) -> None:
             backtest_storage.fail_task(task_id, "缺少 start_date 或 end_date")
             return
 
+        checkpoint = cfg.get("checkpoint") if isinstance(cfg.get("checkpoint"), dict) else None
+        initial_details = backtest_storage.load_partial_details(task_id) if checkpoint else []
+
         def progress_cb(percent: int, message: str) -> None:
             backtest_storage.update_task_progress(task_id, percent, message, log_line=message)
 
         def cancel_check() -> bool:
             return control_check(task_id)
 
-        backtest_storage.update_task_progress(task_id, 0, "开始回测", log_line="开始回测")
+        live_details: list = list(initial_details)
+
+        def checkpoint_cb_with_details(cp: dict) -> None:
+            try:
+                backtest_storage.save_checkpoint(task_id, cp)
+                if cp.get("phase") == "backtest":
+                    backtest_storage.save_partial_details(task_id, live_details)
+            except Exception as e:
+                logger.debug("CSB 保存检查点失败 %s: %s", task_id, e)
+
+        backtest_storage.update_task_progress(
+            task_id,
+            int(task.get("progress") or 0),
+            "开始回测" if not checkpoint else "从检查点续跑",
+            log_line="从检查点续跑" if checkpoint else "开始回测",
+        )
         stock_pool = cfg.get("stock_pool")
         if stock_pool is None and cfg.get("stock_code"):
             stock_pool = [cfg.get("stock_code")]
@@ -90,14 +116,31 @@ def _run_task(task_id: str) -> None:
             exit_mode=str(cfg.get("exit_mode") or "hit_rate"),
             progress_cb=progress_cb,
             cancel_check=cancel_check,
+            checkpoint=checkpoint,
+            checkpoint_cb=checkpoint_cb_with_details,
+            initial_details=live_details,
         )
-        if cancel_check():
+        out_details = result.get("details") or live_details
+
+        if result.get("paused_or_cancelled") or cancel_check():
+            # 暂停：状态已由 pause API 设为 paused，仅确保检查点在
+            t = backtest_storage.get_task(task_id)
+            if t and t.get("status") == "paused":
+                try:
+                    cp = backtest_storage.get_checkpoint(task_id) or {}
+                    if cp.get("phase") == "backtest":
+                        backtest_storage.save_partial_details(task_id, out_details)
+                except Exception:
+                    pass
+                return
             backtest_storage.cancel_task(task_id)
             return
+
+        backtest_storage.clear_checkpoint(task_id)
         backtest_storage.complete_task(
             task_id,
             summary=result.get("summary") or {},
-            details_rows=result.get("details") or [],
+            details_rows=out_details,
         )
         if cfg.get("is_hit_rate_compare") and cfg.get("paired_from_task_id"):
             sm = result.get("summary") or {}
@@ -124,6 +167,7 @@ def _run_task(task_id: str) -> None:
         with _lock:
             _cancelled.discard(task_id)
             _paused.discard(task_id)
+            _active_threads.pop(task_id, None)
         db.close()
 
 
@@ -148,6 +192,7 @@ def _maybe_start_hit_rate_compare(parent_id: str) -> Optional[str]:
         return existing
 
     child_cfg = dict(cfg)
+    child_cfg.pop("checkpoint", None)
     child_cfg["exit_mode"] = "hit_rate"
     child_cfg["compare_hit_rate"] = False
     child_cfg["is_hit_rate_compare"] = True
@@ -166,4 +211,6 @@ def _maybe_start_hit_rate_compare(parent_id: str) -> Optional[str]:
 
 def start_backtest_task(task_id: str) -> None:
     t = threading.Thread(target=_run_task, args=(task_id,), daemon=True, name=f"csb-bt-{task_id[:8]}")
+    with _lock:
+        _active_threads[task_id] = t
     t.start()

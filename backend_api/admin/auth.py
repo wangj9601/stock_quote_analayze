@@ -5,7 +5,7 @@
 import logging
 from datetime import timedelta
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -18,6 +18,7 @@ from backend_api.auth import (
     get_current_admin,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from backend_api.services.login_log_service import record_login_log
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,25 @@ router = APIRouter(prefix="/api/admin/auth", tags=["admin-auth"])
 
 @router.post("/login", response_model=AdminLoginResponse)
 async def login_for_access_token(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
 ):
     """管理员登录"""
+    client_host = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+
     admin = authenticate_admin(db, username, password)
     if not admin:
+        record_login_log(
+            channel="admin",
+            username=username,
+            success=False,
+            failure_reason="用户名或密码错误",
+            ip=client_host,
+            user_agent=user_agent,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户名或密码错误",
@@ -62,6 +75,15 @@ async def login_for_access_token(
     access_token = create_access_token(
         data={"sub": admin.username, "is_admin": True},
         expires_delta=access_token_expires
+    )
+
+    record_login_log(
+        channel="admin",
+        username=admin.username,
+        success=True,
+        user_id=admin.id,
+        ip=client_host,
+        user_agent=user_agent,
     )
     
     return {

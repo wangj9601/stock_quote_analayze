@@ -157,6 +157,8 @@ def _ensure_trace_for_backtest_range(
     cancel_check: Optional[Callable[[], bool]] = None,
     progress_start: int = 0,
     progress_end: int = 50,
+    stock_offset: int = 0,
+    checkpoint_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> Dict[str, Any]:
     covered = dates_ready_for_universe_backtest(
         db, config_id=config_id, dates=dates, stock_pool=stock_pool
@@ -178,31 +180,65 @@ def _ensure_trace_for_backtest_range(
         stocks = [(c, n) for c, n in stocks if c in allow]
 
     span = max(1, progress_end - progress_start)
+    hit_total = 0
 
     def _range_progress(done: int, total: int, msg: str) -> None:
         if progress_cb:
             pct = progress_start + int(span * done / max(1, total))
             progress_cb(min(progress_end - 1, pct), msg)
 
+    def _on_chunk(flat_hits: List[Dict[str, Any]], done_stocks: int, total: int) -> None:
+        nonlocal hit_total
+        if flat_hits:
+            upsert_trace_rows(db, config_id=config_id, rows=flat_hits)
+            hit_total += len(flat_hits)
+        if checkpoint_cb:
+            checkpoint_cb(
+                {
+                    "phase": "precompute",
+                    "precompute_stock_offset": int(done_stocks),
+                    "backtest_date_index": 0,
+                    "cooldown": {},
+                    "precompute_meta": {
+                        **meta,
+                        "precompute_hits": hit_total,
+                        "range_scan_completed": False,
+                        "stocks_total": total,
+                    },
+                }
+            )
+
     hits_by_date, completed = engine.screen_universe_for_dates(
-        stocks, missing, require_entry=True, progress_cb=_range_progress, cancel_check=cancel_check
+        stocks,
+        missing,
+        require_entry=True,
+        progress_cb=_range_progress,
+        cancel_check=cancel_check,
+        stock_offset=stock_offset,
+        chunk_hits_cb=_on_chunk,
     )
-    hit_total = 0
     done = 0
     if completed:
-        all_hits = [h for rows in hits_by_date.values() for h in rows]
-        if all_hits:
-            upsert_trace_rows(db, config_id=config_id, rows=all_hits)
-            hit_total = len(all_hits)
         for d in missing:
             mark_date_scanned(
                 db,
                 config_id=config_id,
                 trade_date=d,
-                extra={"hits": len(hits_by_date.get(d) or []), "candidates": len(stocks), "scope": "pool" if stock_pool else "full_market"},
+                extra={
+                    "hits": len(hits_by_date.get(d) or []),
+                    "candidates": len(stocks),
+                    "scope": "pool" if stock_pool else "full_market",
+                },
             )
             done += 1
-    meta.update({"precomputed_days": done, "precompute_hits": hit_total, "range_scan_completed": completed})
+    meta.update(
+        {
+            "precomputed_days": done,
+            "precompute_hits": hit_total,
+            "range_scan_completed": completed,
+            "stock_offset_end": len(stocks) if completed else int(stock_offset or 0),
+        }
+    )
     if progress_cb:
         progress_cb(progress_end, f"预计算补齐 {done} 日，买点 {hit_total} 条")
     return meta
@@ -263,6 +299,9 @@ def run_csb_backtest(
     exit_mode: str = "hit_rate",
     progress_cb: Optional[Callable[[int, str], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
+    checkpoint: Optional[Dict[str, Any]] = None,
+    checkpoint_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
+    initial_details: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     mode = (exit_mode or "hit_rate").strip().lower()
     if mode not in ("hit_rate", "risk_exit", "structure_exit"):
@@ -302,8 +341,27 @@ def run_csb_backtest(
     if stock_pool:
         pool = [str(c).strip().zfill(6) if str(c).strip().isdigit() else str(c).strip() for c in stock_pool]
 
+    cp = checkpoint if isinstance(checkpoint, dict) else {}
+    cp_phase = str(cp.get("phase") or "")
+    try:
+        precompute_offset = int(cp.get("precompute_stock_offset") or 0)
+    except (TypeError, ValueError):
+        precompute_offset = 0
+    try:
+        date_start_index = int(cp.get("backtest_date_index") or 0)
+    except (TypeError, ValueError):
+        date_start_index = 0
+    if cp_phase == "backtest":
+        precompute_offset = 0
+        date_start_index = max(0, min(len(dates), date_start_index))
+    else:
+        date_start_index = 0
+
     precompute_meta: Dict[str, Any] = {}
-    if use_trace and resolved_id is not None:
+    if isinstance(cp.get("precompute_meta"), dict):
+        precompute_meta = dict(cp.get("precompute_meta") or {})
+    skip_precompute = cp_phase == "backtest"
+    if use_trace and resolved_id is not None and not skip_precompute:
         try:
             precompute_meta = _ensure_trace_for_backtest_range(
                 db,
@@ -317,19 +375,45 @@ def run_csb_backtest(
                 cancel_check=cancel_check,
                 progress_start=0,
                 progress_end=45,
+                stock_offset=precompute_offset,
+                checkpoint_cb=checkpoint_cb,
             )
         except Exception as e:
             logger.exception("CSB 回测预计算补齐失败: %s", e)
             precompute_meta = {"error": str(e)}
+        if cancel_check and cancel_check():
+            return {
+                "summary": {"cancelled": True, "precompute": precompute_meta},
+                "details": list(initial_details or []),
+                "paused_or_cancelled": True,
+            }
 
-    details: List[Dict[str, Any]] = []
+    details: List[Dict[str, Any]] = initial_details if initial_details is not None else []
     cooldown: Dict[str, str] = {}
+    if isinstance(cp.get("cooldown"), dict):
+        cooldown = {str(k): str(v)[:10] for k, v in (cp.get("cooldown") or {}).items()}
     use_trace_ok = bool(use_trace and resolved_id is not None)
     trade_start = 45 if use_trace_ok else 0
 
     for i, d in enumerate(dates):
+        if i < date_start_index:
+            continue
         if cancel_check and cancel_check():
-            break
+            if checkpoint_cb:
+                checkpoint_cb(
+                    {
+                        "phase": "backtest",
+                        "precompute_stock_offset": 0,
+                        "backtest_date_index": i,
+                        "cooldown": cooldown,
+                        "precompute_meta": precompute_meta,
+                    }
+                )
+            return {
+                "summary": {"cancelled": True, "precompute": precompute_meta},
+                "details": details,
+                "paused_or_cancelled": True,
+            }
         if progress_cb:
             pct = trade_start + int((100 - trade_start) * i / max(1, len(dates)))
             progress_cb(min(99, pct), f"扫描 {d}")
@@ -470,6 +554,17 @@ def run_csb_backtest(
             }
             enrich_detail_with_factors(row_out, sig, future, entry_price)
             details.append(row_out)
+
+        if checkpoint_cb:
+            checkpoint_cb(
+                {
+                    "phase": "backtest",
+                    "precompute_stock_offset": 0,
+                    "backtest_date_index": i + 1,
+                    "cooldown": cooldown,
+                    "precompute_meta": precompute_meta,
+                }
+            )
 
     total = len(details)
     hits = sum(1 for r in details if r.get("hit_target"))

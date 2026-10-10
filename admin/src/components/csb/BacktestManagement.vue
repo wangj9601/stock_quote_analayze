@@ -936,7 +936,9 @@ async function resume(id: string) {
   try {
     const res: any = await csbApiService.resumeBacktest(id)
     if (res?.success === false) {
-      ElMessage.warning('恢复失败（任务可能已结束）')
+      ElMessage.warning(res?.message || '恢复失败（任务可能已结束）')
+    } else if (res?.mode === 'checkpoint') {
+      ElMessage.success('已从检查点续跑（进程重启后恢复）')
     } else {
       ElMessage.success('已恢复')
     }

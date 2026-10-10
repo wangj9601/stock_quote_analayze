@@ -166,6 +166,7 @@ async def test_pause_resume_api_routes(monkeypatch):
     from backend_api.admin import csb_admin_routes as routes
 
     calls = {"pause": None, "resume": None, "storage_pause": None, "storage_resume": None}
+    status = {"v": "running"}
 
     monkeypatch.setattr(
         "backend_core.strategies.csb.backtest_worker.request_pause",
@@ -176,22 +177,28 @@ async def test_pause_resume_api_routes(monkeypatch):
         lambda tid: calls.__setitem__("resume", tid),
     )
     monkeypatch.setattr(
+        "backend_core.strategies.csb.backtest_worker.is_task_alive",
+        lambda _tid: True,
+    )
+    monkeypatch.setattr(
         "backend_core.strategies.csb.backtest_storage.pause_task",
-        lambda tid: calls.__setitem__("storage_pause", tid) or True,
+        lambda tid: (status.__setitem__("v", "paused"), calls.__setitem__("storage_pause", tid)) and True,
     )
     monkeypatch.setattr(
         "backend_core.strategies.csb.backtest_storage.resume_task",
-        lambda tid: calls.__setitem__("storage_resume", tid) or True,
+        lambda tid: (status.__setitem__("v", "running"), calls.__setitem__("storage_resume", tid)) and True,
     )
     monkeypatch.setattr(
         "backend_core.strategies.csb.backtest_storage.get_task",
-        lambda tid: {"task_id": tid, "status": "paused"},
+        lambda tid: {"task_id": tid, "status": status["v"]},
     )
 
     r1 = await routes.pause_backtest("task-abc")
+    status["v"] = "paused"
     r2 = await routes.resume_backtest("task-abc")
     assert r1["success"] is True
     assert r2["success"] is True
+    assert r2.get("mode") == "in_process"
     assert calls["pause"] == "task-abc"
     assert calls["resume"] == "task-abc"
     assert calls["storage_pause"] == "task-abc"

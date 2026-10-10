@@ -10,6 +10,9 @@
       <el-tab-pane label="权限资源" name="permissions">
         <PermissionsView />
       </el-tab-pane>
+      <el-tab-pane label="登录日志" name="login-logs" lazy>
+        <LoginLogsView />
+      </el-tab-pane>
     </el-tabs>
   </div>
 </template>
@@ -20,10 +23,14 @@ import { useRoute, useRouter } from 'vue-router'
 import UsersView from './UsersView.vue'
 import RolesView from './RolesView.vue'
 import PermissionsView from './PermissionsView.vue'
+import LoginLogsView from './LoginLogsView.vue'
 
 const route = useRoute()
 const router = useRouter()
-const activeTab = ref<'users' | 'roles' | 'permissions'>('users')
+
+type AccessTab = 'users' | 'roles' | 'permissions' | 'login-logs'
+const VALID_TABS = new Set<AccessTab>(['users', 'roles', 'permissions', 'login-logs'])
+const activeTab = ref<AccessTab>('users')
 
 function onTabChange(name: string | number) {
   const tab = typeof name === 'number' ? String(name) : name
@@ -33,8 +40,8 @@ function onTabChange(name: string | number) {
 watch(
   () => route.query.tab,
   (tab) => {
-    if (tab === 'users' || tab === 'roles' || tab === 'permissions') {
-      activeTab.value = tab
+    if (typeof tab === 'string' && VALID_TABS.has(tab as AccessTab)) {
+      activeTab.value = tab as AccessTab
     }
   },
   { immediate: true }

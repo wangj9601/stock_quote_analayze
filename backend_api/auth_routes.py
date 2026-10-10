@@ -25,6 +25,7 @@ from .auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from .permissions import build_permissions_response
+from backend_api.services.login_log_service import record_login_log
 
 # 配置日志（.env 中 LOG_TO_FILE=true 时才写文件）
 from backend_core.logging_utils import should_log_to_file, resolve_log_file
@@ -133,6 +134,14 @@ async def login(
                 f"IP: {client_host}, "
                 f"User-Agent: {user_agent}"
             )
+            record_login_log(
+                channel="user",
+                username=login_data.username,
+                success=False,
+                failure_reason="用户名或密码错误",
+                ip=client_host,
+                user_agent=user_agent,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="用户名或密码错误",
@@ -149,6 +158,15 @@ async def login(
                 f"用户名: {login_data.username}, "
                 f"IP: {client_host}, "
                 f"User-Agent: {user_agent}"
+            )
+            record_login_log(
+                channel="user",
+                username=login_data.username,
+                success=False,
+                user_id=user.id,
+                failure_reason="账号已被禁用",
+                ip=client_host,
+                user_agent=user_agent,
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -206,6 +224,14 @@ async def login(
                 f"IP: {client_host}, "
                 f"User-Agent: {user_agent}, "
                 f"处理时间: {process_time:.3f}秒"
+            )
+            record_login_log(
+                channel="user",
+                username=login_data.username,
+                success=True,
+                user_id=user.id,
+                ip=client_host,
+                user_agent=user_agent,
             )
             return response
         except Exception as e:

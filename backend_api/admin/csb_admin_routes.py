@@ -943,13 +943,23 @@ async def pause_backtest(task_id: str):
 async def resume_backtest(task_id: str):
     from backend_core.strategies.csb import backtest_storage, backtest_worker
 
+    row = backtest_storage.get_task(task_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if row.get("status") != "paused":
+        return {"success": False, "message": "仅暂停中的任务可恢复"}
+
+    # 同进程：唤醒阻塞中的 worker；进程重启后：从检查点重新拉起线程
+    if backtest_worker.is_task_alive(task_id):
+        backtest_worker.request_resume(task_id)
+        ok = backtest_storage.resume_task(task_id)
+        return {"success": ok, "mode": "in_process"}
+
+    if not backtest_storage.prepare_checkpoint_resume(task_id):
+        return {"success": False, "message": "无法从检查点续跑"}
     backtest_worker.request_resume(task_id)
-    ok = backtest_storage.resume_task(task_id)
-    if not ok:
-        row = backtest_storage.get_task(task_id)
-        if row and row.get("status") == "paused":
-            backtest_worker.request_pause(task_id)
-    return {"success": ok}
+    backtest_worker.start_backtest_task(task_id)
+    return {"success": True, "mode": "checkpoint"}
 
 
 @router.post("/backtests/{task_id}/rerun")

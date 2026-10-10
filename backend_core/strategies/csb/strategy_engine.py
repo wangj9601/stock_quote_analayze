@@ -474,10 +474,14 @@ class CSBStrategyEngine:
         progress_cb: Optional[ProgressCb] = None,
         cancel_check: Optional[CancelCheck] = None,
         chunk_size: Optional[int] = None,
+        stock_offset: int = 0,
+        chunk_hits_cb: Optional[Callable[[List[Dict[str, Any]], int, int], None]] = None,
     ) -> Tuple[Dict[str, List[Dict[str, Any]]], bool]:
         """一次拉齐 [最早日-回看, 最晚日] 行情，内存中按日评点（对齐 URT）。
 
         require_pass：历史别名，等同 require_entry。
+        stock_offset：跳过已完成股票数（检查点续跑）。
+        chunk_hits_cb(chunk_hits, done_stocks, total)：每批完成后回调（增量落库/检查点）。
         """
         if require_pass is not None:
             require_entry = bool(require_pass)
@@ -497,11 +501,16 @@ class CSBStrategyEngine:
         )
         workers = _screen_workers()
         total = len(stocks)
-        done_stocks = 0
+        try:
+            offset = max(0, min(total, int(stock_offset or 0)))
+        except (TypeError, ValueError):
+            offset = 0
+        done_stocks = offset
 
         logger.info(
-            "CSB 区间扫描 stocks=%s days=%s window=%s~%s batch_codes=%s workers=%s",
+            "CSB 区间扫描 stocks=%s offset=%s days=%s window=%s~%s batch_codes=%s workers=%s",
             total,
+            offset,
             len(date_list),
             start_s,
             end_s,
@@ -509,9 +518,13 @@ class CSBStrategyEngine:
             workers,
         )
         if progress_cb:
-            progress_cb(0, total, f"区间一次扫描 0/{total} 只（{len(date_list)} 个交易日）")
+            progress_cb(
+                done_stocks,
+                total,
+                f"区间一次扫描 {done_stocks}/{total} 只（{len(date_list)} 个交易日）",
+            )
 
-        for i in range(0, total, n_chunk):
+        for i in range(offset, total, n_chunk):
             if cancel_check and cancel_check():
                 logger.info("CSB 区间扫描已取消 stocks_done=%s/%s", done_stocks, total)
                 return hits_by_date, False
@@ -543,12 +556,19 @@ class CSBStrategyEngine:
             else:
                 with ThreadPoolExecutor(max_workers=workers) as pool:
                     chunk_hits = list(pool.map(_run_job, jobs))
+            flat_hits: List[Dict[str, Any]] = []
             for hits in chunk_hits:
                 for h in hits:
                     d = str(h.get("signal_date") or "")[:10]
                     if d in hits_by_date:
                         hits_by_date[d].append(h)
-            done_stocks += len(chunk)
+                    flat_hits.append(h)
+            done_stocks = min(total, i + len(chunk))
+            if chunk_hits_cb:
+                try:
+                    chunk_hits_cb(flat_hits, done_stocks, total)
+                except Exception as e:
+                    logger.debug("CSB chunk_hits_cb failed: %s", e)
             if progress_cb:
                 progress_cb(
                     done_stocks,
