@@ -262,7 +262,10 @@ def build_csb_trade_meta(
     if mode == "structure_exit":
         summary = (
             f"CSB 结构出场：次日开盘入场；观察 {hz} 日；"
-            f"假突破 {dcfg.get('false_break_days', 3)} 日 + 无缓冲基准止损 + 派发减仓 + "
+            f"BREAKOUT 假突破 {dcfg.get('false_break_days', 3)} 日；"
+            f"PROBE/LPS 基准止损（PROBE 下轨缓冲 "
+            f"{float(dcfg.get('channel_fail_buffer_pct', 0.005)) * 100:.1f}% × "
+            f"连续 {int(dcfg.get('channel_fail_confirm_days', 2))} 日确认失效）+ 派发减仓 + "
             f"MA{dcfg.get('trail_ma_fast', 10)}/MA{dcfg.get('trail_ma', 20)} 阶梯跟踪；"
             f"同时统计 +{tp:.1f}% 命中；最低得分 {ms:.0f}。"
         )
@@ -436,7 +439,17 @@ def run_csb_backtest(
                 try:
                     if signals:
                         upsert_trace_rows(db, config_id=int(resolved_id), rows=signals)
-                    mark_date_scanned(db, config_id=int(resolved_id), trade_date=d, extra={"hits": len(signals)})
+                    # 须带 scope/candidates，否则 dates_ready 不认「已全市场扫描」的空买点日
+                    mark_date_scanned(
+                        db,
+                        config_id=int(resolved_id),
+                        trade_date=d,
+                        extra={
+                            "hits": len(signals),
+                            "candidates": len(stocks),
+                            "scope": "pool" if pool else "full_market",
+                        },
+                    )
                 except Exception as e:
                     logger.debug("CSB 当日落库失败 %s: %s", d, e)
         elif not use_trace_ok:
@@ -508,6 +521,7 @@ def run_csb_backtest(
 
             entry_low = sig.get("entry_low")
             channel_upper = sig.get("channel_upper")
+            channel_lower = sig.get("channel_lower")
             if mode == "structure_exit":
                 exit_info = evaluate_structure_exit_rules(
                     entry_price=entry_price,
@@ -517,6 +531,8 @@ def run_csb_backtest(
                     signal_date=d,
                     config=cfg,
                     prior_bars=_prior_bars(db, code, d, 40),
+                    signal_type=str(sig.get("signal_type") or ""),
+                    channel_lower=channel_lower,
                 )
             else:
                 exit_info = evaluate_risk_exit_rules(

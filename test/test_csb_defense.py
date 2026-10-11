@@ -128,3 +128,130 @@ def test_trail_ratchet_uses_ma_after_gain():
         prior_bars=prior,
     )
     assert r.get("exit_reason") == "ma_trail"
+
+
+def test_false_break_only_for_breakout_not_probe():
+    """PROBE 收盘落回上轨之下不应判假突破；同价序列对 BREAKOUT 应判假突破。"""
+    cfg = get_default_csb_config()
+    after = [
+        _bar("2024-06-01", 9.8, 10.1, 9.7, 9.95),  # 信号日：PROBE 在通道内
+        _bar("2024-06-02", 9.9, 10.0, 9.6, 9.7),  # 收盘 < 上轨 10.0
+        _bar("2024-06-03", 9.7, 9.9, 9.5, 9.8),
+        _bar("2024-06-04", 9.8, 10.0, 9.6, 9.85),
+    ]
+    probe = evaluate_structure_exit_rules(
+        entry_price=9.95,
+        entry_low=9.5,
+        channel_upper=10.0,
+        bars_after_entry=after,
+        signal_date="2024-06-01",
+        config=cfg,
+        signal_type="CSB_PROBE",
+        channel_lower=9.0,
+    )
+    assert probe.get("exit_reason") != "false_break"
+
+    breakout = evaluate_structure_exit_rules(
+        entry_price=10.4,
+        entry_low=9.9,
+        channel_upper=10.0,
+        bars_after_entry=[
+            _bar("2024-06-01", 10.0, 10.5, 9.9, 10.4),
+            _bar("2024-06-02", 10.4, 10.6, 9.5, 9.6),
+            _bar("2024-06-03", 9.6, 9.8, 9.4, 9.7),
+        ],
+        signal_date="2024-06-01",
+        config=cfg,
+        signal_type="CSB_BREAKOUT",
+    )
+    assert breakout.get("exit_reason") == "false_break"
+
+
+def test_probe_channel_fail_needs_confirm_days():
+    """PROBE：连续 2 日收盘跌破「下轨×(1-缓冲)」才 channel_fail。"""
+    cfg = get_default_csb_config()
+    # 下轨 9.0 × 0.995 = 8.955
+    after = [
+        _bar("2024-06-01", 9.8, 10.0, 9.7, 9.9),
+        _bar("2024-06-02", 9.9, 10.0, 9.6, 9.85),
+        _bar("2024-06-03", 9.8, 9.9, 8.8, 8.90),  # 第 1 日破地板，尚不离场
+        _bar("2024-06-04", 8.9, 9.0, 8.7, 8.88),  # 第 2 日确认
+    ]
+    r = evaluate_structure_exit_rules(
+        entry_price=9.9,
+        entry_low=8.5,
+        channel_upper=10.0,
+        bars_after_entry=after,
+        signal_date="2024-06-01",
+        config=cfg,
+        signal_type="CSB_PROBE",
+        channel_lower=9.0,
+    )
+    assert r.get("exit_reason") == "channel_fail"
+    assert r.get("exit_date") == "2024-06-04"
+
+
+def test_probe_single_day_pierce_does_not_channel_fail():
+    """单日刺穿下轨后收回 → 不算通道失效。"""
+    cfg = get_default_csb_config()
+    after = [
+        _bar("2024-06-01", 9.8, 10.0, 9.7, 9.9),
+        _bar("2024-06-02", 9.8, 9.9, 8.8, 8.90),  # 刺穿
+        _bar("2024-06-03", 9.0, 9.3, 8.95, 9.20),  # 收回，打断连续
+        _bar("2024-06-04", 9.2, 9.4, 9.1, 9.30),
+    ]
+    r = evaluate_structure_exit_rules(
+        entry_price=9.9,
+        entry_low=8.5,
+        channel_upper=10.0,
+        bars_after_entry=after,
+        signal_date="2024-06-01",
+        config=cfg,
+        signal_type="CSB_PROBE",
+        channel_lower=9.0,
+    )
+    assert r.get("exit_reason") != "channel_fail"
+
+
+def test_probe_channel_fail_buffer_ignores_shallow_dip():
+    """收盘略低于名义下轨但仍在缓冲带内 → 不累计失效。"""
+    cfg = get_default_csb_config()
+    # 下轨 9.0，缓冲后地板 8.955；9.0~8.96 之间的浅跌不触发
+    after = [
+        _bar("2024-06-01", 9.8, 10.0, 9.7, 9.9),
+        _bar("2024-06-02", 9.9, 10.0, 8.97, 8.97),
+        _bar("2024-06-03", 8.97, 9.1, 8.96, 8.96),
+        _bar("2024-06-04", 8.96, 9.2, 8.95, 9.10),
+    ]
+    r = evaluate_structure_exit_rules(
+        entry_price=9.9,
+        entry_low=8.5,
+        channel_upper=10.0,
+        bars_after_entry=after,
+        signal_date="2024-06-01",
+        config=cfg,
+        signal_type="CSB_PROBE",
+        channel_lower=9.0,
+    )
+    assert r.get("exit_reason") != "channel_fail"
+
+
+def test_lps_skips_false_break():
+    """LPS 回踩上轨附近，收盘略低于上轨不应判假突破。"""
+    cfg = get_default_csb_config()
+    after = [
+        _bar("2024-06-01", 10.1, 10.3, 9.95, 10.05),
+        _bar("2024-06-02", 10.0, 10.2, 9.9, 9.95),  # < upper 10.0
+        _bar("2024-06-03", 9.95, 10.1, 9.9, 10.0),
+        _bar("2024-06-04", 10.0, 10.2, 9.95, 10.1),
+    ]
+    r = evaluate_structure_exit_rules(
+        entry_price=10.05,
+        entry_low=9.8,
+        channel_upper=10.0,
+        bars_after_entry=after,
+        signal_date="2024-06-01",
+        config=cfg,
+        signal_type="CSB_LPS",
+    )
+    assert r.get("exit_reason") != "false_break"

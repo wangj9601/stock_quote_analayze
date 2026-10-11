@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence
 
-from .config import CSB_DISTRIBUTE, CSB_FALSE_BREAK, CSB_STOP, CSB_TRAIL
+from .config import CSB_BREAKOUT, CSB_DISTRIBUTE, CSB_FALSE_BREAK, CSB_PROBE, CSB_STOP, CSB_TRAIL
 from .indicators import _f, bar_body_pct, sma, upper_shadow_ratio
 
 
@@ -186,9 +186,12 @@ def evaluate_structure_exit_rules(
     signal_date: str,
     config: Dict[str, Any],
     prior_bars: Optional[Sequence[Dict[str, Any]]] = None,
+    signal_type: Optional[str] = None,
+    channel_lower: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    结构出场：假突破 → 基准止损（无缓冲）→ 派发 → 阶梯跟踪 → 到期。
+    结构出场：假突破（仅 BREAKOUT）→ 基准止损（无缓冲）→ 派发 → 阶梯跟踪 → 到期。
+    PROBE / LPS 不做「三日不重回上轨」；PROBE 以「下轨×(1−缓冲)」连续确认作为通道失效。
     跟踪线取波段低点与 MA10/MA20 中仍在收盘价之下的较高者，只上移。
     """
     dcfg = (config or {}).get("defense") or {}
@@ -198,8 +201,12 @@ def evaluate_structure_exit_rules(
     buffer = float(dcfg.get("stop_buffer_pct", 0.0))
     arm_gain = float(dcfg.get("trail_arm_gain", 0.03))
     swing_w = int(dcfg.get("swing_window", 2))
+    cf_buf = max(0.0, float(dcfg.get("channel_fail_buffer_pct", 0.005)))
+    cf_confirm = max(1, int(dcfg.get("channel_fail_confirm_days", 2)))
+    st = str(signal_type or "").strip().upper()
 
-    if channel_upper and signal_date:
+    # 假突破 / 三日不重回：只对通道突破单生效；PROBE 入场本就在通道内，LPS 刻意回踩上轨。
+    if st == CSB_BREAKOUT and channel_upper and signal_date:
         fb = check_false_break(
             bars_after_entry,
             breakout_date=signal_date,
@@ -210,6 +217,10 @@ def evaluate_structure_exit_rules(
             return fb
 
     stop_px = baseline_stop_price(entry_low, buffer)
+    # PROBE：下轨扣除缓冲后，连续 N 日收盘跌破才判通道失效（减少一日刺穿误杀）
+    probe_floor: Optional[float] = None
+    if st == CSB_PROBE and channel_lower is not None and float(channel_lower) > 0:
+        probe_floor = float(channel_lower) * (1.0 - cf_buf)
     closes: List[float] = []
     vols: List[float] = []
     tos: List[float] = []
@@ -228,6 +239,7 @@ def evaluate_structure_exit_rules(
     ratchet: Optional[float] = None
     running_high = float(entry_price)
     anchor = str(signal_date or "")[:10]
+    below_floor_streak = 0
 
     for bar in bars_after_entry:
         cl = _f(bar.get("close")) or entry_price
@@ -249,6 +261,21 @@ def evaluate_structure_exit_rules(
             hit = evaluate_baseline_stop(bar, stop_price=stop_px)
             if hit:
                 return hit
+
+        if probe_floor is not None:
+            if cl <= probe_floor:
+                below_floor_streak += 1
+                if below_floor_streak >= cf_confirm:
+                    return {
+                        "exit_reason": "channel_fail",
+                        "signal_type": CSB_STOP,
+                        "exit_date": bar_date,
+                        "exit_price": cl,
+                        "channel_fail_streak": below_floor_streak,
+                        "channel_fail_floor": probe_floor,
+                    }
+            else:
+                below_floor_streak = 0
 
         dist = evaluate_distribution_exit(
             bar,

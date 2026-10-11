@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 
 <head>
@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>选股 - 股票分析</title>
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/design-tokens.css?v=20261008c">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20261011-fonts">
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
     <link rel="stylesheet" href="css/ops-responsive.css">
@@ -2041,7 +2041,7 @@
 
         <div id="csb-content" class="strategy-content" data-perm="channel.screening.tab.csb">
             <div class="gms-integrated-head">
-                <p class="gms-integrated-hint">CSB 通道粘合突破：MA 粘合 SETUP → 试探 PROBE / 突破 BREAKOUT / 回踩 LPS；列表「观察」写入统一交易观察（来源：通道突破）。全市场建议勾选「优先读预计算」或缩小至自选/板块/个股。</p>
+                <p class="gms-integrated-hint">CSB 通道粘合突破：MA 粘合 SETUP → 试探 PROBE / 突破 BREAKOUT / 回踩 LPS；列表「观察」写入统一交易观察（来源：通道突破）。全市场勾选「优先读预计算」时先读缓存，无覆盖则自动现算并落库。</p>
             </div>
             <div class="params-section">
                 <div class="param-group">
@@ -2080,7 +2080,7 @@
                     <label><input type="checkbox" id="csbEntryOnly" checked> 仅入场信号</label>
                 </div>
                 <div class="param-group param-group-check" id="csbTraceOnlyWrap">
-                    <label title="仅全市场：读取 csb_signal_trace 预计算；无数据时自动回退现算。"><input type="checkbox" id="csbTraceOnly" checked> 优先读预计算</label>
+                    <label title="全市场：优先读 csb_signal_trace；无覆盖时自动全市场现算并写回预计算（可能较慢）。"><input type="checkbox" id="csbTraceOnly" checked> 优先读预计算</label>
                 </div>
                 <div class="param-actions">
                     <button type="button" id="csbRefreshBtn" class="refresh-btn" data-strategy="csb" data-perm="channel.screening.tab.csb.btn.refresh">刷新筛选</button>
@@ -2417,7 +2417,7 @@
     <script src="js/screening.js?v=20260928-urt-precompute"></script>
     <script src="js/sbbr_screening.js?v=20260918a"></script>
     <script src="js/rpe_screening.js?v=20260917a"></script>
-    <script src="js/csb_screening.js?v=20261007-csb"></script>
+    <script src="js/csb_screening.js?v=20261011-csb-live"></script>
 
     <!-- 比价效应：顶/底滚动（双圆形 FAB，仅 RPE Tab） -->
     <div class="rpe-scroll-fab" id="rpeScrollFab" data-scroll-fab hidden aria-hidden="true" aria-label="页面快速滚动">

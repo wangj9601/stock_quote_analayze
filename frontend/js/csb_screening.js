@@ -413,19 +413,34 @@
       }
 
       let data = await api(`/api/screening/csb-strategy?${q}`);
-      if (traceOnly && scope === 'market' && (!data.data || !data.data.length)) {
+      // 全市场仅读预计算未覆盖时：去掉 trace_only，触发后端现算并回写 csb_signal_trace
+      if (
+        traceOnly &&
+        scope === 'market' &&
+        (data.need_precompute || (!data.data || !data.data.length))
+      ) {
+        if (loading) {
+          const tip = loading.querySelector('.loading-text') || loading;
+          if (tip) tip.textContent = '全市场暂无预计算，正在现算并写入缓存，请稍候…';
+        }
+        showErr('全市场暂无预计算，正在触发信号现算（可能需数分钟）…');
         q.delete('trace_only');
         data = await api(`/api/screening/csb-strategy?${q}`);
       }
 
       const rows = data.data || [];
       const asof = data.search_date || data.asof_date || '-';
+      const src = String(data.source || data.data_source || '');
       const srcLabel =
-        data.source === 'csb_signal_trace'
+        src === 'csb_signal_trace'
           ? '预计算'
-          : data.source === 'live' || data.source === 'realtime'
-            ? '实时计算'
-            : data.source || 'live';
+          : src === 'realtime+trace'
+            ? '现算已落库'
+            : src === 'live' || src === 'realtime'
+              ? '实时计算'
+              : src === 'empty_trace'
+                ? 'empty_trace'
+                : src || 'live';
       const metaParts = [
         `回溯基准日 ${asof}`,
         `数据来源 ${srcLabel}`,
@@ -445,16 +460,26 @@
       if (data.concept_board_codes && data.concept_board_codes.length) {
         metaParts.push(`概念 ${data.concept_board_codes.join(',')}`);
       }
-      if (data.message) showErr(data.message);
+      // 现算成功后用 info 提示；仍需预计算才用错误条
+      if (data.need_precompute) {
+        showErr(data.message || '全市场暂无可用数据');
+      } else if (data.message) {
+        showErr('');
+        toast(data.message, 'info');
+      } else {
+        showErr('');
+      }
       const metaEl = document.getElementById('csbSearchMeta');
       if (metaEl) metaEl.textContent = metaParts.join(' · ');
       const hint = document.getElementById('csbDataDateHint');
       if (hint) {
         hint.textContent = data.need_precompute
-          ? '（全市场需预计算或缩小范围）'
-          : traceOnly && scope === 'market'
-            ? '（优先读预计算，无数据时回退现算）'
-            : '';
+          ? '（全市场需预计算；或关闭「优先读预计算」直接现算）'
+          : src === 'realtime+trace'
+            ? '（本次已现算并写入预计算）'
+            : traceOnly && scope === 'market'
+              ? '（优先读预计算，无覆盖时自动现算落库）'
+              : '';
       }
       const dateEl = document.getElementById('csbDate');
       if (dateEl && asof && asof !== '-' && (!date || data.date_snapped)) {
@@ -462,8 +487,10 @@
       }
       renderSignalRows(rows, {
         emptyHint: data.need_precompute
-          ? '全市场暂无预计算结果。请先在管理端执行 CSB 预计算，或改用自选/板块/个股范围。'
-          : null,
+          ? '全市场暂无预计算覆盖。刷新将自动现算；也可改用自选/板块/个股，或在管理端预计算。'
+          : rows.length
+            ? null
+            : '当日无符合条件的买点（预计算/现算已覆盖该日）。',
       });
     } catch (e) {
       showErr(e.message || String(e));

@@ -4666,7 +4666,6 @@ async def get_csb_strategy(
     try:
         from backend_core.strategies.csb.config import CSBConfigManager
         from backend_core.strategies.csb.frontend_interface import CSBFrontendInterface
-        from backend_core.strategies.csb.signal_storage import load_traces
         from backend_api.models import User, Watchlist
         from backend_api.utils.cn_listed_board_filter import (
             filter_stock_codes_by_board_segments,
@@ -4819,43 +4818,7 @@ async def get_csb_strategy(
 
     trade_date = (str(date).strip()[:10] if date else None) or None
 
-    if trace_only and scope_raw == "market" and cid is not None:
-        from backend_core.strategies.csb.data_loader import CSBDataLoader
-
-        loader = CSBDataLoader(db)
-        effective = loader.resolve_effective_trade_date(trade_date)
-        rows = load_traces(
-            db,
-            trade_date=effective,
-            config_id=int(cid),
-            entry_only=entry_only,
-            signal_type=signal_type,
-            limit=max_results,
-        )
-        rows = _filter_rows_by_seg(rows)
-        empty_msg = None
-        if not rows:
-            empty_msg = (
-                f"全市场暂无预计算（{effective}）。"
-                "将自动尝试现算；若仍无结果，请先执行 CSB 预计算或缩小范围。"
-            )
-        return JSONResponse(
-            {
-                "success": True,
-                "data": rows,
-                "total": len(rows),
-                "search_date": effective,
-                "strategy_name": "CSB通道突破",
-                "scope": scope_raw,
-                "config_id": cid,
-                "source": "csb_signal_trace",
-                "trace_only": True,
-                "need_precompute": not bool(rows),
-                "message": empty_msg,
-                **extra_meta,
-            }
-        )
-
+    # 全市场 + 优先读预计算：先只读 trace；无覆盖时由前端去掉 trace_only 再请求触发现算落库
     result = CSBFrontendInterface.screen(
         db,
         scope="all",
@@ -4863,9 +4826,11 @@ async def get_csb_strategy(
         stock_codes=stock_codes,
         screening_date=trade_date,
         config_id=cid,
-        prefer_cache=not trace_only,
-        force_realtime=bool(trace_only and scope_raw != "market"),
+        prefer_cache=True,
+        force_realtime=False,
         require_entry=entry_only,
+        trace_only=bool(trace_only and scope_raw == "market"),
+        persist_realtime=True,
     )
     data_rows = result.get("data") or []
     if signal_type:
@@ -4882,11 +4847,11 @@ async def get_csb_strategy(
             "search_date": result.get("search_date"),
             "strategy_name": result.get("strategy_name") or "CSB通道突破",
             "scope": scope_raw,
-            "config_id": cid,
+            "config_id": result.get("config_id", cid),
             "source": result.get("source"),
             "message": result.get("message"),
             "need_precompute": result.get("need_precompute"),
-            "trace_only": trace_only,
+            "trace_only": bool(trace_only and scope_raw == "market"),
             **extra_meta,
         }
     )

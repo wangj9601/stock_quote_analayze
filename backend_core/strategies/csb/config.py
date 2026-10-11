@@ -75,6 +75,9 @@ def get_default_csb_config() -> Dict[str, Any]:
             "stop_buffer_pct": 0.0,
             "trail_arm_gain": 0.03,
             "swing_window": 2,
+            # PROBE 通道失效：下轨缓冲 + 连续确认，降低窄通道一日刺穿的换手
+            "channel_fail_buffer_pct": 0.005,
+            "channel_fail_confirm_days": 2,
             "distribution_min_gain": 0.08,
             "distribution_turnover_mult": 2.0,
             "distribution_body_max": 0.03,

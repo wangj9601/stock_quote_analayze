@@ -174,14 +174,13 @@ def marker_covers_universe_request(
     except (TypeError, ValueError):
         cand_n = None
     threshold = max(1, int(min_full_market_codes))
+    # full_market 标记优先：即使 candidates 字段缺失/偏小，也视为全市场已扫完
+    if scope == "full_market":
+        return True
     if not want_pool:
         if scope == "pool":
             return False
-        if cand_n is not None and cand_n < threshold:
-            return False
-        return scope == "full_market" or (cand_n is not None and cand_n >= threshold)
-    if scope == "full_market":
-        return True
+        return cand_n is not None and cand_n >= threshold
     if scope == "pool":
         return cand_n is not None and cand_n >= max(1, int(pool_need))
     return False
