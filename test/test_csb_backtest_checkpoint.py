@@ -180,25 +180,67 @@ def test_resume_after_restart_starts_thread(monkeypatch):
     assert state["status"] == "pending"
 
 
-def test_mark_zombie_running_failed(monkeypatch):
+def test_recover_interrupted_running_requeues(monkeypatch):
     from backend_core.strategies.csb import backtest_storage
 
     rows = [
-        type("R", (), {"task_id": "a", "status": "running", "message": "", "error": None, "completed_at": None})(),
-        type("R", (), {"task_id": "b", "status": "paused", "message": "", "error": None, "completed_at": None})(),
-        type("R", (), {"task_id": "c", "status": "running", "message": "", "error": None, "completed_at": None})(),
+        type(
+            "R",
+            (),
+            {
+                "task_id": "a",
+                "status": "running",
+                "message": "",
+                "error": None,
+                "completed_at": None,
+                "logs": [],
+            },
+        )(),
+        type(
+            "R",
+            (),
+            {
+                "task_id": "b",
+                "status": "paused",
+                "message": "",
+                "error": None,
+                "completed_at": None,
+                "logs": [],
+            },
+        )(),
+        type(
+            "R",
+            (),
+            {
+                "task_id": "c",
+                "status": "failed",
+                "message": "进程中断，请重新执行或从暂停任务恢复",
+                "error": "进程中断，请重新执行或从暂停任务恢复",
+                "completed_at": None,
+                "logs": [],
+            },
+        )(),
     ]
 
     class Q:
+        def __init__(self, items):
+            self._items = items
+
         def filter(self, *a, **k):
             return self
 
         def all(self):
-            return [r for r in rows if r.status == "running"]
+            return self._items
 
     class Sess:
+        def __init__(self):
+            self._n = 0
+
         def query(self, *a, **k):
-            return Q()
+            self._n += 1
+            if self._n == 1:
+                return Q([r for r in rows if r.status == "running"])
+            return Q([r for r in rows if r.status == "failed"])
 
         def commit(self):
             pass
@@ -210,8 +252,10 @@ def test_mark_zombie_running_failed(monkeypatch):
             pass
 
     monkeypatch.setattr(backtest_storage, "_session", lambda: Sess())
-    n = backtest_storage.mark_zombie_running_tasks_failed("进程中断")
-    assert n == 2
-    assert rows[0].status == "failed"
+    ids = backtest_storage.recover_interrupted_running_tasks("服务重启，已自动排队续跑")
+    assert set(ids) == {"a", "c"}
+    assert rows[0].status == "pending"
     assert rows[1].status == "paused"
-    assert rows[2].status == "failed"
+    assert rows[2].status == "pending"
+    assert rows[0].error is None
+    assert "自动排队续跑" in (rows[0].message or "")

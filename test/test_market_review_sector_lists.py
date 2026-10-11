@@ -1,9 +1,11 @@
 """每日复盘：领涨/领跌全量上涨下跌列表与主线角色切分。"""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from backend_core.market_review.compute import (
     SECTOR_LIST_UI_TOP_N,
+    _hydrate_legacy_sector_lists,
+    _sector_lists_look_legacy_truncated,
     build_sector_pack,
     split_industry_roles,
 )
@@ -74,3 +76,47 @@ def test_build_sector_pack_returns_all_up_and_down_boards():
     # 主线仍从涨幅前 10 中按净流入挑选
     assert pack["main"] is not None
     assert pack["main"]["board_code"] in {r["board_code"] for r in pack["leaders"][:10]}
+
+
+def test_sector_lists_look_legacy_truncated_only_exact_10_and_3():
+    assert _sector_lists_look_legacy_truncated(
+        {"leaders": [{}] * 10, "laggards": [{}] * 3}
+    )
+    assert not _sector_lists_look_legacy_truncated(
+        {"leaders": [{}] * 10, "laggards": [{}] * 4}
+    )
+    assert not _sector_lists_look_legacy_truncated(
+        {"leaders": [{}] * 60, "laggards": [{}] * 3}
+    )
+
+
+def test_hydrate_legacy_sector_lists_expands_and_persists():
+    db = MagicMock()
+    data = {
+        "mainline_json": {
+            "sector": {
+                "leaders": [{"board_code": f"U{i}", "board_name": f"涨{i}"} for i in range(10)],
+                "laggards": [{"board_code": f"D{i}", "board_name": f"跌{i}"} for i in range(3)],
+                "ladder": {"b2": 1},
+            }
+        }
+    }
+    fresh = {
+        "leaders": [{"board_code": f"U{i}"} for i in range(15)],
+        "laggards": [{"board_code": f"D{i}"} for i in range(12)],
+        "main": {"board_code": "U0"},
+        "sidelines": [],
+        "rotation": {"dropped": [], "new_inflow": []},
+        "capital_in": [],
+        "capital_out": [],
+    }
+    with patch(
+        "backend_core.market_review.compute.build_sector_pack", return_value=fresh
+    ):
+        out = _hydrate_legacy_sector_lists(db, "2026-10-09", data)
+    sector = out["mainline_json"]["sector"]
+    assert len(sector["leaders"]) == 15
+    assert len(sector["laggards"]) == 12
+    assert sector["ladder"] == {"b2": 1}  # 非列表字段保留
+    assert db.execute.called
+    assert db.commit.called

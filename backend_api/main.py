@@ -1309,15 +1309,23 @@ async def startup_event():
         except Exception as e:
             logger.warning("权限注册表增量同步失败: %s", e)
 
-        # CSB：残留 running 标失败；paused 保留以便手动从检查点恢复
+        # CSB：残留 running /「进程中断」failed → 自动排队续跑（关管理页不中断；仅 API 进程退出会断）
         try:
             from backend_core.strategies.csb import backtest_storage as csb_bt_storage
+            from backend_core.strategies.csb import backtest_worker as csb_bt_worker
 
-            n = csb_bt_storage.mark_zombie_running_tasks_failed("进程中断，请重新执行或从暂停任务恢复")
-            if n:
-                logger.info("CSB 已将 %s 个残留 running 回测标为 failed", n)
+            recovered = csb_bt_storage.recover_interrupted_running_tasks(
+                "服务重启，已自动排队续跑（关闭管理页不会中断回测）"
+            )
+            for tid in recovered:
+                try:
+                    csb_bt_worker.start_backtest_task(tid)
+                except Exception as start_err:
+                    logger.warning("CSB 自动续跑拉起失败 %s: %s", tid[:8], start_err)
+            if recovered:
+                logger.info("CSB 已自动续跑 %s 个中断回测任务", len(recovered))
         except Exception as e:
-            logger.warning("CSB 残留回测任务清理失败: %s", e)
+            logger.warning("CSB 残留回测任务恢复失败: %s", e)
 
         # 启动 PVFRS 监控后台线程
         try:

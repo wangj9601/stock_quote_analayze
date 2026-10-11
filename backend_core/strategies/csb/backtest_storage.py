@@ -498,31 +498,58 @@ def load_partial_details(task_id: str) -> List[Dict[str, Any]]:
         db.close()
 
 
-def mark_zombie_running_tasks_failed(reason: str = "进程中断") -> int:
-    """启动时将残留 running 标为 failed；paused 保留以便手动恢复。"""
+def recover_interrupted_running_tasks(
+    reason: str = "服务重启，已自动排队续跑（关闭管理页不会中断回测）",
+) -> List[str]:
+    """启动时将残留 running（及「进程中断」类 failed）改回 pending 并保留检查点。
+
+    关闭浏览器/管理页本身不会杀任务；仅当 API 进程退出时线程会断。
+    此处自动重新排队，避免再标成 failed。paused 仍留给用户手动恢复。
+    """
     db = _session()
     try:
-        rows = (
+        running = (
             db.query(CSBBacktestTask)
             .filter(CSBBacktestTask.status == "running")
             .all()
         )
-        n = 0
+        failed = (
+            db.query(CSBBacktestTask)
+            .filter(CSBBacktestTask.status == "failed")
+            .all()
+        )
+        interrupt_keys = ("进程中断", "服务重启")
+        recoverable_failed = [
+            r
+            for r in failed
+            if any(k in str(r.error or "") or k in str(r.message or "") for k in interrupt_keys)
+        ]
+        rows = list(running) + recoverable_failed
+        ids: List[str] = []
         now = datetime.utcnow()
         for row in rows:
-            row.status = "failed"
-            row.error = reason
+            tid = str(row.task_id)
+            row.status = "pending"
+            row.error = None
             row.message = reason
-            row.completed_at = now
-            n += 1
-        if n:
+            row.completed_at = None
+            logs = list(row.logs or [])
+            logs.append({"ts": now.isoformat() + "Z", "message": reason})
+            row.logs = logs[-200:]
+            ids.append(tid)
+        if ids:
             db.commit()
-        return n
+        return ids
     except Exception:
         db.rollback()
         raise
     finally:
         db.close()
+
+
+def mark_zombie_running_tasks_failed(reason: str = "进程中断") -> int:
+    """兼容旧调用：改为自动续跑排队，返回重排队数量（不再标 failed）。"""
+    return len(recover_interrupted_running_tasks(reason=reason))
 
 
 def delete_task(task_id: str) -> bool:

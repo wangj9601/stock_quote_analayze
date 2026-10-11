@@ -248,6 +248,7 @@
         </el-form-item>
         <el-form-item>
           <span class="hint">
+            回测在服务端后台线程执行：关闭本页或浏览器不会取消任务；请保持 API 服务进程运行。服务重启后会从检查点自动续跑。
             单日预计算只写选定交易日。改参数或要与实时扫对齐时：先「清空 trace」或「强制刷新区间」（与回测同引擎），再开「优先读缓存」创建任务。
             <template v-if="traceStatsLabel">当前 trace：{{ traceStatsLabel }}</template>
           </span>

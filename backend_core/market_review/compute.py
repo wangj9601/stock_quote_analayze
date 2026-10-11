@@ -1500,6 +1500,70 @@ def build_review_snapshot(
     return snapshot
 
 
+def _sector_lists_look_legacy_truncated(sector: Dict[str, Any]) -> bool:
+    """旧版 build_sector_pack 固定 leaders LIMIT 10、laggards LIMIT 3。"""
+    if not isinstance(sector, dict):
+        return False
+    leaders = sector.get("leaders") or []
+    laggards = sector.get("laggards") or []
+    return len(leaders) == 10 and len(laggards) == 3
+
+
+def _hydrate_legacy_sector_lists(
+    db: Session, trade_date: str, data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """读取时把旧快照的领涨/领跌补成全量，供前端折叠；并回写库以免反复扩。"""
+    mj = data.get("mainline_json")
+    if not isinstance(mj, dict):
+        return data
+    sector = mj.get("sector")
+    if not _sector_lists_look_legacy_truncated(sector):
+        return data
+    d = trade_date[:10]
+    try:
+        fresh = build_sector_pack(db, d, mj.get("industry_confirm"))
+    except Exception:
+        logger.exception("扩写旧版行业列表失败 trade_date=%s", d)
+        return data
+    new_leaders = fresh.get("leaders") or []
+    new_laggards = fresh.get("laggards") or []
+    if len(new_leaders) <= 10 and len(new_laggards) <= 3:
+        return data
+    sector = dict(sector)
+    sector["leaders"] = new_leaders
+    sector["laggards"] = new_laggards
+    # 主线/支线/轮动/资金榜随同刷新，与当前口径一致
+    for key in ("main", "sidelines", "rotation", "capital_in", "capital_out"):
+        if key in fresh:
+            sector[key] = fresh[key]
+    mj = dict(mj)
+    mj["sector"] = sector
+    data["mainline_json"] = mj
+    try:
+        db.execute(
+            text(
+                """
+                UPDATE market_daily_review
+                SET mainline_json = CAST(:mainline_json AS jsonb),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE trade_date = CAST(:d AS date)
+                """
+            ),
+            {"d": d, "mainline_json": json.dumps(mj, ensure_ascii=False)},
+        )
+        db.commit()
+        logger.info(
+            "已扩写旧版行业列表 trade_date=%s leaders=%s laggards=%s",
+            d,
+            len(new_leaders),
+            len(new_laggards),
+        )
+    except Exception:
+        logger.exception("回写扩写后的行业列表失败 trade_date=%s", d)
+        db.rollback()
+    return data
+
+
 def get_review_snapshot(db: Session, trade_date: str) -> Optional[Dict[str, Any]]:
     row = db.execute(
         text("SELECT * FROM market_daily_review WHERE trade_date = :d"),
@@ -1515,6 +1579,7 @@ def get_review_snapshot(db: Session, trade_date: str) -> Optional[Dict[str, Any]
                 data[k] = json.loads(v)
             except Exception:
                 pass
+    data = _hydrate_legacy_sector_lists(db, trade_date, data)
     data["markdown"] = render_markdown(data)
     return data
 
