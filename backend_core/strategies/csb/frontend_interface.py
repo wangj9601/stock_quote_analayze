@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -75,6 +76,36 @@ class CSBFrontendInterface:
         cfg = cm.merge_overrides(base, min_score=min_score) if min_score is not None else base
 
         loader = CSBDataLoader(db)
+        requested = (screening_date or "").strip()[:10]
+        if requested:
+            try:
+                datetime.strptime(requested, "%Y-%m-%d")
+            except ValueError:
+                requested = ""
+        # 显式选择的日期若无行情（节假日/周末等）：不回退上一交易日
+        if requested and not loader.is_trading_day(requested):
+            return {
+                "success": True,
+                "data": [],
+                "total": 0,
+                "strategy_name": "CSB通道突破",
+                "scope": scope,
+                "message": "非交易日、无数据",
+                "need_precompute": False,
+                "non_trading_day": True,
+                "search_date": requested,
+                "config_id": resolved_id,
+                "source": "non_trading_day",
+                "data_source": "non_trading_day",
+                "parameters": {
+                    "config_id": resolved_id,
+                    "min_score": cfg.get("min_score"),
+                    "screening_date_effective": requested,
+                    "data_source": "non_trading_day",
+                    "non_trading_day": True,
+                },
+            }
+
         effective = loader.resolve_effective_trade_date(screening_date)
         data: List[Dict[str, Any]] = []
         data_source = "realtime"

@@ -1,0 +1,85 @@
+{
+  "run_at": "2026-10-12T13:05:29",
+  "targets": [
+    {
+      "config_id": 13,
+      "user_id": 7,
+      "username": "wangxw1",
+      "wechat_userid": "WangXueWu",
+      "push_time": "M13:05:30",
+      "success": true,
+      "record_id": 165,
+      "error_message": null,
+      "channels": [
+        {
+          "channel": "email",
+          "success": true,
+          "error": null
+        },
+        {
+          "channel": "wechat",
+          "success": true,
+          "error": null
+        }
+      ],
+      "report_file_path": "reports/csv\\urt_7_20261009_130544.xlsx",
+      "record_status": "success",
+      "channel_status": {
+        "email": "success",
+        "wechat": "success"
+      }
+    },
+    {
+      "config_id": 14,
+      "user_id": 6,
+      "username": "wangxw",
+      "wechat_userid": "WangXueWu",
+      "push_time": "M13:05:52",
+      "success": true,
+      "record_id": 166,
+      "error_message": null,
+      "channels": [
+        {
+          "channel": "wechat",
+          "success": true,
+          "error": null
+        }
+      ],
+      "report_file_path": "reports/csv\\urt_6_20261009_130654.xlsx",
+      "record_status": "success",
+      "channel_status": {
+        "wechat": "success"
+      }
+    }
+  ],
+  "errors": [],
+  "configs_found": [
+    {
+      "id": 13,
+      "user_id": 7,
+      "enabled": true,
+      "channels": [
+        "email",
+        "wechat"
+      ],
+      "push_times": [
+        "17:30"
+      ],
+      "wechat_notify_userids": [],
+      "wechat_app_profile": null
+    },
+    {
+      "id": 14,
+      "user_id": 6,
+      "enabled": true,
+      "channels": [
+        "wechat"
+      ],
+      "push_times": [
+        "19:30"
+      ],
+      "wechat_notify_userids": null,
+      "wechat_app_profile": null
+    }
+  ]
+}

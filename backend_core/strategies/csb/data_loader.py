@@ -349,6 +349,35 @@ class CSBDataLoader:
             if own:
                 db.close()
 
+    def is_trading_day(self, date_s: Optional[str]) -> bool:
+        """所选自然日是否存在日 K（有行情即视为交易日）。"""
+        raw = (date_s or "").strip()[:10]
+        if not raw:
+            return False
+        try:
+            datetime.strptime(raw, "%Y-%m-%d")
+        except ValueError:
+            return False
+
+        db = self._session()
+        own = self._db is None
+        try:
+            from backend_api.models import HistoricalQuotes
+
+            hit = (
+                db.query(HistoricalQuotes.date)
+                .filter(HistoricalQuotes.date == raw)
+                .limit(1)
+                .first()
+            )
+            return hit is not None
+        except Exception as e:
+            logger.warning("CSB is_trading_day failed: %s", e)
+            return False
+        finally:
+            if own:
+                db.close()
+
     def resolve_effective_trade_date(self, requested: Optional[str] = None) -> str:
         db = self._session()
         own = self._db is None
