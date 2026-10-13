@@ -102,6 +102,15 @@ def _run_task(task_id: str) -> None:
         if stock_pool is None and cfg.get("stock_code"):
             stock_pool = [cfg.get("stock_code")]
 
+        bt_filters = {
+            "min_touch_count": cfg.get("min_touch_count"),
+            "probe_min_score": cfg.get("probe_min_score"),
+            "max_signals_per_day": cfg.get("max_signals_per_day"),
+            "allowed_signal_types": cfg.get("allowed_signal_types"),
+        }
+        defense_overrides = cfg.get("defense_overrides")
+        if not isinstance(defense_overrides, dict):
+            defense_overrides = None
         result = run_csb_backtest(
             db,
             start_date=str(start_date)[:10],
@@ -119,6 +128,8 @@ def _run_task(task_id: str) -> None:
             checkpoint=checkpoint,
             checkpoint_cb=checkpoint_cb_with_details,
             initial_details=live_details,
+            backtest_filters=bt_filters,
+            defense_overrides=defense_overrides,
         )
         out_details = result.get("details") or live_details
 

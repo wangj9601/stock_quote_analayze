@@ -19,7 +19,7 @@ from .backtest_factor_report import (
     build_hit_rate_compare,
     enrich_detail_with_factors,
 )
-from .config import CSBConfigManager
+from .config import BUY_SIGNAL_TYPES, CSB_PROBE, CSBConfigManager
 from .data_loader import CSBDataLoader
 from .defense_exit import evaluate_risk_exit_rules, evaluate_structure_exit_rules
 from .strategy_engine import CSBStrategyEngine
@@ -31,6 +31,63 @@ from .trace_store import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def filter_backtest_signals(
+    signals: Sequence[Dict[str, Any]],
+    cfg: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """按 backtest 段过滤：信号类型 / PROBE 最低分 / 回踩次数 / 单日上限。"""
+    rows = [s for s in (signals or []) if isinstance(s, dict)]
+    bt = (cfg or {}).get("backtest") if isinstance((cfg or {}).get("backtest"), dict) else {}
+    bt = bt or {}
+
+    allowed = bt.get("allowed_signal_types")
+    allow_set = None
+    if isinstance(allowed, (list, tuple, set)) and allowed:
+        allow_set = {str(x).strip() for x in allowed if str(x).strip()}
+
+    try:
+        min_touch = int(bt.get("min_touch_count") or 0)
+    except (TypeError, ValueError):
+        min_touch = 0
+    probe_min = bt.get("probe_min_score")
+    try:
+        probe_min_f = float(probe_min) if probe_min is not None and probe_min != "" else None
+    except (TypeError, ValueError):
+        probe_min_f = None
+    try:
+        max_per_day = int(bt.get("max_signals_per_day") or 0)
+    except (TypeError, ValueError):
+        max_per_day = 0
+
+    out: List[Dict[str, Any]] = []
+    for s in rows:
+        st = str(s.get("signal_type") or "").strip()
+        if allow_set is not None and st not in allow_set:
+            continue
+        if st and st not in BUY_SIGNAL_TYPES and allow_set is None:
+            continue
+        try:
+            touches = float(s.get("touch_count") or 0)
+        except (TypeError, ValueError):
+            touches = 0.0
+        # 回踩门槛主要针对 PROBE；BREAKOUT/LPS 不因回踩数被挡
+        if st == CSB_PROBE and min_touch > 0 and touches < float(min_touch):
+            continue
+        if st == CSB_PROBE and probe_min_f is not None:
+            try:
+                sc = float(s.get("score") or 0)
+            except (TypeError, ValueError):
+                sc = 0.0
+            if sc < probe_min_f:
+                continue
+        out.append(s)
+
+    out.sort(key=lambda r: float(r.get("score") or 0), reverse=True)
+    if max_per_day > 0:
+        out = out[:max_per_day]
+    return out
 
 
 def resolve_target_pct_range(target_pct: Any = 0.10, target_pct_max: Any = None) -> tuple[float, float]:
@@ -263,9 +320,12 @@ def build_csb_trade_meta(
         summary = (
             f"CSB 结构出场：次日开盘入场；观察 {hz} 日；"
             f"BREAKOUT 假突破 {dcfg.get('false_break_days', 3)} 日；"
-            f"PROBE/LPS 基准止损（PROBE 下轨缓冲 "
-            f"{float(dcfg.get('channel_fail_buffer_pct', 0.005)) * 100:.1f}% × "
-            f"连续 {int(dcfg.get('channel_fail_confirm_days', 2))} 日确认失效）+ 派发减仓 + "
+            f"PROBE 基准止损缓冲 "
+            f"{float(dcfg.get('probe_stop_buffer_pct', 0.01)) * 100:.1f}% × "
+            f"连续 {int(dcfg.get('probe_stop_confirm_days', 2))} 日；"
+            f"通道失效下轨缓冲 "
+            f"{float(dcfg.get('channel_fail_buffer_pct', 0.015)) * 100:.1f}% × "
+            f"连续 {int(dcfg.get('channel_fail_confirm_days', 3))} 日；派发减仓 + "
             f"MA{dcfg.get('trail_ma_fast', 10)}/MA{dcfg.get('trail_ma', 20)} 阶梯跟踪；"
             f"同时统计 +{tp:.1f}% 命中；最低得分 {ms:.0f}。"
         )
@@ -305,6 +365,8 @@ def run_csb_backtest(
     checkpoint: Optional[Dict[str, Any]] = None,
     checkpoint_cb: Optional[Callable[[Dict[str, Any]], None]] = None,
     initial_details: Optional[List[Dict[str, Any]]] = None,
+    backtest_filters: Optional[Dict[str, Any]] = None,
+    defense_overrides: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     mode = (exit_mode or "hit_rate").strip().lower()
     if mode not in ("hit_rate", "risk_exit", "structure_exit"):
@@ -314,6 +376,13 @@ def run_csb_backtest(
     cm.ensure_default_row(db)
     cfg = cm.get_config(strategy_config_id, db=db)
     bt = cfg.get("backtest") or {}
+    if isinstance(backtest_filters, dict) and backtest_filters:
+        cfg = cm.merge_overrides(cfg, backtest={k: v for k, v in backtest_filters.items() if v is not None})
+        bt = cfg.get("backtest") or {}
+    if isinstance(defense_overrides, dict) and defense_overrides:
+        cfg = cm.merge_overrides(
+            cfg, defense={k: v for k, v in defense_overrides.items() if v is not None}
+        )
     target_lo, target_hi = resolve_target_pct_range(
         target_pct if target_pct is not None else bt.get("target_pct", 0.10),
         target_pct_max,
@@ -459,6 +528,8 @@ def run_csb_backtest(
         if pool:
             allow = set(pool)
             signals = [s for s in signals if str(s.get("code")) in allow]
+
+        signals = filter_backtest_signals(signals, cfg)
 
         for sig in signals:
             code = str(sig.get("code") or "")

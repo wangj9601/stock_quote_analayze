@@ -84,6 +84,26 @@ class BacktestCreateBody(BaseModel):
         "standard",
         description="信号质量: standard=标准 | premium=精选",
     )
+    preset_id: Optional[str] = Field(
+        None,
+        description="回测优化预设: optimized_probe / breakout_lps_only / hit_rate_probe / structure_v2",
+    )
+    min_touch_count: Optional[int] = Field(
+        None, ge=0, description="PROBE 最低回踩次数；0 或不传=不限制"
+    )
+    probe_min_score: Optional[float] = Field(
+        None, description="PROBE 额外最低得分（可高于全局 min_score）"
+    )
+    max_signals_per_day: Optional[int] = Field(
+        None, ge=0, description="单日最多纳入信号数（按得分降序）；0=不限制"
+    )
+    allowed_signal_types: Optional[List[str]] = Field(
+        None, description="允许的信号类型列表，如 CSB_PROBE / CSB_BREAKOUT / CSB_LPS"
+    )
+    defense_overrides: Optional[Dict[str, Any]] = Field(
+        None,
+        description="任务级防御参数覆盖，如 channel_fail_buffer_pct / channel_fail_confirm_days",
+    )
 
 
 class BatchDeleteBody(BaseModel):
@@ -328,7 +348,17 @@ def _attach_csb_trade_meta(db: Session, config: Dict[str, Any]) -> Dict[str, Any
 
 
 def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, Any]:
+    from backend_core.strategies.csb.backtest_presets import apply_backtest_preset
     from backend_core.strategies.csb.backtest_runner import resolve_target_pct_range
+
+    if body.preset_id:
+        try:
+            merged = apply_backtest_preset(str(body.preset_id), body.model_dump())
+            body = BacktestCreateBody(**merged)
+        except KeyError:
+            raise HTTPException(status_code=400, detail=f"未知回测预设: {body.preset_id}")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"应用回测预设失败: {e}")
 
     mode = (body.stock_pool_mode or "all").strip() or "all"
     cn_seg = _normalize_cn_board_segment(body.cn_board_segment)
@@ -409,6 +439,22 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         config["compare_hit_rate"] = config["exit_mode"] in ("structure_exit", "risk_exit")
     else:
         config["compare_hit_rate"] = bool(body.compare_hit_rate)
+    if body.preset_id:
+        config["preset_id"] = str(body.preset_id).strip()
+    if body.min_touch_count is not None:
+        config["min_touch_count"] = int(body.min_touch_count)
+    if body.probe_min_score is not None:
+        config["probe_min_score"] = float(body.probe_min_score)
+    if body.max_signals_per_day is not None:
+        config["max_signals_per_day"] = int(body.max_signals_per_day)
+    if body.allowed_signal_types:
+        config["allowed_signal_types"] = [
+            str(x).strip() for x in body.allowed_signal_types if str(x).strip()
+        ]
+    if isinstance(body.defense_overrides, dict) and body.defense_overrides:
+        config["defense_overrides"] = {
+            str(k): v for k, v in body.defense_overrides.items() if v is not None
+        }
     if cn_seg:
         config["cn_board_segment"] = cn_seg
 
@@ -842,6 +888,13 @@ async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends
         "end_date": end_s,
         "purge_first": bool(body.purge_first),
     }
+
+
+@router.get("/backtest-presets")
+async def list_csb_backtest_presets():
+    from backend_core.strategies.csb.backtest_presets import list_backtest_presets
+
+    return {"success": True, "data": list_backtest_presets()}
 
 
 @router.post("/backtests")

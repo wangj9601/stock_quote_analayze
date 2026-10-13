@@ -55,13 +55,14 @@
 | 2 | 年线防守 | MA250 的 20 日归一化斜率 `≥ slope_min`（走平或向上） | `ma250.slope_min=-0.0005` |
 | 3 | 换手初筛 | 近 20 日均换手率 `≥ min_avg_20`（%） | `turnover.min_avg_20=1.0` |
 | 4 | 独立回踩 | 通道下轨支撑测试次数 `≥ min_touches` | `min_touches=2`、`touch_tol_pct=0.015`、`touch_leave_pct=0.03`、`touch_lookback=60` |
-| 5 | 地量 | 近 5 日均量/近 60 日均量 `≤ dry_vol_ratio`，且换手同口径不超阈值 | `dry_vol.dry_vol_ratio=0.55`、`lookback_short=5`、`lookback_long=60` |
+| 5 | 地量 | **不含信号日**：近 5 日均量/近 60 日均量 `≤ dry_vol_ratio`，且换手同口径不超阈值 | `dry_vol.dry_vol_ratio=0.55`、`lookback_short=5`、`lookback_long=60` |
 
 **要点说明**
 
 - **年线只判斜率，不看是否站上**：`close ≥ MA250` 不能替代斜率条件；年线下行（斜率 < `slope_min`）直接否决。
 - **独立回踩计数**：连续贴轨只计 1 次；必须「离开下轨（收盘 ≥ 下轨×(1+`touch_leave_pct`)）后再回来」才计下一次。收盘 **有效跌破下轨（深于 Spring 上限）** 的触碰 **不计入** 支撑测试。
 - **地量缺换手不阻断**：若 `turnover_rate` 缺失，换手比这一项视为通过，仅按成交量比判定。
+- **地量不含信号日**：蓄势期地量在 `bars[:-1]` 上计算。信号日换手放大（BREAKOUT）不得否决 `setup_ok`，否则买点2/LPS 与 SETUP 同日互斥。
 - 若 `len(bars) < 60`，通道判定直接返回 `insufficient_bars`。
 
 满足 SETUP 但未触发任何买点时，信号类型回落为 **`CSB_SETUP`（观察）**。
@@ -85,7 +86,7 @@
 
 ### 4.2 买点2 · BREAKOUT（放量实体阳线突破上轨）
 
-前提：`setup_ok = True`，且存在通道上轨。需 **全部满足**：
+前提：`setup_ok = True`（**优先当日；若当日不成立则回退前一交易日 setup**，通道上轨取该 setup），且存在通道上轨。需 **全部满足**：
 
 | 条件 | 规则 | 默认 |
 |------|------|------|

@@ -168,14 +168,15 @@ def test_false_break_only_for_breakout_not_probe():
 
 
 def test_probe_channel_fail_needs_confirm_days():
-    """PROBE：连续 2 日收盘跌破「下轨×(1-缓冲)」才 channel_fail。"""
+    """PROBE：连续 3 日收盘跌破「下轨×(1-缓冲)」才 channel_fail。"""
     cfg = get_default_csb_config()
-    # 下轨 9.0 × 0.995 = 8.955
+    # 下轨 9.0 × 0.985 = 8.865
     after = [
         _bar("2024-06-01", 9.8, 10.0, 9.7, 9.9),
         _bar("2024-06-02", 9.9, 10.0, 9.6, 9.85),
-        _bar("2024-06-03", 9.8, 9.9, 8.8, 8.90),  # 第 1 日破地板，尚不离场
-        _bar("2024-06-04", 8.9, 9.0, 8.7, 8.88),  # 第 2 日确认
+        _bar("2024-06-03", 9.8, 9.9, 8.8, 8.80),  # 第 1 日破地板，尚不离场
+        _bar("2024-06-04", 8.9, 9.0, 8.7, 8.75),  # 第 2 日，尚不离场
+        _bar("2024-06-05", 8.8, 8.9, 8.6, 8.70),  # 第 3 日确认
     ]
     r = evaluate_structure_exit_rules(
         entry_price=9.9,
@@ -188,7 +189,7 @@ def test_probe_channel_fail_needs_confirm_days():
         channel_lower=9.0,
     )
     assert r.get("exit_reason") == "channel_fail"
-    assert r.get("exit_date") == "2024-06-04"
+    assert r.get("exit_date") == "2024-06-05"
 
 
 def test_probe_single_day_pierce_does_not_channel_fail():
@@ -216,12 +217,12 @@ def test_probe_single_day_pierce_does_not_channel_fail():
 def test_probe_channel_fail_buffer_ignores_shallow_dip():
     """收盘略低于名义下轨但仍在缓冲带内 → 不累计失效。"""
     cfg = get_default_csb_config()
-    # 下轨 9.0，缓冲后地板 8.955；9.0~8.96 之间的浅跌不触发
+    # 下轨 9.0，缓冲后地板 8.865；9.0~8.90 之间的浅跌不触发
     after = [
         _bar("2024-06-01", 9.8, 10.0, 9.7, 9.9),
         _bar("2024-06-02", 9.9, 10.0, 8.97, 8.97),
-        _bar("2024-06-03", 8.97, 9.1, 8.96, 8.96),
-        _bar("2024-06-04", 8.96, 9.2, 8.95, 9.10),
+        _bar("2024-06-03", 8.97, 9.1, 8.90, 8.90),
+        _bar("2024-06-04", 8.90, 9.2, 8.88, 9.10),
     ]
     r = evaluate_structure_exit_rules(
         entry_price=9.9,

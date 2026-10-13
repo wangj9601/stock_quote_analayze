@@ -73,11 +73,14 @@ def get_default_csb_config() -> Dict[str, Any]:
             "trail_ma": 20,
             "trail_ma_fast": 10,
             "stop_buffer_pct": 0.0,
+            # PROBE 基准止损：缓冲 + 连续确认，降低次日阴线误杀
+            "probe_stop_buffer_pct": 0.01,
+            "probe_stop_confirm_days": 2,
             "trail_arm_gain": 0.03,
             "swing_window": 2,
-            # PROBE 通道失效：下轨缓冲 + 连续确认，降低窄通道一日刺穿的换手
-            "channel_fail_buffer_pct": 0.005,
-            "channel_fail_confirm_days": 2,
+            # PROBE 通道失效：加宽下轨缓冲 + 更长确认，降低窄通道误杀（结构 v2）
+            "channel_fail_buffer_pct": 0.015,
+            "channel_fail_confirm_days": 3,
             "distribution_min_gain": 0.08,
             "distribution_turnover_mult": 2.0,
             "distribution_body_max": 0.03,
@@ -93,6 +96,11 @@ def get_default_csb_config() -> Dict[str, Any]:
             "target_pct": 0.10,
             "commission_bps": 5,
             "slippage_bps": 5,
+            # 0/空=不启用；优化预设会覆盖
+            "min_touch_count": 0,
+            "probe_min_score": None,
+            "max_signals_per_day": 0,
+            "allowed_signal_types": None,
         },
         "premium": {
             "squeeze_days_min": 30,
@@ -220,6 +228,26 @@ class CSBConfigManager:
         defense = cfg.setdefault("defense", {})
         if "stop_buffer_pct" not in defense:
             defense["stop_buffer_pct"] = 0.0
+        defense.setdefault("probe_stop_buffer_pct", 0.01)
+        defense.setdefault("probe_stop_confirm_days", 2)
+        # 旧工厂默认 0.5%/2 日 → 升到 1.5%/3 日；用户改过的其它值保留
+        try:
+            if abs(float(defense.get("channel_fail_buffer_pct", 0.015)) - 0.005) < 1e-9:
+                defense["channel_fail_buffer_pct"] = 0.015
+        except (TypeError, ValueError):
+            defense["channel_fail_buffer_pct"] = 0.015
+        try:
+            if int(defense.get("channel_fail_confirm_days", 3)) == 2:
+                defense["channel_fail_confirm_days"] = 3
+        except (TypeError, ValueError):
+            defense["channel_fail_confirm_days"] = 3
+        defense.setdefault("channel_fail_buffer_pct", 0.015)
+        defense.setdefault("channel_fail_confirm_days", 3)
+        bt = cfg.setdefault("backtest", {})
+        bt.setdefault("min_touch_count", 0)
+        bt.setdefault("probe_min_score", None)
+        bt.setdefault("max_signals_per_day", 0)
+        bt.setdefault("allowed_signal_types", None)
         return cfg
 
     def merge_overrides(self, base: Optional[Dict[str, Any]] = None, **overrides) -> Dict[str, Any]:

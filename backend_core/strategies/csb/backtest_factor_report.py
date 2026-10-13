@@ -49,6 +49,14 @@ def flatten_score_factors(sig: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     out["squeeze_pct"] = _round(_f(sig.get("squeeze_pct")), 4)
     out["touch_count"] = sig.get("touch_count")
     out["vol_expand_mult"] = _round(_f(sig.get("vol_expand_mult")), 4)
+    vr = _f(sig.get("vol_ratio_5_20"))
+    if vr is None and isinstance(sig.get("detail"), dict):
+        entry = sig["detail"].get("entry") or {}
+        vr = _f(entry.get("vol_ratio_5_20"))
+    out["vol_ratio_5_20"] = _round(vr, 4)
+    # PROBE 无放量倍数时，用 5/20 量比回填，便于导出与分桶
+    if out.get("vol_expand_mult") is None and vr is not None:
+        out["vol_expand_mult"] = _round(vr, 4)
     out["channel_upper"] = _round(_f(sig.get("channel_upper")), 4)
     out["channel_lower"] = _round(_f(sig.get("channel_lower")), 4)
     return out

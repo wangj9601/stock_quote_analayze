@@ -143,6 +143,13 @@ class CSBApiService {
     })
   }
 
+  async listBacktestPresets() {
+    const res = await this.request<{ success: boolean; data: Array<{ id: string; label: string; description?: string }> }>(
+      `${PREFIX}/backtest-presets`
+    )
+    return res.data || []
+  }
+
   async createBacktest(body: Record<string, any>) {
     return this.request<{ success: boolean; task_id: string; data: any }>(
       `${PREFIX}/backtests`,

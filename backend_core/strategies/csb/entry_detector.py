@@ -91,6 +91,31 @@ def detect_probe(
     }
 
 
+def resolve_setup_for_breakout(
+    bars: List[Dict[str, Any]],
+    setup: Dict[str, Any],
+    config: Dict[str, Any],
+    *,
+    prior_setup_provider=None,
+) -> Dict[str, Any]:
+    """BREAKOUT 用的 SETUP：当日失败时回退到前一交易日。
+
+    突破日通道粘合常被价格拉开，若仍要求当日 ``setup_ok``，买点2/LPS 几乎不可达。
+    蓄势应在突破前完成：前一日 setup 成立 + 当日突破细则。
+    """
+    if setup.get("setup_ok"):
+        return setup
+    if len(bars) < 2:
+        return setup
+    provider = prior_setup_provider or (lambda b, c: detect_setup(b[:-1], c))
+    prior = provider(bars, config) or {}
+    if prior.get("setup_ok"):
+        out = dict(prior)
+        out["setup_from_prior_bar"] = True
+        return out
+    return setup
+
+
 def detect_breakout(
     bars: List[Dict[str, Any]],
     setup: Dict[str, Any],
@@ -219,7 +244,7 @@ def detect_lps(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, 
         if idx < 60:
             break
         hist = bars[: idx + 1]
-        setup_then = detect_setup(hist, config)
+        setup_then = resolve_setup_for_breakout(hist, detect_setup(hist, config), config)
         bo = detect_breakout(hist, setup_then, config)
         if not bo.get("entry_signal"):
             continue
@@ -242,6 +267,7 @@ def detect_lps(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, 
             "reason": "ok",
             "channel": setup_then.get("channel"),
             "lps_breakout_date": str(hist[-1].get("date") or "")[:10],
+            "setup_from_prior_bar": bool(setup_then.get("setup_from_prior_bar")),
             **confirmed,
         }
     return {"entry_signal": False, "signal_type": None, "reason": "no_recent_breakout"}
@@ -250,9 +276,17 @@ def detect_lps(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, 
 def detect_entry(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
     """综合入口：BREAKOUT 优先，其次 LPS，再次 PROBE。"""
     setup = detect_setup(bars, config)
-    breakout = detect_breakout(bars, setup, config)
+    setup_bo = resolve_setup_for_breakout(bars, setup, config)
+    breakout = detect_breakout(bars, setup_bo, config)
     if breakout.get("entry_signal"):
-        return {**setup, **breakout, "entry_kind": "breakout"}
+        merged = {**setup, **breakout, "entry_kind": "breakout"}
+        if setup_bo.get("setup_from_prior_bar"):
+            merged["setup_from_prior_bar"] = True
+            # 突破用前一日通道上轨，便于复盘
+            if setup_bo.get("channel"):
+                merged["channel"] = setup_bo.get("channel")
+            merged["setup_ok"] = True
+        return merged
     lps = detect_lps(bars, config)
     if lps.get("entry_signal"):
         return {**setup, **lps, "entry_kind": "lps"}

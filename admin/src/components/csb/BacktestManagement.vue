@@ -9,6 +9,27 @@
             </el-form-item>
           </el-col>
           <el-col :span="12">
+            <el-form-item label="优化预设">
+              <el-select
+                v-model="selectedPresetId"
+                class="w-full"
+                clearable
+                placeholder="不使用预设（手动配置）"
+                @change="onPresetChange"
+              >
+                <el-option
+                  v-for="p in presets"
+                  :key="p.id"
+                  :label="p.label"
+                  :value="p.id"
+                />
+              </el-select>
+              <span v-if="presetHint" class="hint">{{ presetHint }}</span>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
             <el-form-item label="参数版本">
               <el-select
                 v-model="form.strategy_config_id"
@@ -426,7 +447,92 @@ const form = reactive({
   stock_pool_mode: 'all',
   stock_code: '',
   stock_list: '',
+  min_touch_count: undefined as number | undefined,
+  probe_min_score: undefined as number | undefined,
+  max_signals_per_day: undefined as number | undefined,
+  allowed_signal_types: undefined as string[] | undefined,
+  defense_overrides: undefined as Record<string, number> | undefined,
+  preset_id: undefined as string | undefined,
 })
+
+const presets = ref<Array<{ id: string; label: string; description?: string }>>([])
+const selectedPresetId = ref<string | undefined>()
+const presetHint = computed(() => {
+  const p = presets.value.find((x) => x.id === selectedPresetId.value)
+  return p?.description || ''
+})
+
+/** 与后端 backtest_presets 字段保持一致（前端即时回填表单） */
+const PRESET_FIELDS: Record<string, Record<string, any>> = {
+  optimized_probe: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    min_score: 80,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 3,
+    probe_min_score: 80,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE', 'CSB_BREAKOUT', 'CSB_LPS'],
+  },
+  breakout_lps_only: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.1,
+    target_pct_max: 0.1,
+    min_score: 60,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 0,
+    probe_min_score: undefined,
+    max_signals_per_day: 50,
+    allowed_signal_types: ['CSB_BREAKOUT', 'CSB_LPS'],
+  },
+  hit_rate_probe: {
+    exit_mode: 'hit_rate',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    min_score: 80,
+    horizon_days: 10,
+    compare_hit_rate: false,
+    min_touch_count: 3,
+    probe_min_score: 80,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE'],
+  },
+  structure_v2: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    min_score: 80,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 3,
+    probe_min_score: 80,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE', 'CSB_BREAKOUT', 'CSB_LPS'],
+    defense_overrides: {
+      channel_fail_buffer_pct: 0.015,
+      channel_fail_confirm_days: 3,
+    },
+  },
+}
+
+function onPresetChange(id: string | undefined) {
+  form.preset_id = id || undefined
+  if (!id) {
+    form.min_touch_count = undefined
+    form.probe_min_score = undefined
+    form.max_signals_per_day = undefined
+    form.allowed_signal_types = undefined
+    form.defense_overrides = undefined
+    return
+  }
+  const fields = PRESET_FIELDS[id]
+  if (!fields) return
+  form.defense_overrides = undefined
+  Object.assign(form, fields)
+}
 
 function clampPctDecimal(v: number) {
   return Math.min(1, Math.max(0.001, Number(v)))
@@ -777,6 +883,14 @@ async function createTask() {
     }
     if (mode === 'industry_board') body.industry_board_codes = selectedIndustryBoardCodes.value
     if (mode === 'concept_board') body.concept_board_codes = selectedConceptBoardCodes.value
+    if (form.preset_id) body.preset_id = form.preset_id
+    if (form.min_touch_count != null) body.min_touch_count = form.min_touch_count
+    if (form.probe_min_score != null) body.probe_min_score = form.probe_min_score
+    if (form.max_signals_per_day != null) body.max_signals_per_day = form.max_signals_per_day
+    if (form.allowed_signal_types?.length) body.allowed_signal_types = form.allowed_signal_types
+    if (form.defense_overrides && typeof form.defense_overrides === 'object') {
+      body.defense_overrides = form.defense_overrides
+    }
 
     await csbApiService.createBacktest(body)
     ElMessage.success('任务已创建')
@@ -990,6 +1104,15 @@ onMounted(async () => {
   start.setMonth(start.getMonth() - 3)
   form.end_date = end.toISOString().slice(0, 10)
   form.start_date = start.toISOString().slice(0, 10)
+  try {
+    presets.value = await csbApiService.listBacktestPresets()
+  } catch {
+    presets.value = [
+      { id: 'optimized_probe', label: 'PROBE 优化（结构+5%+分≥80+回踩≥3）' },
+      { id: 'breakout_lps_only', label: '仅 BREAKOUT/LPS（结构+10%）' },
+      { id: 'hit_rate_probe', label: 'PROBE 命中率（不止损+5%）' },
+    ]
+  }
   await loadConfigs()
   await loadTasks()
   timer = window.setInterval(() => {

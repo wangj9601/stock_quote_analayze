@@ -153,16 +153,30 @@ def check_ma250_defense(bars: Sequence[Dict[str, Any]], config: Dict[str, Any]) 
     }
 
 
-def check_dry_volume(bars: Sequence[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
+def check_dry_volume(
+    bars: Sequence[Dict[str, Any]],
+    config: Dict[str, Any],
+    *,
+    exclude_last: bool = True,
+) -> Dict[str, Any]:
+    """蓄势期地量。
+
+    默认 ``exclude_last=True``：不含信号日。否则当日放量突破会把 5 日均量抬高，
+    使 ``dry_ok`` 与 BREAKOUT 的换手放大条件同日互斥，LPS 连带为零。
+    """
     dcfg = (config or {}).get("dry_vol") or {}
     short_n = int(dcfg.get("lookback_short", 5))
     long_n = int(dcfg.get("lookback_long", 60))
     ratio_max = float(dcfg.get("dry_vol_ratio", 0.55))
 
-    vol_short = avg_volume(bars, short_n)
-    vol_long = avg_volume(bars, long_n)
-    to_short = avg_turnover(bars, short_n)
-    to_long = avg_turnover(bars, long_n)
+    hist: Sequence[Dict[str, Any]] = bars
+    if exclude_last and len(bars) > 1:
+        hist = list(bars)[:-1]
+
+    vol_short = avg_volume(hist, short_n)
+    vol_long = avg_volume(hist, long_n)
+    to_short = avg_turnover(hist, short_n)
+    to_long = avg_turnover(hist, long_n)
 
     vol_ratio = (vol_short / vol_long) if vol_short and vol_long and vol_long > 0 else None
     to_ratio = (to_short / to_long) if to_short and to_long and to_long > 0 else None
@@ -175,6 +189,7 @@ def check_dry_volume(bars: Sequence[Dict[str, Any]], config: Dict[str, Any]) -> 
         "dry_ok": dry_ok,
         "vol_ratio_short_long": vol_ratio,
         "turnover_ratio_short_long": to_ratio,
+        "exclude_last": bool(exclude_last and len(bars) > 1),
     }
 
 

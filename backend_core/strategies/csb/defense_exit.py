@@ -198,12 +198,17 @@ def evaluate_structure_exit_rules(
     false_days = int(dcfg.get("false_break_days", 3))
     trail_ma = int(dcfg.get("trail_ma", 20))
     trail_fast = int(dcfg.get("trail_ma_fast", 10))
-    buffer = float(dcfg.get("stop_buffer_pct", 0.0))
     arm_gain = float(dcfg.get("trail_arm_gain", 0.03))
     swing_w = int(dcfg.get("swing_window", 2))
-    cf_buf = max(0.0, float(dcfg.get("channel_fail_buffer_pct", 0.005)))
-    cf_confirm = max(1, int(dcfg.get("channel_fail_confirm_days", 2)))
+    cf_buf = max(0.0, float(dcfg.get("channel_fail_buffer_pct", 0.015)))
+    cf_confirm = max(1, int(dcfg.get("channel_fail_confirm_days", 3)))
     st = str(signal_type or "").strip().upper()
+    if st == CSB_PROBE:
+        buffer = float(dcfg.get("probe_stop_buffer_pct", dcfg.get("stop_buffer_pct", 0.0)))
+        stop_confirm = max(1, int(dcfg.get("probe_stop_confirm_days", 1)))
+    else:
+        buffer = float(dcfg.get("stop_buffer_pct", 0.0))
+        stop_confirm = 1
 
     # 假突破 / 三日不重回：只对通道突破单生效；PROBE 入场本就在通道内，LPS 刻意回踩上轨。
     if st == CSB_BREAKOUT and channel_upper and signal_date:
@@ -240,6 +245,7 @@ def evaluate_structure_exit_rules(
     running_high = float(entry_price)
     anchor = str(signal_date or "")[:10]
     below_floor_streak = 0
+    below_stop_streak = 0
 
     for bar in bars_after_entry:
         cl = _f(bar.get("close")) or entry_price
@@ -258,9 +264,14 @@ def evaluate_structure_exit_rules(
             continue
 
         if stop_px is not None:
-            hit = evaluate_baseline_stop(bar, stop_price=stop_px)
-            if hit:
-                return hit
+            if cl is not None and cl <= float(stop_px):
+                below_stop_streak += 1
+                if below_stop_streak >= stop_confirm:
+                    hit = evaluate_baseline_stop(bar, stop_price=stop_px)
+                    if hit:
+                        return hit
+            else:
+                below_stop_streak = 0
 
         if probe_floor is not None:
             if cl <= probe_floor:

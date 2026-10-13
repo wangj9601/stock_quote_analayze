@@ -22,6 +22,14 @@
 - URT 信号日取「最近一个已完成交易日」（收盘后才有当日 bar；盘中跑=上一交易日）
 
 ## 历史执行
+### 2026-10-13 12:59（第 3 次）
+- 复用同一脚本，链路照常跑通；服务（API5000/前端8000/管理端8001/PG5446）均在
+- 同 2 条 enabled urt_daily 配置（id=13→user7、id=14→user6），均 success，push_records 167 / 168
+  - `reports/csv/urt_7_20261009_125931.xlsx`（20 行，0 买点，得分 33.5–63.2）
+  - `reports/csv/urt_6_20261009_130031.xlsx`（72 行，0 买点，得分 28.7–68.7）
+- 信号日仍为 2026-10-09；**告警：`historical_quotes` 缺 2026-10-12（周一）数据，最新仅到 10-09**，疑似日更采集滞后（`trading_calendar` 为空表，无法用日历佐证）
+- 注意：读取最新报告不要用文件名排序（HHMMSS 会跨日串位），应从 result json 的 report_file_path 取
+
 ### 2026-10-12 13:05（第 2 次）
 - 复用同一脚本，链路照常跑通，前后端/DB/依赖均在线
 - 目标 2 条 enabled urt_daily 配置：id=13→user7(wangxw1, email+wechat)、id=14→user6(wangxw, wechat)

@@ -140,6 +140,127 @@ def test_ma250_requires_flat_or_up_slope():
     assert check_ma250_defense(down, cfg)["ma250_ok"] is False
 
 
+def test_dry_volume_excludes_signal_day_expand():
+    """蓄势地量不含信号日：当日放量不应否决 dry_ok（否则 BREAKOUT 与 setup 互斥）。"""
+    from backend_core.strategies.csb.setup_detector import check_dry_volume
+
+    bars = []
+    for i in range(70):
+        # 前段相对放量，近段缩量蓄势
+        vol = 2_000_000 if i < 55 else 400_000
+        to = 3.0 if i < 55 else 0.6
+        bars.append(
+            {
+                "date": f"2024-05-{(i % 28) + 1:02d}",
+                "open": 10.0,
+                "high": 10.1,
+                "low": 9.9,
+                "close": 10.0,
+                "volume": vol,
+                "turnover_rate": to,
+            }
+        )
+    # 信号日 2× 换手放量突破
+    bars.append(
+        {
+            "date": "2024-06-01",
+            "open": 10.0,
+            "high": 10.5,
+            "low": 9.95,
+            "close": 10.4,
+            "volume": 5_000_000,
+            "turnover_rate": 4.0,
+        }
+    )
+    cfg = get_default_csb_config()
+    dry = check_dry_volume(bars, cfg)
+    assert dry["dry_ok"] is True
+    # 显式含当日时应被否决（对照旧口径）
+    dry_incl = check_dry_volume(bars, cfg, exclude_last=False)
+    assert dry_incl["dry_ok"] is False
+
+
+def test_detect_setup_dry_ok_on_breakout_volume_day():
+    from backend_core.strategies.csb.setup_detector import check_dry_volume, detect_setup
+
+    bars = []
+    for i in range(70):
+        vol = 2_000_000 if i < 55 else 400_000
+        bars.append(
+            {
+                "date": f"d{i}",
+                "open": 10.0,
+                "high": 10.05,
+                "low": 9.95,
+                "close": 10.0,
+                "volume": vol,
+                "turnover_rate": 2.0 if i < 55 else 0.5,
+            }
+        )
+    bars.append(
+        {
+            "date": "breakout",
+            "open": 10.0,
+            "high": 10.5,
+            "low": 9.95,
+            "close": 10.4,
+            "volume": 8_000_000,
+            "turnover_rate": 5.0,
+        }
+    )
+    cfg = get_default_csb_config()
+    assert check_dry_volume(bars, cfg)["dry_ok"] is True
+    st = detect_setup(bars, cfg)
+    assert (st.get("dry_vol") or {}).get("dry_ok") is True
+
+
+def test_breakout_uses_prior_day_setup_when_today_setup_fails():
+    """突破日 setup 可能因粘合被破坏；前一日 setup_ok 时应仍可判 BREAKOUT。"""
+    from backend_core.strategies.csb.entry_detector import detect_breakout, resolve_setup_for_breakout
+
+    prior_setup = {
+        "setup_ok": True,
+        "channel": {"upper": 10.0, "lower": 9.5, "squeeze_ok": True},
+        "reason": "ok",
+    }
+    today_setup = {
+        "setup_ok": False,
+        "channel": {"upper": 10.2, "lower": 9.4, "squeeze_ok": False},
+        "reason": "rules_not_met",
+    }
+    bars = []
+    for i in range(21):
+        bars.append(
+            {
+                "date": f"2024-04-{i+1:02d}",
+                "open": 10.0,
+                "high": 10.1,
+                "low": 9.9,
+                "close": 10.0,
+                "volume": 5_000_000,
+                "turnover_rate": 1.0,
+            }
+        )
+    bars[-1] = {
+        "date": "2024-04-21",
+        "open": 10.0,
+        "high": 10.35,
+        "low": 9.95,
+        "close": 10.30,
+        "volume": 100,
+        "turnover_rate": 3.0,
+    }
+    cfg = get_default_csb_config()
+    resolved = resolve_setup_for_breakout(
+        bars, today_setup, cfg, prior_setup_provider=lambda _b, _c: prior_setup
+    )
+    assert resolved.get("setup_ok") is True
+    assert resolved.get("channel", {}).get("upper") == 10.0
+    r = detect_breakout(bars, resolved, cfg)
+    assert r["entry_signal"] is True
+    assert r["signal_type"] == CSB_BREAKOUT
+
+
 def test_breakout_uses_turnover_and_channel_upper():
     from backend_core.strategies.csb.entry_detector import detect_breakout
 
