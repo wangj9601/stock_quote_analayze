@@ -73,7 +73,44 @@ const MarketsPage = {
             searchModal.classList.remove('show');
         }
 
+        await this.applyIndexDeepLink();
         await this.applySectorDetailDeepLink();
+        this.bindIndexCardClicks();
+    },
+
+    /**
+     * 深链：markets.html?index=000001 → 指数详情分析页。
+     */
+    async applyIndexDeepLink() {
+        let q;
+        try {
+            q = new URLSearchParams(window.location.search || '');
+        } catch (e) {
+            return;
+        }
+        const code = String(q.get('index') || '').trim();
+        if (!code) return;
+        const path = String(window.location.pathname || '');
+        if (/index_detail\.html$/i.test(path)) return;
+        // 港股指数码保留在行情页（详情首期仅 A 股）
+        if (/^[A-Za-z]/.test(code)) return;
+        window.location.replace(`index_detail.html?index=${encodeURIComponent(code)}`);
+    },
+
+    bindIndexCardClicks() {
+        document.querySelectorAll('#a-stock-market-tab .index-card[data-index-code]').forEach((card) => {
+            if (card.dataset.indexNavBound) return;
+            if (card.classList.contains('hk-index-card')) return;
+            card.dataset.indexNavBound = '1';
+            card.style.cursor = 'pointer';
+            card.title = card.title || '查看该指数环境与技术分析';
+            card.addEventListener('click', () => {
+                const code = card.getAttribute('data-index-code') || card.dataset.indexCode;
+                if (code) {
+                    window.location.href = `index_detail.html?index=${encodeURIComponent(code)}`;
+                }
+            });
+        });
     },
 
     /**

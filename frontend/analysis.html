@@ -25,6 +25,7 @@
         })();
     </script>
     <link rel="stylesheet" href="css/analysis-ops.css?v=20261009-sector-fold">
+    <link rel="stylesheet" href="css/index_detail.css?v=20261015-idx">
     <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c">
 </head>
 
@@ -43,6 +44,7 @@
                     <button class="analysis-tab active" data-tab="board-analysis" data-perm="channel.analyze.tab.board">板块分析</button>
                     <button class="analysis-tab" data-tab="leader-mid" data-perm="channel.analyze.tab.leader_mid">龙头中军</button>
                     <button class="analysis-tab" data-tab="stock-ai" data-perm="channel.analyze.tab.stock_ai">个股分析</button>
+                    <button class="analysis-tab" data-tab="index-ai" data-perm="channel.analyze.tab.index">指数分析</button>
                     <button class="analysis-tab" data-tab="rs-rating" data-perm="channel.analyze.tab.rs">个股相对强度分析</button>
                     <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
                     <button type="button" class="analysis-tab" data-tab="recommend" data-perm="channel.analyze.tab.recommend">策略推荐</button>
@@ -351,6 +353,94 @@
                                 <path fill="currentColor" d="M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
                             </svg>
                         </button>
+                    </div>
+                </div>
+
+                <!-- 指数分析：市场环境 + 广度/贡献 + 价格行为 -->
+                <div class="tab-panel" id="index-ai">
+                    <div class="ssa-section isa-workbench" data-perm="channel.analyze.tab.index">
+                        <div class="ssa-header">
+                            <h3>指数分析</h3>
+                            <p class="ssa-hint">
+                                针对上证、深成、创业板、沪深300 等指数，一次给出<strong>环境研判</strong>与<strong>价格行为</strong>（波段 → 形态 → 关位 → 江恩）。
+                                若库内已维护成分，另展示涨跌广度、强弱榜与行业近似贡献（成交额加权，非官方权重）。
+                                从行情点进指数卡片会打开详情页；本页可快选指数做对照分析。可导出 PNG / PDF。
+                            </p>
+                        </div>
+                        <div class="isa-quick" id="isaQuickIndices" aria-label="常用指数"></div>
+                        <div class="ssa-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="isaIndexCode">指数代码</label>
+                                    <input type="text" id="isaIndexCode" placeholder="如 000001、000300" autocomplete="off">
+                                </div>
+                                <div class="form-group">
+                                    <label for="isaTradeDate">基准日（可选）</label>
+                                    <input type="date" id="isaTradeDate">
+                                </div>
+                                <div class="form-group ssa-actions">
+                                    <label>&nbsp;</label>
+                                    <div class="ssa-action-btns">
+                                        <button type="button" class="btn btn-primary" id="isaAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.index.btn.analyze">分析</button>
+                                        <button type="button" class="btn btn-secondary" id="isaRealtimeAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.index.btn.analyze"
+                                            title="叠加最新指数现价后重算">实时分析</button>
+                                        <button type="button" class="btn btn-secondary" id="isaExportPdfBtn"
+                                            data-perm="channel.analyze.tab.index.btn.analyze"
+                                            title="导出结构化 PDF 报告" disabled>导出 PDF</button>
+                                        <button type="button" class="btn btn-secondary" id="isaExportPngBtn"
+                                            data-perm="channel.analyze.tab.index.btn.analyze"
+                                            title="导出页面长图 PNG" disabled>导出 PNG</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="isaEmpty" class="ssa-empty">点选上方常用指数，或输入代码后点击「分析」</div>
+                        <div id="isaExportRoot" class="ssa-export-root" hidden>
+                            <div class="ssa-meta" id="isaMeta" hidden></div>
+                            <section class="ssa-block" id="isaMarketViewBlock" hidden>
+                                <h4 class="ssa-block-title">指数环境研判</h4>
+                                <div class="ssa-block-status" id="isaMarketViewStatus"></div>
+                                <div id="isaMarketViewHost"></div>
+                            </section>
+                            <section class="ssa-block" id="isaBreadthBlock" hidden>
+                                <h4 class="ssa-block-title">成分广度与行业贡献（近似）</h4>
+                                <div id="isaBreadthHost"></div>
+                            </section>
+                            <section class="ssa-pa-section" id="isaPaSection" hidden>
+                                <div class="ssa-pa-section__head">
+                                    <h4 class="ssa-pa-section__title">价格行为</h4>
+                                    <p class="ssa-pa-section__hint">阅读顺序：波段定方向 → 形态看短线结构 → 关位定攻防；指数日线、不复权。</p>
+                                </div>
+                                <section class="ssa-block ssa-block--collapsible" id="isaSwingBlock" hidden>
+                                    <details class="ssa-details" open>
+                                        <summary class="ssa-block-title">1. 波段与趋势（含 SMC）</summary>
+                                        <div class="ssa-block-status" id="isaSwingStatus"></div>
+                                        <div class="ssa-swing-host" id="isaSwingHost"></div>
+                                    </details>
+                                </section>
+                                <section class="ssa-block ssa-block--collapsible" id="isaPatternBlock" hidden>
+                                    <details class="ssa-details" open>
+                                        <summary class="ssa-block-title">2. 形态识别</summary>
+                                        <div class="ssa-block-status" id="isaPatternStatus"></div>
+                                        <div class="ssa-pattern-host" id="isaPatternHost"></div>
+                                    </details>
+                                </section>
+                                <section class="ssa-block" id="isaLevelsBlock" hidden>
+                                    <h4 class="ssa-block-title">3. 阻力支撑位</h4>
+                                    <div class="ssa-block-status" id="isaLevelsStatus"></div>
+                                    <div class="ssa-levels-host" id="isaLevelsHost"></div>
+                                </section>
+                            </section>
+                            <section class="ssa-block ssa-block--collapsible" id="isaGannBlock" hidden>
+                                <details class="ssa-details">
+                                    <summary class="ssa-block-title">江恩趋势预测</summary>
+                                    <div class="ssa-block-status" id="isaGannStatus"></div>
+                                    <div class="ssa-gann-host" id="isaGannHost"></div>
+                                </details>
+                            </section>
+                        </div>
                     </div>
                 </div>
 
@@ -1731,7 +1821,7 @@
     <script src="js/board_analysis_pdf.js"></script>
     <script src="js/board_analysis.js"></script>
     <script src="js/leader_mid_analysis.js"></script>
-    <script src="js/kde_levels_tool.js?v=20260919a"></script>
+    <script src="js/kde_levels_tool.js?v=20261015-idxlv"></script>
     <script src="js/pattern_tool.js?v=20260921d"></script>
     <script src="js/market_structure_tool.js?v=20260930-smcfold"></script>
     <script src="js/gann_trend_tool.js?v=20260917c"></script>
@@ -1740,6 +1830,9 @@
     <script src="js/stock_trade_plan.js?v=20260929-rr"></script>
     <script src="js/page_scroll_fab.js"></script>
     <script src="js/stock_multi_strategy.js?v=20260927-smc"></script>
+    <script src="js/index_analysis_pdf.js?v=20261015-idxpdf"></script>
+    <script src="js/index_analysis.js?v=20261015-idxlv"></script>
+    <script src="js/index_analysis_panel.js?v=20261015-idxpdf"></script>
     <script src="js/rs_rating_analysis.js?v=20261007-rsa"></script>
     <script src="js/trade_observe.js?v=20261007-csb"></script>
     <script src="js/recommend.js?v=20260930-rv"></script>

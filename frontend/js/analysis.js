@@ -8,12 +8,17 @@ const AnalysisPage = {
         if (window.StockTradeLink && StockTradeLink.redirectFromAnalysisDeepLink()) {
             return;
         }
+        // 指数分析深链 → 指数详情页
+        if (window.IndexAnalysis && typeof IndexAnalysis.redirectDeepLinkIfNeeded === 'function') {
+            if (IndexAnalysis.redirectDeepLinkIfNeeded()) return;
+        }
         this.bindEvents();
         if (window.BoardAnalysis) BoardAnalysis.init();
         if (window.MarketAnalysis) MarketAnalysis.init();
         if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();
         if (window.KdeLevelsTool) KdeLevelsTool.init();
         if (window.StockMultiStrategy) StockMultiStrategy.init();
+        if (window.IndexAnalysis) IndexAnalysis.init();
         this.applyPopupWindowMode();
         const initialTab = this.resolveInitialTab();
         if (initialTab && initialTab !== this.currentTab) {
@@ -233,6 +238,13 @@ const AnalysisPage = {
                         void Promise.resolve(StockMultiStrategy.loadWatchlistOptions())
                             .finally(() => StockMultiStrategy.bootstrapFromUrl());
                     }
+                }
+                break;
+            case 'index-ai':
+                if (window.IndexAnalysis) {
+                    IndexAnalysis.init();
+                } else if (window.IndexAnalysisPanel) {
+                    void IndexAnalysisPanel.ensureReady();
                 }
                 break;
             case 'rs-rating':

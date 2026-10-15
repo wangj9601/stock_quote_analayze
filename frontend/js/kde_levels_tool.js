@@ -163,11 +163,18 @@ const KdeLevelsTool = {
      * @returns {{ ok: boolean, data: object, message: string, candidates: array, httpOk: boolean }}
      */
     async fetchLevels(query, options = {}) {
-        const adjust = options.adjust === 'none' ? 'none' : (options.adjust || 'qfq');
+        const assetType = String(options.asset_type || options.assetType || '').toLowerCase();
+        const isIndex = assetType === 'index';
+        const adjust = isIndex
+            ? 'none'
+            : (options.adjust === 'none' ? 'none' : (options.adjust || 'qfq'));
         const factorSource = options.factor_source || 'auto';
         const maxLevels = options.max_levels != null ? String(options.max_levels) : '8';
-        const qs = new URLSearchParams({ max_levels: maxLevels, adjust });
-        if (adjust === 'qfq') qs.set('factor_source', factorSource);
+        const qs = new URLSearchParams({ max_levels: maxLevels });
+        if (!isIndex) {
+            qs.set('adjust', adjust);
+            if (adjust === 'qfq') qs.set('factor_source', factorSource);
+        }
         if (options.vp_from_date) {
             qs.set('vp_from_date', options.vp_from_date);
         } else if (options.vp_lookback != null) {
@@ -179,10 +186,13 @@ const KdeLevelsTool = {
             qs.set('kde_lookback', String(options.kde_lookback));
         }
         if (options.use_realtime) qs.set('use_realtime', 'true');
-        if (options.anchor_price != null && Number.isFinite(Number(options.anchor_price))) {
+        if (!isIndex && options.anchor_price != null && Number.isFinite(Number(options.anchor_price))) {
             qs.set('anchor_price', String(options.anchor_price));
         }
-        const url = `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
+        // 指数必须走 index-levels，避免 000001 撞上平安银行个股通道
+        const url = isIndex
+            ? `${API_BASE_URL}/api/analysis/index-levels?code=${encodeURIComponent(query)}&${qs.toString()}`
+            : `${API_BASE_URL}/api/analysis/levels/${encodeURIComponent(query)}?${qs.toString()}`;
         const fetchOpts = options.signal ? { signal: options.signal } : {};
         const resp = await authFetch(url, fetchOpts);
         const payload = await resp.json().catch(() => ({}));
@@ -195,6 +205,15 @@ const KdeLevelsTool = {
             candidates,
             payload,
         };
+    },
+
+    _isIndexAsset(ctx, container) {
+        const fromCtx = String((ctx && (ctx.asset_type || ctx.assetType)) || '').toLowerCase();
+        if (fromCtx === 'index') return true;
+        const fromDom = container
+            && container.dataset
+            && String(container.dataset.assetType || '').toLowerCase();
+        return fromDom === 'index';
     },
 
     _fmtPrice(v) {
@@ -279,10 +298,17 @@ const KdeLevelsTool = {
         );
     },
 
-    async _fillEmbeddedBoards(container, code) {
+    async _fillEmbeddedBoards(container, code, ctx) {
         if (!container) return;
         const host = container.querySelector('.kde-levels-boards');
         if (!host) return;
+        // 指数无个股行业/概念归属；避免 000001 误显示「银行」等个股板块
+        if (this._isIndexAsset(ctx, container)) {
+            host.innerHTML =
+                `<div class="kde-levels-board-line"><span class="kde-levels-board-label">标的类型</span><span>指数</span></div>` +
+                `<div class="kde-levels-board-line"><span class="kde-levels-board-label">行业/概念</span><span class="muted">不适用</span></div>`;
+            return;
+        }
         const stock = String(code || container.dataset.stockCode || '').trim();
         const token = `${Date.now()}-${Math.random()}`;
         container.dataset.boardReq = token;
@@ -379,9 +405,19 @@ const KdeLevelsTool = {
         // options.code 优先：会话 DOM 恢复后 data 可能缺 stock_code；亦兼容 code 字段
         const code = String(options.code || d.stock_code || d.code || '').trim();
         if (code) container.dataset.stockCode = code;
-        const name = d.stock_name || '';
+        const assetType = String(
+            options.asset_type || options.assetType || d.asset_type || ''
+        ).toLowerCase();
+        if (assetType === 'index') {
+            container.dataset.assetType = 'index';
+        } else {
+            delete container.dataset.assetType;
+        }
+        const name = d.stock_name || d.name || '';
         const title = name ? `${code} ${name}` : (code || '结果');
-        const adjustBrief = d.price_adjust === 'qfq' ? '前复权' : '不复权';
+        const adjustBrief = assetType === 'index'
+            ? '指数日线'
+            : (d.price_adjust === 'qfq' ? '前复权' : '不复权');
         const summary = ok
             ? `${title} · ${adjustBrief}`
             : `${title} · ${adjustBrief}${message ? `（${message}）` : ''}`;
@@ -787,9 +823,12 @@ const KdeLevelsTool = {
 
         const bindCtx = {
             code,
-            adjust: options.adjust != null
-                ? (options.adjust === 'qfq' ? 'qfq' : 'none')
-                : (d.price_adjust === 'qfq' ? 'qfq' : 'none'),
+            asset_type: assetType === 'index' ? 'index' : 'stock',
+            adjust: assetType === 'index'
+                ? 'none'
+                : (options.adjust != null
+                    ? (options.adjust === 'qfq' ? 'qfq' : 'none')
+                    : (d.price_adjust === 'qfq' ? 'qfq' : 'none')),
             factor_source: options.factor_source || 'auto',
             max_levels: options.max_levels != null ? options.max_levels : 8,
             onUpdated: typeof options.onUpdated === 'function' ? options.onUpdated : null,
@@ -797,7 +836,7 @@ const KdeLevelsTool = {
         this._bindEmbeddedVpControls(container, bindCtx);
         this._bindEmbeddedKdeControls(container, bindCtx);
         this._bindEmbeddedSyncLookback(container, bindCtx);
-        void this._fillEmbeddedBoards(container, code);
+        void this._fillEmbeddedBoards(container, code, bindCtx);
     },
 
     /**
@@ -813,6 +852,8 @@ const KdeLevelsTool = {
             || ''
         ).trim();
         if (code) container.dataset.stockCode = code;
+        const isIndex = this._isIndexAsset(ctx, container);
+        if (isIndex) container.dataset.assetType = 'index';
         // 克隆替换，避免重复 addEventListener（会话恢复或多次 rebind）
         [
             '.ssa-kde-lookback-apply', '.ssa-kde-lookback-days', '.ssa-kde-from-date',
@@ -826,7 +867,8 @@ const KdeLevelsTool = {
         });
         const bindCtx = {
             code,
-            adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+            asset_type: isIndex ? 'index' : 'stock',
+            adjust: isIndex ? 'none' : ((ctx && ctx.adjust) === 'none' ? 'none' : 'qfq'),
             factor_source: (ctx && ctx.factor_source) || 'auto',
             max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
             onUpdated: ctx && typeof ctx.onUpdated === 'function' ? ctx.onUpdated : null,
@@ -838,7 +880,7 @@ const KdeLevelsTool = {
             const near = container.querySelector('.kde-levels-card--inline .kde-levels-near');
             if (near) near.insertAdjacentHTML('afterend', this._boardsPlaceholderHtml());
         }
-        void this._fillEmbeddedBoards(container, code);
+        void this._fillEmbeddedBoards(container, code, bindCtx);
     },
 
     _readEmbeddedVpParams(container) {
@@ -1007,8 +1049,14 @@ const KdeLevelsTool = {
             const body = /^(sh|sz|bj|hk)/i.test(token) ? token.slice(2) : token;
             if (/^\d{4,6}$/.test(body)) code = token;
         }
+        const isIndex = this._isIndexAsset(ctx, container);
         if (!code) {
-            if (window.CommonUtils) CommonUtils.showToast('缺少股票代码，请先完成分析', 'warning');
+            if (window.CommonUtils) {
+                CommonUtils.showToast(
+                    isIndex ? '缺少指数代码，请先完成分析' : '缺少股票代码，请先完成分析',
+                    'warning'
+                );
+            }
             return;
         }
         if (window.CommonUtils && !CommonUtils.checkLoginAndHandleExpiry()) return;
@@ -1040,7 +1088,9 @@ const KdeLevelsTool = {
             else btn.textContent = '计算中…';
         });
 
-        const statusEl = document.getElementById('ssaLevelsStatus');
+        const statusEl = document.getElementById(isIndex ? 'isaLevelsStatus' : 'ssaLevelsStatus')
+            || document.getElementById('ssaLevelsStatus')
+            || document.getElementById('isaLevelsStatus');
         if (statusEl) {
             statusEl.hidden = false;
             statusEl.className = 'ssa-block-status is-loading';
@@ -1049,7 +1099,8 @@ const KdeLevelsTool = {
 
         try {
             const fetched = await this.fetchLevels(code, {
-                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                asset_type: isIndex ? 'index' : 'stock',
+                adjust: isIndex ? 'none' : ((ctx && ctx.adjust) === 'none' ? 'none' : 'qfq'),
                 factor_source: (ctx && ctx.factor_source) || 'auto',
                 max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
                 kde_lookback: days,
@@ -1063,7 +1114,8 @@ const KdeLevelsTool = {
             }
             this.renderEmbedded(container, fetched.data || {}, fetched.ok, fetched.message, {
                 code,
-                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                asset_type: isIndex ? 'index' : 'stock',
+                adjust: isIndex ? 'none' : ((ctx && ctx.adjust) === 'none' ? 'none' : 'qfq'),
                 factor_source: (ctx && ctx.factor_source) || 'auto',
                 max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
                 onUpdated: ctx && ctx.onUpdated,
@@ -1083,7 +1135,7 @@ const KdeLevelsTool = {
                 CommonUtils.showToast(`已按 ${days} 日同步 KDE/VP 回看`, 'success');
             }
         } catch (e) {
-            console.warn('个股分析·KDE/VP 同步回看失败', e);
+            console.warn(isIndex ? '指数分析·KDE/VP 同步回看失败' : '个股分析·KDE/VP 同步回看失败', e);
             busyBtns.forEach((btn) => {
                 btn.disabled = false;
                 if (btn.classList.contains('ssa-kde-vp-sync-lookback')) btn.textContent = '同步回看';
@@ -1113,8 +1165,14 @@ const KdeLevelsTool = {
             const body = /^(sh|sz|bj|hk)/i.test(token) ? token.slice(2) : token;
             if (/^\d{4,6}$/.test(body)) code = token;
         }
+        const isIndex = this._isIndexAsset(ctx, container);
         if (!code) {
-            if (window.CommonUtils) CommonUtils.showToast('缺少股票代码，请先完成分析', 'warning');
+            if (window.CommonUtils) {
+                CommonUtils.showToast(
+                    isIndex ? '缺少指数代码，请先完成分析' : '缺少股票代码，请先完成分析',
+                    'warning'
+                );
+            }
             return;
         }
         if (window.CommonUtils && !CommonUtils.checkLoginAndHandleExpiry()) return;
@@ -1136,7 +1194,9 @@ const KdeLevelsTool = {
             applyBtn.disabled = true;
             applyBtn.textContent = '计算中…';
         }
-        const statusEl = document.getElementById('ssaLevelsStatus');
+        const statusEl = document.getElementById(isIndex ? 'isaLevelsStatus' : 'ssaLevelsStatus')
+            || document.getElementById('ssaLevelsStatus')
+            || document.getElementById('isaLevelsStatus');
         const loadingTxt = which === 'kde'
             ? '正在按回看窗口重算 KDE 支撑/压力…'
             : '正在按回看窗口重算 Volume Profile…';
@@ -1147,7 +1207,8 @@ const KdeLevelsTool = {
         }
         try {
             const fetched = await this.fetchLevels(code, {
-                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                asset_type: isIndex ? 'index' : 'stock',
+                adjust: isIndex ? 'none' : ((ctx && ctx.adjust) === 'none' ? 'none' : 'qfq'),
                 factor_source: (ctx && ctx.factor_source) || 'auto',
                 max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
                 vp_from_date: vpParams.vp_from_date || undefined,
@@ -1167,7 +1228,8 @@ const KdeLevelsTool = {
             }
             this.renderEmbedded(container, fetched.data || {}, fetched.ok, fetched.message, {
                 code,
-                adjust: (ctx && ctx.adjust) === 'none' ? 'none' : 'qfq',
+                asset_type: isIndex ? 'index' : 'stock',
+                adjust: isIndex ? 'none' : ((ctx && ctx.adjust) === 'none' ? 'none' : 'qfq'),
                 factor_source: (ctx && ctx.factor_source) || 'auto',
                 max_levels: (ctx && ctx.max_levels) != null ? ctx.max_levels : 8,
                 onUpdated: ctx && ctx.onUpdated,
@@ -1187,7 +1249,12 @@ const KdeLevelsTool = {
                 CommonUtils.showToast(which === 'kde' ? 'KDE 回看已更新' : 'VP 回看已更新', 'success');
             }
         } catch (e) {
-            console.warn(which === 'kde' ? '个股分析·KDE 回看重算失败' : '个股分析·VP 回看重算失败', e);
+            console.warn(
+                which === 'kde'
+                    ? (isIndex ? '指数分析·KDE 回看重算失败' : '个股分析·KDE 回看重算失败')
+                    : (isIndex ? '指数分析·VP 回看重算失败' : '个股分析·VP 回看重算失败'),
+                e
+            );
             if (applyBtn) {
                 applyBtn.disabled = false;
                 applyBtn.textContent = '应用';

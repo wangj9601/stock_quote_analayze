@@ -57,6 +57,8 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.analyze.tab.strategy", "name": "投资策略", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 30},
     {"code": "channel.analyze.tab.report", "name": "分析报告", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 40},
     {"code": "channel.analyze.tab.stock_ai", "name": "个股分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 50},
+    {"code": "channel.analyze.tab.index", "name": "指数分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 51},
+    {"code": "channel.analyze.tab.index.btn.analyze", "name": "指数分析执行", "level": 3, "parent_code": "channel.analyze.tab.index", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.rs", "name": "个股相对强度分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 52},
     {"code": "channel.analyze.tab.rs.btn.query", "name": "查询相对强度", "level": 3, "parent_code": "channel.analyze.tab.rs", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.rs.btn.batch", "name": "批量个股分析", "level": 3, "parent_code": "channel.analyze.tab.rs", "channel_code": "analyze", "sort_order": 20},

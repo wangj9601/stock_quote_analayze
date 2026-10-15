@@ -530,12 +530,17 @@ function bindEvents() {
         });
     });
     
-    // 点击指数卡片跳转
+    // 点击指数卡片跳转指数详情分析
     document.querySelectorAll('.index-card').forEach(function(card) {
         card.addEventListener('click', function() {
             const code = card.dataset.indexCode;
             if (code) {
-                window.location.href = 'markets.html?index=' + code;
+                // 港股指数卡暂仍进行情中心港股区；A 股进指数分析
+                if (card.classList.contains('hk-index-card')) {
+                    window.location.href = 'markets.html?index=' + encodeURIComponent(code);
+                } else {
+                    window.location.href = 'index_detail.html?index=' + encodeURIComponent(code);
+                }
             }
         });
     });

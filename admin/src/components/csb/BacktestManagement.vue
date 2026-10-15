@@ -341,7 +341,7 @@
         <div class="list-header">
           <span>任务列表</span>
           <div class="list-actions">
-            <el-select v-model="statusFilter" clearable placeholder="状态筛选" style="width: 130px" @change="loadTasks">
+            <el-select v-model="statusFilter" clearable placeholder="状态筛选" style="width: 130px" @change="() => loadTasks()">
               <el-option label="全部" value="" />
               <el-option label="pending" value="pending" />
               <el-option label="running" value="running" />
@@ -350,7 +350,7 @@
               <el-option label="failed" value="failed" />
               <el-option label="cancelled" value="cancelled" />
             </el-select>
-            <el-button size="small" @click="loadTasks">刷新</el-button>
+            <el-button size="small" @click="() => loadTasks()">刷新</el-button>
             <el-button size="small" type="danger" plain :disabled="!selectedIds.length" @click="batchDelete">批量删除</el-button>
           </div>
         </div>
@@ -764,6 +764,36 @@ const selectedIds = ref<string[]>([])
 const detailVisible = ref(false)
 const selectedTaskId = ref('')
 let timer: number | undefined
+const ACTIVE_STATUSES = ['pending', 'running', 'paused'] as const
+
+function hasActiveTasks(list: any[] = tasks.value) {
+  return list.some((t) =>
+    (ACTIVE_STATUSES as readonly string[]).includes(String(t?.status || ''))
+  )
+}
+
+function stopPoll() {
+  if (timer != null) {
+    window.clearInterval(timer)
+    timer = undefined
+  }
+}
+
+function startPoll() {
+  if (timer != null) return
+  timer = window.setInterval(() => {
+    if (!hasActiveTasks()) {
+      stopPoll()
+      return
+    }
+    void loadTasks({ silent: true })
+  }, 10000)
+}
+
+function syncPoll() {
+  if (hasActiveTasks()) startPoll()
+  else stopPoll()
+}
 
 function pct(v: any) {
   if (v == null) return '--'
@@ -891,14 +921,16 @@ async function loadConfigs() {
   await loadTraceStats()
 }
 
-async function loadTasks() {
-  loading.value = true
+async function loadTasks(opts?: { silent?: boolean }) {
+  const silent = !!opts?.silent
+  if (!silent) loading.value = true
   try {
     tasks.value = await csbApiService.listBacktests(50, statusFilter.value || undefined)
+    syncPoll()
   } catch (e: any) {
-    ElMessage.error(e.message || '加载失败')
+    if (!silent) ElMessage.error(e.message || '加载失败')
   } finally {
-    loading.value = false
+    if (!silent) loading.value = false
   }
 }
 
@@ -1227,15 +1259,12 @@ onMounted(async () => {
   }
   await loadConfigs()
   await loadTasks()
-  timer = window.setInterval(() => {
-    if (tasks.value.some((t) => ['pending', 'running', 'paused'].includes(t.status))) {
-      loadTasks()
-    }
-  }, 10000)
+  // 仅当存在 pending/running/paused 时才轮询；全部完成后自动 stopPoll
+  syncPoll()
 })
 
 onUnmounted(() => {
-  if (timer) window.clearInterval(timer)
+  stopPoll()
 })
 </script>
 

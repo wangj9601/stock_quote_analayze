@@ -179,6 +179,83 @@ def get_market_indices(db: Session = Depends(get_db)):
             'traceback': traceback.format_exc()
         })
 
+
+@router.get("/index/{code}")
+def get_market_index_detail(code: str, db: Session = Depends(get_db)):
+    """单指数详情抬头（实时表 + 身份解析）。"""
+    try:
+        from backend_core.analysis.index_bars import (
+            fetch_index_realtime_quote,
+            resolve_index_identity,
+        )
+
+        ident = resolve_index_identity(db, code)
+        if not ident.get("ok"):
+            return JSONResponse(
+                {"success": False, "message": ident.get("message") or "未找到指数"},
+                status_code=int(ident.get("http_status") or 404),
+            )
+        quote = fetch_index_realtime_quote(db, ident["code"]) or {}
+        data = {
+            "code": ident["code"],
+            "ts_code": ident["ts_code"],
+            "name": ident.get("name") or quote.get("name"),
+            "current": quote.get("current_price"),
+            "change": quote.get("change"),
+            "change_percent": quote.get("change_percent"),
+            "volume": quote.get("volume"),
+            "amount": quote.get("amount"),
+            "open": quote.get("open"),
+            "high": quote.get("high"),
+            "low": quote.get("low"),
+            "pre_close": quote.get("pre_close"),
+            "update_time": quote.get("update_time"),
+            "asset_type": "index",
+        }
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+        )
+
+
+@router.get("/index/{code}/kline")
+def get_market_index_kline(
+    code: str,
+    limit: int = Query(120, ge=20, le=800),
+    db: Session = Depends(get_db),
+):
+    """指数日 K（index_historical_quotes，正序）。"""
+    try:
+        from backend_core.analysis.index_bars import (
+            load_index_ohlc_asc,
+            resolve_index_identity,
+        )
+
+        ident = resolve_index_identity(db, code)
+        if not ident.get("ok"):
+            return JSONResponse(
+                {"success": False, "message": ident.get("message") or "未找到指数"},
+                status_code=int(ident.get("http_status") or 404),
+            )
+        bars = load_index_ohlc_asc(db, ident["code"], lookback=int(limit), asof=None)
+        return JSONResponse(
+            {
+                "success": True,
+                "data": {
+                    "code": ident["code"],
+                    "ts_code": ident["ts_code"],
+                    "name": ident.get("name"),
+                    "bars": bars,
+                },
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+        )
+
+
 # 获取当日最新板块行情，按涨幅降序排序
 @router.get("/industry_board")
 def get_industry_board(db: Session = Depends(get_db)):

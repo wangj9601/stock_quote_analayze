@@ -397,6 +397,13 @@ except ImportError as e:
     board_analysis_router = None
 
 try:
+    from .stock.index_analysis_routes import router as index_analysis_router
+    print("index_analysis_router 导入成功")
+except ImportError as e:
+    print(f"index_analysis_router 导入失败: {e}")
+    index_analysis_router = None
+
+try:
     from .stock.pattern_routes import router as pattern_router
     print("pattern_router 导入成功")
 except ImportError as e:
@@ -763,6 +770,7 @@ _include_router(app, data_collection_router, "数据采集")
 _include_router(app, collection_workflow_router, "采集流程")
 _include_router(app, stock_analysis_router, "股票分析")
 _include_router(app, board_analysis_router, "板块分析")
+_include_router(app, index_analysis_router, "指数分析")
 _include_router(app, pattern_router, "形态识别")
 _include_router(app, market_structure_router, "波段与趋势")
 _include_router(app, gann_trend_router, "江恩趋势")

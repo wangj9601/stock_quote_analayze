@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>指数分析 - 股票分析</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20261011-fonts">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
+    <link rel="stylesheet" href="css/ops-responsive.css">
+    <link rel="stylesheet" href="css/analysis.css?v=20261009-sector-fold">
+    <link rel="stylesheet" href="css/analysis-ops.css?v=20261009-sector-fold">
+    <link rel="stylesheet" href="css/index_detail.css?v=20261015-idx">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c">
+    <script src="js/echarts.min.js"
+        onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
+</head>
+<body data-channel="quotes" class="ops-map index-detail-page">
+<script src="components/header.js"></script>
+<script>loadHeader('quotes');</script>
+
+<main class="main-content index-detail-main">
+    <div class="container">
+        <nav class="index-detail-toolbar" aria-label="页面导航">
+            <a class="index-detail-back" href="markets.html">
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10 3.5L5.5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                <span>返回行情中心</span>
+            </a>
+        </nav>
+
+        <header class="index-detail-header" id="indexDetailHeader">
+            <h1 class="index-detail-title" id="indexDetailTitle">指数分析</h1>
+            <span class="index-detail-code" id="indexDetailCode"></span>
+            <span class="index-detail-price" id="indexDetailPrice">--</span>
+            <span class="index-detail-change" id="indexDetailChange"></span>
+        </header>
+
+        <div id="indexDetailChart" class="index-detail-chart" aria-label="指数K线"></div>
+
+        <div class="ssa-section" data-perm="channel.analyze.tab.index">
+            <div class="ssa-toolbar">
+                <div class="form-row ssa-form-row">
+                    <div class="form-group">
+                        <label for="isaTradeDate">基准日（可选）</label>
+                        <input type="date" id="isaTradeDate">
+                    </div>
+                    <div class="form-group ssa-actions">
+                        <label>&nbsp;</label>
+                        <div class="ssa-action-btns">
+                            <button type="button" class="btn btn-primary" id="isaAnalyzeBtn"
+                                data-perm="channel.analyze.tab.index.btn.analyze">刷新</button>
+                            <button type="button" class="btn btn-secondary" id="isaRealtimeAnalyzeBtn"
+                                data-perm="channel.analyze.tab.index.btn.analyze"
+                                title="叠加最新指数现价后重算">实时分析</button>
+                            <button type="button" class="btn btn-secondary" id="isaExportPdfBtn"
+                                data-perm="channel.analyze.tab.index.btn.analyze"
+                                title="导出结构化 PDF 报告" disabled>导出 PDF</button>
+                            <button type="button" class="btn btn-secondary" id="isaExportPngBtn"
+                                data-perm="channel.analyze.tab.index.btn.analyze"
+                                title="导出页面长图 PNG" disabled>导出 PNG</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" id="isaIndexCode" value="">
+
+            <div id="isaEmpty" class="ssa-empty">正在分析指数环境与价格行为…</div>
+            <div id="isaExportRoot" class="ssa-export-root" hidden>
+                <div class="ssa-meta" id="isaMeta" hidden></div>
+
+                <section class="ssa-block" id="isaMarketViewBlock" hidden>
+                    <h4 class="ssa-block-title">指数环境研判</h4>
+                    <div class="ssa-block-status" id="isaMarketViewStatus"></div>
+                    <div id="isaMarketViewHost"></div>
+                </section>
+
+                <section class="ssa-block" id="isaBreadthBlock" hidden>
+                    <h4 class="ssa-block-title">成分广度与行业贡献（近似）</h4>
+                    <div id="isaBreadthHost"></div>
+                </section>
+
+                <section class="ssa-pa-section" id="isaPaSection" hidden>
+                    <div class="ssa-pa-section__head">
+                        <h4 class="ssa-pa-section__title">价格行为</h4>
+                        <p class="ssa-pa-section__hint">阅读顺序：波段定方向 → 形态看短线结构 → 关位定攻防；指数日线、不复权。</p>
+                    </div>
+                    <section class="ssa-block ssa-block--collapsible" id="isaSwingBlock" hidden>
+                        <details class="ssa-details" open>
+                            <summary class="ssa-block-title">1. 波段与趋势（含 SMC）</summary>
+                            <div class="ssa-block-status" id="isaSwingStatus"></div>
+                            <div class="ssa-swing-host" id="isaSwingHost"></div>
+                        </details>
+                    </section>
+                    <section class="ssa-block ssa-block--collapsible" id="isaPatternBlock" hidden>
+                        <details class="ssa-details" open>
+                            <summary class="ssa-block-title">2. 形态识别</summary>
+                            <div class="ssa-block-status" id="isaPatternStatus"></div>
+                            <div class="ssa-pattern-host" id="isaPatternHost"></div>
+                        </details>
+                    </section>
+                    <section class="ssa-block" id="isaLevelsBlock" hidden>
+                        <h4 class="ssa-block-title">3. 阻力支撑位</h4>
+                        <div class="ssa-block-status" id="isaLevelsStatus"></div>
+                        <div class="ssa-levels-host" id="isaLevelsHost"></div>
+                    </section>
+                </section>
+
+                <section class="ssa-block ssa-block--collapsible" id="isaGannBlock" hidden>
+                    <details class="ssa-details">
+                        <summary class="ssa-block-title">江恩趋势预测</summary>
+                        <div class="ssa-block-status" id="isaGannStatus"></div>
+                        <div class="ssa-gann-host" id="isaGannHost"></div>
+                    </details>
+                </section>
+            </div>
+        </div>
+    </div>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/common.js"></script>
+<script src="js/stock_trade_link.js"></script>
+<script src="js/index_detail.js?v=20261015-idxpdf"></script>
+</body>
+</html>
