@@ -33,11 +33,53 @@ from .trace_store import (
 logger = logging.getLogger(__name__)
 
 
+def _signal_ref_price(sig: Dict[str, Any], *, upper: float, lower: float) -> Optional[float]:
+    for key in ("close", "probe_price", "breakout_price", "lps_price", "entry_price"):
+        try:
+            v = float(sig.get(key))
+        except (TypeError, ValueError):
+            continue
+        if v > 0:
+            return v
+    mid = (upper + lower) / 2.0
+    return mid if mid > 0 else None
+
+
+def _signal_channel_width_pct(sig: Dict[str, Any]) -> Optional[float]:
+    """通道宽度 / 收盘价；字段不全时返回 None（不过滤）。"""
+    try:
+        upper = float(sig.get("channel_upper"))
+        lower = float(sig.get("channel_lower"))
+    except (TypeError, ValueError):
+        return None
+    if upper <= 0 or lower <= 0 or upper <= lower:
+        return None
+    px = _signal_ref_price(sig, upper=upper, lower=lower)
+    if px is None or px <= 0:
+        return None
+    return (upper - lower) / px
+
+
+def _signal_entry_pos_in_channel(sig: Dict[str, Any]) -> Optional[float]:
+    """(价-下轨)/(上轨-下轨)；0=下轨，1=上轨；字段不全返回 None。"""
+    try:
+        upper = float(sig.get("channel_upper"))
+        lower = float(sig.get("channel_lower"))
+    except (TypeError, ValueError):
+        return None
+    if upper <= 0 or lower <= 0 or upper <= lower:
+        return None
+    px = _signal_ref_price(sig, upper=upper, lower=lower)
+    if px is None:
+        return None
+    return (px - lower) / (upper - lower)
+
+
 def filter_backtest_signals(
     signals: Sequence[Dict[str, Any]],
     cfg: Optional[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """按 backtest 段过滤：信号类型 / PROBE 最低分 / 回踩次数 / 单日上限。"""
+    """按 backtest 段过滤：类型/得分/回踩/通道宽/入场位置/单日上限。"""
     rows = [s for s in (signals or []) if isinstance(s, dict)]
     bt = (cfg or {}).get("backtest") if isinstance((cfg or {}).get("backtest"), dict) else {}
     bt = bt or {}
@@ -51,11 +93,27 @@ def filter_backtest_signals(
         min_touch = int(bt.get("min_touch_count") or 0)
     except (TypeError, ValueError):
         min_touch = 0
+    try:
+        max_touch_raw = bt.get("max_touch_count")
+        max_touch = int(max_touch_raw) if max_touch_raw not in (None, "") else 0
+    except (TypeError, ValueError):
+        max_touch = 0
     probe_min = bt.get("probe_min_score")
     try:
         probe_min_f = float(probe_min) if probe_min is not None and probe_min != "" else None
     except (TypeError, ValueError):
         probe_min_f = None
+    try:
+        min_width_raw = bt.get("min_channel_width_pct")
+        min_width = float(min_width_raw) if min_width_raw not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        min_width = 0.0
+    min_pos_raw = bt.get("min_entry_pos_in_channel")
+    min_pos: Optional[float]
+    try:
+        min_pos = float(min_pos_raw) if min_pos_raw not in (None, "") else None
+    except (TypeError, ValueError):
+        min_pos = None
     try:
         max_per_day = int(bt.get("max_signals_per_day") or 0)
     except (TypeError, ValueError):
@@ -75,12 +133,22 @@ def filter_backtest_signals(
         # 回踩门槛主要针对 PROBE；BREAKOUT/LPS 不因回踩数被挡
         if st == CSB_PROBE and min_touch > 0 and touches < float(min_touch):
             continue
+        if st == CSB_PROBE and max_touch > 0 and touches > float(max_touch):
+            continue
         if st == CSB_PROBE and probe_min_f is not None:
             try:
                 sc = float(s.get("score") or 0)
             except (TypeError, ValueError):
                 sc = 0.0
             if sc < probe_min_f:
+                continue
+        if min_width > 0:
+            width = _signal_channel_width_pct(s)
+            if width is not None and width < min_width:
+                continue
+        if min_pos is not None:
+            pos = _signal_entry_pos_in_channel(s)
+            if pos is not None and pos < float(min_pos):
                 continue
         out.append(s)
 

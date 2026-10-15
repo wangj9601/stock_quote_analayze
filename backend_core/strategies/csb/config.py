@@ -98,6 +98,9 @@ def get_default_csb_config() -> Dict[str, Any]:
             "slippage_bps": 5,
             # 0/空=不启用；优化预设会覆盖
             "min_touch_count": 0,
+            "max_touch_count": 0,
+            "min_channel_width_pct": None,
+            "min_entry_pos_in_channel": None,
             "probe_min_score": None,
             "max_signals_per_day": 0,
             "allowed_signal_types": None,
@@ -245,6 +248,9 @@ class CSBConfigManager:
         defense.setdefault("channel_fail_confirm_days", 3)
         bt = cfg.setdefault("backtest", {})
         bt.setdefault("min_touch_count", 0)
+        bt.setdefault("max_touch_count", 0)
+        bt.setdefault("min_channel_width_pct", None)
+        bt.setdefault("min_entry_pos_in_channel", None)
         bt.setdefault("probe_min_score", None)
         bt.setdefault("max_signals_per_day", 0)
         bt.setdefault("allowed_signal_types", None)

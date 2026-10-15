@@ -1,0 +1,58 @@
+=== e7b3cbe0 (new) ===
+n: 114
+hit_rate: 28.95
+win_rate: 35.09
+avg_pnl: -0.83
+median_pnl: -1.17
+avg_max_gain: 4.81
+avg_score: 85.85
+min_score: 80.03
+avg_touch: 4.06
+avg_held: 6.63
+sig: {'CSB_PROBE': 114}
+exit_stats:
+  {'reason': '通道失效', 'n': 32, 'pct': 28.1, 'avg_pnl': -3.59, 'win': 3.1, 'hit': 12.5}
+  {'reason': '到期平仓', 'n': 30, 'pct': 26.3, 'avg_pnl': 2.09, 'win': 66.7, 'hit': 30.0}
+  {'reason': '阶梯跟踪止损', 'n': 23, 'pct': 20.2, 'avg_pnl': 0.15, 'win': 52.2, 'hit': 47.8}
+  {'reason': '基准止损', 'n': 22, 'pct': 19.3, 'avg_pnl': -5.8, 'win': 0.0, 'hit': 9.1}
+  {'reason': '派发离场', 'n': 7, 'pct': 6.1, 'avg_pnl': 11.71, 'win': 100.0, 'hit': 100.0}
+monthly: {'2025-10': 17, '2025-11': 28, '2025-12': 9, '2026-01': 7, '2026-02': 29, '2026-03': 4, '2026-04': 4, '2026-05': 2, '2026-08': 2, '2026-09': 12}
+
+=== PDF e7b3cbe0 ===
+CSB IIII
+IIII
+CSBII_e7b3cbe0
+II
+2025-10-01 ~ 2026-10-01
+IIII
+IIIIIIII/II/MAIII
+III
+114
+III
+28.95%
+II
+35.09%
+III
+-0.83
+IIIII
+4.81
+IIII
+CSB IIIIIIIIIIIIII 10 IIBREAKOUT III 3 IIPROBE IIIIII 2.0% × II 3 IIIIIIIIII 1.5% × II 3 IIIIII + MA10/MA20
+IIIIIIIII +5.0% IIIIIII 80I
+IIICSB BREAKOUT/LPS/PROBE III ≥ IIII csb_signal_traceI
+IIIIIIIIIII
+IIII10 IIIII
+
+=== vs 2bd159df ===
+n 118 -> 114
+hit 28.81% -> 28.95%
+win 32.2% -> 35.09%
+avg_pnl -0.77% -> -0.83%
+avg_max_gain 4.79% -> 4.81%
+avg_held 5.72 -> 6.63
+exit pct compare (by n-rank labels from each run):
+  通道失效: n 10->32 (8.5%->28.1%) avg_pnl -1.87->-3.59
+  到期平仓: n 27->30 (22.9%->26.3%) avg_pnl 2.39->2.09
+  阶梯跟踪止损: n 23->23 (19.5%->20.2%) avg_pnl 0.27->0.15
+  基准止损: n 52->22 (44.1%->19.3%) avg_pnl -4.07->-5.8
+  派发离场: n 6->7 (5.1%->6.1%) avg_pnl 11.58->11.71

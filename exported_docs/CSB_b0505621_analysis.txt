@@ -1,0 +1,55 @@
+=== b0505621 n=16 ===
+sig: {'CSB_PROBE': 16}
+hit=31.25% win=68.75% avg_pnl=1.68% med=1.66% avg_max_gain=5.86%
+score min/mean=80.03/86.56 touch min/max/mean=4/5/4.38 width% min/mean=2.09/2.72 entry_pos min/mean=-0.198/0.173 pos<0 n=4
+BAD%=18.8% held=7.38
+exit:
+  baseline_stop: n=2 (12.5%) avg_pnl=-5.19% win=0.0% hit=0.0%
+  channel_fail: n=1 (6.2%) avg_pnl=-5.28% win=0.0% hit=0.0%
+  distribution: n=2 (12.5%) avg_pnl=11.18% win=100.0% hit=100.0%
+  horizon_end: n=9 (56.2%) avg_pnl=2.08% win=77.8% hit=33.3%
+  ma_trail: n=2 (12.5%) avg_pnl=0.74% win=100.0% hit=0.0%
+monthly: {'2025-10': 3, '2025-11': 4, '2025-12': 3, '2026-01': 1, '2026-02': 3, '2026-09': 2}
+
+=== PDF ===
+CSB IIII
+IIII
+CSBII_b0505621
+II
+2025-10-01 ~ 2026-10-01
+IIII
+IIIIIIII/II/MAIII
+III
+16
+III
+31.25%
+II
+68.75%
+III
+1.69
+IIIII
+5.86
+IIII
+CSB IIIIIIIIIIIIII 10 IIBREAKOUT III 3 IIPROBE IIIIII 2.0% × II 3 IIIIIIIIII 1.5% × II 3 IIIIII + MA10/MA20
+IIIIIIIII +5.0% IIIIIII 80I
+IIICSB BREAKOUT/LPS/PROBE III ≥ IIII csb_signal_traceI
+IIIIIIIIIII
+IIII10 IIIII
+=== vs cdaac3ce (v5) ===
+n 36->16
+hit 36.11%->31.25%
+win 44.44%->68.75%
+avg_pnl 0.07%->1.68%
+BAD% 38.9%->18.8%
+entry_pos mean -0.185->0.173
+=== vs e7b3cbe0 (v3) ===
+n 114->16
+hit 28.95%->31.25%
+win 35.09%->68.75%
+avg_pnl -0.83%->1.68%
+BAD% 47.4%->18.8%
+entry_pos mean 0.009->0.173
+
+=== v6 compliance (entry CSV uses next-day entry_price) ===
+touch 4-5: 100% width>=2%: 100% entry_pos>=0: 75% (lt0=4) score>=80: 100%
+note: filter uses signal-day close; CSV entry_pos is next-day open — may differ slightly

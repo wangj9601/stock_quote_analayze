@@ -448,6 +448,9 @@ const form = reactive({
   stock_code: '',
   stock_list: '',
   min_touch_count: undefined as number | undefined,
+  max_touch_count: undefined as number | undefined,
+  min_channel_width_pct: undefined as number | undefined,
+  min_entry_pos_in_channel: undefined as number | undefined,
   probe_min_score: undefined as number | undefined,
   max_signals_per_day: undefined as number | undefined,
   allowed_signal_types: undefined as string[] | undefined,
@@ -488,6 +491,24 @@ const PRESET_FIELDS: Record<string, Record<string, any>> = {
     max_signals_per_day: 50,
     allowed_signal_types: ['CSB_BREAKOUT', 'CSB_LPS'],
   },
+  breakout_lps_v3: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.1,
+    target_pct_max: 0.1,
+    min_score: 60,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 0,
+    probe_min_score: undefined,
+    max_signals_per_day: 50,
+    allowed_signal_types: ['CSB_BREAKOUT', 'CSB_LPS'],
+    defense_overrides: {
+      probe_stop_buffer_pct: 0.02,
+      probe_stop_confirm_days: 3,
+      channel_fail_buffer_pct: 0.015,
+      channel_fail_confirm_days: 3,
+    },
+  },
   hit_rate_probe: {
     exit_mode: 'hit_rate',
     target_pct: 0.05,
@@ -516,12 +537,92 @@ const PRESET_FIELDS: Record<string, Record<string, any>> = {
       channel_fail_confirm_days: 3,
     },
   },
+  structure_v3: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    min_score: 80,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 3,
+    probe_min_score: 80,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE', 'CSB_BREAKOUT', 'CSB_LPS'],
+    defense_overrides: {
+      probe_stop_buffer_pct: 0.02,
+      probe_stop_confirm_days: 3,
+      channel_fail_buffer_pct: 0.015,
+      channel_fail_confirm_days: 3,
+    },
+  },
+  structure_v4: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    min_score: 85,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 4,
+    probe_min_score: 85,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE', 'CSB_BREAKOUT', 'CSB_LPS'],
+    defense_overrides: {
+      probe_stop_buffer_pct: 0.02,
+      probe_stop_confirm_days: 3,
+      channel_fail_buffer_pct: 0.015,
+      channel_fail_confirm_days: 3,
+    },
+  },
+  structure_v5: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    min_score: 80,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 4,
+    max_touch_count: 5,
+    min_channel_width_pct: 0.02,
+    probe_min_score: 80,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE', 'CSB_BREAKOUT', 'CSB_LPS'],
+    defense_overrides: {
+      probe_stop_buffer_pct: 0.02,
+      probe_stop_confirm_days: 3,
+      channel_fail_buffer_pct: 0.015,
+      channel_fail_confirm_days: 3,
+    },
+  },
+  structure_v6: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    min_score: 80,
+    horizon_days: 10,
+    compare_hit_rate: true,
+    min_touch_count: 4,
+    max_touch_count: 5,
+    min_channel_width_pct: 0.02,
+    min_entry_pos_in_channel: 0,
+    probe_min_score: 80,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE', 'CSB_BREAKOUT', 'CSB_LPS'],
+    defense_overrides: {
+      probe_stop_buffer_pct: 0.02,
+      probe_stop_confirm_days: 3,
+      channel_fail_buffer_pct: 0.015,
+      channel_fail_confirm_days: 3,
+    },
+  },
 }
 
 function onPresetChange(id: string | undefined) {
   form.preset_id = id || undefined
   if (!id) {
     form.min_touch_count = undefined
+    form.max_touch_count = undefined
+    form.min_channel_width_pct = undefined
+    form.min_entry_pos_in_channel = undefined
     form.probe_min_score = undefined
     form.max_signals_per_day = undefined
     form.allowed_signal_types = undefined
@@ -531,6 +632,9 @@ function onPresetChange(id: string | undefined) {
   const fields = PRESET_FIELDS[id]
   if (!fields) return
   form.defense_overrides = undefined
+  form.max_touch_count = undefined
+  form.min_channel_width_pct = undefined
+  form.min_entry_pos_in_channel = undefined
   Object.assign(form, fields)
 }
 
@@ -885,6 +989,11 @@ async function createTask() {
     if (mode === 'concept_board') body.concept_board_codes = selectedConceptBoardCodes.value
     if (form.preset_id) body.preset_id = form.preset_id
     if (form.min_touch_count != null) body.min_touch_count = form.min_touch_count
+    if (form.max_touch_count != null) body.max_touch_count = form.max_touch_count
+    if (form.min_channel_width_pct != null) body.min_channel_width_pct = form.min_channel_width_pct
+    if (form.min_entry_pos_in_channel != null) {
+      body.min_entry_pos_in_channel = form.min_entry_pos_in_channel
+    }
     if (form.probe_min_score != null) body.probe_min_score = form.probe_min_score
     if (form.max_signals_per_day != null) body.max_signals_per_day = form.max_signals_per_day
     if (form.allowed_signal_types?.length) body.allowed_signal_types = form.allowed_signal_types
@@ -1110,6 +1219,7 @@ onMounted(async () => {
     presets.value = [
       { id: 'optimized_probe', label: 'PROBE 优化（结构+5%+分≥80+回踩≥3）' },
       { id: 'breakout_lps_only', label: '仅 BREAKOUT/LPS（结构+10%）' },
+      { id: 'breakout_lps_v3', label: '仅 BREAKOUT/LPS + 出场 v3' },
       { id: 'hit_rate_probe', label: 'PROBE 命中率（不止损+5%）' },
     ]
   }

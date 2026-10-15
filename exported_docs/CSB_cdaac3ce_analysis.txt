@@ -1,0 +1,56 @@
+=== cdaac3ce n=36 ===
+sig: {'CSB_PROBE': 36}
+hit=36.11% win=44.44% avg_pnl=0.07% med=-0.49% avg_max_gain=5.61%
+score min/mean=80.03/85.42 touch min/max/mean=4/5/4.44 width% min/mean=2.05/2.71 width<2% n=0
+BAD%=38.9% held=6.36
+exit:
+  baseline_stop: n=5 (13.9%) avg_pnl=-6.66% win=0.0% hit=0.0%
+  channel_fail: n=9 (25.0%) avg_pnl=-3.85% win=0.0% hit=22.2%
+  distribution: n=3 (8.3%) avg_pnl=12.48% win=100.0% hit=100.0%
+  horizon_end: n=14 (38.9%) avg_pnl=2.02% win=64.3% hit=35.7%
+  ma_trail: n=5 (13.9%) avg_pnl=0.94% win=80.0% hit=60.0%
+monthly: {'2025-10': 5, '2025-11': 6, '2025-12': 5, '2026-01': 3, '2026-02': 8, '2026-04': 2, '2026-05': 2, '2026-09': 5}
+
+=== PDF ===
+CSB IIII
+IIII
+CSBII_cdaac3ce
+II
+2025-10-01 ~ 2026-10-01
+IIII
+IIIIIIII/II/MAIII
+III
+36
+III
+36.11%
+II
+44.44%
+III
+0.07
+IIIII
+5.61
+IIII
+CSB IIIIIIIIIIIIII 10 IIBREAKOUT III 3 IIPROBE IIIIII 2.0% × II 3 IIIIIIIIII 1.5% × II 3 IIIIII + MA10/MA20
+IIIIIIIII +5.0% IIIIIII 80I
+IIICSB BREAKOUT/LPS/PROBE III ≥ IIII csb_signal_traceI
+IIIIIIIIIII
+IIII10 IIIII
+
+=== vs e7b3cbe0 (v3) ===
+n 114->36
+hit 28.95%->36.11%
+win 35.09%->44.44%
+avg_pnl -0.83%->0.07%
+BAD% 47.4%->38.9%
+touch mean 4.06->4.44
+width% mean 2.20->2.71
+exit% compare:
+  horizon_end: 26.3% -> 38.9% (n 30->14)
+  channel_fail: 28.1% -> 25.0% (n 32->9)
+  ma_trail: 20.2% -> 13.9% (n 23->5)
+  baseline_stop: 19.3% -> 13.9% (n 22->5)
+  distribution: 6.1% -> 8.3% (n 7->3)
+
+=== v5 compliance ===
+touch in 4-5: 100% out=0; width>=2%: 100% lt2=0; score>=80: 100%
+what-if target on e7 (width>2 & touch4-5): n~32 hit~40.6% avg_pnl~+0.83% BAD%~31%

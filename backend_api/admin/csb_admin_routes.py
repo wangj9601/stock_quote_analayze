@@ -86,10 +86,25 @@ class BacktestCreateBody(BaseModel):
     )
     preset_id: Optional[str] = Field(
         None,
-        description="回测优化预设: optimized_probe / breakout_lps_only / hit_rate_probe / structure_v2",
+        description=(
+            "回测优化预设: optimized_probe / breakout_lps_only / breakout_lps_v3 / hit_rate_probe "
+            "/ structure_v2 / structure_v3 / structure_v4 / structure_v5 / structure_v6"
+        ),
     )
     min_touch_count: Optional[int] = Field(
         None, ge=0, description="PROBE 最低回踩次数；0 或不传=不限制"
+    )
+    max_touch_count: Optional[int] = Field(
+        None, ge=0, description="PROBE 最高回踩次数；0 或不传=不限制"
+    )
+    min_channel_width_pct: Optional[float] = Field(
+        None,
+        ge=0,
+        description="最小通道宽度（相对收盘价小数，如 0.02=2%）；不传=不限制",
+    )
+    min_entry_pos_in_channel: Optional[float] = Field(
+        None,
+        description="最小入场通道位置 (价-下轨)/(上轨-下轨)，如 0=不低于下轨；不传=不限制",
     )
     probe_min_score: Optional[float] = Field(
         None, description="PROBE 额外最低得分（可高于全局 min_score）"
@@ -443,6 +458,12 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         config["preset_id"] = str(body.preset_id).strip()
     if body.min_touch_count is not None:
         config["min_touch_count"] = int(body.min_touch_count)
+    if body.max_touch_count is not None:
+        config["max_touch_count"] = int(body.max_touch_count)
+    if body.min_channel_width_pct is not None:
+        config["min_channel_width_pct"] = float(body.min_channel_width_pct)
+    if body.min_entry_pos_in_channel is not None:
+        config["min_entry_pos_in_channel"] = float(body.min_entry_pos_in_channel)
     if body.probe_min_score is not None:
         config["probe_min_score"] = float(body.probe_min_score)
     if body.max_signals_per_day is not None:

@@ -1,0 +1,4 @@
+﻿cohort,n,pct,hit_rate,win_rate,mean_score,med_score,mean_touch_count,med_touch_count,mean_squeeze_days,med_squeeze_days,mean_squeeze_pct,med_squeeze_pct,mean_vol_ratio,med_vol_ratio,mean_channel_width_pct,med_channel_width_pct,mean_entry_pos_in_channel,med_entry_pos_in_channel,mean_entry_above_lower_pct,med_entry_above_lower_pct,mean_stop_cushion_pct,med_stop_cushion_pct,mean_bars_held,med_bars_held,mean_max_gain_pct,med_max_gain_pct,mean_pnl_pct,med_pnl_pct
+BAD,54,47.4,11.1,1.9,86.073,85.82,4.037,4.0,28.222,25.0,0.022,0.019,0.66,0.672,2.159,1.904,-0.132,-0.18,-0.308,-0.459,0.56,0.44,5.63,5.0,2.056,1.235,-4.493,-4.0
+GOOD,37,32.5,43.2,73.0,86.147,85.98,3.973,4.0,29.514,24.0,0.023,0.024,0.649,0.667,2.287,2.391,0.065,0.071,0.038,0.171,0.831,0.745,8.703,10.0,7.849,4.43,3.913,2.73
+MID,23,20.2,47.8,52.2,84.872,82.36,4.261,4.0,22.261,19.0,0.021,0.02,0.666,0.686,2.142,1.969,0.249,0.091,0.114,0.237,1.034,1.101,5.652,5.0,6.376,4.55,0.146,0.15

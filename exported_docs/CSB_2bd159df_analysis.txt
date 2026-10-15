@@ -1,0 +1,80 @@
+rows=118 file=csb_backtest_2bd159df.csv
+
+== signal_type ==
+信号类型
+CSB_PROBE    118
+
+== exit_reason ==
+出场原因
+基准止损      52
+到期平仓      27
+阶梯跟踪止损    23
+通道失效      10
+派发离场       6
+
+== overall ==
+n=118
+hit_rate=28.81%
+win_rate=32.20%
+avg_pnl=-0.77%
+median_pnl=-1.48%
+avg_max_gain=4.79%
+avg_score=85.97
+min_score=80.03
+avg_touch=4.03
+avg_bars_held=5.72
+
+== exit_reason detail ==
+到期平仓	n=27	pct=22.9%	avg_pnl=2.39%	win=70.4%	hit=33.3%
+基准止损	n=52	pct=44.1%	avg_pnl=-4.07%	win=0.0%	hit=7.7%
+派发离场	n=6	pct=5.1%	avg_pnl=11.58%	win=100.0%	hit=100.0%
+通道失效	n=10	pct=8.5%	avg_pnl=-1.87%	win=10.0%	hit=30.0%
+阶梯跟踪止损	n=23	pct=19.5%	avg_pnl=0.27%	win=52.2%	hit=52.2%
+
+== monthly signals ==
+信号日期
+2025-10    17
+2025-11    30
+2025-12     9
+2026-01     7
+2026-02    31
+2026-03     4
+2026-04     4
+2026-05     2
+2026-08     2
+2026-09    12
+Freq: M
+
+== exit focus ==
+channel_fail_like=10 (8.5%)
+baseline_like=75 (63.6%)
+
+== PDF ==
+CSB IIII
+IIII
+CSBII_2bd159df
+II
+2025-10-01 ~ 2026-10-01
+IIII
+IIIIIIII/II/MAIII
+III
+118
+III
+28.81%
+II
+32.20%
+III
+-0.77
+IIIII
+4.79
+IIII
+CSB IIIIIIIIIIIIII 10 IIBREAKOUT III 3 IIPROBE IIIIII 1.0% × II 2 IIIIIIIIII 1.5% × II 3 IIIIII + MA10/MA20
+IIIIIIIII +5.0% IIIIIII 80I
+IIICSB BREAKOUT/LPS/PROBE III ≥ IIII csb_signal_traceI
+IIIIIIIIIII
+IIII10 IIIII
+
+== vs prior ==
+d8595daa: n=127 hit~26.8% (PROBE优化旧通道失效0.5%x2)
+066d24af/4b71bb67: n=0 (仅BREAKOUT/LPS)
+2bd159df: n=118 hit=28.81% (PROBE优化+通道失效默认已放宽到1.5%x3)

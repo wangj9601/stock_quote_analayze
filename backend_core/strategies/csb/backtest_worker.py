@@ -104,6 +104,9 @@ def _run_task(task_id: str) -> None:
 
         bt_filters = {
             "min_touch_count": cfg.get("min_touch_count"),
+            "max_touch_count": cfg.get("max_touch_count"),
+            "min_channel_width_pct": cfg.get("min_channel_width_pct"),
+            "min_entry_pos_in_channel": cfg.get("min_entry_pos_in_channel"),
             "probe_min_score": cfg.get("probe_min_score"),
             "max_signals_per_day": cfg.get("max_signals_per_day"),
             "allowed_signal_types": cfg.get("allowed_signal_types"),

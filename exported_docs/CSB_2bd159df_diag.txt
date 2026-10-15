@@ -1,0 +1,35 @@
+﻿python : E:\wangxw\股票分析软件\编码\stock_quote_analayze\test\_diag_csb_2bd159df.py:9: DeprecationWarning: 
+所在位置 C:\Users\Administrator\AppData\Local\Temp\ps-script-b773028a-4a97-4b7d-bc39-1b150a89714b.ps1:81 字符: 1
++ python test/_diag_csb_2bd159df.py 2>&1 | Out-File -Encoding utf8 expo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (E:\wangxw\股票分析软...cationWarning: :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Pyarrow will become a required dependency of pandas in the next major release of pandas (pandas 3.0),
+(to allow more performant data types, such as the Arrow string type, and better interoperability with other libraries)
+but was not found to be installed on your system.
+If this would cause problems for you,
+please provide us feedback at https://github.com/pandas-dev/pandas/issues/54466
+        
+  import pandas as pd
+csv [WindowsPath('C:/Users/Administrator/Downloads/csb_backtest_2bd159df.csv')]
+pdf [WindowsPath('C:/Users/Administrator/Downloads/CSB回测详情_CSB回测_2bd159df_20261014.pdf')]
+rows 118 cols ['股票代码', '股票名称', '信号日期', '信号类型', '得分', '入场日期', '入场价', '观察期最高价', '观察期最大涨幅(%)', '是否命中目标', '命中日期', '出场日期', '出场价', '出场原因', '盈亏比例(%)', '持有天数', '观察期天数', '粘合天数', '粘合带宽', '回踩次数', '放量倍数', '5/20量比', '通道上轨', '通道下轨', '基准低点', '粘合天数分', '粘合带宽分', '回踩分', '放量分', '满观察期盈亏(%)', '满观察期收盘', 'hit_target_lower', 'hit_target_upper', 'hit_in_band', 'f_vol_ratio_5_20']
+
+=== describe ===
+Traceback (most recent call last):
+  File "E:\wangxw\股票分析软件\编码\stock_quote_analayze\test\_diag_csb_2bd159df.py", line 49, in <module>
+    print(df[num_cols].describe().to_string())
+          ^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\site-packages\pandas\core\generic.py", line 
+11970, in describe
+    return describe_ndframe(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\site-packages\pandas\core\methods\describe.p
+y", line 91, in describe_ndframe
+    describer = DataFrameDescriber(
+                ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\Administrator\AppData\Local\Programs\Python\Python312\Lib\site-packages\pandas\core\methods\describe.p
+y", line 162, in __init__
+    raise ValueError("Cannot describe a DataFrame without columns")
+ValueError: Cannot describe a DataFrame without columns

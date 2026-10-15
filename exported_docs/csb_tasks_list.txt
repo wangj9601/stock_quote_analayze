@@ -1,0 +1,6 @@
+﻿数据库连接URL: 'postgresql+psycopg2://postgres:qidianspacetime@localhost:5446/stock_analysis'
+count 1
+{'task_id': 'c7b8557f-b8a0-4162-948a-7d661c0a3332', 'status': 'running', 'name': 'CSB回测_c7b8557f', 'preset_id': None, 'start_date': '2026-07-09', 'end_date': '2026-10-09', 'exit_mode': 'structure_exit', 'created': '2026-10-12 01:21:29'}
+range_match 0
+trace {'signal_type': 'CSB_PROBE', 'n': 64, 'd0': '2026-07-10', 'd1': '2026-09-30'}
+trace {'signal_type': 'SCANNED', 'n': 28, 'd0': '2026-07-08', 'd1': '2026-09-30'}

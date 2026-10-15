@@ -1,0 +1,16 @@
+﻿python : <string>:2: DeprecationWarning: 
+所在位置 C:\Users\Administrator\AppData\Local\Temp\ps-script-991667fe-7d32-41fa-99a0-cd32e9cb87ed.ps1:81 字符: 1
++ python -c "
++ ~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (<string>:2: DeprecationWarning: :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Pyarrow will become a required dependency of pandas in the next major release of pandas (pandas 3.0),
+(to allow more performant data types, such as the Arrow string type, and better interoperability with other libraries)
+but was not found to be installed on your system.
+If this would cause problems for you,
+please provide us feedback at https://github.com/pandas-dev/pandas/issues/54466
+        
+118
+['股票代码', '股票名称', '信号日期', '信号类型', '得分', '入场日期', '入场价', '观察期最高价', '观察期最大涨幅(%)', '是否命中目标', '命中日期', '出场日期', '出场价', '出场原因', '盈亏比例(%)', '持有天数', '观察期天数', '粘合天数', '粘合带宽', '回踩次数', '放量倍数', '5/20量比', '通道上轨', '通道下轨', '基准低点', '粘合天数分', '粘合带宽分', '回踩分', '放量分', '满观察期盈亏(%)', '满观察期收盘', 'hit_target_lower', 'hit_target_upper', 'hit_in_band', 'f_vol_ratio_5_20']
+[{'股票代码': '\u2060603439', '股票名称': '三力制药', '信号日期': '2025-10-09', '信号类型': 'CSB_PROBE', '得分': 85.86, '入场日期': '2025-10-10', '入场价': 12.52, '观察期最高价': 12.81, '观察期最大涨幅(%)': 2.32, '是否命中目标': '否', '命中日期': nan, '出场日期': '2025-10-23', '出场价': 12.45, '出场原因': '到期平仓', '盈亏比例(%)': -0.56, '持有天数': 10, '观察期天数': nan, '粘合天数': 23, '粘合带宽': 0.0285, '回踩次数': 5, '放量倍数': 0.7344, '5/20量比': 0.7344, '通道上轨': 13.0193, '通道下轨': 12.662, '基准低点': 12.43, '粘合天数分': 23.0, '粘合带宽分': 0.0285, '回踩分': 5.0, '放量分': nan, '满观察期盈亏(%)': -0.56, '满观察期收盘': 12.45, 'hit_target_lower': False, 'hit_target_upper': False, 'hit_in_band': False, 'f_vol_ratio_5_20': 0.7344}, {'股票代码': '\u2060601188', '股票名称': '龙江交通', '信号日期': '2025-10-13', '信号类型': 'CSB_PROBE', '得分': 94.17, '入场日期': '2025-10-14', '入场价': 3.44, '观察期最高价': 3.82, '观察期最大涨幅(%)': 11.05, '是否命中目标': '是', '命中日期': '2025-10-24', '出场日期': '2025-10-27', '出场价': 3.6, '出场原因': '到期平仓', '盈亏比例(%)': 4.65, '持有天数': 10, '观察期天数': nan, '粘合天数': 70, '粘合带宽': 0.0273, '回踩次数': 4, '放量倍数': 0.4373, '5/20量比': 0.4373, '通道上轨': 3.532, '通道下轨': 3.438, '基准低点': 3.4, '粘合天数分': 70.0, '粘合带宽分': 0.0273, '回踩分': 4.0, '放量分': nan, '满观察期盈亏(%)': 4.65, '满观察期收盘': 3.6, 'hit_target_lower': True, 'hit_target_upper': True, 'hit_in_band': True, 'f_vol_ratio_5_20': 0.4373}]
