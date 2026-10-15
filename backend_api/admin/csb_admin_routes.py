@@ -74,7 +74,10 @@ class BacktestCreateBody(BaseModel):
     industry_board_codes: Optional[List[str]] = None
     concept_board_codes: Optional[List[str]] = None
     cn_board_segment: Optional[str] = Field(
-        None, description="A股板块: ALL/MAIN/CYB/SZ_SME/KCB/BJ"
+        None, description="A股板块(单选兼容): ALL/MAIN/CYB/SZ_SME/KCB/BJ"
+    )
+    cn_board_segments: Optional[List[str]] = Field(
+        None, description="A股板块多选: MAIN/CYB/SZ_SME/KCB/BJ；空或不传=全部"
     )
     compare_hit_rate: Optional[bool] = Field(
         None,
@@ -269,6 +272,40 @@ def _normalize_cn_board_segment(raw: Optional[str]) -> Optional[str]:
     return seg
 
 
+def _resolve_cn_board_segments(
+    segments: Optional[List[str]],
+    legacy_single: Optional[str] = None,
+) -> List[str]:
+    """多选优先；兼容单字段。空/ALL → []（不限）。"""
+    from backend_api.utils.cn_listed_board_filter import normalize_list_board_segment
+
+    raws: List[str] = []
+    if isinstance(segments, (list, tuple)) and segments:
+        raws = [str(x).strip() for x in segments if str(x).strip()]
+    elif legacy_single:
+        # 兼容逗号拼接：MAIN,CYB
+        raws = [p.strip() for p in str(legacy_single).split(",") if p.strip()]
+
+    if not raws:
+        return []
+    if any(s.upper() == "ALL" for s in raws):
+        return []
+
+    out: List[str] = []
+    seen = set()
+    for s in raws:
+        u = s.upper()
+        if not normalize_list_board_segment(u):
+            raise HTTPException(
+                status_code=400,
+                detail="cn_board_segment 无效，可选: ALL/MAIN/CYB/SZ_SME/KCB/BJ（可多选）",
+            )
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
 def _apply_cn_board_segment(codes: List[str], board_segment: Optional[str]) -> List[str]:
     seg = _normalize_cn_board_segment(board_segment)
     if not seg:
@@ -276,6 +313,15 @@ def _apply_cn_board_segment(codes: List[str], board_segment: Optional[str]) -> L
     from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
 
     return filter_stock_codes_by_board_segment(codes, seg)
+
+
+def _apply_cn_board_segments(codes: List[str], board_segments: Optional[List[str]]) -> List[str]:
+    segs = [str(x).strip().upper() for x in (board_segments or []) if str(x).strip()]
+    if not segs:
+        return codes
+    from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segments
+
+    return filter_stock_codes_by_board_segments(codes, segs)
 
 
 def _distinct_watchlist_codes(db: Session, user_id: Optional[int] = None) -> List[str]:
@@ -376,7 +422,8 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
             raise HTTPException(status_code=400, detail=f"应用回测预设失败: {e}")
 
     mode = (body.stock_pool_mode or "all").strip() or "all"
-    cn_seg = _normalize_cn_board_segment(body.cn_board_segment)
+    cn_segs = _resolve_cn_board_segments(body.cn_board_segments, body.cn_board_segment)
+    cn_seg = cn_segs[0] if len(cn_segs) == 1 else (",".join(cn_segs) if cn_segs else None)
     target_lo, target_hi = resolve_target_pct_range(body.target_pct, body.target_pct_max)
 
     mgr = CSBConfigManager()
@@ -476,13 +523,13 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         config["defense_overrides"] = {
             str(k): v for k, v in body.defense_overrides.items() if v is not None
         }
-    if cn_seg:
+    if cn_segs:
+        config["cn_board_segments"] = list(cn_segs)
         config["cn_board_segment"] = cn_seg
 
     if mode == "all":
-        if cn_seg:
+        if cn_segs:
             from backend_api.models import StockBasicInfo
-            from backend_api.utils.cn_listed_board_filter import filter_stock_codes_by_board_segment
 
             rows = (
                 db.query(StockBasicInfo.code)
@@ -490,7 +537,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
                 .all()
             )
             codes = [_normalize_a_code(str(r[0])) for r in rows if r[0]]
-            codes = filter_stock_codes_by_board_segment(codes, cn_seg)
+            codes = _apply_cn_board_segments(codes, cn_segs)
             if not codes:
                 raise HTTPException(status_code=400, detail="所选 A 股板块下无股票")
             config["stock_pool"] = codes
@@ -498,7 +545,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         code = _normalize_a_code(body.stock_code or "")
         if not code:
             raise HTTPException(status_code=400, detail="单股回测请填写股票代码")
-        codes = _apply_cn_board_segment([code], body.cn_board_segment)
+        codes = _apply_cn_board_segments([code], cn_segs)
         if not codes:
             raise HTTPException(status_code=400, detail="股票代码不在所选 A 股板块内")
         config["stock_code"] = code
@@ -507,7 +554,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         raw = body.stock_pool or []
         codes = [_normalize_a_code(c) for c in raw if str(c).strip()]
         codes = list(dict.fromkeys(codes))
-        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        codes = _apply_cn_board_segments(codes, cn_segs)
         if not codes:
             raise HTTPException(status_code=400, detail="自定义股票列表为空")
         config["stock_pool"] = codes
@@ -516,13 +563,13 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         if uid is not None:
             config["watchlist_user_id"] = int(uid)
         codes = _distinct_watchlist_codes(db, user_id=uid)
-        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        codes = _apply_cn_board_segments(codes, cn_segs)
         if not codes:
             raise HTTPException(status_code=400, detail="自选股列表为空")
         config["stock_pool"] = codes
     elif mode == "gms_watchlist":
         codes = _distinct_gms_strategy_stock_codes(db)
-        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        codes = _apply_cn_board_segments(codes, cn_segs)
         if not codes:
             raise HTTPException(status_code=400, detail="GMS观察股(A股)列表为空，请先在 GMS 策略版本页维护观察股")
         config["stock_pool"] = codes
@@ -531,7 +578,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         if not raw:
             raise HTTPException(status_code=400, detail="请选择行业板块")
         bcodes, codes = _resolve_industry_codes(db, raw)
-        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        codes = _apply_cn_board_segments(codes, cn_segs)
         if not codes:
             raise HTTPException(status_code=400, detail="行业板块下无成分股")
         config["industry_board_codes"] = bcodes
@@ -541,7 +588,7 @@ def _build_backtest_config(db: Session, body: BacktestCreateBody) -> Dict[str, A
         if not raw:
             raise HTTPException(status_code=400, detail="请选择概念板块")
         bcodes, codes = _resolve_concept_codes(db, raw)
-        codes = _apply_cn_board_segment(codes, body.cn_board_segment)
+        codes = _apply_cn_board_segments(codes, cn_segs)
         if not codes:
             raise HTTPException(status_code=400, detail="概念板块下无成分股")
         config["concept_board_codes"] = bcodes

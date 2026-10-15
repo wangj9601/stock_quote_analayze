@@ -75,6 +75,85 @@ def _signal_entry_pos_in_channel(sig: Dict[str, Any]) -> Optional[float]:
     return (px - lower) / (upper - lower)
 
 
+def build_zero_signal_diagnostics(
+    *,
+    total_signals: int,
+    loaded_before_filter: int,
+    kept_after_filter: int,
+    type_counts_before_filter: Optional[Dict[str, int]] = None,
+    allowed_signal_types: Optional[Sequence[str]] = None,
+    precompute_hits: Optional[int] = None,
+    min_score: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """预计算/读库有买点但最终交易信号为 0 时的诊断（写入 summary.zero_signal_hint）。"""
+    if int(total_signals or 0) > 0:
+        return None
+
+    loaded = int(loaded_before_filter or 0)
+    kept = int(kept_after_filter or 0)
+    try:
+        pc = int(precompute_hits) if precompute_hits is not None else None
+    except (TypeError, ValueError):
+        pc = None
+    if loaded <= 0 and (pc is None or pc <= 0):
+        return None
+
+    type_counts = {
+        str(k): int(v)
+        for k, v in (type_counts_before_filter or {}).items()
+        if str(k).strip()
+    }
+    allow = [str(x).strip() for x in (allowed_signal_types or []) if str(x).strip()]
+    allow_set = set(allow)
+    parts: List[str] = []
+
+    if pc is not None and pc > 0 and loaded <= 0:
+        parts.append(
+            f"预计算命中 {pc} 笔，但回测阶段未读到可交易买点"
+            f"（可能被股票池、日期覆盖或 min_score={min_score} 挡住）"
+        )
+    elif loaded > 0 and kept <= 0:
+        if allow_set and type_counts:
+            excluded = {k: v for k, v in type_counts.items() if k not in allow_set}
+            included = {k: v for k, v in type_counts.items() if k in allow_set}
+            if excluded and not included:
+                excl_s = "、".join(f"{k}×{v}" for k, v in sorted(excluded.items()))
+                allow_s = "、".join(allow)
+                parts.append(
+                    f"读到 {loaded} 笔买点（{excl_s}），但当前允许类型仅含 {allow_s}，"
+                    f"过滤后为 0。可改预设/allowed_signal_types 纳入被排除类型，或换含 BREAKOUT/LPS 的区间"
+                )
+            elif excluded:
+                excl_s = "、".join(f"{k}×{v}" for k, v in sorted(excluded.items()))
+                parts.append(
+                    f"读到 {loaded} 笔买点；其中 {excl_s} 不在允许类型内，"
+                    f"其余经得分/回踩/通道等过滤后为 0"
+                )
+            else:
+                parts.append(f"读到 {loaded} 笔买点，经得分/回踩/通道等过滤后为 0")
+        else:
+            parts.append(f"读到 {loaded} 笔买点，经过滤后为 0")
+    elif kept > 0:
+        parts.append(
+            f"过滤后保留 {kept} 笔，但因冷却期/无次日开盘等原因未形成交易，最终信号为 0"
+        )
+    elif pc is not None and pc > 0:
+        parts.append(f"预计算命中 {pc} 笔，最终交易信号为 0，请检查类型过滤与股票池")
+
+    if not parts:
+        return None
+
+    return {
+        "message": "；".join(parts),
+        "loaded_before_filter": loaded,
+        "kept_after_filter": kept,
+        "type_counts_before_filter": type_counts,
+        "allowed_signal_types": allow or None,
+        "precompute_hits": pc,
+        "min_score": min_score,
+    }
+
+
 def filter_backtest_signals(
     signals: Sequence[Dict[str, Any]],
     cfg: Optional[Dict[str, Any]],
@@ -535,6 +614,10 @@ def run_csb_backtest(
     use_trace_ok = bool(use_trace and resolved_id is not None)
     trade_start = 45 if use_trace_ok else 0
 
+    loaded_before_filter = 0
+    kept_after_filter = 0
+    type_counts_before_filter: Dict[str, int] = {}
+
     for i, d in enumerate(dates):
         if i < date_start_index:
             continue
@@ -597,7 +680,13 @@ def run_csb_backtest(
             allow = set(pool)
             signals = [s for s in signals if str(s.get("code")) in allow]
 
+        for s in signals:
+            st = str(s.get("signal_type") or "").strip() or "UNKNOWN"
+            type_counts_before_filter[st] = type_counts_before_filter.get(st, 0) + 1
+        loaded_before_filter += len(signals)
+
         signals = filter_backtest_signals(signals, cfg)
+        kept_after_filter += len(signals)
 
         for sig in signals:
             code = str(sig.get("code") or "")
@@ -739,6 +828,28 @@ def run_csb_backtest(
         cfg=cfg,
     )
 
+    bt_cfg = cfg.get("backtest") if isinstance(cfg.get("backtest"), dict) else {}
+    allowed_types = bt_cfg.get("allowed_signal_types") if isinstance(bt_cfg, dict) else None
+    pc_hits = None
+    if isinstance(precompute_meta, dict):
+        raw_hits = precompute_meta.get("hits")
+        if raw_hits is None:
+            raw_hits = precompute_meta.get("precompute_hits")
+        try:
+            pc_hits = int(raw_hits) if raw_hits is not None else None
+        except (TypeError, ValueError):
+            pc_hits = None
+
+    zero_hint = build_zero_signal_diagnostics(
+        total_signals=total,
+        loaded_before_filter=loaded_before_filter,
+        kept_after_filter=kept_after_filter,
+        type_counts_before_filter=type_counts_before_filter,
+        allowed_signal_types=allowed_types if isinstance(allowed_types, (list, tuple, set)) else None,
+        precompute_hits=pc_hits,
+        min_score=cfg.get("min_score"),
+    )
+
     summary_base = {
         "total_signals": total,
         "total_samples": total,
@@ -759,6 +870,15 @@ def run_csb_backtest(
         "trade_logic": trade_meta["trade_logic"],
         "precompute": precompute_meta or None,
         "avg_max_gain_pct": round(avg_gain, 2),
+        "filter_diagnostics": {
+            "loaded_before_filter": loaded_before_filter,
+            "kept_after_filter": kept_after_filter,
+            "type_counts_before_filter": type_counts_before_filter,
+            "allowed_signal_types": (
+                [str(x) for x in allowed_types] if isinstance(allowed_types, (list, tuple, set)) else None
+            ),
+        },
+        "zero_signal_hint": zero_hint,
     }
 
     if mode == "hit_rate":

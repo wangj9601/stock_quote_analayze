@@ -115,6 +115,14 @@
           show-icon
           title="区间目标模式：命中率 = 最大涨幅 ≥ 下限；「涨幅落在区间内」「上限触及率」为辅助统计。"
         />
+        <el-alert
+          v-if="zeroSignalHint"
+          class="mb-2"
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="zeroSignalHint"
+        />
         <el-descriptions :column="2" border size="small">
           <el-descriptions-item label="信号数">{{ task.summary.total_signals ?? task.summary.total_samples ?? 0 }}</el-descriptions-item>
           <el-descriptions-item label="命中数">{{ task.summary.target_hits ?? task.summary.hit_count ?? 0 }}</el-descriptions-item>
@@ -312,9 +320,19 @@ const stockPoolLabel = computed(() => {
 })
 
 const cnBoardLabel = computed(() => {
-  const seg = String(task.value?.config?.cn_board_segment || '').toUpperCase()
-  if (!seg || seg === 'ALL') return ''
-  return CN_BOARD_LABELS[seg] || seg
+  const cfg = task.value?.config || {}
+  const rawList = cfg.cn_board_segments
+  let segs: string[] = []
+  if (Array.isArray(rawList) && rawList.length) {
+    segs = rawList.map((s: unknown) => String(s || '').toUpperCase()).filter(Boolean)
+  } else {
+    const raw = String(cfg.cn_board_segment || '').toUpperCase()
+    if (raw && raw !== 'ALL') {
+      segs = raw.split(',').map((s) => s.trim()).filter(Boolean)
+    }
+  }
+  if (!segs.length) return ''
+  return segs.map((s) => CN_BOARD_LABELS[s] || s).join('、')
 })
 
 const poolSizeLabel = computed(() => {
@@ -463,6 +481,12 @@ const scoreBucketRows = computed(() => {
   }))
 })
 
+const zeroSignalHint = computed(() => {
+  const hint = task.value?.summary?.zero_signal_hint
+  if (!hint) return ''
+  if (typeof hint === 'string') return hint
+  return hint.message || ''
+})
 const hitRateCompare = computed(() => task.value?.summary?.hit_rate_compare || null)
 const pairedHitRate = computed(() => task.value?.summary?.paired_hit_rate_summary || null)
 const pairedTaskId = computed(() => {

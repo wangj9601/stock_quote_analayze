@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CSB 对外选股入口（优先读 csb_signal_trace，无缓存时可全市场现算并回写）。"""
+"""CSB 对外选股入口（优先读 csb_signal_trace；全市场现算默认关闭，需显式开启）。"""
 
 from __future__ import annotations
 
@@ -25,9 +25,10 @@ logger = logging.getLogger(__name__)
 
 def _env_allow_full_market_realtime() -> bool:
     """
-    与 URT 对齐：默认允许全市场现算；设 CSB_ALLOW_FULL_MARKET_REALTIME=0 可快速失败，避免网关超时。
+    全市场现算默认关闭，避免生产网关超时、前端「刷新筛选」长时间无响应。
+    需要显式开启时设 CSB_ALLOW_FULL_MARKET_REALTIME=1。
     """
-    raw = (os.getenv("CSB_ALLOW_FULL_MARKET_REALTIME") or "1").strip().lower()
+    raw = (os.getenv("CSB_ALLOW_FULL_MARKET_REALTIME") or "0").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
@@ -169,7 +170,7 @@ class CSBFrontendInterface:
                 "scope": scope,
                 "message": (
                     f"全市场暂无预计算（{effective}）。"
-                    "将自动尝试现算；也可在管理端执行 CSB 信号预计算，或缩小为自选/板块/个股。"
+                    "请先在管理端/工作流执行 CSB 信号预计算，或将范围缩小为自选/板块/个股后再刷新。"
                 ),
                 "need_precompute": True,
                 "search_date": effective,
@@ -218,7 +219,7 @@ class CSBFrontendInterface:
                 "message": (
                     f"全市场暂无预计算（{effective}）。"
                     "请先在管理端/工作流执行 CSB 信号预计算，或将范围缩小为自选/板块/个股后再刷新。"
-                    "（当前已关闭 CSB_ALLOW_FULL_MARKET_REALTIME）"
+                    "（全市场现算已关闭，避免网关超时；如需开启请设 CSB_ALLOW_FULL_MARKET_REALTIME=1）"
                 ),
                 "need_precompute": True,
                 "search_date": effective,

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -16,6 +17,7 @@ from .config import (
     CSB_PROBE,
     CSB_SETUP,
 )
+from .channel import build_channel_series, channel_state_at
 from .data_loader import CSBDataLoader, _norm_code, history_calendar_days_for_fetch
 from .entry_detector import detect_entry
 
@@ -33,6 +35,62 @@ def _screen_workers() -> int:
     return max(1, min(4, n))
 
 
+def _eval_range_enabled() -> bool:
+    raw = (os.getenv("CSB_EVAL_RANGE") or "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def evaluate_range(
+    bars: List[Dict[str, Any]],
+    dates: List[str],
+    *,
+    code: str = "",
+    name: str = "",
+    config: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """一次构建通道序列，按多日评点；字段口径对齐逐日 ``evaluate_one``。"""
+    if not bars or not dates:
+        return []
+    cfg = config or CSBConfigManager().get_default_config()
+    wanted = {str(d)[:10] for d in dates if str(d).strip()}
+    date_to_end: Dict[str, int] = {}
+    for i, b in enumerate(bars):
+        ds = str(b.get("date") or "")[:10]
+        if ds in wanted:
+            date_to_end[ds] = i
+    if not date_to_end:
+        return []
+
+    series = build_channel_series(bars, cfg)
+
+    def _channel_at(end_idx: int) -> Dict[str, Any]:
+        return channel_state_at(series, end_idx, cfg)
+
+    out: List[Dict[str, Any]] = []
+    for d in dates:
+        ds = str(d)[:10]
+        end_i = date_to_end.get(ds)
+        if end_i is None:
+            continue
+        try:
+            sub = bars[: end_i + 1]
+            row = evaluate_one(
+                sub,
+                code=code,
+                name=name,
+                trade_date=ds,
+                config=cfg,
+                channel=_channel_at(end_i),
+                channel_provider=_channel_at,
+            )
+        except Exception as e:
+            logger.debug("CSB evaluate_range skip %s %s: %s", code, ds, e)
+            continue
+        if row:
+            out.append(row)
+    return out
+
+
 def _hits_for_stock_dates(
     code: str,
     name: str,
@@ -45,14 +103,32 @@ def _hits_for_stock_dates(
     """对已拉正序行情，按多个交易日截断评点。"""
     if not hist_asc or not dates:
         return []
+    min_score = float(cfg.get("min_score") or 0)
+    out: List[Dict[str, Any]] = []
+
+    if _eval_range_enabled():
+        try:
+            rows = evaluate_range(
+                hist_asc, dates, code=code, name=name, config=cfg
+            )
+        except Exception as e:
+            logger.debug("CSB evaluate_range failed %s: %s; fallback legacy", code, e)
+            rows = None
+        if rows is not None:
+            for row in rows:
+                if require_entry and not row.get("entry_signal"):
+                    continue
+                if require_entry and float(row.get("score") or 0) < min_score:
+                    continue
+                out.append(row)
+            return out
+
     wanted = {str(d)[:10] for d in dates}
     date_to_end: Dict[str, int] = {}
     for i, b in enumerate(hist_asc):
         ds = str(b.get("date") or "")[:10]
         if ds in wanted:
             date_to_end[ds] = i
-    min_score = float(cfg.get("min_score") or 0)
-    out: List[Dict[str, Any]] = []
     for d in dates:
         end_i = date_to_end.get(str(d)[:10])
         if end_i is None:
@@ -220,16 +296,21 @@ def evaluate_one(
     name: str = "",
     trade_date: Optional[str] = None,
     config: Optional[Dict[str, Any]] = None,
+    channel: Optional[Dict[str, Any]] = None,
+    channel_provider=None,
 ) -> Optional[Dict[str, Any]]:
     """
     纯函数友好：给定正序 bars 评估 CSB 信号。
+    channel / channel_provider：区间扫描注入预计算通道，口径与现算一致。
     """
     cfg = config or CSBConfigManager().get_default_config()
     min_bars = int(cfg.get("min_listing_bars") or 250)
     if len(bars) < min_bars:
         return None
 
-    entry = detect_entry(bars, cfg)
+    entry = detect_entry(
+        bars, cfg, channel=channel, channel_provider=channel_provider
+    )
     td = trade_date or (str(bars[-1].get("date") or "")[:10] if bars else "")
     signal_type = entry.get("signal_type")
     if not signal_type and entry.get("setup_ok"):
@@ -529,6 +610,7 @@ class CSBStrategyEngine:
                 logger.info("CSB 区间扫描已取消 stocks_done=%s/%s", done_stocks, total)
                 return hits_by_date, False
             chunk = stocks[i : i + n_chunk]
+            t_fetch0 = time.perf_counter()
             hist_map = self._load_hist_map(chunk, start_s, end_s, chunk_size=n_chunk)
             jobs: List[Tuple[str, str, List[Dict[str, Any]]]] = []
             for code, name in chunk:
@@ -544,6 +626,7 @@ class CSBStrategyEngine:
                         logger.debug("CSB range fetch skip %s: %s", code_n, e)
                         hist = []
                 jobs.append((code_n, str(name or ""), hist))
+            fetch_ms = (time.perf_counter() - t_fetch0) * 1000.0
 
             def _run_job(item: Tuple[str, str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
                 code, name, hist = item
@@ -551,11 +634,13 @@ class CSBStrategyEngine:
                     code, name, hist, date_list, cfg, require_entry=require_entry
                 )
 
+            t_eval0 = time.perf_counter()
             if workers <= 1 or len(jobs) <= 1:
                 chunk_hits = [_run_job(j) for j in jobs]
             else:
                 with ThreadPoolExecutor(max_workers=workers) as pool:
                     chunk_hits = list(pool.map(_run_job, jobs))
+            eval_ms = (time.perf_counter() - t_eval0) * 1000.0
             flat_hits: List[Dict[str, Any]] = []
             for hits in chunk_hits:
                 for h in hits:
@@ -564,6 +649,15 @@ class CSBStrategyEngine:
                         hits_by_date[d].append(h)
                     flat_hits.append(h)
             done_stocks = min(total, i + len(chunk))
+            logger.info(
+                "CSB 区间扫描 chunk done=%s/%s fetch_ms=%.0f eval_ms=%.0f hits=%s eval_range=%s",
+                done_stocks,
+                total,
+                fetch_ms,
+                eval_ms,
+                len(flat_hits),
+                _eval_range_enabled(),
+            )
             if chunk_hits_cb:
                 try:
                     chunk_hits_cb(flat_hits, done_stocks, total)

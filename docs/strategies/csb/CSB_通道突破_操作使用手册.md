@@ -171,7 +171,8 @@ API：
 | `CSB_SCREEN_WORKERS` | min(4, CPU) | 扫描线程数（上限 16） |
 | `CSB_HIST_BATCH_CODES` | 自动 | 批量拉行情的 codes 分块（上限 120） |
 | `CSB_FULL_MARKET_TRACE_MIN_CODES` | 500 | 判定「全市场已扫描」的最小股票数阈值 |
-| `CSB_ALLOW_FULL_MARKET_REALTIME` | 空 | 允许全市场现算（谨慎开启） |
+| `CSB_ALLOW_FULL_MARKET_REALTIME` | 0 | 允许全市场现算（默认关，避免网关超时） |
+| `CSB_EVAL_RANGE` | 1 | 区间预计算是否走「一次算 MA/通道、按日复用」；设 `0` 可回退旧逐日 `evaluate_one` |
 
 ---
 
@@ -193,7 +194,9 @@ API：
 服务端未安装 `xhtml2pdf`。改用 CSV/XLSX 导出，或安装依赖。
 
 **Q6：预计算/回测很慢或 OOM？**
-大幅拉取时会自动缩小分块（`CSB_HIST_BATCH_CODES`），仍慢可下调 `CSB_SCREEN_WORKERS`，或用 `limit` 先小范围验证。
+- **区间补算**（日志「区间一次扫描」）已默认走 `evaluate_range`：每只股票只算一次 MA/粘合序列再按日评点；异常时可设 `CSB_EVAL_RANGE=0` 回退。
+- 大幅拉取时会自动缩小分块（`CSB_HIST_BATCH_CODES`）；仍慢可调 `CSB_SCREEN_WORKERS`，或用更小股票池 / `limit` 先验证。
+- 运维上优先保证**日终单日预计算**覆盖回测区间，避免任务内临时扫 5000+×多日。
 
 **Q7：港股能跑 CSB 吗？**
 CSB 为 **A 股（CN）** 策略。管理端预计算弹窗的「港股」选项当前不接入 CSB 链路，仅 A 股有效。

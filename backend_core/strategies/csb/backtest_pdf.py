@@ -58,8 +58,16 @@ def build_csb_backtest_html(task: Dict[str, Any]) -> str:
     logic = summary.get("trade_logic") or {}
     rules = logic.get("rules") or []
     rules_html = "".join(f"<li>{_esc(r)}</li>" for r in rules)
+    hint = summary.get("zero_signal_hint") if isinstance(summary.get("zero_signal_hint"), dict) else None
+    hint_html = ""
+    if hint and hint.get("message"):
+        hint_html = (
+            f"<div style='margin:12px 0;padding:10px;border:1px solid #e6a23c;"
+            f"background:#fdf6ec;color:#b88230;'>"
+            f"<b>零信号提示：</b>{_esc(hint.get('message'))}</div>"
+        )
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"/><title>CSB回测报告</title></head>
-<body><h1>CSB 回测报告</h1><table>{body_rows}</table>
+<body><h1>CSB 回测报告</h1>{hint_html}<table>{body_rows}</table>
 <h2>交易逻辑</h2><p>{_esc(logic.get('summary'))}</p><ul>{rules_html}</ul></body></html>"""
 
 

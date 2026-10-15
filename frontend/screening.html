@@ -2041,7 +2041,7 @@
 
         <div id="csb-content" class="strategy-content" data-perm="channel.screening.tab.csb">
             <div class="gms-integrated-head">
-                <p class="gms-integrated-hint">CSB 通道粘合突破：MA 粘合 SETUP → 试探 PROBE / 突破 BREAKOUT / 回踩 LPS；列表「观察」写入统一交易观察（来源：通道突破）。全市场勾选「优先读预计算」时先读缓存，无覆盖则自动现算并落库。</p>
+                <p class="gms-integrated-hint">CSB 通道粘合突破：MA 粘合 SETUP → 试探 PROBE / 突破 BREAKOUT / 回踩 LPS；列表「观察」写入统一交易观察（来源：通道突破）。全市场勾选「优先读预计算」时仅读缓存；无覆盖时请先管理端预计算，或改用自选/板块/个股（避免全市场现算卡死超时）。</p>
             </div>
             <div class="params-section">
                 <div class="param-group">
@@ -2080,7 +2080,7 @@
                     <label><input type="checkbox" id="csbEntryOnly" checked> 仅入场信号</label>
                 </div>
                 <div class="param-group param-group-check" id="csbTraceOnlyWrap">
-                    <label title="全市场：优先读 csb_signal_trace；无覆盖时自动全市场现算并写回预计算（可能较慢）。"><input type="checkbox" id="csbTraceOnly" checked> 优先读预计算</label>
+                    <label title="全市场：仅读 csb_signal_trace 预计算；无覆盖时不自动全市场现算（避免网关超时）。请先管理端预计算，或改用自选/板块/个股。"><input type="checkbox" id="csbTraceOnly" checked> 优先读预计算</label>
                 </div>
                 <div class="param-actions">
                     <button type="button" id="csbRefreshBtn" class="refresh-btn" data-strategy="csb" data-perm="channel.screening.tab.csb.btn.refresh">刷新筛选</button>
@@ -2116,7 +2116,7 @@
                 <label class="csb-cn-board-opt"><input type="checkbox" name="csbCnBoardSegment" value="BJ">北证</label>
                 <span class="csb-cn-board-hint">不选=不限板型</span>
             </div>
-            <div id="csbLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span>筛选中...</span></div>
+            <div id="csbLoading" class="loading-indicator" style="display:none;"><div class="spinner"></div><span class="loading-text">筛选中...</span></div>
             <div id="csbError" class="error-message" style="display:none;"></div>
             <div class="results-container csb-results-container">
                 <div class="results-header"><span id="csbResultsCount">共 0 只</span></div>
@@ -2417,7 +2417,7 @@
     <script src="js/screening.js?v=20260928-urt-precompute"></script>
     <script src="js/sbbr_screening.js?v=20260918a"></script>
     <script src="js/rpe_screening.js?v=20260917a"></script>
-    <script src="js/csb_screening.js?v=20261011-csb-live"></script>
+    <script src="js/csb_screening.js?v=20261015-csb-no-auto-rt"></script>
 
     <!-- 比价效应：顶/底滚动（双圆形 FAB，仅 RPE Tab） -->
     <div class="rpe-scroll-fab" id="rpeScrollFab" data-scroll-fab hidden aria-hidden="true" aria-label="页面快速滚动">

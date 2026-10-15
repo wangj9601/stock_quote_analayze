@@ -361,11 +361,29 @@
     if (signalRow) signalRow.classList.toggle('is-detail-open', willShow);
   }
 
+  function setLoadingTip(text) {
+    const loading = document.getElementById('csbLoading');
+    if (!loading) return;
+    let tip = loading.querySelector('.loading-text');
+    if (!tip) {
+      tip = document.createElement('span');
+      tip.className = 'loading-text';
+      loading.appendChild(tip);
+    }
+    tip.textContent = text || '筛选中...';
+  }
+
   async function refreshSignals() {
     const loading = document.getElementById('csbLoading');
     const body = document.getElementById('csbResultsBody');
+    const btn = document.getElementById('csbRefreshBtn');
     showErr('');
+    if (btn) btn.disabled = true;
     if (loading) loading.style.display = 'flex';
+    setLoadingTip('筛选中...');
+    if (body) {
+      body.innerHTML = '<tr><td colspan="9" class="empty-state">筛选中…</td></tr>';
+    }
     try {
       if (!observeCodesLoaded) {
         await loadObserveCodes();
@@ -400,6 +418,7 @@
       if (stockCode) q.set('stock_code', stockCode);
       if (signalType) q.set('signal_type', signalType);
       if (configRaw && /^\d+$/.test(configRaw)) q.set('config_id', configRaw);
+      // 全市场默认仅读预计算；无缓存时不自动回退全量现算（避免生产网关超时、页面像「没反应」）
       if (traceOnly && scope === 'market') q.set('trace_only', 'true');
       if (scope !== 'single') {
         boardSegs.forEach((seg) => q.append('cn_board_segment', seg));
@@ -412,26 +431,14 @@
         q.set('board_code_source', preferredBoardCodeSource('concept', conceptCodes));
       }
 
-      let data = await api(`/api/screening/csb-strategy?${q}`);
+      if (!traceOnly && scope === 'market') {
+        setLoadingTip('全市场现算可能较慢，请稍候…');
+      }
+
+      const data = await api(`/api/screening/csb-strategy?${q}`);
       const isNonTrading =
         data.non_trading_day === true ||
         String(data.source || data.data_source || '') === 'non_trading_day';
-      // 全市场仅读预计算未覆盖时：去掉 trace_only，触发后端现算并回写 csb_signal_trace
-      // 非交易日不回退、不现算
-      if (
-        !isNonTrading &&
-        traceOnly &&
-        scope === 'market' &&
-        (data.need_precompute || (!data.data || !data.data.length))
-      ) {
-        if (loading) {
-          const tip = loading.querySelector('.loading-text') || loading;
-          if (tip) tip.textContent = '全市场暂无预计算，正在现算并写入缓存，请稍候…';
-        }
-        showErr('全市场暂无预计算，正在触发信号现算（可能需数分钟）…');
-        q.delete('trace_only');
-        data = await api(`/api/screening/csb-strategy?${q}`);
-      }
 
       const rows = data.data || [];
       const asof = data.search_date || data.asof_date || '-';
@@ -471,7 +478,10 @@
       if (isNonTrading) {
         showErr(data.message || '非交易日、无数据');
       } else if (data.need_precompute) {
-        showErr(data.message || '全市场暂无可用数据');
+        showErr(
+          data.message ||
+            '全市场暂无预计算。请在管理端执行 CSB 信号预计算，或将范围改为自选/板块/个股。'
+        );
       } else if (data.message) {
         showErr('');
         toast(data.message, 'info');
@@ -485,11 +495,11 @@
         hint.textContent = isNonTrading
           ? '（所选日期非交易日，不回退上一交易日）'
           : data.need_precompute
-            ? '（全市场需预计算；或关闭「优先读预计算」直接现算）'
+            ? '（全市场需先预计算；或改用自选/板块/个股）'
             : src === 'realtime+trace'
               ? '（本次已现算并写入预计算）'
               : traceOnly && scope === 'market'
-                ? '（优先读预计算，无覆盖时自动现算落库）'
+                ? '（优先读预计算，无覆盖时不自动全市场现算）'
                 : '';
       }
       const dateEl = document.getElementById('csbDate');
@@ -500,7 +510,7 @@
         emptyHint: isNonTrading
           ? '非交易日、无数据'
           : data.need_precompute
-            ? '全市场暂无预计算覆盖。刷新将自动现算；也可改用自选/板块/个股，或在管理端预计算。'
+            ? '全市场暂无预计算。请先在管理端执行 CSB 预计算，或改用自选/板块/个股后再刷新。'
             : rows.length
               ? null
               : '当日无符合条件的买点（预计算/现算已覆盖该日）。',
@@ -510,6 +520,7 @@
       if (body) body.innerHTML = '<tr><td colspan="9" class="empty-state">加载失败</td></tr>';
     } finally {
       if (loading) loading.style.display = 'none';
+      if (btn) btn.disabled = false;
     }
   }
 

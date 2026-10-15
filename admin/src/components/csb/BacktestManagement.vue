@@ -149,14 +149,14 @@
         <el-row :gutter="16">
           <el-col :span="24">
             <el-form-item label="A股板块">
-              <el-radio-group v-model="cnBoardSegment">
-                <el-radio label="ALL">全部A股</el-radio>
-                <el-radio label="MAIN">主板</el-radio>
-                <el-radio label="CYB">创业板</el-radio>
-                <el-radio label="SZ_SME">中小板</el-radio>
-                <el-radio label="KCB">科创板</el-radio>
-                <el-radio label="BJ">北证</el-radio>
-              </el-radio-group>
+              <el-checkbox-group v-model="cnBoardSegments" class="cn-board-group">
+                <el-checkbox label="MAIN">主板</el-checkbox>
+                <el-checkbox label="CYB">创业板</el-checkbox>
+                <el-checkbox label="SZ_SME">中小板</el-checkbox>
+                <el-checkbox label="KCB">科创板</el-checkbox>
+                <el-checkbox label="BJ">北证</el-checkbox>
+              </el-checkbox-group>
+              <div class="hint block-hint">可多选；不选表示全部 A 股</div>
             </el-form-item>
           </el-col>
         </el-row>
@@ -664,7 +664,7 @@ const targetPctMaxPercent = computed({
   },
 })
 
-const cnBoardSegment = ref<'ALL' | 'MAIN' | 'CYB' | 'SZ_SME' | 'KCB' | 'BJ'>('ALL')
+const cnBoardSegments = ref<Array<'MAIN' | 'CYB' | 'SZ_SME' | 'KCB' | 'BJ'>>([])
 const watchlistScope = ref<'all' | 'user'>('all')
 const watchlistUserId = ref<number | undefined>()
 const watchlistUsers = ref<Array<{ user_id: number; username: string; watchlist_count: number }>>([])
@@ -974,7 +974,9 @@ async function createTask() {
       compare_hit_rate: form.exit_mode === 'hit_rate' ? false : form.compare_hit_rate,
       signal_quality_mode: form.signal_quality_mode,
       stock_pool_mode: mode,
-      cn_board_segment: cnBoardSegment.value === 'ALL' ? undefined : cnBoardSegment.value,
+    }
+    if (cnBoardSegments.value.length) {
+      body.cn_board_segments = [...cnBoardSegments.value]
     }
     // 空=不覆盖，使用参数版本 min_score（禁止静默写死 70）
     if (form.min_score != null && form.min_score !== ('' as any)) {
@@ -1229,7 +1231,7 @@ onMounted(async () => {
     if (tasks.value.some((t) => ['pending', 'running', 'paused'].includes(t.status))) {
       loadTasks()
     }
-  }, 4000)
+  }, 10000)
 })
 
 onUnmounted(() => {
@@ -1242,6 +1244,8 @@ onUnmounted(() => {
 .w-full { width: 100%; }
 .hint { margin-left: 8px; color: #6b7280; font-size: 12px; }
 .hint.warn { display: block; margin: 4px 0 0; margin-left: 0; color: #b45309; }
+.block-hint { display: block; margin: 6px 0 0; margin-left: 0; }
+.cn-board-group { display: flex; flex-wrap: wrap; gap: 8px 16px; }
 .list-header { display: flex; justify-content: space-between; align-items: center; }
 .list-actions { display: flex; gap: 8px; align-items: center; }
 </style>

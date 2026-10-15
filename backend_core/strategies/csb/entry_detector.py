@@ -231,12 +231,25 @@ def confirm_lps(
     }
 
 
-def detect_lps(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
-    """买点3：最近 lps_window 日内出现过 BREAKOUT，当日满足 LPS。"""
+def detect_lps(
+    bars: List[Dict[str, Any]],
+    config: Dict[str, Any],
+    *,
+    channel_provider=None,
+) -> Dict[str, Any]:
+    """买点3：最近 lps_window 日内出现过 BREAKOUT，当日满足 LPS。
+
+    channel_provider(end_index) -> 与 compute_channel_state(bars[:end_index+1]) 等价的通道状态。
+    """
     ecfg = (config or {}).get("entry") or {}
     window = int(ecfg.get("lps_window", 3))
     if len(bars) < 80 or window <= 0:
         return {"entry_signal": False, "signal_type": None, "reason": "short_history"}
+
+    def _setup_at(end_idx: int) -> Dict[str, Any]:
+        hist = bars[: end_idx + 1]
+        ch = channel_provider(end_idx) if channel_provider else None
+        return detect_setup(hist, config, channel=ch)
 
     today = bars[-1]
     for offset in range(1, window + 1):
@@ -244,7 +257,16 @@ def detect_lps(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, 
         if idx < 60:
             break
         hist = bars[: idx + 1]
-        setup_then = resolve_setup_for_breakout(hist, detect_setup(hist, config), config)
+        setup_hist = _setup_at(idx)
+
+        def _prior_provider(b, c, _end=idx):
+            if _end <= 0:
+                return detect_setup(b[:-1], c)
+            return _setup_at(_end - 1)
+
+        setup_then = resolve_setup_for_breakout(
+            hist, setup_hist, config, prior_setup_provider=_prior_provider
+        )
         bo = detect_breakout(hist, setup_then, config)
         if not bo.get("entry_signal"):
             continue
@@ -273,10 +295,31 @@ def detect_lps(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, 
     return {"entry_signal": False, "signal_type": None, "reason": "no_recent_breakout"}
 
 
-def detect_entry(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
-    """综合入口：BREAKOUT 优先，其次 LPS，再次 PROBE。"""
-    setup = detect_setup(bars, config)
-    setup_bo = resolve_setup_for_breakout(bars, setup, config)
+def detect_entry(
+    bars: List[Dict[str, Any]],
+    config: Dict[str, Any],
+    *,
+    channel: Optional[Dict[str, Any]] = None,
+    channel_provider=None,
+) -> Dict[str, Any]:
+    """综合入口：BREAKOUT 优先，其次 LPS，再次 PROBE。
+
+    channel：当日（bars 最后一根）预计算通道。
+    channel_provider(end_index)：按 bars 下标取通道，供前一日 SETUP / LPS 窗口复用。
+    """
+    end_i = len(bars) - 1
+    if channel is None and channel_provider is not None and end_i >= 0:
+        channel = channel_provider(end_i)
+    setup = detect_setup(bars, config, channel=channel)
+
+    def _prior_provider(b, c):
+        if channel_provider is not None and end_i >= 1:
+            return detect_setup(b[:-1], c, channel=channel_provider(end_i - 1))
+        return detect_setup(b[:-1], c)
+
+    setup_bo = resolve_setup_for_breakout(
+        bars, setup, config, prior_setup_provider=_prior_provider
+    )
     breakout = detect_breakout(bars, setup_bo, config)
     if breakout.get("entry_signal"):
         merged = {**setup, **breakout, "entry_kind": "breakout"}
@@ -287,7 +330,7 @@ def detect_entry(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str
                 merged["channel"] = setup_bo.get("channel")
             merged["setup_ok"] = True
         return merged
-    lps = detect_lps(bars, config)
+    lps = detect_lps(bars, config, channel_provider=channel_provider)
     if lps.get("entry_signal"):
         return {**setup, **lps, "entry_kind": "lps"}
     probe = detect_probe(bars, setup, config)

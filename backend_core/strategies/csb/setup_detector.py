@@ -193,10 +193,16 @@ def check_dry_volume(
     }
 
 
-def detect_setup(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str, Any]:
+def detect_setup(
+    bars: List[Dict[str, Any]],
+    config: Dict[str, Any],
+    *,
+    channel: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     SETUP 判定：通道粘合 + 年线走平/向上 + 独立回踩 + 地量 + 换手初筛。
     bars 正序。
+    channel：可选预计算通道状态（与 compute_channel_state(bars) 等价），区间扫描复用。
     """
     tcfg = (config or {}).get("turnover") or {}
     ccfg = (config or {}).get("channel") or {}
@@ -206,7 +212,7 @@ def detect_setup(bars: List[Dict[str, Any]], config: Dict[str, Any]) -> Dict[str
     leave_pct = float(ccfg.get("touch_leave_pct", 0.03))
     lookback = int(ccfg.get("touch_lookback", 60))
 
-    channel = compute_channel_state(bars, config)
+    channel = channel if channel is not None else compute_channel_state(bars, config)
     if not channel.get("ok"):
         return {
             "signal_type": None,
