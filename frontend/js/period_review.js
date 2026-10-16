@@ -20,8 +20,7 @@ function createPeriodReview(kind, prefix) {
             this._bind('LoadBtn', () => this.load());
             this._bind('ComputeBtn', () => this.compute());
             this._bind('SaveBtn', () => this.save());
-            this._bind('ExportBtn', () => this.exportFile('md'));
-            this._bind('ExportPdfBtn', () => this.exportFile('pdf'));
+            this._bind('ExportPdfBtn', () => this.exportPdf());
             this.load();
         },
 
@@ -156,20 +155,21 @@ function createPeriodReview(kind, prefix) {
             }
         },
 
-        async exportFile(ext) {
-            this.setStatus(ext === 'pdf' ? '正在生成 PDF…' : '正在生成 Markdown…', 'busy');
-            const unlock = this.lockToolbar(ext === 'pdf' ? 'ExportPdfBtn' : 'ExportBtn', '导出中…');
+        async exportPdf() {
+            this.setStatus('正在生成 PDF…', 'busy');
+            const unlock = this.lockToolbar('ExportPdfBtn', '导出中…');
             try {
                 const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
-                const path = ext === 'pdf' ? 'period/export.pdf' : 'period/export.md';
-                const resp = await fetchFn(`${this.API_BASE_URL}/api/market_review/${path}?${this.query()}`);
+                const resp = await fetchFn(
+                    `${this.API_BASE_URL}/api/market_review/period/export.pdf?${this.query()}`
+                );
                 const ct = (resp.headers.get('Content-Type') || '').toLowerCase();
                 if (!resp.ok || ct.includes('application/json')) {
                     const payload = await resp.json().catch(() => ({}));
                     throw new Error(payload.message || '导出失败');
                 }
                 const blob = await resp.blob();
-                const filename = this._downloadName(resp, `period_review_${this.anchor()}.${ext}`);
+                const filename = this._downloadName(resp, `period_review_${this.anchor()}.pdf`);
                 this._saveBlob(blob, filename);
                 this.setStatus(`已下载 ${filename}`, 'ok');
             } catch (e) {

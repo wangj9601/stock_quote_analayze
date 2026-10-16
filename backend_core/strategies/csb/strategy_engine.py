@@ -201,12 +201,17 @@ def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]
     entry_bonus = 0.0
     vol_bonus = 0.0
     vm = result.get("vol_expand_mult")
+    entry_cfg = (config or {}).get("entry") or {}
+    vol_ref = float(entry_cfg.get("vol_expand_mult") or pcfg.get("vol_expand_mult") or 2.0)
+    if vol_ref <= 0:
+        vol_ref = 2.0
     if signal_type == CSB_PROBE:
         entry_bonus = 12.0
     elif signal_type == CSB_BREAKOUT:
         entry_bonus = 20.0
-        if vm is not None:
-            vol_bonus = min(10.0, float(vm))
+        # 倍数是比值，不能直接当分数：达到突破阈值即满分，更高倍数不再加分。
+        if vm is not None and float(vm) > 0:
+            vol_bonus = min(10.0, 10.0 * float(vm) / vol_ref)
     elif signal_type == CSB_LPS:
         entry_bonus = 16.0
 
@@ -278,7 +283,7 @@ def compute_score_detail(result: Dict[str, Any], config: Optional[Dict[str, Any]
                 "score": round(vol_bonus, 2),
                 "max": 10.0,
                 "value": float(vm) if vm is not None else None,
-                "formula": "仅 BREAKOUT：min(10, 当日换手/20日均换手)",
+                "formula": f"仅 BREAKOUT：min(10, 10×放量倍数/{vol_ref:g})，达到突破阈值即满分",
             },
         },
     }

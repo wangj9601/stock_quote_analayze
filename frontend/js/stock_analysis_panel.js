@@ -81,12 +81,12 @@
         <h4 class="ssa-block-title">主力入场</h4>
         <div class="ssa-main-force-actions">
           <button type="button" class="btn btn-secondary btn-sm" id="ssaMainForceFetchBtn"
-            title="先 Tushare moneyflow，失败则东财">拉取数据</button>
+            title="日终主源为 Tushare；拉取时先 Tushare moneyflow，失败则东财">拉取数据</button>
           <button type="button" class="btn btn-secondary btn-sm" id="ssaMainForceImportToggle">导入数据</button>
         </div>
       </div>
       <div class="ssa-mfe-import" id="ssaMainForceImportPanel" hidden>
-        <p class="ssa-mfe-import-lead">东财分档表（金额默认元）或 Tushare moneyflow 导出（万元，自动识别 buy_elg_amount 等列）。同花顺净额不能替代。</p>
+        <p class="ssa-mfe-import-lead">可导入东财分档表（金额默认元）或 Tushare moneyflow 导出（万元，自动识别 buy_elg_amount 等列）。日终主源为 Tushare；同花顺净额不能替代。</p>
         <div class="ssa-mfe-import-row">
           <label class="ssa-mfe-import-label">金额单位
             <select id="ssaMainForceImportUnit" aria-label="导入金额单位">

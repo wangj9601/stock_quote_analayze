@@ -35,16 +35,59 @@ def _f(v: Any) -> Optional[float]:
         return None
 
 
+def _score_parts(sig: Dict[str, Any]) -> Dict[str, Any]:
+    """分项分使用 0～满分的点数，不回写粘合天数、带宽、回踩次数、放量倍数的原始量。"""
+    sd = sig.get("score_detail")
+    if not isinstance(sd, dict):
+        detail = sig.get("detail") if isinstance(sig.get("detail"), dict) else {}
+        nested = detail.get("score")
+        sd = nested if isinstance(nested, dict) else None
+    parts = sd.get("parts") if isinstance(sd, dict) else None
+    if isinstance(parts, dict) and parts:
+        return parts
+
+    from .strategy_engine import compute_score_detail
+
+    detail = sig.get("detail") if isinstance(sig.get("detail"), dict) else {}
+    setup = detail.get("setup") if isinstance(detail.get("setup"), dict) else {}
+    sch = setup.get("channel") if isinstance(setup.get("channel"), dict) else {}
+    entry = detail.get("entry") if isinstance(detail.get("entry"), dict) else {}
+    channel: Dict[str, Any] = dict(sig.get("channel") or {}) if isinstance(sig.get("channel"), dict) else {}
+    for key in ("squeeze_days", "squeeze_pct", "lower", "upper"):
+        if channel.get(key) is None and sch.get(key) is not None:
+            channel[key] = sch.get(key)
+    if sig.get("squeeze_days") is not None:
+        channel["squeeze_days"] = sig.get("squeeze_days")
+    if sig.get("squeeze_pct") is not None:
+        channel["squeeze_pct"] = sig.get("squeeze_pct")
+    payload = dict(sig)
+    payload["channel"] = channel
+    if payload.get("touch_count") is None:
+        payload["touch_count"] = setup.get("touch_count")
+    if payload.get("vol_expand_mult") is None:
+        payload["vol_expand_mult"] = entry.get("vol_expand_mult")
+    if payload.get("dry_vol") is None and isinstance(setup.get("dry_vol"), dict):
+        payload["dry_vol"] = setup.get("dry_vol")
+    if payload.get("turnover_ok") is None and setup.get("turnover_ok") is not None:
+        payload["turnover_ok"] = setup.get("turnover_ok")
+    if payload.get("spring_ok") is None and setup.get("spring_ok") is not None:
+        payload["spring_ok"] = setup.get("spring_ok")
+    return compute_score_detail(payload).get("parts") or {}
+
+
 def flatten_score_factors(sig: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     sig = sig if isinstance(sig, dict) else {}
     out: Dict[str, Any] = {}
-    for src, col, _ in PART_SCORE_FIELDS:
-        val = sig.get(src)
-        if val is None and isinstance(sig.get("detail"), dict):
-            setup = sig["detail"].get("setup") or {}
-            ch = setup.get("channel") or {}
-            val = ch.get(src) if src in ch else setup.get(src)
-        out[col] = _round(_f(val), 4) if col.startswith("f_") else val
+    parts = _score_parts(sig)
+    part_score_keys = {
+        "f_squeeze_days": "squeeze_days",
+        "f_squeeze_pct": "squeeze_pct",
+        "f_touch_count": "touches",
+        "f_vol_expand": "vol_expand",
+    }
+    for col, part_key in part_score_keys.items():
+        part = parts.get(part_key) if isinstance(parts.get(part_key), dict) else {}
+        out[col] = _round(_f(part.get("score")), 2)
     out["squeeze_days"] = sig.get("squeeze_days")
     out["squeeze_pct"] = _round(_f(sig.get("squeeze_pct")), 4)
     out["touch_count"] = sig.get("touch_count")
@@ -134,7 +177,7 @@ def assign_score_buckets(details: Sequence[Dict[str, Any]]) -> Dict[str, Dict[st
 
 _FACTOR_BIN_SPECS = [
     ("squeeze_days", "粘合天数", [(None, 15.0, "<15"), (15.0, 20.0, "[15,20)"), (20.0, None, "≥20")]),
-    ("f_vol_expand", "放量倍数", [(None, 2.0, "<2"), (2.0, 2.5, "[2,2.5)"), (2.5, None, "≥2.5")]),
+    ("vol_expand_mult", "放量倍数", [(None, 2.0, "<2"), (2.0, 2.5, "[2,2.5)"), (2.5, None, "≥2.5")]),
     ("touch_count", "回踩次数", [(None, 2.0, "<2"), (2.0, 3.0, "[2,3)"), (3.0, None, "≥3")]),
 ]
 

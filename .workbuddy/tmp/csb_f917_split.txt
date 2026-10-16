@@ -1,0 +1,56 @@
+CSB_PROBE n=518 pnl=0.490 t=1.97 med=-0.32 wr=46.9% full=1.115 t_full=3.78 full_wr=55.4% hit=16.4%
+CSB_BREAKOUT n=16 pnl=1.555 t=0.51 med=-0.92 wr=43.8% full=0.713 t_full=0.25 full_wr=43.8% hit=37.5%
+CSB_LPS n=1
+VS 基准止损 n=165 exit=-3.92 full=-2.13 exit_better=61 full_better=102 delta_sum=-295.1
+VS 通道失效 n=46 exit=-1.70 full=-1.53 exit_better=21 full_better=23 delta_sum=-7.8
+VS 阶梯跟踪止损 n=124 exit=-0.19 full=0.27 exit_better=59 full_better=49 delta_sum=-56.8
+VS 派发离场 n=46 exit=12.78 full=11.33 exit_better=29 full_better=14 delta_sum=66.7
+VS 到期平仓 n=152 exit=3.07 full=3.07 exit_better=0 full_better=0 delta_sum=0.0
+VS 假突破 n=2 exit=-5.96 full=6.96 exit_better=1 full_better=1 delta_sum=-25.8
+---PROBE FILTERS---
+PROBE band<1.2 n=67 pnl=0.198 t=0.45 med=-0.36 wr=46.3% full=0.782 t_full=1.47 full_wr=56.7% hit=11.9%
+PROBE band1.2-2 n=140 pnl=-0.132 t=-0.28 med=-0.85 wr=39.3% full=0.302 t_full=0.56 full_wr=52.1% hit=16.4%
+PROBE band>2 n=311 pnl=0.834 t=2.45 med=0.11 wr=50.5% full=1.554 t_full=3.79 full_wr=56.6% hit=17.4%
+PROBE touch2 n=138 pnl=0.053 t=0.12 med=-0.89 wr=38.4% full=0.547 t_full=0.85 full_wr=52.2% hit=10.1%
+PROBE touch3 n=180 pnl=0.433 t=0.92 med=-0.27 wr=47.2% full=0.875 t_full=1.84 full_wr=53.3% hit=16.7%
+PROBE touch4 n=106 pnl=0.437 t=0.83 med=-0.33 wr=48.1% full=1.783 t_full=2.69 full_wr=54.7% hit=22.6%
+PROBE touch>=5 n=94 pnl=1.304 t=2.51 med=0.87 wr=57.4% full=1.658 t_full=2.75 full_wr=64.9% hit=18.1%
+PROBE sc60-75 n=131 pnl=-0.221 t=-0.37 med=-0.90 wr=39.7% full=0.783 t_full=1.04 full_wr=49.6% hit=13.0%
+PROBE sc75-85 n=268 pnl=0.748 t=2.17 med=-0.17 wr=47.0% full=1.234 t_full=3.12 full_wr=55.2% hit=17.5%
+PROBE sc>=85 n=119 pnl=0.694 t=1.94 med=0.36 wr=54.6% full=1.213 t_full=2.88 full_wr=62.2% hit=17.6%
+PROBE band>2 touch>=4 sc>=80 n=73 pnl=1.213 t=1.88 med=0.89 wr=61.6% full=2.258 t_full=3.16 full_wr=68.5% hit=21.9%
+PROBE band>2 touch>=5 n=73 pnl=1.695 t=2.85 med=1.37 wr=65.8% full=1.913 t_full=3.06 full_wr=68.5% hit=16.4%
+PROBE touch>=5 sc>=80 n=58 pnl=1.039 t=1.82 med=0.58 wr=55.2% full=2.024 t_full=2.75 full_wr=69.0% hit=20.7%
+---PROBE MONTH---
+2025-04 n=3 mean=-1.08 sum=-3.2
+2025-05 n=37 mean=0.93 sum=34.4
+2025-06 n=139 mean=1.13 sum=157.1
+2025-07 n=62 mean=1.15 sum=71.6
+2025-08 n=52 mean=3.10 sum=161.2
+2025-09 n=46 mean=-0.72 sum=-33.3
+2025-10 n=23 mean=2.43 sum=55.9
+2025-11 n=73 mean=-1.01 sum=-73.7
+2025-12 n=21 mean=1.51 sum=31.8
+2026-01 n=8 mean=-0.14 sum=-1.1
+2026-02 n=40 mean=-2.66 sum=-106.3
+2026-03 n=11 mean=-4.55 sum=-50.0
+2026-04 n=3 mean=3.26 sum=9.8
+---BREAKOUT---
+德石股份 2025-06-13 sc=75.81 pnl=-14.23 full=-13.83 exit=基准止损 mfe=9.1
+生 意 宝 2026-02-26 sc=95.44 pnl=-9.36 full=-5.37 exit=基准止损 mfe=2.1
+山东玻纤 2025-06-03 sc=93.6 pnl=-6.81 full=-5.82 exit=阶梯跟踪止损 mfe=13.19
+海达股份 2025-06-09 sc=80.23 pnl=-6.37 full=-15.56 exit=假突破 mfe=0.09
+德尔未来 2026-02-27 sc=75.77 pnl=-5.54 full=29.48 exit=假突破 mfe=32.25
+华茂股份 2025-06-26 sc=89.14 pnl=-3.3 full=-3.52 exit=基准止损 mfe=3.3
+佰奥智能 2025-12-25 sc=88.4 pnl=-1.69 full=-1.69 exit=到期平仓 mfe=1.76
+福华尚纬 2025-09-01 sc=91.44 pnl=-1.01 full=-5.39 exit=阶梯跟踪止损 mfe=8.2
+鸿铭股份 2025-12-23 sc=80.72 pnl=-0.83 full=-0.83 exit=到期平仓 mfe=0.02
+耀皮玻璃 2025-09-09 sc=82.59 pnl=1.14 full=1.14 exit=到期平仓 mfe=8.29
+华瓷股份 2026-02-27 sc=79.67 pnl=1.18 full=1.18 exit=到期平仓 mfe=11.45
+四环生物 2025-10-09 sc=86.66 pnl=5.93 full=5.93 exit=到期平仓 mfe=8.05
+华测检测 2026-01-05 sc=82.35 pnl=7.11 full=7.11 exit=到期平仓 mfe=8.17
+华脉科技 2025-06-05 sc=75.05 pnl=8.33 full=-4.78 exit=派发离场 mfe=15.56
+华电能源 2025-07-01 sc=88.09 pnl=11.07 full=3.95 exit=派发离场 mfe=14.23
+九鼎新材 2025-07-01 sc=80.38 pnl=39.26 full=19.41 exit=派发离场 mfe=46.91
+probe days=137 max_per_day=21 days_gt10=9 days_gt20=1
+med_per_day=2 mean_per_day=3.78

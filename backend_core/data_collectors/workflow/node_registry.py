@@ -241,28 +241,28 @@ NODE_DEFS: List[CollectionNodeDef] = [
         "cn",
         exec_ths_fund_flow_daily,
         param_schema=_TRADE_DATE_SCHEMA,
-        description="stock_fund_flow_individual(即时) → stock_fund_flow_daily（可指定交易日）",
+        description="同花顺即时资金流 → stock_fund_flow_daily；免费页空表时改用新浪流入/流出/净额（可指定交易日）",
     ),
     _n(
         "em_stock_fund_flow_daily",
-        "东财个股主力资金流日采",
+        "东财个股分档资金流日采（兜底）",
         "cn",
         exec_em_stock_fund_flow_daily,
         param_schema=_TRADE_DATE_SCHEMA,
         description=(
             "stock_individual_fund_flow → stock_fund_flow_em_daily（主力/四档；"
-            "活跃池增量；可指定交易日；EM_FUND_FLOW_* 环境变量限速）"
+            "活跃池增量兜底/历史；可指定交易日；EM_FUND_FLOW_* 环境变量限速）"
         ),
     ),
     _n(
         "tushare_moneyflow_daily",
-        "Tushare个股资金流向日采",
+        "Tushare个股资金流向日采（主源）",
         "cn",
         exec_tushare_moneyflow_daily,
         param_schema=_TRADE_DATE_SCHEMA,
         description=(
-            "pro.moneyflow(trade_date) 全市场单日写入 stock_fund_flow_em_daily；"
-            "特大+大单≈主力；金额万元→元；需 TUSHARE_TOKEN（约 2000 积分）"
+            "日终主力主源：pro.moneyflow(trade_date) 全市场单日写入 stock_fund_flow_em_daily；"
+            "特大+大单≈主力；金额万元→元；同日覆盖东财；需 TUSHARE_TOKEN（约 2000 积分）"
         ),
     ),
     _n(

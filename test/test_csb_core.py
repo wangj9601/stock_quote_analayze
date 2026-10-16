@@ -91,6 +91,8 @@ def test_score_premium_after_30_squeeze_days():
     sd = compute_score_detail(result, get_default_csb_config())
     assert sd["parts"]["squeeze_premium"]["score"] == 8.0
     assert sd["parts"]["spring"]["score"] == 6.0
+    # 放量 2.0 倍等于突破阈值，记满分 10，而不是把倍数 2 直接当 2 分
+    assert sd["parts"]["vol_expand"]["score"] == 10.0
 
 
 def test_support_tests_cluster_counts_once():

@@ -17,7 +17,6 @@ const DailyReviewPage = {
         const loadBtn = document.getElementById('drLoadBtn');
         const computeBtn = document.getElementById('drComputeBtn');
         const saveBtn = document.getElementById('drSaveBtn');
-        const exportBtn = document.getElementById('drExportBtn');
         const exportPdfBtn = document.getElementById('drExportPdfBtn');
         if (loadBtn && !loadBtn.dataset.bound) {
             loadBtn.dataset.bound = '1';
@@ -30,10 +29,6 @@ const DailyReviewPage = {
         if (saveBtn && !saveBtn.dataset.bound) {
             saveBtn.dataset.bound = '1';
             saveBtn.addEventListener('click', () => this.save());
-        }
-        if (exportBtn && !exportBtn.dataset.bound) {
-            exportBtn.dataset.bound = '1';
-            exportBtn.addEventListener('click', () => this.exportMd());
         }
         if (exportPdfBtn && !exportPdfBtn.dataset.bound) {
             exportPdfBtn.dataset.bound = '1';
@@ -165,33 +160,6 @@ const DailyReviewPage = {
             this.setStatus(`${d} 观点/建议已保存`, 'ok');
         } catch (e) {
             this.setStatus(e.message || '保存失败', 'error');
-        } finally {
-            unlock();
-        }
-    },
-
-    async exportMd() {
-        const d = this.tradeDate();
-        this.setStatus('正在生成 Markdown…', 'busy');
-        const unlock = this.lockToolbar('drExportBtn', '导出中…');
-        try {
-            const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
-            const resp = await fetchFn(
-                `${this.API_BASE_URL}/api/market_review/export.md?trade_date=${encodeURIComponent(d)}`
-            );
-            const ct = (resp.headers.get('Content-Type') || '').toLowerCase();
-            if (!resp.ok || ct.includes('application/json')) {
-                const payload = await resp.json().catch(() => ({}));
-                throw new Error(payload.message || '导出失败');
-            }
-            const blob = await resp.blob();
-            const filename = this._downloadName(resp, `daily_review_${d}.md`);
-            this._saveBlob(blob, filename);
-            const text = await blob.text();
-            this.setMarkdownPreview(text);
-            this.setStatus(`已下载 ${filename}`, 'ok');
-        } catch (e) {
-            this.setStatus(e.message || '导出失败', 'error');
         } finally {
             unlock();
         }

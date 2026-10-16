@@ -139,7 +139,7 @@
 | 换手 | 20 日均换手达标 +10 | 10 |
 | Spring | 近端出现 Spring +`premium.spring_bonus` | 6 |
 | 买点类型 | `PROBE +12 / LPS +16 / BREAKOUT +20` | 20 |
-| 放量倍数 | 仅 BREAKOUT：`min(10, vol_expand_mult)` | 10 |
+| 放量倍数 | 仅 BREAKOUT：达到 `entry.vol_expand_mult` 记 10 分，`min(10, 10×倍数/阈值)`，超过阈值不再加分 | 10 |
 
 `total = min(100, 各项之和)`；`min_score`（默认 **60**）为入选门槛。
 
@@ -170,9 +170,9 @@
 
 ### 6.4 阶梯跟踪（浮盈保护）
 
-浮盈达到 `trail_arm_gain`（默认 **3%**）后 **启用**：
-跟踪线取 **已确认波段低点**（左右各 `swing_window` 根更高）、**MA10**、**MA20** 中 **位于收盘价之下** 的 **最高者**，且 **只上移不下移**（ratchet）。
-收盘跌破跟踪线 → `CSB_TRAIL`，`exit_reason=ma_trail`。
+前序最高价相对入场价的涨幅达到 `trail_arm_gain`（默认 **3%**）后 **启用**（当日新高次日才参与判断）：
+跟踪线取 **已确认波段低点**（左右各 `swing_window` 根更高）、**MA10**、**MA20** 与 **武装价** `入场价×(1+trail_arm_gain)` 中 **位于收盘价之下** 的 **最高者**，且 **只上移不下移**。
+跟踪线不低于武装价，避免浮盈后跟回成本附近。收盘跌破跟踪线或跌破武装价 → `CSB_TRAIL`，`exit_reason=ma_trail`。
 
 ### 6.5 出场模式对照
 

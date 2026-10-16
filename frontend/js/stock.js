@@ -2880,7 +2880,7 @@ const StockPage = {
             const mfePayload = await mfeResp.json();
             if (!emPayload.success || !emPayload.data) {
                 if (emSection) emSection.style.opacity = '0.7';
-                if (hintEl) hintEl.textContent = (emPayload && emPayload.message) || '暂无东财分档数据（需日终采集或回填）';
+                if (hintEl) hintEl.textContent = (emPayload && emPayload.message) || '暂无主力分档数据（需日终 Tushare 采集或拉取）';
                 this.flowEmChart.setOption({
                     xAxis: [{ data: [] }],
                     series: [{ name: '主力净流入', data: [] }, { name: '大单净流入', data: [] }],
@@ -2932,7 +2932,9 @@ const StockPage = {
                 }
             }
             if (hintEl) {
-                hintEl.textContent = '口径：东财订单分档（非机构身份）。高亮区间为最近入场窗口。';
+                hintEl.textContent = (emPayload.data && emPayload.data.disclaimer)
+                    ? `${emPayload.data.disclaimer}。高亮区间为最近入场窗口。`
+                    : '口径：订单分档（日终优先 Tushare moneyflow，非机构身份）。高亮区间为最近入场窗口。';
             }
             this.flowEmChart.setOption({
                 xAxis: [{ data: dates }],
@@ -2943,7 +2945,7 @@ const StockPage = {
             });
         } catch (e) {
             console.error(e);
-            if (hintEl) hintEl.textContent = '东财主力分档加载失败';
+            if (hintEl) hintEl.textContent = '主力分档加载失败';
         }
     },
 

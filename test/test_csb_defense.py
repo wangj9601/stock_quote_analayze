@@ -128,6 +128,40 @@ def test_trail_ratchet_uses_ma_after_gain():
         prior_bars=prior,
     )
     assert r.get("exit_reason") == "ma_trail"
+    assert float(r.get("trail_level") or 0) >= 10.2 * 1.03
+
+
+def test_trail_floor_does_not_fall_back_to_cost():
+    """武装之后，收盘跌破入场价×(1+arm) 即跟踪离场，不跟到成本附近的均线。"""
+    cfg = get_default_csb_config()
+    prior = [_bar(f"2024-05-{i+1:02d}", 10, 10.1, 9.9, 10.0, vol=1_000_000) for i in range(25)]
+    after = [
+        _bar("2024-06-03", 10.2, 10.6, 10.15, 10.5, vol=1_000_000),
+        _bar("2024-06-04", 10.45, 10.55, 10.35, 10.4, vol=1_000_000),
+    ]
+    held = evaluate_structure_exit_rules(
+        entry_price=10.0,
+        entry_low=9.2,
+        channel_upper=None,
+        bars_after_entry=after,
+        signal_date="2024-06-01",
+        config=cfg,
+        prior_bars=prior,
+    )
+    assert held.get("exit_reason") == "horizon_end"
+
+    stopped = evaluate_structure_exit_rules(
+        entry_price=10.0,
+        entry_low=9.2,
+        channel_upper=None,
+        bars_after_entry=after + [_bar("2024-06-05", 10.3, 10.35, 10.05, 10.15, vol=1_000_000)],
+        signal_date="2024-06-01",
+        config=cfg,
+        prior_bars=prior,
+    )
+    assert stopped.get("exit_reason") == "ma_trail"
+    assert float(stopped.get("trail_level") or 0) >= 10.0 * 1.03
+    assert stopped.get("exit_date") == "2024-06-05"
 
 
 def test_false_break_only_for_breakout_not_probe():

@@ -192,6 +192,9 @@ def test_flatten_fills_vol_ratio_for_probe():
     assert flat.get("vol_ratio_5_20") == 0.73
     # PROBE 无放量倍数时，用 5/20 量比回填便于分桶
     assert flat.get("vol_expand_mult") == 0.73
+    # 分项分是封顶后的点数，PROBE 没有放量分
+    assert flat.get("f_vol_expand") == 0.0
+    assert flat.get("f_touch_count") == 12.0
 
 
 def test_presets_exist_and_apply():

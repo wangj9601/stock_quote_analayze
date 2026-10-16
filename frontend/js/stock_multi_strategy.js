@@ -17,6 +17,8 @@ const StockMultiStrategy = {
     lastSwing: null,
     lastGann: null,
     lastTradePlan: null,
+    lastEmFundFlow: null,
+    mainFlowChart: null,
     lastUseRealtime: false,
     lastRealtime: null,
     embeddedMode: false,
@@ -94,6 +96,7 @@ const StockMultiStrategy = {
         this.bindScrollFab();
         this._bindRsHistoryDelegation();
         this.bindMainForceTools();
+        this.bindMainFundFlowTools();
         void this.ensureUserWatchlistCodes().then(() => this.updateWatchlistBtn());
     },
 
@@ -139,7 +142,35 @@ const StockMultiStrategy = {
         this.updateTradeObserveBtn();
         this._bindRsHistoryDelegation();
         this.bindMainForceTools();
+        this.bindMainFundFlowTools();
         void this.ensureUserWatchlistCodes().then(() => this.updateWatchlistBtn());
+    },
+
+    /**
+     * 委托绑定主力资金流向「展开明细」「补采」。
+     * 资金流向区块会整段重绘，直接绑节点会丢失。
+     */
+    bindMainFundFlowTools() {
+        if (this._mainFundFlowToolsBound) return;
+        this._mainFundFlowToolsBound = true;
+        document.addEventListener('click', (e) => {
+            const t = e.target && e.target.closest
+                ? e.target.closest('#ssaMainFlowExpandBtn, #ssaMainFlowCollectBtn')
+                : null;
+            if (!t) return;
+            if (!t.closest('#ssaFundFlowHost') && !t.closest('#ssaMainFlowMount')) return;
+            e.preventDefault();
+            if (t.id === 'ssaMainFlowCollectBtn') {
+                void this.fetchMainForceData();
+                return;
+            }
+            this.toggleMainFlowDetail();
+        });
+        window.addEventListener('resize', () => {
+            if (this.mainFlowChart) {
+                try { this.mainFlowChart.resize(); } catch (err) { /* ignore */ }
+            }
+        });
     },
 
     /**
@@ -221,18 +252,36 @@ const StockMultiStrategy = {
         el.className = 'ssa-mfe-import-status' + (kind ? ` is-${kind}` : '');
     },
 
+    _setMainForceCollectBusy(busy) {
+        const fetchBtn = document.getElementById('ssaMainForceFetchBtn');
+        const collectBtn = document.getElementById('ssaMainFlowCollectBtn');
+        if (fetchBtn) {
+            fetchBtn.disabled = !!busy;
+            fetchBtn.textContent = busy ? '拉取中…' : '拉取数据';
+        }
+        if (collectBtn) {
+            collectBtn.disabled = !!busy;
+            collectBtn.textContent = busy ? '补采中…' : '补采';
+            collectBtn.setAttribute('aria-busy', busy ? 'true' : 'false');
+        }
+    },
+
     async fetchMainForceData() {
         const code = this._currentAnalysisCode();
         if (!code) {
             CommonUtils.showToast('请先分析一只股票', 'warning');
             return;
         }
-        const btn = document.getElementById('ssaMainForceFetchBtn');
-        if (btn) {
-            btn.disabled = true;
-            btn.textContent = '拉取中…';
-        }
+        if (this._mainForceCollecting) return;
+        this._mainForceCollecting = true;
+        this._setMainForceCollectBusy(true);
         this.setBlockLoading('ssaMainForceBlock', 'ssaMainForceStatus', '正在拉取 Tushare，失败将回退东财…');
+        const fundFlowStatus = document.getElementById('ssaFundFlowStatus');
+        if (fundFlowStatus) {
+            fundFlowStatus.hidden = false;
+            fundFlowStatus.className = 'ssa-block-status is-loading';
+            fundFlowStatus.textContent = '正在补采主力分档（近 120 日）…';
+        }
         try {
             const q = new URLSearchParams({
                 code,
@@ -253,15 +302,23 @@ const StockMultiStrategy = {
             const n = (payload.data && payload.data.upserted) || 0;
             CommonUtils.showToast(`已写入 ${n} 日（${src}）`, 'success');
             await this.reloadMainForceEntry();
+            if (fundFlowStatus) {
+                fundFlowStatus.hidden = true;
+                fundFlowStatus.textContent = '';
+                fundFlowStatus.className = 'ssa-block-status';
+            }
         } catch (e) {
             const msg = (e && e.message) || '拉取失败';
             this.setBlockError('ssaMainForceStatus', msg);
+            if (fundFlowStatus) {
+                fundFlowStatus.hidden = false;
+                fundFlowStatus.className = 'ssa-block-status is-error';
+                fundFlowStatus.textContent = msg;
+            }
             CommonUtils.showToast(msg, 'error');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '拉取数据';
-            }
+            this._mainForceCollecting = false;
+            this._setMainForceCollectBusy(false);
         }
     },
 
@@ -342,8 +399,10 @@ const StockMultiStrategy = {
                 const st = document.getElementById('ssaMainForceStatus');
                 if (st) st.hidden = true;
             }
+            await this.loadMainFundFlow(code);
         } catch (e) {
             this.renderMainForceEmpty(mfeHost, (e && e.message) || '重算失败');
+            await this.loadMainFundFlow(code);
         }
     },
 
@@ -1626,6 +1685,7 @@ const StockMultiStrategy = {
             lastLevels: this.lastLevels,
             lastRs: this.lastRs,
             lastFundFlow: this.lastFundFlow,
+            lastEmFundFlow: this.lastEmFundFlow,
             lastAuction: this.lastAuction,
             lastPattern: this.lastPattern,
             lastSwing: this.lastSwing,
@@ -1643,6 +1703,7 @@ const StockMultiStrategy = {
         this.lastLevels = state.lastLevels;
         this.lastRs = state.lastRs;
         this.lastFundFlow = state.lastFundFlow;
+        this.lastEmFundFlow = state.lastEmFundFlow;
         this.lastAuction = state.lastAuction;
         this.lastPattern = state.lastPattern;
         this.lastSwing = state.lastSwing;
@@ -1756,6 +1817,8 @@ const StockMultiStrategy = {
         // RS / 主力入场工具已改为 document 事件委托，恢复 DOM 后无需再绑
         this._bindRsHistoryDelegation();
         this.bindMainForceTools();
+        this.bindMainFundFlowTools();
+        this._rehydrateMainFundFlowChart();
         this.updateExportBtn();
         this.updateTradeObserveBtn();
         this.updateGannTradeObserveBtn();
@@ -1815,6 +1878,8 @@ const StockMultiStrategy = {
         this.lastLevels = null;
         this.lastRs = null;
         this.lastFundFlow = null;
+        this.lastEmFundFlow = null;
+        this.disposeMainFlowChart();
         this.lastAuction = null;
         this.lastPattern = null;
         this.lastSwing = null;
@@ -2381,6 +2446,7 @@ const StockMultiStrategy = {
         const gannHost = document.getElementById('ssaGannHost');
         if (planHost) planHost.innerHTML = '';
         if (rsHost) rsHost.innerHTML = '';
+        this.disposeMainFlowChart();
         if (fundFlowHost) fundFlowHost.innerHTML = '';
         if (mainForceHost) mainForceHost.innerHTML = '';
         if (levelsHost) levelsHost.innerHTML = '';
@@ -2841,7 +2907,7 @@ const StockMultiStrategy = {
             }
         }
 
-        // 资金流向
+        // 资金流向（同花顺）+ 主力资金分档（日终 Tushare 为主，同批请求摘要/走势）
         const fundFlowBlock = document.getElementById('ssaFundFlowBlock');
         const fundFlowHost = document.getElementById('ssaFundFlowHost');
         if (fundFlowBlock && fundFlowHost) {
@@ -2853,8 +2919,11 @@ const StockMultiStrategy = {
                 if (st) st.hidden = true;
             } else {
                 fundFlowHost.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc((bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用')}</p>`;
+                this._ensureMainFundFlowMount(fundFlowHost);
                 this.setBlockError('ssaFundFlowStatus', (bundle.fundFlow && bundle.fundFlow.error) || '资金流向暂不可用');
             }
+            const ffCode = (bundle.stock && bundle.stock.code) || this._currentAnalysisCode();
+            void this.loadMainFundFlow(ffCode);
         }
 
         // 主力入场
@@ -2870,7 +2939,7 @@ const StockMultiStrategy = {
             } else {
                 this.renderMainForceEmpty(
                     mfeHost,
-                    (bundle.mainForceEntry && bundle.mainForceEntry.error) || '暂无东财/Tushare 分档数据'
+                    (bundle.mainForceEntry && bundle.mainForceEntry.error) || '暂无主力分档数据'
                 );
                 const st = document.getElementById('ssaMainForceStatus');
                 if (st) st.hidden = true;
@@ -3450,26 +3519,316 @@ const StockMultiStrategy = {
         } catch (e) {
             console.warn('个股分析·资金流向失败', e);
             host.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc(e.message || '资金流向暂不可用')}</p>`;
+            this._ensureMainFundFlowMount(host);
             this.lastFundFlow = { ok: false, data: null, error: e.message || '资金流向加载失败' };
             this.setBlockError('ssaFundFlowStatus', e.message || '资金流向暂无数据（需日终采集入库）');
         }
+        await this.loadMainFundFlow(code);
         this.updateExportBtn();
+    },
+
+    disposeMainFlowChart() {
+        if (this.mainFlowChart) {
+            try { this.mainFlowChart.dispose(); } catch (e) { /* ignore */ }
+            this.mainFlowChart = null;
+        }
+    },
+
+    _ensureMainFundFlowMount(host) {
+        if (!host) return null;
+        let mount = host.querySelector('#ssaMainFlowMount');
+        if (!mount) {
+            mount = document.createElement('div');
+            mount.id = 'ssaMainFlowMount';
+            mount.className = 'ssa-main-flow';
+            host.appendChild(mount);
+        }
+        return mount;
+    },
+
+    _fmtFundYi(v) {
+        if (v == null || Number.isNaN(Number(v))) return '--';
+        const yi = Number(v) / 1e8;
+        const sign = yi > 0 ? '+' : '';
+        return `${sign}${yi.toFixed(2)}亿`;
+    },
+
+    _clsFundYi(v) {
+        if (v == null || Number.isNaN(Number(v))) return '';
+        return Number(v) >= 0 ? 'is-up' : 'is-down';
+    },
+
+    async loadMainFundFlow(code) {
+        const host = document.getElementById('ssaFundFlowHost');
+        if (!host || !code) return;
+        const mount = this._ensureMainFundFlowMount(host);
+        if (!mount) return;
+        mount.innerHTML = '<p class="ssa-fund-flow-hint">主力资金加载中…</p>';
+        this.disposeMainFlowChart();
+        try {
+            const q = new URLSearchParams({ code: String(code).trim(), days: '10' });
+            const resp = await authFetch(
+                `${this.API_BASE_URL}/api/stock_fund_flow/em/daily?${q}`
+            );
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok || !payload.success || !payload.data) {
+                const msg = payload.message || '暂无主力分档数据';
+                this.lastEmFundFlow = { ok: false, data: null, error: msg };
+                this.renderMainFundFlowEmpty(mount, msg);
+                return;
+            }
+            const data = payload.data || {};
+            const series = Array.isArray(data.series) ? data.series : [];
+            if (!series.length) {
+                this.lastEmFundFlow = { ok: false, data: null, error: '暂无主力分档数据' };
+                this.renderMainFundFlowEmpty(mount, '暂无主力分档数据');
+                return;
+            }
+            this.lastEmFundFlow = { ok: true, data, error: null };
+            this.renderMainFundFlow(mount, data);
+        } catch (e) {
+            console.warn('个股分析·主力资金流向失败', e);
+            const msg = (e && e.message) || '主力资金加载失败';
+            this.lastEmFundFlow = { ok: false, data: null, error: msg };
+            this.renderMainFundFlowEmpty(mount, msg);
+        }
+    },
+
+    renderMainFundFlowEmpty(mount, message) {
+        if (!mount) return;
+        this.disposeMainFlowChart();
+        const msg = message || '暂无主力分档数据';
+        mount.innerHTML = `
+            <div class="ssa-main-flow-card">
+              <div class="ssa-main-flow-head">
+                <h5 class="ssa-main-flow-title">主力资金流向</h5>
+                <button type="button" class="btn btn-secondary btn-sm" id="ssaMainFlowCollectBtn"
+                  title="先 Tushare moneyflow 近 120 日，失败再东财">补采</button>
+              </div>
+              <p class="ssa-fund-flow-empty">${this.esc(msg)}</p>
+              <p class="ssa-fund-flow-hint">点「补采」先走 Tushare moneyflow（近 120 日），失败再东财；也可在下方「主力入场」导入 CSV。日终主源为 Tushare；同花顺净额不能替代。</p>
+            </div>`;
+        if (this._mainForceCollecting) this._setMainForceCollectBusy(true);
+    },
+
+    renderMainFundFlow(mount, data) {
+        if (!mount) return;
+        this.disposeMainFlowChart();
+        const series = Array.isArray(data && data.series) ? data.series : [];
+        const latest = series.length ? series[series.length - 1] : null;
+        let netSum = 0;
+        let netSumOk = false;
+        series.forEach((r) => {
+            const v = r && r.main_net_inflow;
+            if (v == null || Number.isNaN(Number(v))) return;
+            netSum += Number(v);
+            netSumOk = true;
+        });
+        const firstDate = series[0] && series[0].trade_date;
+        const lastDate = latest && latest.trade_date;
+        const srcLabel = this._formatMainFlowSourceLabel(data.series_source, series);
+        mount.innerHTML = `
+            <div class="ssa-main-flow-card">
+              <div class="ssa-main-flow-head">
+                <h5 class="ssa-main-flow-title">主力资金流向</h5>
+                <button type="button" class="btn btn-secondary btn-sm" id="ssaMainFlowCollectBtn"
+                  title="先 Tushare moneyflow 近 120 日，失败再东财；成功后刷新本区与主力入场">补采</button>
+              </div>
+              <div class="ssa-fund-flow-meta">
+                <span>分档 · 近 ${this.esc(String(data.days_requested || series.length || 10))} 日</span>
+                <span>来源 ${this.esc(srcLabel)}</span>
+                <span>区间 ${this.esc(firstDate || '--')} ~ ${this.esc(lastDate || '--')}</span>
+              </div>
+              <div class="ssa-fund-flow-summary ssa-main-flow-summary">
+                <div class="ssa-fund-flow-metric">
+                  <span>最新主力净流入</span>
+                  <strong class="${this._clsFundYi(latest && latest.main_net_inflow)}">${this._fmtFundYi(latest && latest.main_net_inflow)}</strong>
+                </div>
+                <div class="ssa-fund-flow-metric">
+                  <span>最新超大单净流入</span>
+                  <strong class="${this._clsFundYi(latest && latest.super_large_net_inflow)}">${this._fmtFundYi(latest && latest.super_large_net_inflow)}</strong>
+                </div>
+                <div class="ssa-fund-flow-metric">
+                  <span>最新大单净流入</span>
+                  <strong class="${this._clsFundYi(latest && latest.large_net_inflow)}">${this._fmtFundYi(latest && latest.large_net_inflow)}</strong>
+                </div>
+                <div class="ssa-fund-flow-metric" title="近 10 日主力净流入代数和">
+                  <span>近 10 日主力合计</span>
+                  <strong class="${netSumOk ? this._clsFundYi(netSum) : ''}">${netSumOk ? this._fmtFundYi(netSum) : '--'}</strong>
+                </div>
+              </div>
+              <div class="ssa-main-flow-chart" id="ssaMainFlowChart" role="img" aria-label="近10日主力净流入"></div>
+              <div class="ssa-main-flow-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="ssaMainFlowExpandBtn">展开明细</button>
+              </div>
+              <div class="ssa-main-flow-detail" id="ssaMainFlowDetail" hidden></div>
+              <p class="ssa-fund-flow-hint">${this.esc(data.disclaimer || '订单分档净流入（日终优先 Tushare moneyflow），非机构身份。')} 缺数可点「补采」；明细表点「展开明细」后渲染。</p>
+            </div>`;
+        this._paintMainFundFlowChart(series);
+        if (this._mainForceCollecting) this._setMainForceCollectBusy(true);
+    },
+
+    _mainFlowSourceMap() {
+        return {
+            em: '东财',
+            tushare: 'Tushare',
+            tushare_l2: 'Tushare',
+            tushare_dc: 'Tushare(DC)',
+            manual: '手工',
+            stock_fund_flow_em_daily: '分档日表',
+        };
+    },
+
+    _formatMainFlowSourceLabel(seriesSource, series) {
+        const map = this._mainFlowSourceMap();
+        let raw = seriesSource ? String(seriesSource) : '';
+        if (!raw || raw === 'stock_fund_flow_em_daily') {
+            const fromRows = Array.isArray(series)
+                ? [...new Set(series.map((r) => String((r && r.source) || '').trim()).filter(Boolean))]
+                : [];
+            raw = fromRows.length ? fromRows.sort().join('+') : 'stock_fund_flow_em_daily';
+        }
+        return raw
+            .split('+')
+            .map((s) => map[s.trim()] || s.trim())
+            .filter(Boolean)
+            .join(' + ') || '分档日表';
+    },
+
+    _paintMainFundFlowChart(series) {
+        const chartDom = document.getElementById('ssaMainFlowChart');
+        if (!chartDom) return;
+        if (typeof echarts === 'undefined') {
+            chartDom.innerHTML = '<p class="ssa-fund-flow-empty">图表库未加载，请刷新页面</p>';
+            return;
+        }
+        this.disposeMainFlowChart();
+        this.mainFlowChart = echarts.init(chartDom);
+        const dates = series.map((r) => r.trade_date || '');
+        const toYi = (v) => {
+            if (v == null || Number.isNaN(Number(v))) return null;
+            return Number((Number(v) / 1e8).toFixed(4));
+        };
+        const main = series.map((r) => toYi(r.main_net_inflow));
+        const large = series.map((r) => toYi(r.large_net_inflow));
+        this.mainFlowChart.setOption({
+            backgroundColor: 'transparent',
+            grid: { left: '11%', right: '4%', top: '18%', bottom: '16%' },
+            legend: {
+                data: ['主力净流入', '大单净流入'],
+                top: 0,
+                textStyle: { fontSize: 11 },
+            },
+            tooltip: { trigger: 'axis' },
+            xAxis: {
+                type: 'category',
+                data: dates,
+                axisLabel: { fontSize: 10 },
+            },
+            yAxis: {
+                type: 'value',
+                name: '亿',
+                nameTextStyle: { fontSize: 11 },
+                splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
+            },
+            series: [
+                {
+                    name: '主力净流入',
+                    type: 'bar',
+                    data: main.map((v) => ({
+                        value: v,
+                        itemStyle: {
+                            color: v == null ? '#94a3b8' : (v >= 0 ? '#dc2626' : '#16a34a'),
+                        },
+                    })),
+                    barMaxWidth: 18,
+                },
+                {
+                    name: '大单净流入',
+                    type: 'line',
+                    data: large,
+                    itemStyle: { color: '#e6a23c' },
+                    lineStyle: { width: 2 },
+                },
+            ],
+        });
+        setTimeout(() => {
+            if (this.mainFlowChart) {
+                try { this.mainFlowChart.resize(); } catch (e) { /* ignore */ }
+            }
+        }, 50);
+    },
+
+    _rehydrateMainFundFlowChart() {
+        const chartDom = document.getElementById('ssaMainFlowChart');
+        if (!chartDom) return;
+        const data = this.lastEmFundFlow && this.lastEmFundFlow.ok ? this.lastEmFundFlow.data : null;
+        const series = data && Array.isArray(data.series) ? data.series : [];
+        if (!series.length) return;
+        this._paintMainFundFlowChart(series);
+    },
+
+    buildMainFlowDetailTableHtml(series) {
+        const rows = (Array.isArray(series) ? series : []).slice().reverse();
+        const body = rows.length
+            ? rows
+                  .map(
+                      (r) => `
+              <tr>
+                <td>${this.esc(r.trade_date || '--')}</td>
+                <td class="${this._clsFundYi(r.main_net_inflow)}">${this._fmtFundYi(r.main_net_inflow)}</td>
+                <td class="${this._clsFundYi(r.super_large_net_inflow)}">${this._fmtFundYi(r.super_large_net_inflow)}</td>
+                <td class="${this._clsFundYi(r.large_net_inflow)}">${this._fmtFundYi(r.large_net_inflow)}</td>
+                <td class="${this._clsFundYi(r.mid_net_inflow)}">${this._fmtFundYi(r.mid_net_inflow)}</td>
+                <td class="${this._clsFundYi(r.small_net_inflow)}">${this._fmtFundYi(r.small_net_inflow)}</td>
+              </tr>`
+                  )
+                  .join('')
+            : '<tr><td colspan="6">暂无明细</td></tr>';
+        return `
+            <div class="ssa-fund-flow-table-wrap">
+              <table class="ssa-fund-flow-table ssa-main-flow-table">
+                <thead>
+                  <tr>
+                    <th>日期</th>
+                    <th>主力净流入</th>
+                    <th>超大单</th>
+                    <th>大单</th>
+                    <th>中单</th>
+                    <th>小单</th>
+                  </tr>
+                </thead>
+                <tbody>${body}</tbody>
+              </table>
+            </div>`;
+    },
+
+    toggleMainFlowDetail() {
+        const detail = document.getElementById('ssaMainFlowDetail');
+        const btn = document.getElementById('ssaMainFlowExpandBtn');
+        if (!detail || !btn) return;
+        if (detail.hidden) {
+            if (!detail.dataset.rendered) {
+                const series = (this.lastEmFundFlow && this.lastEmFundFlow.data
+                    && this.lastEmFundFlow.data.series) || [];
+                detail.innerHTML = this.buildMainFlowDetailTableHtml(series);
+                detail.dataset.rendered = '1';
+            }
+            detail.hidden = false;
+            btn.textContent = '收起明细';
+        } else {
+            detail.hidden = true;
+            btn.textContent = '展开明细';
+        }
     },
 
     renderFundFlow(host, data) {
         if (!host) return;
+        this.disposeMainFlowChart();
         const series = Array.isArray(data && data.series) ? data.series : [];
         const analysis = (data && data.analysis) || {};
-        const fmtYi = (v) => {
-            if (v == null || Number.isNaN(Number(v))) return '--';
-            const yi = Number(v) / 1e8;
-            const sign = yi > 0 ? '+' : '';
-            return `${sign}${yi.toFixed(2)}亿`;
-        };
-        const clsYi = (v) => {
-            if (v == null || Number.isNaN(Number(v))) return '';
-            return Number(v) >= 0 ? 'is-up' : 'is-down';
-        };
+        const fmtYi = (v) => this._fmtFundYi(v);
+        const clsYi = (v) => this._clsFundYi(v);
         const latest = series.length ? series[series.length - 1] : null;
         const recent = series.slice(-8).reverse();
         const rowsHtml = recent.length
@@ -3520,7 +3879,8 @@ const StockMultiStrategy = {
                 </table>
               </div>
               <p class="ssa-fund-flow-hint">口径：同花顺/文件采集入库的流入、流出、净额（元）。「区间净流入合计」= 区间内每日净流入代数和（含正负）。详情页「资金流向」Tab 可查看近 20 日图表。</p>
-            </div>`;
+            </div>
+            <div class="ssa-main-flow" id="ssaMainFlowMount"></div>`;
     },
 
     renderMainForceEntry(host, data) {
@@ -3549,10 +3909,7 @@ const StockMultiStrategy = {
             return Number(v) >= 0 ? 'is-up' : 'is-down';
         };
         const verdict = d.verdict_label || d.verdict || '--';
-        const srcMap = { em: '东财', tushare: 'Tushare', manual: '手工' };
-        const srcLabel = d.series_source
-            ? String(d.series_source).split('+').map((s) => srcMap[s.trim()] || s.trim()).filter(Boolean).join(' + ')
-            : '';
+        const srcLabel = this._formatMainFlowSourceLabel(d.series_source, null);
         const winHtml = w
             ? `<div class="ssa-fund-flow-summary">
                 <div class="ssa-fund-flow-metric"><span>入场窗口</span><strong>${this.esc(w.start_date || '--')} ~ ${this.esc(w.end_date || '--')}</strong></div>

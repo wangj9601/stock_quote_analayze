@@ -122,6 +122,7 @@ body.ops-map .ssa-results,
 body.ops-map .ssa-meta-card,
 body.ops-map .ssa-trade-plan-block,
 body.ops-map .ssa-fund-flow-card,
+body.ops-map .ssa-main-flow-card,
 body.ops-map .ssa-auction-card,
 body.ops-map .ssa-rs-card,
 body.ops-map .ssa-rs-roc,
@@ -516,6 +517,7 @@ body.ops-map .ssa-card,
 body.ops-map .ssa-meta-card,
 body.ops-map .ssa-rs-card,
 body.ops-map .ssa-fund-flow-card,
+body.ops-map .ssa-main-flow-card,
 body.ops-map .ssa-auction-card,
 body.ops-map .ssa-candidates,
 body.ops-map .ssa-details,
@@ -550,6 +552,7 @@ body.ops-map .ssa-deeplink-hint code {
 
 body.ops-map .ssa-header h3,
 body.ops-map .ssa-block-title,
+body.ops-map .ssa-main-flow-title,
 body.ops-map .ssa-block-header,
 body.ops-map .ssa-plan-col-title,
 body.ops-map .ssa-plan-wrap,
@@ -1296,6 +1299,7 @@ body.ops-map .dr-code {
     body.ops-map .finance-grid,
     body.ops-map .ssa-rs-rocs,
     body.ops-map .ssa-fund-flow-summary,
+    body.ops-map .ssa-main-flow-summary,
     body.ops-map .ssa-auction-summary {
         grid-template-columns: 1fr !important;
     }
@@ -1307,7 +1311,8 @@ body.ops-map .dr-code {
         gap: 10px !important;
     }
 
-    body.ops-map .ssa-fund-flow-summary {
+    body.ops-map .ssa-fund-flow-summary,
+    body.ops-map .ssa-main-flow-summary {
         grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     }
 }

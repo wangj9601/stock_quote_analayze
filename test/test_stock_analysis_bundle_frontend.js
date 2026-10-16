@@ -54,4 +54,10 @@ assert(
   'analysis.html 应加载 stock_multi_strategy.js'
 );
 
+assert(js.includes('loadMainFundFlow'), '应有主力资金流向加载');
+assert(js.includes('/api/stock_fund_flow/em/daily'), '主力资金应请求分档日接口 /em/daily');
+assert(js.includes('ssaMainFlowExpandBtn'), '应有展开明细按钮');
+assert(js.includes('ssaMainFlowCollectBtn'), '应有主力资金补采按钮');
+assert(js.includes('toggleMainFlowDetail'), '应有明细延迟渲染');
+
 console.log('test_stock_analysis_bundle_frontend.js: OK');

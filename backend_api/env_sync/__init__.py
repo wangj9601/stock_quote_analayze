@@ -379,8 +379,8 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
             },
             {
                 "code": "stock_fund_flow_em_daily",
-                "name": "A股东财主力/分档资金流",
-                "desc": "stock_fund_flow_em_daily，按 trade_date 区间",
+                "name": "A股主力/分档资金流",
+                "desc": "stock_fund_flow_em_daily（日终以 Tushare 为主，可含东财），按 trade_date 区间",
                 "requires_date_range": True,
             },
         ],

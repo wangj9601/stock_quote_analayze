@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
-"""同花顺个股资金流日采：stock_fund_flow_individual(symbol='即时') → stock_fund_flow_daily。"""
+"""个股资金流日采：同花顺「即时」优先，免费页空表时用新浪资金流 → stock_fund_flow_daily。"""
 
 from __future__ import annotations
 
+import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from io import StringIO
 from typing import Any, Dict, List, Optional
 
-import akshare as ak
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 from sqlalchemy import text
 
 from backend_core.database.db import SessionLocal
@@ -19,6 +23,23 @@ logger = logging.getLogger(__name__)
 _AMOUNT_RE = re.compile(
     r"^\s*([+-]?\d+(?:\.\d+)?)\s*(亿|万)?\s*$",
     re.UNICODE,
+)
+
+_THS_PAGE_URL = (
+    "http://data.10jqka.com.cn/funds/ggzjl/field/zdf/order/desc/page/{}/ajax/1/free/1/"
+)
+_THS_COUNT_URL = (
+    "http://data.10jqka.com.cn/funds/ggzjl/field/code/order/desc/ajax/1/free/1/"
+)
+_SINA_MONEYFLOW_URL = (
+    "https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/"
+    "MoneyFlow.ssl_bkzj_ssggzj"
+)
+_SINA_PAGE_SIZE = 100
+_SINA_MAX_PAGES = 120
+_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
 )
 
 
@@ -155,6 +176,188 @@ def analyze_fund_flow_series(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def _ths_headers() -> Dict[str, str]:
+    import py_mini_racer
+    from akshare.datasets import get_ths_js
+
+    with open(get_ths_js("ths.js"), encoding="utf-8") as f:
+        js = f.read()
+    ctx = py_mini_racer.MiniRacer()
+    ctx.eval(js)
+    v_code = ctx.call("v")
+    return {
+        "Accept": "text/html, */*; q=0.01",
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        "hexin-v": v_code,
+        "Cookie": f"v={v_code}",
+        "Host": "data.10jqka.com.cn",
+        "Referer": "https://data.10jqka.com.cn/funds/ggzjl/",
+        "User-Agent": _UA,
+        "X-Requested-With": "XMLHttpRequest",
+    }
+
+
+def ths_page_count(html: str) -> Optional[int]:
+    """解析 span.page_info（形如 1/103）。节点缺失时返回 None，不抛异常。"""
+    soup = BeautifulSoup(html or "", "lxml")
+    node = soup.find("span", attrs={"class": "page_info"})
+    if node is None:
+        return None
+    raw = node.get_text(strip=True)
+    if "/" not in raw:
+        return None
+    try:
+        return int(raw.split("/")[-1])
+    except ValueError:
+        return None
+
+
+def ths_html_to_frame(html: str) -> pd.DataFrame:
+    """把一页资金流表格转成 DataFrame；空表返回空框。"""
+    if not html or BeautifulSoup(html, "lxml").find("td") is None:
+        return pd.DataFrame()
+    try:
+        tables = pd.read_html(StringIO(html))
+    except ValueError:
+        return pd.DataFrame()
+    if not tables:
+        return pd.DataFrame()
+    df = tables[0]
+    if df.empty:
+        return df
+    df.columns = [str(c).strip() for c in df.columns]
+    return df
+
+
+def fetch_ths_instant_dataframe(timeout: float = 20.0) -> pd.DataFrame:
+    """抓同花顺即时资金流。免费接口只回空表壳时抛 RuntimeError。"""
+    headers = _ths_headers()
+    count_resp = requests.get(_THS_COUNT_URL, headers=headers, timeout=timeout)
+    count_html = count_resp.content.decode("gbk", errors="replace")
+    page_num = ths_page_count(count_html)
+    if page_num is None:
+        page_resp = requests.get(_THS_PAGE_URL.format(1), headers=headers, timeout=timeout)
+        page_html = page_resp.content.decode("gbk", errors="replace")
+        page_num = ths_page_count(page_html)
+        frame = ths_html_to_frame(page_html)
+        if page_num is None:
+            if frame.empty:
+                raise RuntimeError(
+                    "同花顺个股资金流免费接口返回空表，缺少 page_info"
+                )
+            return frame
+    frames: List[pd.DataFrame] = []
+    for page in range(1, page_num + 1):
+        headers = _ths_headers()
+        resp = requests.get(_THS_PAGE_URL.format(page), headers=headers, timeout=timeout)
+        html = resp.content.decode("gbk", errors="replace")
+        frame = ths_html_to_frame(html)
+        if not frame.empty:
+            frames.append(frame)
+    if not frames:
+        raise RuntimeError("同花顺个股资金流分页有页码但没有数据行")
+    return pd.concat(frames, ignore_index=True)
+
+
+def _sina_a_share(symbol: str) -> bool:
+    s = str(symbol or "").strip().lower()
+    if s.startswith("sh") and len(s) >= 8 and s[2] == "6":
+        return True
+    if s.startswith("sz") and len(s) >= 8 and s[2] in ("0", "3"):
+        return True
+    if s.startswith("bj") and len(s) >= 8:
+        return True
+    return False
+
+
+def _sina_page(page: int, page_size: int, timeout: float) -> List[Dict[str, Any]]:
+    resp = requests.get(
+        _SINA_MONEYFLOW_URL,
+        params={
+            "page": page,
+            "num": page_size,
+            "sort": "netamount",
+            "asc": 0,
+            "bankuai": "",
+            "shichang": "",
+        },
+        headers={"User-Agent": _UA, "Referer": "https://vip.stock.finance.sina.com.cn/"},
+        timeout=timeout,
+    )
+    text = resp.content.decode("utf-8", errors="replace").strip()
+    if not text or text == "null":
+        return []
+    data = json.loads(text)
+    return data if isinstance(data, list) else []
+
+
+def fetch_sina_moneyflow_records(
+    page_size: int = _SINA_PAGE_SIZE,
+    max_pages: int = _SINA_MAX_PAGES,
+    timeout: float = 20.0,
+    workers: int = 8,
+) -> List[Dict[str, Any]]:
+    """按页拉取新浪全市场资金流，直到空页。"""
+    records: List[Dict[str, Any]] = []
+    page = 1
+    while page <= max_pages:
+        batch = list(range(page, min(page + workers, max_pages + 1)))
+        with ThreadPoolExecutor(max_workers=len(batch)) as pool:
+            parts = list(pool.map(lambda p: _sina_page(p, page_size, timeout), batch))
+        stop = False
+        for rows in parts:
+            if not rows:
+                stop = True
+                break
+            records.extend(rows)
+            if len(rows) < page_size:
+                stop = True
+                break
+        if stop:
+            break
+        page += workers
+    return records
+
+
+def sina_records_to_frame(records: List[Dict[str, Any]]) -> pd.DataFrame:
+    """新浪 in/out/net（元）对齐同花顺列名，只保留 A 股。"""
+    rows: List[Dict[str, Any]] = []
+    for rec in records:
+        symbol = str(rec.get("symbol") or "")
+        if not _sina_a_share(symbol):
+            continue
+        code = normalize_ths_code(symbol)
+        if not code:
+            continue
+        change = rec.get("changeratio")
+        try:
+            change_pct = float(change) * 100.0 if change not in (None, "") else None
+        except (TypeError, ValueError):
+            change_pct = None
+        rows.append(
+            {
+                "股票代码": code,
+                "股票简称": rec.get("name"),
+                "最新价": rec.get("trade"),
+                "涨跌幅": change_pct,
+                "流入资金": rec.get("inamount"),
+                "流出资金": rec.get("outamount"),
+                "净额": rec.get("netamount"),
+                "成交额": rec.get("amount"),
+            }
+        )
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).drop_duplicates(subset=["股票代码"], keep="first")
+
+
+def fetch_sina_instant_dataframe() -> pd.DataFrame:
+    frame = sina_records_to_frame(fetch_sina_moneyflow_records())
+    if frame.empty:
+        raise RuntimeError("新浪个股资金流返回空数据")
+    return frame
+
+
 class ThsFundFlowDailyCollector:
     """采集同花顺「即时」全市场流入/流出并 UPSERT 到 stock_fund_flow_daily。"""
 
@@ -163,12 +366,19 @@ class ThsFundFlowDailyCollector:
     def __init__(self, trade_date: Optional[str] = None) -> None:
         self.trade_date = trade_date or datetime.now().strftime("%Y-%m-%d")
         self.logger = logger
+        self.source = self.SOURCE
 
     def fetch_dataframe(self) -> pd.DataFrame:
-        self.logger.info("调用 ak.stock_fund_flow_individual(symbol='即时')")
-        df = ak.stock_fund_flow_individual(symbol="即时")
+        self.logger.info("抓取同花顺个股资金流即时页")
+        try:
+            df = fetch_ths_instant_dataframe()
+            self.source = "ths"
+        except Exception as exc:
+            self.logger.warning("同花顺个股资金流不可用，改用新浪资金流: %s", exc)
+            df = fetch_sina_instant_dataframe()
+            self.source = "sina"
         if df is None or df.empty:
-            raise RuntimeError("同花顺个股资金流「即时」返回空数据")
+            raise RuntimeError("个股资金流返回空数据")
         return df
 
     def dataframe_to_rows(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
@@ -212,7 +422,7 @@ class ThsFundFlowDailyCollector:
                 "change_percent": parse_ths_percent(row.get(c_chg)) if c_chg else None,
                 "turnover_rate": parse_ths_percent(row.get(c_tr)) if c_tr else None,
                 "current_price": parse_ths_amount(row.get(c_price)) if c_price else None,
-                "source": self.SOURCE,
+                "source": self.source,
                 "created_at": now,
                 "updated_at": now,
             }
@@ -331,7 +541,7 @@ class ThsFundFlowDailyCollector:
             "written": written,
             "realtime_updated": synced["realtime_updated"],
             "historical_updated": synced["historical_updated"],
-            "source": self.SOURCE,
+            "source": self.source,
         }
         self.logger.info(
             "同花顺资金流日采完成 trade_date=%s fetched=%s unique=%s written=%s "

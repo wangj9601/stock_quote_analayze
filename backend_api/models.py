@@ -538,7 +538,7 @@ class StockFundFlowDaily(Base):
 
 
 class StockFundFlowEmDaily(Base):
-    """东财个股资金流日序列：主力/超大/大/中/小单净流入（单位：元）。"""
+    """个股主力/分档资金流日序列（单位：元；日终以 Tushare 为主，亦可东财/手工；表名含 em 为历史命名）。"""
 
     __tablename__ = "stock_fund_flow_em_daily"
     code = Column(StockCodeTextPK(), primary_key=True)

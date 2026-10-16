@@ -62,8 +62,41 @@ async def get_history(code: str = Query(None, description="股票代码")):
         )
 
 
+def _series_sources_from_rows(rows: list) -> str:
+    """聚合行内 source，供 UI 展示（如 tushare+em）。"""
+    sources = sorted(
+        {
+            str(r.get("source") or "").strip()
+            for r in (rows or [])
+            if str(r.get("source") or "").strip()
+        }
+    )
+    return "+".join(sources) if sources else "stock_fund_flow_em_daily"
+
+
+def _main_force_disclaimer(series_source: str) -> str:
+    """按实际入库来源生成口径说明；日终以 Tushare 为主。"""
+    parts = {
+        p.strip().lower()
+        for p in str(series_source or "").split("+")
+        if p.strip()
+    }
+    has_ts = any(p.startswith("tushare") for p in parts)
+    has_em = "em" in parts
+    if has_ts and has_em:
+        return "订单分档净流入（日终以 Tushare moneyflow 为主，可含东财回补），非机构身份"
+    if has_ts:
+        return "订单分档净流入（Tushare moneyflow：特大单+大单≈主力），非机构身份"
+    if has_em:
+        return "订单分档净流入（东财分档），非机构身份"
+    return "订单分档净流入（日终优先 Tushare moneyflow），非机构身份"
+
+
+EMPTY_MAIN_FORCE_MSG = "暂无主力分档数据（需日终 Tushare 采集、拉取或导入）"
+
+
 def _query_em_daily_rows(db: Session, code: str, days: int = 60) -> list:
-    """从 stock_fund_flow_em_daily 读分档序列（升序）。"""
+    """从 stock_fund_flow_em_daily 读分档序列（升序；含 Tushare/东财等 source）。"""
     code_n = normalize_ths_code(code) or normalize_equity_code(code) or str(code).strip()
     days = max(1, min(int(days or 60), 250))
     rows = db.execute(
@@ -95,10 +128,10 @@ async def get_em_daily(
     days: int = Query(60, ge=1, le=250, description="回看交易日数"),
     db: Session = Depends(get_db),
 ):
-    """读取东财个股主力/分档资金流日表（本地入库）。"""
+    """读取个股主力/分档资金流日表（stock_fund_flow_em_daily，日终以 Tushare 为主）。"""
     if is_hk_equity_code(code):
         return JSONResponse(
-            {"success": False, "message": "东财主力分档仅支持 A 股"},
+            {"success": False, "message": "主力分档仅支持 A 股"},
             status_code=400,
         )
     try:
@@ -107,23 +140,24 @@ async def get_em_daily(
             return JSONResponse(
                 {
                     "success": False,
-                    "message": "暂无东财资金流分档数据（需日终采集或回填）",
+                    "message": EMPTY_MAIN_FORCE_MSG,
                 },
                 status_code=404,
             )
+        series_source = _series_sources_from_rows(series)
         return {
             "success": True,
             "data": {
                 "code": series[0].get("code") or code,
                 "days_requested": days,
-                "series_source": "stock_fund_flow_em_daily",
+                "series_source": series_source,
                 "series": series,
-                "disclaimer": "东财订单分档净流入，非机构身份",
+                "disclaimer": _main_force_disclaimer(series_source),
             },
         }
     except Exception as e:
         return JSONResponse(
-            {"success": False, "message": f"查询东财资金流失败: {e}"},
+            {"success": False, "message": f"查询主力分档资金流失败: {e}"},
             status_code=500,
         )
 
@@ -140,7 +174,7 @@ def compute_main_force_entry_response(
     if not em_series:
         return {
             "success": False,
-            "message": "暂无东财资金流分档数据（需日终采集或回填）",
+            "message": EMPTY_MAIN_FORCE_MSG,
         }
 
     first = em_series[0]["trade_date"]
@@ -212,14 +246,9 @@ def compute_main_force_entry_response(
         board_main_nets=board_nets or None,
         lookback_days=days,
     )
-    sources = sorted(
-        {
-            str(r.get("source") or "").strip()
-            for r in em_series
-            if str(r.get("source") or "").strip()
-        }
-    )
-    data["series_source"] = "+".join(sources) if sources else "stock_fund_flow_em_daily"
+    series_source = _series_sources_from_rows(em_series)
+    data["series_source"] = series_source
+    data["disclaimer"] = _main_force_disclaimer(series_source)
     return {"success": True, "data": data}
 
 

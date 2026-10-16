@@ -327,7 +327,7 @@
                         </div>
                     </div>
 
-                    <!-- 资金流向（本地入库：A股/港股日表 + 东财主力分档） -->
+                    <!-- 资金流向（本地入库：A股/港股日表 + 主力分档，日终以 Tushare 为主） -->
                     <div class="tab-panel" id="flow">
                         <div class="flow-summary">
                             <div class="flow-item">
@@ -351,8 +351,8 @@
                             <div id="flowChart" style="height: 400px;"></div>
                         </div>
                         <div class="flow-em-section" id="flowEmSection">
-                            <h4 class="flow-em-title">东财主力 / 大单净流入</h4>
-                            <p class="flow-em-hint" id="flowEmHint">口径：东财订单分档（非机构身份）。高亮区间为最近入场窗口。</p>
+                            <h4 class="flow-em-title">主力 / 大单净流入</h4>
+                            <p class="flow-em-hint" id="flowEmHint">口径：订单分档（日终优先 Tushare moneyflow，非机构身份）。高亮区间为最近入场窗口。</p>
                             <div id="flowEmMfeSummary" class="flow-em-mfe" style="display:none;"></div>
                             <div class="flow-chart">
                                 <div id="flowEmChart" style="height: 360px;"></div>

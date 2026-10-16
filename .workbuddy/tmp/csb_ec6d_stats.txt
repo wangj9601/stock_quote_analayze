@@ -1,0 +1,58 @@
+COLS ['股票代码', '股票名称', '信号日期', '信号类型', '得分', '入场日期', '入场价', '观察期最高价', '观察期最大涨幅(%)', '是否命中目标', '命中日期', '出场日期', '出场价', '出场原因', '盈亏比例(%)', '持有天数', '观察期天数', '粘合天数', '粘合带宽', '回踩次数', '放量倍数', '5/20量比', '通道上轨', '通道下轨', '基准低点', '粘合天数分', '粘合带宽分', '回踩分', '放量分', '满观察期盈亏(%)', '满观察期收盘', 'hit_target_lower', 'hit_target_upper', 'hit_in_band', 'f_vol_ratio_5_20']
+N 26
+compound 58.6806% maxdd -29.86%
+HIT 是 n=11 avg_pnl=9.45 avg_mfe=25.91 win=9
+HIT 否 n=15 avg_pnl=-2.88 avg_mfe=4.00 win=4
+GIVEBACK hit trades
+悦心健康 mfe=11.71 pnl=0.9 give=10.81 exit=阶梯跟踪止损 hold=8
+山东玻纤 mfe=13.19 pnl=-6.81 give=20.00 exit=阶梯跟踪止损 hold=8
+南华期货 mfe=53.54 pnl=15.55 give=37.99 exit=派发离场 hold=2
+华脉科技 mfe=15.56 pnl=8.33 give=7.23 exit=派发离场 hold=2
+金牛化工 mfe=33.12 pnl=9.94 give=23.18 exit=派发离场 hold=2
+华电能源 mfe=14.23 pnl=11.07 give=3.16 exit=派发离场 hold=9
+九鼎新材 mfe=46.91 pnl=39.26 give=7.65 exit=派发离场 hold=6
+康欣新材 mfe=16.3 pnl=14.11 give=2.19 exit=派发离场 hold=9
+华瓷股份 mfe=11.45 pnl=1.18 give=10.27 exit=到期平仓 hold=10
+德尔未来 mfe=32.25 pnl=-5.54 give=37.79 exit=假突破 hold=2
+德尔未来 mfe=36.7 pnl=15.99 give=20.71 exit=派发离场 hold=4
+LOSERS
+⁠301158 德石股份 2025-06-13 score=75.81 mfe=9.1 hit=否 exit=基准止损 pnl=-14.23 full=-13.83 vol=8.4054 band=0.0224 touch=1 days=20
+⁠000973 佛塑科技 2025-06-26 score=69.97 mfe=0.12 hit=否 exit=基准止损 pnl=-14.0 full=-15.25 vol=2.6527 band=0.0243 touch=2 days=17
+⁠002095 生 意 宝 2026-02-26 score=95.44 mfe=2.1 hit=否 exit=基准止损 pnl=-9.36 full=-5.37 vol=4.1918 band=0.003 touch=3 days=21
+⁠605006 山东玻纤 2025-06-03 score=93.6 mfe=13.19 hit=是 exit=阶梯跟踪止损 pnl=-6.81 full=-5.82 vol=5.4223 band=0.0113 touch=3 days=15
+⁠300320 海达股份 2025-06-09 score=80.23 mfe=0.09 hit=否 exit=假突破 pnl=-6.37 full=-15.56 vol=2.4463 band=0.0225 touch=2 days=17
+⁠002631 德尔未来 2026-02-27 score=75.77 mfe=32.25 hit=是 exit=假突破 pnl=-5.54 full=29.48 vol=2.2505 band=0.0187 touch=2 days=16
+⁠600467 好当家 2025-07-02 score=100.0 mfe=0.0 hit=否 exit=到期平仓 pnl=-4.4 full=-4.4 vol=8.4676 band=0.0157 touch=1 days=49
+⁠000850 华茂股份 2025-06-26 score=89.14 mfe=3.3 hit=否 exit=基准止损 pnl=-3.3 full=-3.52 vol=10.7905 band=0.0114 touch=3 days=28
+⁠002820 桂发祥 2025-06-25 score=100.0 mfe=4.53 hit=否 exit=阶梯跟踪止损 pnl=-2.77 full=-2.77 vol=4.7438 band=0.0107 touch=4 days=28
+⁠300836 佰奥智能 2025-12-25 score=88.4 mfe=1.76 hit=否 exit=到期平仓 pnl=-1.69 full=-1.69 vol=2.2115 band=0.0353 touch=4 days=22
+⁠603333 福华尚纬 2025-09-01 score=91.44 mfe=8.2 hit=否 exit=阶梯跟踪止损 pnl=-1.01 full=-5.39 vol=4.2343 band=0.0136 touch=2 days=18
+⁠301105 鸿铭股份 2025-12-23 score=80.72 mfe=0.02 hit=否 exit=到期平仓 pnl=-0.83 full=-0.83 vol=3.1394 band=0.0073 touch=1 days=17
+⁠002479 富春环保 2025-07-07 score=73.24 mfe=3.33 hit=否 exit=阶梯跟踪止损 pnl=-0.56 full=0.74 vol=3.0741 band=0.0153 touch=1 days=28
+⁠002162 悦心健康 2025-05-30 score=88.27 mfe=11.71 hit=是 exit=阶梯跟踪止损 pnl=0.9 full=-3.15 vol=2.6771 band=0.0096 touch=2 days=22
+⁠300777 中简科技 2025-06-25 score=93.0 mfe=2.93 hit=否 exit=到期平仓 pnl=1.14 full=1.14 vol=2.3175 band=0.0053 touch=3 days=24
+⁠600819 耀皮玻璃 2025-09-09 score=82.59 mfe=8.29 hit=否 exit=到期平仓 pnl=1.14 full=1.14 vol=3.352 band=0.0166 touch=3 days=17
+⁠001216 华瓷股份 2026-02-27 score=79.67 mfe=11.45 hit=是 exit=到期平仓 pnl=1.18 full=1.18 vol=4.0538 band=0.0375 touch=3 days=15
+⁠000518 四环生物 2025-10-09 score=86.66 mfe=8.05 hit=否 exit=到期平仓 pnl=5.93 full=5.93 vol=2.6203 band=0.0158 touch=2 days=21
+⁠300012 华测检测 2026-01-05 score=82.35 mfe=8.17 hit=否 exit=到期平仓 pnl=7.11 full=7.11 vol=3.062 band=0.0268 touch=2 days=30
+⁠603042 华脉科技 2025-06-05 score=75.05 mfe=15.56 hit=是 exit=派发离场 pnl=8.33 full=-4.78 vol=4.1604 band=0.034 touch=2 days=17
+⁠600722 金牛化工 2025-06-13 score=77.58 mfe=33.12 hit=是 exit=派发离场 pnl=9.94 full=-0.95 vol=4.2523 band=0.0131 touch=1 days=18
+⁠600726 华电能源 2025-07-01 score=88.09 mfe=14.23 hit=是 exit=派发离场 pnl=11.07 full=3.95 vol=5.2956 band=0.0136 touch=3 days=16
+⁠600076 康欣新材 2025-12-19 score=92.67 mfe=16.3 hit=是 exit=派发离场 pnl=14.11 full=13.79 vol=4.529 band=0.0098 touch=2 days=18
+⁠603093 南华期货 2025-06-03 score=71.51 mfe=53.54 hit=是 exit=派发离场 pnl=15.55 full=35.05 vol=2.2806 band=0.0191 touch=1 days=26
+⁠002631 德尔未来 2026-03-04 score=73.52 mfe=36.7 hit=是 exit=派发离场 pnl=15.99 full=24.58 vol= band=0.0187 touch=3 days=16
+⁠002201 九鼎新材 2025-07-01 score=80.38 mfe=46.91 hit=是 exit=派发离场 pnl=39.26 full=19.41 vol=2.6064 band=0.0273 touch=2 days=18
+vol<2.5 n=5 avg=0.62 win=0.40
+2.5-4 n=8 avg=4.87 win=0.62
+4-6 n=9 avg=2.74 win=0.56
+>6 n=3 avg=-7.31 win=0.00
+band<1.2% n=8 avg=-0.86 win=0.38
+1.2-2% n=10 avg=4.81 win=0.60
+>2% n=8 avg=2.45 win=0.50
+touch=1 n=6 avg=0.91 win=0.33
+touch=2 n=10 avg=4.87 win=0.60
+touch=3 n=8 avg=1.38 win=0.62
+touch=4 n=2 avg=-2.23 win=0.00
+pf 1.86 expectancy 2.34
+top2 share 41.97% top3 53.78%
+overlap {'2025-06-04': ['山东玻纤', '南华期货'], '2025-06-16': ['金牛化工', '德石股份'], '2025-06-26': ['桂发祥', '中简科技'], '2025-06-27': ['华茂股份', '佛塑科技'], '2025-07-02': ['华电能源', '九鼎新材'], '2026-03-02': ['华瓷股份', '德尔未来']}

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 WF_NAME = "A股收盘后标准流程"
 NODE_KEY = "em_stock_fund_flow_daily"
-DISPLAY_NAME = "东财个股主力资金流日采"
+DISPLAY_NAME = "东财个股分档资金流日采（兜底）"
 AFTER_NODE = "ths_fund_flow_daily"
 
 

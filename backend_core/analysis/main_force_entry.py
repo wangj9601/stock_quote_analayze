@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-"""主力入场判定：东财主力净流入窗口 + 净流入加权均价 + Volume Profile 旁证。
+"""主力入场判定：分档主力净流入窗口 + 净流入加权均价 + Volume Profile 旁证。
 
-口径：主力 = 东财按成交额分档推断的主力净流入（≈超大单+大单），非账户归属。
+口径：主力 = 订单分档主力净流入（日终以 Tushare moneyflow 为准，≈特大单+大单；
+亦可含东财行），非账户归属。数据表 stock_fund_flow_em_daily。
 """
 
 from __future__ import annotations
@@ -18,7 +19,8 @@ ROLL_MIN_ENTRY_DAYS = 3
 HIGH_CATCH_PCT = 0.03  # 成本重心高于末收盘超过 3% → high_catch
 
 DISCLAIMER = (
-    "订单分档代理，非机构身份；价位为加权均价近似，非筹码分布"
+    "订单分档代理（日终优先 Tushare moneyflow），非机构身份；"
+    "价位为加权均价近似，非筹码分布"
 )
 
 VERDICT_LABELS = {

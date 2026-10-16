@@ -1,0 +1,590 @@
+N 535
+COLS ['股票代码', '股票名称', '信号日期', '信号类型', '得分', '入场日期', '入场价', '观察期最高价', '观察期最大涨幅(%)', '是否命中目标', '命中日期', '出场日期', '出场价', '出场原因', '盈亏比例(%)', '持有天数', '观察期天数', '粘合天数', '粘合带宽', '回踩次数', '放量倍数', '5/20量比', '通道上轨', '通道下轨', '基准低点', '粘合天数分', '粘合带宽分', '回踩分', '放量分', '满观察期盈亏(%)', '满观察期收盘', 'hit_target_lower', 'hit_target_upper', 'hit_in_band', 'f_vol_ratio_5_20']
+signal 2025-04-21 ~ 2026-04-13 entry 2025-04-22 ~ 2026-04-14
+mean=0.551 med=-0.330 std=5.971 t=2.14 se=0.258
+win=251 loss=276 wr=46.92% avg_win=4.76 avg_loss=-3.26 pf=1.33
+mfe_avg=5.93 full_avg=1.15 full_med=0.74 full_win=295
+sum=294.92 max=41.89 min=-27.55
+drop_top1 n=534 mean=0.474 sum=253.03
+drop_top2 n=533 mean=0.401 sum=213.77
+drop_top3 n=532 mean=0.338 sum=179.73
+sig Counter({'CSB_PROBE': 518, 'CSB_BREAKOUT': 16, 'CSB_LPS': 1})
+hit Counter({'否': 443, '是': 92})
+exit Counter({'基准止损': 165, '到期平仓': 152, '阶梯跟踪止损': 124, '通道失效': 46, '派发离场': 46, '假突破': 2})
+EXIT 基准止损 n=165 avg=-3.92 sum=-646.68 win=0
+EXIT 到期平仓 n=152 avg=3.07 sum=467.03 win=125
+EXIT 阶梯跟踪止损 n=124 avg=-0.19 sum=-23.27 win=76
+EXIT 通道失效 n=46 avg=-1.70 sum=-78.00 win=4
+EXIT 派发离场 n=46 avg=12.78 sum=587.75 win=46
+EXIT 假突破 n=2 avg=-5.96 sum=-11.91 win=0
+HIT 是 n=92 avg=7.93 mfe=17.36 win=80
+HIT 否 n=443 avg=-0.98 mfe=3.56 win=171
+SCORE 0-70 n=32 avg=0.02 win=0.38
+SCORE 70-80 n=260 avg=0.47 win=0.44
+SCORE 80-90 n=203 avg=0.80 win=0.51
+SCORE 90-101 n=40 avg=0.27 win=0.50
+vol<2.5 n=521 avg=0.46 win=0.47
+2.5-4 n=5 avg=10.52 win=0.80
+4-6 n=6 avg=0.57 win=0.50
+>6 n=2 avg=-8.77 win=0.00
+missing_vol 1
+band<1.2% n=71 avg=-0.10 win=0.44
+1.2-2% n=146 avg=0.06 win=0.40
+>2% n=318 avg=0.92 win=0.51
+touch=1 n=2 avg=-7.53 win=0.00
+touch=2 n=145 avg=0.38 win=0.39
+touch=3 n=187 avg=0.47 win=0.48
+touch=4 n=107 avg=0.42 win=0.48
+touch=5 n=61 avg=1.19 win=0.56
+touch=6 n=31 avg=1.71 win=0.61
+touch=7 n=1 avg=-3.26 win=0.00
+touch=8 n=1 avg=0.34 win=1.00
+M 2025-04 n=3 avg=-1.08 sum=-3.25 win=0
+M 2025-05 n=37 avg=0.93 sum=34.37 win=19
+M 2025-06 n=144 avg=0.94 sum=134.76 win=70
+M 2025-07 n=64 avg=1.91 sum=121.92 win=40
+M 2025-08 n=52 avg=3.10 sum=161.22 win=41
+M 2025-09 n=48 avg=-0.69 sum=-33.17 win=21
+M 2025-10 n=24 avg=2.58 sum=61.82 win=13
+M 2025-11 n=73 avg=-1.01 sum=-73.69 win=21
+M 2025-12 n=23 avg=1.27 sum=29.26 win=9
+M 2026-01 n=9 avg=0.67 sum=6.00 win=4
+M 2026-02 n=41 avg=-2.82 sum=-115.71 win=8
+M 2026-03 n=14 avg=-2.74 sum=-38.40 win=3
+M 2026-04 n=3 avg=3.26 sum=9.79 win=2
+---TRADES---
+⁠301339 苏交数智 sig=2025-05-16 typ=CSB_PROBE sc=72.34 mfe=6.23 hit=否 exit=阶梯跟踪止损 pnl=-27.55 full=-26.92 hold=7 vol=0.7838 band=0.0186 touch=3 entry=2025-05-19
+⁠300781 因赛集团 sig=2025-07-07 typ=CSB_PROBE sc=72.14 mfe=9.66 hit=否 exit=阶梯跟踪止损 pnl=-27.38 full=-27.3 hold=7 vol=0.5072 band=0.0243 touch=3 entry=2025-07-08
+⁠001282 三联锻造 sig=2025-06-20 typ=CSB_PROBE sc=83.45 mfe=9.01 hit=否 exit=阶梯跟踪止损 pnl=-23.91 full=-25.34 hold=4 vol=0.6129 band=0.0342 touch=4 entry=2025-06-23
+⁠603151 邦基科技 sig=2025-11-07 typ=CSB_PROBE sc=75.82 mfe=1.18 hit=否 exit=基准止损 pnl=-15.58 full=-27.9 hold=2 vol=0.7034 band=0.0127 touch=2 entry=2025-11-10
+⁠301158 德石股份 sig=2025-06-13 typ=CSB_BREAKOUT sc=75.81 mfe=9.1 hit=否 exit=基准止损 pnl=-14.23 full=-13.83 hold=7 vol=8.4054 band=0.0224 touch=1 entry=2025-06-16
+⁠301083 百胜智能 sig=2026-03-19 typ=CSB_PROBE sc=75.12 mfe=0.0 hit=否 exit=基准止损 pnl=-12.59 full=-14.4 hold=2 vol=0.7279 band=0.0291 touch=5 entry=2026-03-20
+⁠603136 天目湖 sig=2026-03-11 typ=CSB_PROBE sc=86.66 mfe=2.97 hit=否 exit=基准止损 pnl=-9.94 full=-2.12 hold=8 vol=0.7265 band=0.0213 touch=3 entry=2026-03-12
+⁠603280 南方路机 sig=2026-02-25 typ=CSB_PROBE sc=73.09 mfe=0.58 hit=否 exit=基准止损 pnl=-9.65 full=-5.16 hold=4 vol=0.6442 band=0.0156 touch=3 entry=2026-02-26
+⁠002095 生 意 宝 sig=2026-02-26 typ=CSB_BREAKOUT sc=95.44 mfe=2.1 hit=否 exit=基准止损 pnl=-9.36 full=-5.37 hold=4 vol=4.1918 band=0.003 touch=3 entry=2026-02-27
+⁠605068 明新旭腾 sig=2025-12-29 typ=CSB_PROBE sc=69.69 mfe=0.61 hit=否 exit=基准止损 pnl=-8.68 full=-8.29 hold=2 vol=0.7002 band=0.0292 touch=3 entry=2025-12-30
+⁠301067 显盈科技 sig=2026-02-12 typ=CSB_PROBE sc=74.01 mfe=2.24 hit=否 exit=基准止损 pnl=-7.86 full=-1.09 hold=7 vol=0.5752 band=0.036 touch=3 entry=2026-02-13
+⁠688628 优利德 sig=2025-11-11 typ=CSB_PROBE sc=82.7 mfe=0.38 hit=否 exit=基准止损 pnl=-7.55 full=-8.16 hold=5 vol=0.6834 band=0.0292 touch=3 entry=2025-11-12
+⁠000952 广济药业 sig=2026-02-13 typ=CSB_PROBE sc=72.78 mfe=1.12 hit=否 exit=基准止损 pnl=-7.47 full=-5.6 hold=6 vol=0.6772 band=0.0169 touch=3 entry=2026-02-24
+⁠301290 东星医疗 sig=2025-10-27 typ=CSB_PROBE sc=95.1 mfe=0.44 hit=否 exit=基准止损 pnl=-7.22 full=-3.66 hold=3 vol=0.5399 band=0.0116 touch=3 entry=2025-10-28
+⁠301355 南王科技 sig=2026-02-10 typ=CSB_PROBE sc=72.08 mfe=1.86 hit=否 exit=基准止损 pnl=-7.14 full=-7.66 hold=9 vol=0.7927 band=0.0317 touch=6 entry=2026-02-11
+⁠001298 好上好 sig=2026-02-26 typ=CSB_PROBE sc=76.89 mfe=1.59 hit=否 exit=基准止损 pnl=-7.11 full=-2.81 hold=3 vol=0.6255 band=0.0132 touch=2 entry=2026-02-27
+⁠603375 盛景微 sig=2026-02-25 typ=CSB_PROBE sc=83.84 mfe=2.25 hit=否 exit=基准止损 pnl=-6.88 full=-0.36 hold=5 vol=0.5413 band=0.0126 touch=4 entry=2026-02-26
+⁠300640 德艺文创 sig=2026-02-27 typ=CSB_PROBE sc=84.51 mfe=0.26 hit=否 exit=基准止损 pnl=-6.83 full=-5.03 hold=2 vol=0.7087 band=0.0299 touch=4 entry=2026-03-02
+⁠600697 欧亚集团 sig=2026-02-13 typ=CSB_PROBE sc=84.8 mfe=1.96 hit=否 exit=基准止损 pnl=-6.82 full=-5.37 hold=6 vol=0.6922 band=0.0128 touch=2 entry=2026-02-24
+⁠605006 山东玻纤 sig=2025-06-03 typ=CSB_BREAKOUT sc=93.6 mfe=13.19 hit=是 exit=阶梯跟踪止损 pnl=-6.81 full=-5.82 hold=8 vol=5.4223 band=0.0113 touch=3 entry=2025-06-04
+⁠002391 长青股份 sig=2025-09-15 typ=CSB_PROBE sc=79.56 mfe=1.13 hit=否 exit=基准止损 pnl=-6.77 full=-3.87 hold=6 vol=0.7194 band=0.0114 touch=4 entry=2025-09-16
+⁠000409 云鼎科技 sig=2026-02-25 typ=CSB_PROBE sc=84.23 mfe=1.87 hit=否 exit=基准止损 pnl=-6.47 full=-2.81 hold=4 vol=0.6711 band=0.0167 touch=4 entry=2026-02-26
+⁠000715 中兴商业 sig=2026-02-26 typ=CSB_PROBE sc=96.37 mfe=1.25 hit=否 exit=基准止损 pnl=-6.39 full=-4.36 hold=3 vol=0.7235 band=0.0065 touch=3 entry=2026-02-27
+⁠300320 海达股份 sig=2025-06-09 typ=CSB_BREAKOUT sc=80.23 mfe=0.09 hit=否 exit=假突破 pnl=-6.37 full=-15.56 hold=1 vol=2.4463 band=0.0225 touch=2 entry=2025-06-10
+⁠300040 九洲集团 sig=2025-09-05 typ=CSB_PROBE sc=91.96 mfe=2.47 hit=否 exit=基准止损 pnl=-6.16 full=-6.16 hold=10 vol=0.5618 band=0.0362 touch=4 entry=2025-09-08
+⁠430718 合肥高科 sig=2025-06-17 typ=CSB_PROBE sc=77.19 mfe=3.56 hit=否 exit=基准止损 pnl=-5.7 full=2.14 hold=3 vol=0.6905 band=0.0208 touch=5 entry=2025-06-18
+⁠000633 合金投资 sig=2026-02-26 typ=CSB_PROBE sc=77.64 mfe=2.77 hit=否 exit=基准止损 pnl=-5.67 full=-7.18 hold=4 vol=0.6461 band=0.0095 touch=5 entry=2026-02-27
+⁠601126 四方股份 sig=2025-05-19 typ=CSB_PROBE sc=80.53 mfe=1.59 hit=否 exit=基准止损 pnl=-5.65 full=-6.83 hold=4 vol=0.6647 band=0.0139 touch=3 entry=2025-05-20
+⁠002631 德尔未来 sig=2026-02-27 typ=CSB_BREAKOUT sc=75.77 mfe=32.25 hit=是 exit=假突破 pnl=-5.54 full=29.48 hold=2 vol=2.2505 band=0.0187 touch=2 entry=2026-03-02
+⁠600250 南京商旅 sig=2026-02-24 typ=CSB_PROBE sc=73.82 mfe=1.84 hit=否 exit=基准止损 pnl=-5.44 full=0.88 hold=5 vol=0.6234 band=0.0255 touch=2 entry=2026-02-25
+⁠000978 桂林旅游 sig=2025-12-02 typ=CSB_PROBE sc=83.79 mfe=0.87 hit=否 exit=基准止损 pnl=-5.24 full=-4.37 hold=8 vol=0.7976 band=0.0129 touch=5 entry=2025-12-03
+⁠688619 罗普特 sig=2025-11-07 typ=CSB_PROBE sc=76.68 mfe=0.75 hit=否 exit=基准止损 pnl=-5.2 full=-16.91 hold=3 vol=0.698 band=0.0133 touch=2 entry=2025-11-10
+⁠600621 华鑫股份 sig=2025-11-17 typ=CSB_PROBE sc=86.07 mfe=1.31 hit=否 exit=通道失效 pnl=-5.12 full=-3.68 hold=4 vol=0.5582 band=0.0357 touch=6 entry=2025-11-18
+⁠300994 久祺股份 sig=2025-11-10 typ=CSB_PROBE sc=79.81 mfe=1.53 hit=否 exit=基准止损 pnl=-5.09 full=-8.54 hold=6 vol=0.5972 band=0.0392 touch=4 entry=2025-11-11
+⁠605577 龙版传媒 sig=2025-11-13 typ=CSB_PROBE sc=75.92 mfe=2.22 hit=否 exit=基准止损 pnl=-5.06 full=-4.16 hold=6 vol=0.5694 band=0.0267 touch=2 entry=2025-11-14
+⁠002523 天桥起重 sig=2025-06-17 typ=CSB_PROBE sc=87.47 mfe=2.8 hit=否 exit=基准止损 pnl=-5.04 full=2.52 hold=3 vol=0.7357 band=0.0133 touch=5 entry=2025-06-18
+⁠002927 泰永长征 sig=2025-06-18 typ=CSB_PROBE sc=77.03 mfe=3.23 hit=否 exit=基准止损 pnl=-5.02 full=2.87 hold=2 vol=0.5246 band=0.0287 touch=3 entry=2025-06-19
+⁠600368 五洲交通 sig=2025-06-10 typ=CSB_PROBE sc=74.47 mfe=1.14 hit=否 exit=基准止损 pnl=-5.01 full=-3.64 hold=8 vol=0.4771 band=0.0341 touch=3 entry=2025-06-11
+⁠000801 四川九洲 sig=2025-06-17 typ=CSB_PROBE sc=81.46 mfe=4.18 hit=否 exit=基准止损 pnl=-4.96 full=0.46 hold=3 vol=0.5308 band=0.0254 touch=3 entry=2025-06-18
+⁠600072 中船科技 sig=2025-09-16 typ=CSB_PROBE sc=83.98 mfe=2.44 hit=否 exit=通道失效 pnl=-4.96 full=-3.7 hold=7 vol=0.6126 band=0.0361 touch=6 entry=2025-09-17
+⁠600962 国投中鲁 sig=2025-11-11 typ=CSB_PROBE sc=86.47 mfe=1.8 hit=否 exit=基准止损 pnl=-4.96 full=-5.53 hold=6 vol=0.6677 band=0.0141 touch=3 entry=2025-11-12
+⁠000721 西安饮食 sig=2025-05-14 typ=CSB_PROBE sc=74.33 mfe=2.76 hit=否 exit=基准止损 pnl=-4.86 full=-3.65 hold=7 vol=0.5362 band=0.0347 touch=3 entry=2025-05-15
+⁠002479 富春环保 sig=2025-06-17 typ=CSB_PROBE sc=77.42 mfe=0.2 hit=否 exit=基准止损 pnl=-4.7 full=-0.59 hold=3 vol=0.7342 band=0.0103 touch=4 entry=2025-06-18
+⁠600579 中化装备 sig=2025-06-17 typ=CSB_PROBE sc=79.07 mfe=6.34 hit=否 exit=基准止损 pnl=-4.62 full=5.68 hold=3 vol=0.6341 band=0.0157 touch=3 entry=2025-06-18
+⁠003003 天元股份 sig=2025-09-16 typ=CSB_PROBE sc=83.31 mfe=0.08 hit=否 exit=基准止损 pnl=-4.56 full=-4.48 hold=3 vol=0.7895 band=0.0187 touch=2 entry=2025-09-17
+⁠600713 南京医药 sig=2026-02-27 typ=CSB_PROBE sc=67.64 mfe=0.18 hit=否 exit=基准止损 pnl=-4.55 full=-1.27 hold=3 vol=0.633 band=0.0214 touch=2 entry=2026-03-02
+⁠301376 致欧科技 sig=2025-11-11 typ=CSB_PROBE sc=77.28 mfe=2.08 hit=否 exit=基准止损 pnl=-4.53 full=-4.79 hold=7 vol=0.6275 band=0.0389 touch=4 entry=2025-11-12
+⁠002361 神剑股份 sig=2025-06-17 typ=CSB_PROBE sc=71.41 mfe=6.0 hit=否 exit=基准止损 pnl=-4.5 full=3.67 hold=2 vol=0.6104 band=0.0272 touch=3 entry=2025-06-18
+⁠300194 福安药业 sig=2026-02-26 typ=CSB_PROBE sc=87.81 mfe=0.45 hit=否 exit=基准止损 pnl=-4.5 full=-3.83 hold=3 vol=0.5942 band=0.0288 touch=4 entry=2026-02-27
+⁠002561 徐家汇 sig=2026-02-25 typ=CSB_PROBE sc=78.87 mfe=0.0 hit=否 exit=基准止损 pnl=-4.45 full=-2.74 hold=4 vol=0.659 band=0.0325 touch=5 entry=2026-02-26
+⁠601788 光大证券 sig=2025-11-12 typ=CSB_PROBE sc=87.16 mfe=2.41 hit=否 exit=基准止损 pnl=-4.44 full=-5.37 hold=8 vol=0.5958 band=0.0314 touch=4 entry=2025-11-13
+⁠002302 西部建设 sig=2025-11-17 typ=CSB_PROBE sc=85.8 mfe=0.15 hit=否 exit=基准止损 pnl=-4.43 full=-4.87 hold=2 vol=0.6756 band=0.0088 touch=2 entry=2025-11-18
+⁠000417 合百集团 sig=2025-06-12 typ=CSB_PROBE sc=81.63 mfe=1.42 hit=否 exit=基准止损 pnl=-4.42 full=0.35 hold=5 vol=0.795 band=0.0319 touch=4 entry=2025-06-13
+⁠600727 鲁北化工 sig=2025-09-16 typ=CSB_PROBE sc=75.92 mfe=0.65 hit=否 exit=基准止损 pnl=-4.42 full=-3.12 hold=5 vol=0.4401 band=0.0283 touch=3 entry=2025-09-17
+⁠600186 莲花控股 sig=2025-05-19 typ=CSB_PROBE sc=66.06 mfe=1.1 hit=否 exit=基准止损 pnl=-4.39 full=-3.92 hold=4 vol=0.577 band=0.0374 touch=2 entry=2025-05-20
+⁠002713 东易日盛 sig=2025-06-25 typ=CSB_PROBE sc=80.91 mfe=1.74 hit=否 exit=基准止损 pnl=-4.36 full=-1.31 hold=2 vol=0.5746 band=0.0243 touch=5 entry=2025-06-26
+⁠000850 华茂股份 sig=2025-06-10 typ=CSB_PROBE sc=73.08 mfe=2.41 hit=否 exit=基准止损 pnl=-4.34 full=-1.45 hold=7 vol=0.4749 band=0.0093 touch=2 entry=2025-06-11
+⁠603586 金麒麟 sig=2025-11-11 typ=CSB_PROBE sc=86.16 mfe=0.26 hit=否 exit=基准止损 pnl=-4.26 full=-5.42 hold=6 vol=0.714 band=0.0353 touch=4 entry=2025-11-12
+⁠600300 维维股份 sig=2025-06-17 typ=CSB_PROBE sc=80.64 mfe=0.28 hit=否 exit=基准止损 pnl=-4.25 full=-2.55 hold=2 vol=0.4933 band=0.0238 touch=3 entry=2025-06-18
+⁠002972 科安达 sig=2025-11-12 typ=CSB_PROBE sc=77.75 mfe=2.24 hit=否 exit=基准止损 pnl=-4.24 full=-4.4 hold=8 vol=0.7453 band=0.025 touch=3 entry=2025-11-13
+⁠688001 华兴源创 sig=2025-11-14 typ=CSB_PROBE sc=72.98 mfe=0.87 hit=否 exit=基准止损 pnl=-4.22 full=-3.52 hold=4 vol=0.6195 band=0.0329 touch=4 entry=2025-11-17
+⁠002419 天虹股份 sig=2026-02-26 typ=CSB_PROBE sc=75.74 mfe=0.88 hit=否 exit=基准止损 pnl=-4.22 full=-1.58 hold=3 vol=0.6753 band=0.0147 touch=3 entry=2026-02-27
+⁠000782 恒申新材 sig=2025-06-09 typ=CSB_PROBE sc=74.1 mfe=2.6 hit=否 exit=基准止损 pnl=-4.2 full=-4.0 hold=7 vol=0.6702 band=0.0196 touch=2 entry=2025-06-10
+⁠600916 中国黄金 sig=2025-11-11 typ=CSB_PROBE sc=88.22 mfe=0.12 hit=否 exit=基准止损 pnl=-4.18 full=-3.7 hold=8 vol=0.6262 band=0.0151 touch=3 entry=2025-11-12
+⁠002692 远程股份 sig=2025-06-17 typ=CSB_PROBE sc=67.3 mfe=2.27 hit=否 exit=基准止损 pnl=-4.12 full=1.24 hold=3 vol=0.5428 band=0.0228 touch=2 entry=2025-06-18
+⁠600641 先导基电 sig=2025-05-12 typ=CSB_PROBE sc=76.11 mfe=1.93 hit=否 exit=基准止损 pnl=-4.07 full=-4.14 hold=4 vol=0.7934 band=0.026 touch=2 entry=2025-05-13
+⁠002753 永东股份 sig=2025-09-08 typ=CSB_PROBE sc=68.56 mfe=1.54 hit=否 exit=基准止损 pnl=-4.07 full=-3.09 hold=9 vol=0.698 band=0.0225 touch=2 entry=2025-09-09
+⁠688695 中创股份 sig=2025-11-14 typ=CSB_PROBE sc=69.56 mfe=1.79 hit=否 exit=基准止损 pnl=-4.03 full=-3.58 hold=4 vol=0.6018 band=0.0186 touch=2 entry=2025-11-17
+⁠600191 华资实业 sig=2025-05-29 typ=CSB_PROBE sc=77.93 mfe=2.14 hit=否 exit=到期平仓 pnl=-4.02 full=-4.02 hold=10 vol=0.6506 band=0.0179 touch=4 entry=2025-05-30
+⁠601002 XD晋亿实 sig=2025-06-18 typ=CSB_PROBE sc=74.35 mfe=3.76 hit=否 exit=基准止损 pnl=-3.97 full=3.34 hold=2 vol=0.7651 band=0.0322 touch=4 entry=2025-06-19
+⁠000601 韶能股份 sig=2025-09-17 typ=CSB_PROBE sc=73.12 mfe=0.0 hit=否 exit=基准止损 pnl=-3.95 full=-4.14 hold=3 vol=0.4851 band=0.0235 touch=2 entry=2025-09-18
+⁠600356 恒丰纸业 sig=2025-11-11 typ=CSB_PROBE sc=76.5 mfe=0.31 hit=否 exit=基准止损 pnl=-3.95 full=-8.22 hold=6 vol=0.7512 band=0.026 touch=3 entry=2025-11-12
+⁠000686 东北证券 sig=2026-03-02 typ=CSB_PROBE sc=71.84 mfe=0.79 hit=否 exit=基准止损 pnl=-3.94 full=-3.49 hold=3 vol=0.7032 band=0.0326 touch=2 entry=2026-03-03
+⁠000570 苏常柴Ａ sig=2025-06-10 typ=CSB_PROBE sc=69.48 mfe=3.57 hit=否 exit=基准止损 pnl=-3.93 full=2.68 hold=8 vol=0.7939 band=0.0189 touch=2 entry=2025-06-11
+⁠603117 万林物流 sig=2025-07-02 typ=CSB_PROBE sc=80.61 mfe=0.81 hit=否 exit=基准止损 pnl=-3.89 full=-2.76 hold=6 vol=0.7189 band=0.0096 touch=3 entry=2025-07-03
+⁠601099 太平洋 sig=2026-02-24 typ=CSB_PROBE sc=76.0 mfe=2.43 hit=否 exit=基准止损 pnl=-3.88 full=-2.43 hold=6 vol=0.5993 band=0.016 touch=2 entry=2026-02-25
+⁠300780 德恩精工 sig=2025-06-17 typ=CSB_PROBE sc=75.63 mfe=9.65 hit=否 exit=基准止损 pnl=-3.86 full=6.39 hold=3 vol=0.7648 band=0.0247 touch=3 entry=2025-06-18
+⁠600892 大晟文化 sig=2026-04-01 typ=CSB_PROBE sc=75.93 mfe=0.82 hit=否 exit=基准止损 pnl=-3.81 full=-0.27 hold=3 vol=0.6366 band=0.0259 touch=4 entry=2026-04-02
+⁠603912 佳力图 sig=2025-06-17 typ=CSB_PROBE sc=73.03 mfe=2.83 hit=否 exit=基准止损 pnl=-3.77 full=1.77 hold=3 vol=0.6398 band=0.0375 touch=4 entry=2025-06-18
+⁠300701 森霸传感 sig=2025-11-17 typ=CSB_PROBE sc=73.95 mfe=0.0 hit=否 exit=基准止损 pnl=-3.75 full=-1.44 hold=3 vol=0.7188 band=0.025 touch=2 entry=2025-11-18
+⁠000756 新华制药 sig=2026-02-24 typ=CSB_PROBE sc=78.93 mfe=1.27 hit=否 exit=基准止损 pnl=-3.75 full=-1.78 hold=6 vol=0.4428 band=0.0283 touch=2 entry=2026-02-25
+⁠001239 永达股份 sig=2025-11-12 typ=CSB_PROBE sc=69.8 mfe=0.72 hit=否 exit=基准止损 pnl=-3.71 full=-5.63 hold=5 vol=0.3873 band=0.0288 touch=3 entry=2025-11-13
+⁠600824 益民集团 sig=2025-06-05 typ=CSB_PROBE sc=88.79 mfe=0.0 hit=否 exit=基准止损 pnl=-3.7 full=-6.25 hold=6 vol=0.5799 band=0.0168 touch=5 entry=2025-06-06
+⁠600199 金种子酒 sig=2025-09-29 typ=CSB_PROBE sc=77.93 mfe=0.19 hit=否 exit=通道失效 pnl=-3.68 full=-2.17 hold=4 vol=0.6694 band=0.0299 touch=3 entry=2025-09-30
+⁠600628 新世界 sig=2026-02-24 typ=CSB_PROBE sc=81.7 mfe=8.96 hit=否 exit=通道失效 pnl=-3.59 full=8.32 hold=4 vol=0.5549 band=0.022 touch=4 entry=2026-02-25
+⁠603101 汇嘉时代 sig=2025-07-30 typ=CSB_PROBE sc=71.2 mfe=9.09 hit=否 exit=基准止损 pnl=-3.54 full=2.02 hold=2 vol=0.7832 band=0.0232 touch=3 entry=2025-07-31
+⁠002131 利欧股份 sig=2025-06-17 typ=CSB_PROBE sc=77.44 mfe=3.23 hit=否 exit=基准止损 pnl=-3.52 full=0.59 hold=3 vol=0.7943 band=0.0343 touch=4 entry=2025-06-18
+⁠300802 矩子科技 sig=2025-11-10 typ=CSB_PROBE sc=73.27 mfe=1.12 hit=否 exit=基准止损 pnl=-3.52 full=-7.09 hold=4 vol=0.6811 band=0.0269 touch=6 entry=2025-11-11
+⁠002523 天桥起重 sig=2025-06-11 typ=CSB_PROBE sc=74.53 mfe=0.27 hit=否 exit=基准止损 pnl=-3.51 full=-3.24 hold=3 vol=0.7988 band=0.0219 touch=4 entry=2025-06-12
+⁠002811 郑中设计 sig=2025-07-22 typ=CSB_PROBE sc=84.28 mfe=21.5 hit=是 exit=基准止损 pnl=-3.5 full=9.56 hold=6 vol=0.716 band=0.0213 touch=5 entry=2025-07-23
+⁠600196 复星医药 sig=2025-11-11 typ=CSB_PROBE sc=75.0 mfe=1.78 hit=否 exit=基准止损 pnl=-3.46 full=-3.95 hold=6 vol=0.657 band=0.0368 touch=3 entry=2025-11-12
+⁠000882 华联股份 sig=2026-01-23 typ=CSB_PROBE sc=81.59 mfe=0.49 hit=否 exit=通道失效 pnl=-3.45 full=-2.96 hold=5 vol=0.6379 band=0.0177 touch=6 entry=2026-01-26
+⁠000700 模塑科技 sig=2025-06-18 typ=CSB_PROBE sc=72.78 mfe=17.34 hit=是 exit=基准止损 pnl=-3.44 full=9.17 hold=2 vol=0.5465 band=0.0289 touch=2 entry=2025-06-19
+⁠603611 诺力股份 sig=2025-11-14 typ=CSB_PROBE sc=71.71 mfe=0.0 hit=否 exit=基准止损 pnl=-3.44 full=-4.8 hold=2 vol=0.6086 band=0.0292 touch=2 entry=2025-11-17
+⁠000501 武商集团 sig=2025-06-09 typ=CSB_PROBE sc=68.21 mfe=0.55 hit=否 exit=基准止损 pnl=-3.41 full=-7.59 hold=3 vol=0.7677 band=0.0192 touch=2 entry=2025-06-10
+⁠002131 利欧股份 sig=2025-06-10 typ=CSB_PROBE sc=74.13 mfe=2.25 hit=否 exit=基准止损 pnl=-3.37 full=-4.21 hold=4 vol=0.7444 band=0.0195 touch=2 entry=2025-06-11
+⁠601798 蓝科高新 sig=2025-11-17 typ=CSB_PROBE sc=79.53 mfe=0.53 hit=否 exit=基准止损 pnl=-3.36 full=-5.05 hold=2 vol=0.4615 band=0.0259 touch=4 entry=2025-11-18
+⁠001338 永顺泰 sig=2025-09-15 typ=CSB_PROBE sc=94.06 mfe=0.34 hit=否 exit=通道失效 pnl=-3.35 full=-3.0 hold=5 vol=0.4736 band=0.0158 touch=3 entry=2025-09-16
+⁠600551 时代出版 sig=2025-09-18 typ=CSB_PROBE sc=76.46 mfe=0.23 hit=否 exit=基准止损 pnl=-3.34 full=-0.81 hold=3 vol=0.7236 band=0.0301 touch=3 entry=2025-09-19
+⁠600814 杭州解百 sig=2025-05-21 typ=CSB_PROBE sc=76.72 mfe=0.86 hit=否 exit=基准止损 pnl=-3.3 full=-1.71 hold=2 vol=0.6385 band=0.0131 touch=4 entry=2025-05-22
+⁠000850 华茂股份 sig=2025-06-26 typ=CSB_BREAKOUT sc=89.14 mfe=3.3 hit=否 exit=基准止损 pnl=-3.3 full=-3.52 hold=1 vol=10.7905 band=0.0114 touch=3 entry=2025-06-27
+⁠002760 凤形股份 sig=2025-06-12 typ=CSB_PROBE sc=77.92 mfe=2.54 hit=否 exit=通道失效 pnl=-3.28 full=0.0 hold=3 vol=0.7564 band=0.0139 touch=2 entry=2025-06-13
+⁠002576 通达动力 sig=2025-11-17 typ=CSB_PROBE sc=94.51 mfe=0.45 hit=否 exit=基准止损 pnl=-3.26 full=-3.6 hold=3 vol=0.7672 band=0.026 touch=7 entry=2025-11-18
+⁠600573 惠泉啤酒 sig=2026-02-25 typ=CSB_PROBE sc=81.7 mfe=0.57 hit=否 exit=基准止损 pnl=-3.2 full=0.25 hold=4 vol=0.7691 band=0.0172 touch=2 entry=2026-02-26
+⁠603348 文灿股份 sig=2025-11-10 typ=CSB_PROBE sc=76.62 mfe=0.93 hit=否 exit=基准止损 pnl=-3.19 full=-5.83 hold=7 vol=0.6373 band=0.0143 touch=2 entry=2025-11-11
+⁠600824 益民集团 sig=2026-02-13 typ=CSB_PROBE sc=76.93 mfe=1.57 hit=否 exit=通道失效 pnl=-3.13 full=-4.03 hold=5 vol=0.5984 band=0.0315 touch=5 entry=2026-02-24
+⁠688273 麦澜德 sig=2025-11-05 typ=CSB_PROBE sc=76.28 mfe=0.0 hit=否 exit=通道失效 pnl=-3.11 full=-10.61 hold=3 vol=0.6186 band=0.0389 touch=2 entry=2025-11-06
+⁠300233 金城医药 sig=2026-02-26 typ=CSB_PROBE sc=70.1 mfe=5.09 hit=否 exit=阶梯跟踪止损 pnl=-3.11 full=0.33 hold=3 vol=0.5958 band=0.0116 touch=2 entry=2026-02-27
+⁠001332 锡装股份 sig=2025-05-20 typ=CSB_PROBE sc=78.09 mfe=25.92 hit=是 exit=基准止损 pnl=-3.09 full=19.08 hold=3 vol=0.58 band=0.0316 touch=4 entry=2025-05-21
+⁠300577 开润股份 sig=2025-06-25 typ=CSB_PROBE sc=82.14 mfe=5.64 hit=否 exit=阶梯跟踪止损 pnl=-3.09 full=-2.89 hold=7 vol=0.7242 band=0.0226 touch=3 entry=2025-06-26
+⁠000779 甘咨询 sig=2025-06-17 typ=CSB_PROBE sc=80.47 mfe=2.53 hit=否 exit=基准止损 pnl=-3.08 full=1.54 hold=3 vol=0.7107 band=0.0221 touch=2 entry=2025-06-18
+⁠001318 阳光乳业 sig=2026-02-06 typ=CSB_PROBE sc=72.64 mfe=0.39 hit=否 exit=基准止损 pnl=-3.08 full=-4.46 hold=5 vol=0.77 band=0.0222 touch=3 entry=2026-02-09
+⁠600106 重庆路桥 sig=2026-02-12 typ=CSB_PROBE sc=85.53 mfe=2.26 hit=否 exit=基准止损 pnl=-3.06 full=-1.29 hold=7 vol=0.5492 band=0.0259 touch=3 entry=2026-02-13
+⁠603569 长久物流 sig=2025-07-01 typ=CSB_PROBE sc=72.34 mfe=1.02 hit=否 exit=到期平仓 pnl=-3.05 full=-3.05 hold=10 vol=0.6971 band=0.0331 touch=3 entry=2025-07-02
+⁠300463 迈克生物 sig=2026-03-11 typ=CSB_PROBE sc=72.61 mfe=1.57 hit=否 exit=基准止损 pnl=-3.05 full=-6.45 hold=7 vol=0.7064 band=0.0223 touch=3 entry=2026-03-12
+⁠603586 金麒麟 sig=2025-10-29 typ=CSB_PROBE sc=83.41 mfe=0.0 hit=否 exit=基准止损 pnl=-3.03 full=-3.7 hold=4 vol=0.7352 band=0.0144 touch=4 entry=2025-10-30
+⁠000650 仁和药业 sig=2026-02-25 typ=CSB_PROBE sc=88.14 mfe=1.35 hit=否 exit=基准止损 pnl=-3.03 full=-0.51 hold=6 vol=0.6316 band=0.0154 touch=3 entry=2026-02-26
+⁠000852 石化机械 sig=2025-09-05 typ=CSB_PROBE sc=86.94 mfe=3.0 hit=否 exit=通道失效 pnl=-3.0 full=-3.0 hold=10 vol=0.7368 band=0.0243 touch=5 entry=2025-09-08
+⁠605179 一鸣食品 sig=2025-06-11 typ=CSB_PROBE sc=70.1 mfe=0.28 hit=否 exit=基准止损 pnl=-2.99 full=-4.75 hold=3 vol=0.5632 band=0.0116 touch=2 entry=2025-06-12
+⁠600630 龙头股份 sig=2025-06-10 typ=CSB_PROBE sc=81.29 mfe=1.54 hit=否 exit=基准止损 pnl=-2.97 full=-3.56 hold=4 vol=0.7437 band=0.0116 touch=3 entry=2025-06-11
+⁠002910 庄园牧场 sig=2025-06-17 typ=CSB_PROBE sc=85.89 mfe=6.16 hit=否 exit=基准止损 pnl=-2.97 full=5.28 hold=2 vol=0.7952 band=0.0284 touch=5 entry=2025-06-18
+⁠301533 威马农机 sig=2026-01-26 typ=CSB_PROBE sc=82.36 mfe=3.9 hit=否 exit=基准止损 pnl=-2.97 full=-5.83 hold=2 vol=0.5836 band=0.0146 touch=4 entry=2026-01-27
+⁠300159 新研股份 sig=2026-03-18 typ=CSB_PROBE sc=71.24 mfe=3.96 hit=否 exit=基准止损 pnl=-2.97 full=1.65 hold=4 vol=0.7277 band=0.0398 touch=4 entry=2026-03-19
+⁠300826 测绘股份 sig=2025-11-10 typ=CSB_PROBE sc=83.47 mfe=1.47 hit=否 exit=基准止损 pnl=-2.93 full=-3.16 hold=8 vol=0.7867 band=0.0181 touch=2 entry=2025-11-11
+⁠000750 国海证券 sig=2025-11-12 typ=CSB_PROBE sc=83.67 mfe=0.89 hit=否 exit=基准止损 pnl=-2.9 full=-6.24 hold=5 vol=0.7329 band=0.0093 touch=2 entry=2025-11-13
+⁠002404 嘉欣丝绸 sig=2025-06-17 typ=CSB_PROBE sc=74.15 mfe=4.82 hit=否 exit=基准止损 pnl=-2.89 full=3.05 hold=3 vol=0.6329 band=0.021 touch=3 entry=2025-06-18
+⁠002819 东方中科 sig=2025-11-14 typ=CSB_PROBE sc=79.99 mfe=2.54 hit=否 exit=通道失效 pnl=-2.89 full=-3.98 hold=5 vol=0.7027 band=0.0289 touch=4 entry=2025-11-17
+⁠600558 大西洋 sig=2025-09-05 typ=CSB_PROBE sc=77.13 mfe=1.72 hit=否 exit=到期平仓 pnl=-2.87 full=-2.87 hold=10 vol=0.7379 band=0.0395 touch=4 entry=2025-09-08
+⁠301559 中集环科 sig=2025-11-04 typ=CSB_PROBE sc=72.7 mfe=2.98 hit=否 exit=到期平仓 pnl=-2.86 full=-2.86 hold=10 vol=0.704 band=0.0316 touch=3 entry=2025-11-05
+⁠000652 泰达股份 sig=2026-03-02 typ=CSB_PROBE sc=65.55 mfe=1.67 hit=否 exit=基准止损 pnl=-2.86 full=-2.38 hold=3 vol=0.4627 band=0.0298 touch=2 entry=2026-03-03
+⁠600279 重庆港 sig=2026-03-18 typ=CSB_PROBE sc=90.63 mfe=0.76 hit=否 exit=基准止损 pnl=-2.86 full=-0.38 hold=2 vol=0.569 band=0.0175 touch=4 entry=2026-03-19
+⁠600814 杭州解百 sig=2025-06-16 typ=CSB_PROBE sc=91.0 mfe=6.2 hit=否 exit=基准止损 pnl=-2.84 full=0.65 hold=4 vol=0.7561 band=0.04 touch=5 entry=2025-06-17
+⁠000590 古汉医药 sig=2025-12-01 typ=CSB_PROBE sc=77.35 mfe=0.86 hit=否 exit=基准止损 pnl=-2.84 full=-5.77 hold=7 vol=0.6896 band=0.0226 touch=3 entry=2025-12-02
+⁠601008 连云港 sig=2025-11-11 typ=CSB_PROBE sc=78.75 mfe=0.18 hit=否 exit=基准止损 pnl=-2.82 full=-6.88 hold=6 vol=0.4385 band=0.033 touch=4 entry=2025-11-12
+⁠688709 成都华微 sig=2025-05-20 typ=CSB_PROBE sc=80.82 mfe=2.66 hit=否 exit=基准止损 pnl=-2.81 full=-0.71 hold=4 vol=0.7904 band=0.0207 touch=2 entry=2025-05-21
+⁠000008 神州高铁 sig=2025-06-09 typ=CSB_PROBE sc=78.22 mfe=0.35 hit=否 exit=基准止损 pnl=-2.81 full=-4.21 hold=5 vol=0.5478 band=0.0191 touch=3 entry=2025-06-10
+⁠000862 银星能源 sig=2025-06-18 typ=CSB_PROBE sc=72.58 mfe=4.27 hit=否 exit=基准止损 pnl=-2.78 full=3.71 hold=2 vol=0.6173 band=0.0297 touch=4 entry=2025-06-19
+⁠603725 天安新材 sig=2025-11-11 typ=CSB_PROBE sc=77.29 mfe=0.3 hit=否 exit=基准止损 pnl=-2.76 full=-8.37 hold=2 vol=0.5802 band=0.0229 touch=3 entry=2025-11-12
+⁠600396 华电辽能 sig=2025-09-05 typ=CSB_PROBE sc=65.61 mfe=2.14 hit=否 exit=到期平仓 pnl=-2.75 full=-2.75 hold=10 vol=0.513 band=0.0392 touch=2 entry=2025-09-08
+⁠603227 雪峰科技 sig=2025-11-06 typ=CSB_PROBE sc=75.23 mfe=1.76 hit=否 exit=基准止损 pnl=-2.75 full=-4.4 hold=9 vol=0.5145 band=0.0191 touch=4 entry=2025-11-07
+⁠003028 振邦智能 sig=2025-11-14 typ=CSB_PROBE sc=77.42 mfe=1.52 hit=否 exit=基准止损 pnl=-2.75 full=-3.45 hold=4 vol=0.6306 band=0.0223 touch=3 entry=2025-11-17
+⁠000523 红棉股份 sig=2025-06-17 typ=CSB_PROBE sc=79.69 mfe=0.3 hit=否 exit=基准止损 pnl=-2.72 full=-0.91 hold=3 vol=0.6829 band=0.0172 touch=3 entry=2025-06-18
+⁠301175 中科环保 sig=2025-06-09 typ=CSB_PROBE sc=72.55 mfe=1.16 hit=否 exit=基准止损 pnl=-2.7 full=-2.12 hold=9 vol=0.7821 band=0.0298 touch=2 entry=2025-06-10
+⁠600895 张江高科 sig=2025-06-04 typ=CSB_PROBE sc=78.41 mfe=1.28 hit=否 exit=基准止损 pnl=-2.68 full=-1.72 hold=7 vol=0.711 band=0.0224 touch=3 entry=2025-06-05
+⁠002713 东易日盛 sig=2025-07-28 typ=CSB_PROBE sc=68.01 mfe=6.21 hit=否 exit=基准止损 pnl=-2.66 full=5.54 hold=3 vol=0.7663 band=0.0392 touch=2 entry=2025-07-29
+⁠002732 燕塘乳业 sig=2025-06-10 typ=CSB_PROBE sc=72.05 mfe=2.01 hit=否 exit=基准止损 pnl=-2.6 full=-3.73 hold=4 vol=0.77 band=0.0182 touch=2 entry=2025-06-11
+⁠002820 桂发祥 sig=2025-06-18 typ=CSB_PROBE sc=88.9 mfe=15.58 hit=是 exit=基准止损 pnl=-2.6 full=7.7 hold=2 vol=0.7419 band=0.0164 touch=5 entry=2025-06-19
+⁠600733 北汽蓝谷 sig=2026-03-11 typ=CSB_PROBE sc=74.44 mfe=2.71 hit=否 exit=基准止损 pnl=-2.58 full=-7.09 hold=6 vol=0.7601 band=0.0382 touch=3 entry=2026-03-12
+⁠001239 永达股份 sig=2025-06-17 typ=CSB_PROBE sc=70.9 mfe=3.36 hit=否 exit=基准止损 pnl=-2.54 full=2.81 hold=3 vol=0.631 band=0.0364 touch=2 entry=2025-06-18
+⁠600827 百联股份 sig=2025-05-19 typ=CSB_PROBE sc=75.25 mfe=1.28 hit=否 exit=基准止损 pnl=-2.45 full=-2.02 hold=5 vol=0.4609 band=0.031 touch=3 entry=2025-05-20
+⁠600814 杭州解百 sig=2025-06-12 typ=CSB_PROBE sc=88.01 mfe=4.58 hit=否 exit=基准止损 pnl=-2.42 full=-0.38 hold=2 vol=0.7754 band=0.028 touch=4 entry=2025-06-13
+⁠002060 广东建工 sig=2025-12-10 typ=CSB_PROBE sc=77.42 mfe=0.27 hit=否 exit=基准止损 pnl=-2.41 full=-1.34 hold=3 vol=0.6514 band=0.0159 touch=2 entry=2025-12-11
+⁠600824 益民集团 sig=2026-02-10 typ=CSB_PROBE sc=83.64 mfe=0.22 hit=否 exit=基准止损 pnl=-2.41 full=-7.02 hold=3 vol=0.755 band=0.0142 touch=5 entry=2026-02-11
+⁠600550 保变电气 sig=2025-09-12 typ=CSB_PROBE sc=84.56 mfe=1.67 hit=否 exit=基准止损 pnl=-2.39 full=-1.19 hold=6 vol=0.5215 band=0.0378 touch=2 entry=2025-09-15
+⁠600158 中体产业 sig=2025-05-21 typ=CSB_PROBE sc=75.19 mfe=12.42 hit=是 exit=基准止损 pnl=-2.34 full=7.01 hold=2 vol=0.7208 band=0.0056 touch=2 entry=2025-05-22
+⁠600528 中铁工业 sig=2025-11-12 typ=CSB_PROBE sc=71.84 mfe=0.12 hit=否 exit=基准止损 pnl=-2.34 full=-5.74 hold=4 vol=0.6211 band=0.0094 touch=2 entry=2025-11-13
+⁠600868 梅雁吉祥 sig=2025-05-09 typ=CSB_PROBE sc=81.05 mfe=0.67 hit=否 exit=基准止损 pnl=-2.33 full=-5.0 hold=5 vol=0.6256 band=0.0126 touch=3 entry=2025-05-12
+⁠300783 三只松鼠 sig=2025-06-18 typ=CSB_PROBE sc=73.06 mfe=1.33 hit=否 exit=通道失效 pnl=-2.33 full=-1.92 hold=3 vol=0.7019 band=0.0398 touch=3 entry=2025-06-19
+⁠000711 京蓝科技 sig=2025-07-25 typ=CSB_PROBE sc=77.5 mfe=0.0 hit=否 exit=基准止损 pnl=-2.29 full=-2.86 hold=2 vol=0.6795 band=0.026 touch=3 entry=2025-07-28
+⁠603102 百合股份 sig=2025-08-11 typ=CSB_PROBE sc=75.14 mfe=2.0 hit=否 exit=基准止损 pnl=-2.28 full=1.15 hold=4 vol=0.663 band=0.0194 touch=6 entry=2025-08-12
+⁠002732 燕塘乳业 sig=2026-02-26 typ=CSB_PROBE sc=85.67 mfe=1.93 hit=否 exit=基准止损 pnl=-2.28 full=-0.85 hold=3 vol=0.7462 band=0.0093 touch=2 entry=2026-02-27
+⁠002825 纳尔股份 sig=2025-09-12 typ=CSB_PROBE sc=86.68 mfe=0.49 hit=否 exit=基准止损 pnl=-2.26 full=-3.54 hold=5 vol=0.5363 band=0.0213 touch=3 entry=2025-09-15
+⁠300194 福安药业 sig=2026-02-10 typ=CSB_PROBE sc=95.98 mfe=0.45 hit=否 exit=基准止损 pnl=-2.24 full=-6.28 hold=3 vol=0.5736 band=0.0201 touch=6 entry=2026-02-11
+⁠002556 辉隆股份 sig=2025-08-06 typ=CSB_PROBE sc=85.03 mfe=2.21 hit=否 exit=基准止损 pnl=-2.21 full=-1.53 hold=8 vol=0.6194 band=0.0111 touch=3 entry=2025-08-07
+⁠688120 华海清科 sig=2025-04-23 typ=CSB_PROBE sc=94.69 mfe=1.35 hit=否 exit=基准止损 pnl=-2.2 full=-5.45 hold=5 vol=0.7059 band=0.0132 touch=3 entry=2025-04-24
+⁠002458 益生股份 sig=2025-09-29 typ=CSB_PROBE sc=78.17 mfe=0.58 hit=否 exit=通道失效 pnl=-2.2 full=-1.5 hold=6 vol=0.6468 band=0.0241 touch=3 entry=2025-09-30
+⁠600824 益民集团 sig=2025-06-13 typ=CSB_PROBE sc=77.48 mfe=2.18 hit=否 exit=基准止损 pnl=-2.18 full=0.97 hold=5 vol=0.5442 band=0.0261 touch=3 entry=2025-06-16
+⁠600109 国金证券 sig=2025-11-12 typ=CSB_PROBE sc=76.09 mfe=0.83 hit=否 exit=通道失效 pnl=-2.18 full=-4.99 hold=5 vol=0.6638 band=0.0348 touch=4 entry=2025-11-13
+⁠002658 雪迪龙 sig=2025-09-19 typ=CSB_PROBE sc=71.03 mfe=7.59 hit=否 exit=基准止损 pnl=-2.15 full=5.06 hold=2 vol=0.4961 band=0.0319 touch=2 entry=2025-09-22
+⁠603656 泰禾智能 sig=2025-06-10 typ=CSB_PROBE sc=76.99 mfe=7.65 hit=否 exit=通道失效 pnl=-2.13 full=-0.55 hold=3 vol=0.737 band=0.0281 touch=3 entry=2025-06-11
+⁠000888 峨眉山Ａ sig=2025-07-04 typ=CSB_PROBE sc=76.44 mfe=1.78 hit=否 exit=基准止损 pnl=-2.13 full=-2.42 hold=9 vol=0.6382 band=0.007 touch=3 entry=2025-07-07
+⁠603366 日出东方 sig=2025-07-17 typ=CSB_PROBE sc=91.65 mfe=2.03 hit=否 exit=通道失效 pnl=-2.13 full=-3.35 hold=9 vol=0.6945 band=0.0134 touch=4 entry=2025-07-18
+⁠000625 长安汽车 sig=2025-11-06 typ=CSB_PROBE sc=74.2 mfe=0.49 hit=否 exit=基准止损 pnl=-2.11 full=-2.11 hold=10 vol=0.4193 band=0.0192 touch=2 entry=2025-11-07
+⁠688381 帝奥微 sig=2025-06-03 typ=CSB_PROBE sc=79.13 mfe=2.77 hit=否 exit=通道失效 pnl=-2.1 full=-2.1 hold=10 vol=0.5359 band=0.0371 touch=4 entry=2025-06-04
+⁠002164 宁波东力 sig=2025-07-29 typ=CSB_PROBE sc=84.85 mfe=26.89 hit=是 exit=基准止损 pnl=-2.09 full=18.44 hold=3 vol=0.6617 band=0.0142 touch=5 entry=2025-07-30
+⁠600138 中青旅 sig=2025-12-02 typ=CSB_PROBE sc=80.02 mfe=0.31 hit=否 exit=基准止损 pnl=-2.08 full=-2.8 hold=8 vol=0.7191 band=0.0319 touch=2 entry=2025-12-03
+⁠003000 劲仔食品 sig=2025-09-18 typ=CSB_PROBE sc=70.92 mfe=0.33 hit=否 exit=基准止损 pnl=-2.05 full=-0.98 hold=4 vol=0.4081 band=0.0363 touch=2 entry=2025-09-19
+⁠000788 北大医药 sig=2025-09-11 typ=CSB_PROBE sc=72.7 mfe=0.47 hit=否 exit=通道失效 pnl=-2.04 full=-5.19 hold=4 vol=0.5867 band=0.0252 touch=2 entry=2025-09-12
+⁠600895 张江高科 sig=2025-05-20 typ=CSB_PROBE sc=81.33 mfe=1.29 hit=否 exit=基准止损 pnl=-2.0 full=-2.08 hold=9 vol=0.5159 band=0.0139 touch=5 entry=2025-05-21
+⁠601375 中原证券 sig=2025-11-11 typ=CSB_PROBE sc=94.66 mfe=0.66 hit=否 exit=基准止损 pnl=-1.98 full=-5.95 hold=5 vol=0.7351 band=0.0134 touch=3 entry=2025-11-12
+⁠600838 上海九百 sig=2025-06-10 typ=CSB_PROBE sc=81.74 mfe=1.36 hit=否 exit=通道失效 pnl=-1.97 full=-2.22 hold=5 vol=0.6374 band=0.021 touch=5 entry=2025-06-11
+⁠600371 万向德农 sig=2025-09-17 typ=CSB_PROBE sc=75.11 mfe=0.33 hit=否 exit=基准止损 pnl=-1.97 full=-2.4 hold=2 vol=0.4933 band=0.0196 touch=4 entry=2025-09-18
+⁠603933 睿能科技 sig=2026-02-12 typ=CSB_PROBE sc=70.14 mfe=3.23 hit=否 exit=阶梯跟踪止损 pnl=-1.96 full=-3.05 hold=6 vol=0.7489 band=0.0394 touch=4 entry=2026-02-13
+⁠605507 国邦医药 sig=2025-10-29 typ=CSB_PROBE sc=87.53 mfe=5.67 hit=否 exit=基准止损 pnl=-1.95 full=4.87 hold=5 vol=0.7157 band=0.0219 touch=5 entry=2025-10-30
+⁠688112 鼎阳科技 sig=2025-11-14 typ=CSB_PROBE sc=79.02 mfe=0.66 hit=否 exit=通道失效 pnl=-1.95 full=-2.36 hold=3 vol=0.584 band=0.0327 touch=4 entry=2025-11-17
+⁠000779 甘咨询 sig=2025-06-05 typ=CSB_PROBE sc=76.55 mfe=2.79 hit=否 exit=基准止损 pnl=-1.93 full=-5.16 hold=7 vol=0.5649 band=0.0258 touch=3 entry=2025-06-06
+⁠002186 全 聚 德 sig=2025-06-18 typ=CSB_PROBE sc=93.07 mfe=6.76 hit=否 exit=基准止损 pnl=-1.93 full=4.54 hold=2 vol=0.7754 band=0.0197 touch=3 entry=2025-06-19
+⁠002136 安 纳 达 sig=2025-07-28 typ=CSB_PROBE sc=76.81 mfe=3.66 hit=否 exit=基准止损 pnl=-1.92 full=2.38 hold=2 vol=0.7982 band=0.0136 touch=2 entry=2025-07-29
+⁠600859 王府井 sig=2025-06-12 typ=CSB_PROBE sc=84.86 mfe=0.44 hit=否 exit=基准止损 pnl=-1.89 full=-0.15 hold=2 vol=0.7133 band=0.0205 touch=3 entry=2025-06-13
+⁠300729 乐歌股份 sig=2025-11-11 typ=CSB_PROBE sc=87.13 mfe=1.37 hit=否 exit=基准止损 pnl=-1.85 full=-2.47 hold=6 vol=0.6249 band=0.0235 touch=5 entry=2025-11-12
+⁠603706 东方环宇 sig=2025-11-12 typ=CSB_PROBE sc=78.29 mfe=5.32 hit=否 exit=阶梯跟踪止损 pnl=-1.85 full=-7.64 hold=5 vol=0.6171 band=0.0117 touch=4 entry=2025-11-13
+⁠002962 五方光电 sig=2025-11-13 typ=CSB_PROBE sc=84.46 mfe=2.78 hit=否 exit=基准止损 pnl=-1.83 full=-1.63 hold=7 vol=0.6116 band=0.0302 touch=3 entry=2025-11-14
+⁠000008 神州高铁 sig=2025-06-18 typ=CSB_PROBE sc=87.05 mfe=2.17 hit=否 exit=基准止损 pnl=-1.81 full=0.72 hold=2 vol=0.7485 band=0.0118 touch=3 entry=2025-06-19
+⁠300022 吉峰科技 sig=2025-11-11 typ=CSB_PROBE sc=85.71 mfe=6.8 hit=否 exit=阶梯跟踪止损 pnl=-1.81 full=-6.46 hold=3 vol=0.7958 band=0.0092 touch=2 entry=2025-11-12
+⁠002661 克明食品 sig=2025-06-18 typ=CSB_PROBE sc=91.57 mfe=1.5 hit=否 exit=基准止损 pnl=-1.8 full=1.4 hold=2 vol=0.6754 band=0.0137 touch=4 entry=2025-06-19
+⁠600980 北矿科技 sig=2025-11-10 typ=CSB_PROBE sc=76.36 mfe=0.29 hit=否 exit=通道失效 pnl=-1.8 full=-5.79 hold=4 vol=0.3712 band=0.0386 touch=5 entry=2025-11-11
+⁠603633 徕木股份 sig=2025-06-16 typ=CSB_PROBE sc=82.56 mfe=11.46 hit=是 exit=基准止损 pnl=-1.78 full=10.7 hold=4 vol=0.7475 band=0.0178 touch=4 entry=2025-06-17
+⁠002239 奥特佳 sig=2025-06-10 typ=CSB_PROBE sc=69.47 mfe=1.38 hit=否 exit=通道失效 pnl=-1.72 full=0.34 hold=5 vol=0.5901 band=0.0189 touch=2 entry=2025-06-11
+⁠688061 灿瑞科技 sig=2025-11-07 typ=CSB_PROBE sc=77.96 mfe=1.93 hit=否 exit=通道失效 pnl=-1.72 full=-9.38 hold=5 vol=0.7543 band=0.0322 touch=6 entry=2025-11-10
+⁠300491 通合科技 sig=2025-06-18 typ=CSB_PROBE sc=64.21 mfe=9.41 hit=否 exit=通道失效 pnl=-1.7 full=6.24 hold=3 vol=0.459 band=0.0399 touch=2 entry=2025-06-19
+⁠300836 佰奥智能 sig=2025-12-25 typ=CSB_BREAKOUT sc=88.4 mfe=1.76 hit=否 exit=到期平仓 pnl=-1.69 full=-1.69 hold=10 vol=2.2115 band=0.0353 touch=4 entry=2025-12-26
+⁠000686 东北证券 sig=2026-02-10 typ=CSB_PROBE sc=83.24 mfe=0.22 hit=否 exit=基准止损 pnl=-1.65 full=-6.38 hold=4 vol=0.5688 band=0.027 touch=3 entry=2026-02-11
+⁠600628 新世界 sig=2025-06-03 typ=CSB_PROBE sc=81.45 mfe=5.28 hit=否 exit=阶梯跟踪止损 pnl=-1.63 full=-0.95 hold=8 vol=0.6855 band=0.023 touch=4 entry=2025-06-04
+⁠605588 冠石科技 sig=2025-07-11 typ=CSB_PROBE sc=82.44 mfe=3.89 hit=否 exit=阶梯跟踪止损 pnl=-1.63 full=3.35 hold=8 vol=0.6229 band=0.0142 touch=5 entry=2025-07-14
+⁠300786 国林科技 sig=2025-06-17 typ=CSB_PROBE sc=79.5 mfe=18.1 hit=是 exit=基准止损 pnl=-1.6 full=14.46 hold=3 vol=0.7095 band=0.0092 touch=3 entry=2025-06-18
+⁠430300 辰光医疗 sig=2025-07-22 typ=CSB_PROBE sc=76.82 mfe=3.09 hit=否 exit=阶梯跟踪止损 pnl=-1.6 full=-4.79 hold=3 vol=0.7011 band=0.0391 touch=3 entry=2025-07-23
+⁠002552 宝鼎科技 sig=2025-12-08 typ=CSB_PROBE sc=77.92 mfe=5.04 hit=否 exit=通道失效 pnl=-1.58 full=1.76 hold=3 vol=0.7866 band=0.0083 touch=2 entry=2025-12-09
+⁠002267 陕天然气 sig=2025-11-10 typ=CSB_PROBE sc=84.27 mfe=2.3 hit=否 exit=基准止损 pnl=-1.57 full=-4.72 hold=8 vol=0.5013 band=0.0149 touch=2 entry=2025-11-11
+⁠002713 东易日盛 sig=2025-06-18 typ=CSB_PROBE sc=73.62 mfe=1.93 hit=否 exit=通道失效 pnl=-1.5 full=-1.07 hold=4 vol=0.4988 band=0.0263 touch=2 entry=2025-06-19
+⁠603536 惠发食品 sig=2025-08-07 typ=CSB_PROBE sc=77.57 mfe=8.81 hit=否 exit=阶梯跟踪止损 pnl=-1.49 full=4.99 hold=5 vol=0.7493 band=0.0097 touch=2 entry=2025-08-08
+⁠603153 上海建科 sig=2025-11-11 typ=CSB_PROBE sc=90.74 mfe=0.27 hit=否 exit=通道失效 pnl=-1.49 full=-1.86 hold=5 vol=0.6157 band=0.005 touch=3 entry=2025-11-12
+⁠600798 宁波海运 sig=2025-11-13 typ=CSB_PROBE sc=75.33 mfe=5.19 hit=否 exit=阶梯跟踪止损 pnl=-1.48 full=-9.14 hold=3 vol=0.4884 band=0.0187 touch=2 entry=2025-11-14
+⁠603209 兴通股份 sig=2026-01-27 typ=CSB_PROBE sc=81.4 mfe=3.19 hit=否 exit=阶梯跟踪止损 pnl=-1.47 full=0.45 hold=4 vol=0.6864 band=0.0184 touch=4 entry=2026-01-28
+⁠300962 中金辐照 sig=2025-09-22 typ=CSB_PROBE sc=76.98 mfe=4.0 hit=否 exit=通道失效 pnl=-1.43 full=3.05 hold=3 vol=0.7749 band=0.0313 touch=6 entry=2025-09-23
+⁠002877 智能自控 sig=2026-02-06 typ=CSB_PROBE sc=96.17 mfe=3.48 hit=否 exit=阶梯跟踪止损 pnl=-1.37 full=-1.37 hold=10 vol=0.5265 band=0.0193 touch=4 entry=2026-02-09
+⁠920118 太湖远大 sig=2026-02-11 typ=CSB_PROBE sc=73.33 mfe=4.24 hit=否 exit=阶梯跟踪止损 pnl=-1.36 full=2.84 hold=7 vol=0.4259 band=0.0267 touch=2 entry=2026-02-12
+⁠688235 百济神州 sig=2025-12-01 typ=CSB_PROBE sc=78.39 mfe=0.63 hit=否 exit=通道失效 pnl=-1.33 full=-4.74 hold=3 vol=0.7716 band=0.0344 touch=4 entry=2025-12-02
+⁠600559 老白干酒 sig=2025-10-23 typ=CSB_PROBE sc=73.24 mfe=0.41 hit=否 exit=到期平仓 pnl=-1.3 full=-1.3 hold=10 vol=0.6794 band=0.0271 touch=2 entry=2025-10-24
+⁠002926 华西证券 sig=2025-10-27 typ=CSB_PROBE sc=70.14 mfe=5.91 hit=否 exit=阶梯跟踪止损 pnl=-1.3 full=-0.8 hold=6 vol=0.7138 band=0.0274 touch=3 entry=2025-10-28
+⁠301498 乖宝宠物 sig=2025-09-29 typ=CSB_PROBE sc=77.11 mfe=3.08 hit=否 exit=阶梯跟踪止损 pnl=-1.24 full=-3.79 hold=5 vol=0.5995 band=0.026 touch=5 entry=2025-09-30
+⁠301512 智信精密 sig=2025-11-11 typ=CSB_PROBE sc=74.97 mfe=4.91 hit=否 exit=阶梯跟踪止损 pnl=-1.24 full=-3.81 hold=6 vol=0.7938 band=0.0129 touch=3 entry=2025-11-12
+⁠002136 安 纳 达 sig=2025-07-30 typ=CSB_PROBE sc=79.51 mfe=6.48 hit=否 exit=基准止损 pnl=-1.22 full=3.67 hold=2 vol=0.7909 band=0.0124 touch=2 entry=2025-07-31
+⁠600962 国投中鲁 sig=2025-10-29 typ=CSB_PROBE sc=81.07 mfe=4.51 hit=否 exit=阶梯跟踪止损 pnl=-1.21 full=-1.63 hold=4 vol=0.7572 band=0.0061 touch=2 entry=2025-10-30
+⁠002962 五方光电 sig=2025-11-11 typ=CSB_PROBE sc=85.58 mfe=1.2 hit=否 exit=基准止损 pnl=-1.2 full=-2.67 hold=2 vol=0.5964 band=0.0257 touch=3 entry=2025-11-12
+⁠300006 莱美药业 sig=2026-02-10 typ=CSB_PROBE sc=88.04 mfe=4.09 hit=否 exit=阶梯跟踪止损 pnl=-1.17 full=-7.21 hold=6 vol=0.5761 band=0.0062 touch=6 entry=2026-02-11
+⁠600575 淮河能源 sig=2025-08-06 typ=CSB_PROBE sc=88.33 mfe=0.28 hit=否 exit=到期平仓 pnl=-1.13 full=-1.13 hold=10 vol=0.6914 band=0.0267 touch=4 entry=2025-08-07
+⁠688187 时代电气 sig=2025-05-20 typ=CSB_PROBE sc=85.56 mfe=2.38 hit=否 exit=通道失效 pnl=-1.09 full=-3.65 hold=5 vol=0.7729 band=0.0178 touch=3 entry=2025-05-21
+⁠600982 宁波能源 sig=2025-08-05 typ=CSB_PROBE sc=80.54 mfe=1.91 hit=否 exit=到期平仓 pnl=-1.06 full=-1.06 hold=10 vol=0.4925 band=0.0146 touch=3 entry=2025-08-06
+⁠600523 贵航股份 sig=2025-11-14 typ=CSB_PROBE sc=64.68 mfe=2.02 hit=否 exit=到期平仓 pnl=-1.04 full=-1.04 hold=10 vol=0.6461 band=0.0333 touch=2 entry=2025-11-17
+⁠603333 福华尚纬 sig=2025-09-01 typ=CSB_BREAKOUT sc=91.44 mfe=8.2 hit=否 exit=阶梯跟踪止损 pnl=-1.01 full=-5.39 hold=9 vol=4.2343 band=0.0136 touch=2 entry=2025-09-02
+⁠603390 通达电气 sig=2025-09-26 typ=CSB_PROBE sc=88.46 mfe=0.93 hit=否 exit=通道失效 pnl=-1.01 full=-3.65 hold=3 vol=0.7652 band=0.0382 touch=3 entry=2025-09-29
+⁠300218 安利股份 sig=2025-06-26 typ=CSB_PROBE sc=74.05 mfe=3.64 hit=否 exit=阶梯跟踪止损 pnl=-0.99 full=-1.06 hold=9 vol=0.7582 band=0.0198 touch=2 entry=2025-06-27
+⁠600621 华鑫股份 sig=2025-11-06 typ=CSB_PROBE sc=80.41 mfe=0.61 hit=否 exit=通道失效 pnl=-0.98 full=-3.18 hold=5 vol=0.6441 band=0.0144 touch=3 entry=2025-11-07
+⁠600316 洪都航空 sig=2025-06-06 typ=CSB_PROBE sc=78.16 mfe=4.65 hit=否 exit=阶梯跟踪止损 pnl=-0.97 full=-4.87 hold=2 vol=0.6459 band=0.0241 touch=3 entry=2025-06-09
+⁠603836 海程邦达 sig=2025-08-04 typ=CSB_PROBE sc=76.37 mfe=3.83 hit=否 exit=阶梯跟踪止损 pnl=-0.94 full=-0.14 hold=8 vol=0.537 band=0.0105 touch=2 entry=2025-08-05
+⁠000066 中国长城 sig=2025-06-17 typ=CSB_PROBE sc=66.97 mfe=4.31 hit=否 exit=通道失效 pnl=-0.9 full=2.23 hold=4 vol=0.5062 band=0.0241 touch=2 entry=2025-06-18
+⁠000809 和展能源 sig=2026-02-13 typ=CSB_PROBE sc=93.55 mfe=14.04 hit=是 exit=阶梯跟踪止损 pnl=-0.88 full=7.89 hold=5 vol=0.6762 band=0.0178 touch=3 entry=2026-02-24
+⁠600536 中国软件 sig=2025-06-17 typ=CSB_PROBE sc=75.04 mfe=7.97 hit=否 exit=阶梯跟踪止损 pnl=-0.87 full=3.49 hold=3 vol=0.7381 band=0.0158 touch=2 entry=2025-06-18
+⁠920489 佳先股份 sig=2025-07-17 typ=CSB_PROBE sc=71.05 mfe=6.02 hit=否 exit=阶梯跟踪止损 pnl=-0.87 full=-0.87 hold=10 vol=0.4566 band=0.0366 touch=2 entry=2025-07-18
+⁠000868 安凯客车 sig=2025-08-04 typ=CSB_PROBE sc=86.48 mfe=1.03 hit=否 exit=到期平仓 pnl=-0.85 full=-0.85 hold=10 vol=0.6892 band=0.0261 touch=4 entry=2025-08-05
+⁠601188 龙江交通 sig=2025-07-18 typ=CSB_PROBE sc=69.82 mfe=3.89 hit=否 exit=阶梯跟踪止损 pnl=-0.83 full=-3.89 hold=5 vol=0.7092 band=0.0127 touch=2 entry=2025-07-21
+⁠301105 鸿铭股份 sig=2025-12-23 typ=CSB_BREAKOUT sc=80.72 mfe=0.02 hit=否 exit=到期平仓 pnl=-0.83 full=-0.83 hold=10 vol=3.1394 band=0.0073 touch=1 entry=2025-12-24
+⁠600785 新华百货 sig=2025-12-09 typ=CSB_PROBE sc=70.75 mfe=1.85 hit=否 exit=到期平仓 pnl=-0.82 full=-0.82 hold=10 vol=0.7433 band=0.009 touch=2 entry=2025-12-10
+⁠600778 友好集团 sig=2025-05-29 typ=CSB_PROBE sc=69.96 mfe=4.37 hit=否 exit=阶梯跟踪止损 pnl=-0.78 full=-3.74 hold=5 vol=0.6526 band=0.0329 touch=3 entry=2025-05-30
+⁠000875 电投绿能 sig=2025-05-30 typ=CSB_PROBE sc=70.23 mfe=2.14 hit=否 exit=通道失效 pnl=-0.78 full=-0.97 hold=8 vol=0.5946 band=0.0255 touch=2 entry=2025-06-03
+⁠002481 双塔食品 sig=2025-06-12 typ=CSB_PROBE sc=82.48 mfe=0.98 hit=否 exit=通道失效 pnl=-0.78 full=0.2 hold=7 vol=0.7649 band=0.0165 touch=3 entry=2025-06-13
+⁠600865 百大集团 sig=2025-08-08 typ=CSB_PROBE sc=84.05 mfe=4.42 hit=否 exit=阶梯跟踪止损 pnl=-0.77 full=3.09 hold=4 vol=0.7455 band=0.0118 touch=5 entry=2025-08-11
+⁠601555 东吴证券 sig=2025-11-12 typ=CSB_PROBE sc=90.92 mfe=1.28 hit=否 exit=通道失效 pnl=-0.75 full=-5.34 hold=5 vol=0.7048 band=0.0283 touch=3 entry=2025-11-13
+⁠603221 爱丽家居 sig=2025-10-29 typ=CSB_PROBE sc=69.43 mfe=5.25 hit=否 exit=通道失效 pnl=-0.74 full=3.94 hold=3 vol=0.7008 band=0.0143 touch=2 entry=2025-10-30
+⁠300109 新开源 sig=2025-12-12 typ=CSB_PROBE sc=71.44 mfe=6.67 hit=否 exit=通道失效 pnl=-0.73 full=4.19 hold=3 vol=0.6202 band=0.039 touch=4 entry=2025-12-15
+⁠000750 国海证券 sig=2025-10-27 typ=CSB_PROBE sc=76.59 mfe=1.97 hit=否 exit=到期平仓 pnl=-0.66 full=-0.66 hold=10 vol=0.7686 band=0.0096 touch=2 entry=2025-10-28
+⁠688597 煜邦电力 sig=2025-05-23 typ=CSB_PROBE sc=81.36 mfe=3.65 hit=否 exit=通道失效 pnl=-0.65 full=2.53 hold=3 vol=0.6512 band=0.0106 touch=3 entry=2025-05-26
+⁠688459 哈铁科技 sig=2025-04-24 typ=CSB_PROBE sc=86.31 mfe=0.82 hit=否 exit=到期平仓 pnl=-0.61 full=-0.61 hold=10 vol=0.44 band=0.0068 touch=2 entry=2025-04-25
+⁠000599 青岛双星 sig=2025-08-04 typ=CSB_PROBE sc=83.25 mfe=4.0 hit=否 exit=阶梯跟踪止损 pnl=-0.6 full=1.0 hold=8 vol=0.8263 band=0.0134 touch=3 entry=2025-08-05
+⁠300897 山科智能 sig=2025-10-30 typ=CSB_PROBE sc=87.27 mfe=2.64 hit=否 exit=通道失效 pnl=-0.6 full=-14.12 hold=3 vol=0.6556 band=0.0141 touch=5 entry=2025-10-31
+⁠603196 璞源材料 sig=2025-06-06 typ=CSB_PROBE sc=80.09 mfe=3.76 hit=否 exit=阶梯跟踪止损 pnl=-0.59 full=-3.56 hold=4 vol=0.6921 band=0.0101 touch=2 entry=2025-06-09
+⁠600764 中国海防 sig=2025-06-03 typ=CSB_PROBE sc=76.12 mfe=0.92 hit=否 exit=到期平仓 pnl=-0.58 full=-0.58 hold=10 vol=0.7986 band=0.0155 touch=2 entry=2025-06-04
+⁠000798 中水渔业 sig=2025-05-09 typ=CSB_PROBE sc=82.23 mfe=2.97 hit=否 exit=到期平仓 pnl=-0.57 full=-0.57 hold=10 vol=0.6694 band=0.0223 touch=3 entry=2025-05-12
+⁠002049 紫光国微 sig=2025-05-20 typ=CSB_PROBE sc=69.97 mfe=1.28 hit=否 exit=到期平仓 pnl=-0.57 full=-0.57 hold=10 vol=0.6454 band=0.0329 touch=3 entry=2025-05-21
+⁠603439 三力制药 sig=2025-10-09 typ=CSB_PROBE sc=85.86 mfe=2.32 hit=否 exit=到期平仓 pnl=-0.56 full=-0.56 hold=10 vol=0.7344 band=0.0285 touch=5 entry=2025-10-10
+⁠600862 中航高科 sig=2025-05-30 typ=CSB_PROBE sc=74.19 mfe=1.58 hit=否 exit=到期平仓 pnl=-0.47 full=-0.47 hold=10 vol=0.5142 band=0.0353 touch=3 entry=2025-06-03
+⁠002262 恩华药业 sig=2025-04-21 typ=CSB_PROBE sc=80.47 mfe=2.97 hit=否 exit=到期平仓 pnl=-0.44 full=-0.44 hold=10 vol=0.5796 band=0.0141 touch=3 entry=2025-04-22
+⁠002631 德尔未来 sig=2025-06-05 typ=CSB_PROBE sc=83.75 mfe=4.12 hit=否 exit=阶梯跟踪止损 pnl=-0.43 full=-3.47 hold=9 vol=0.7622 band=0.0138 touch=4 entry=2025-06-06
+⁠600382 广东明珠 sig=2025-12-24 typ=CSB_PROBE sc=73.09 mfe=6.98 hit=否 exit=阶梯跟踪止损 pnl=-0.42 full=5.03 hold=5 vol=0.7099 band=0.0156 touch=3 entry=2025-12-25
+⁠300067 安诺其 sig=2025-07-29 typ=CSB_PROBE sc=80.73 mfe=2.24 hit=否 exit=通道失效 pnl=-0.37 full=-1.12 hold=5 vol=0.6979 band=0.0307 touch=4 entry=2025-07-30
+⁠430556 雅达股份 sig=2025-06-06 typ=CSB_PROBE sc=75.36 mfe=3.64 hit=否 exit=阶梯跟踪止损 pnl=-0.36 full=-2.18 hold=5 vol=0.6965 band=0.0209 touch=3 entry=2025-06-09
+⁠000507 珠海港 sig=2025-07-04 typ=CSB_PROBE sc=88.27 mfe=2.71 hit=否 exit=到期平仓 pnl=-0.36 full=-0.36 hold=10 vol=0.5327 band=0.0101 touch=4 entry=2025-07-07
+⁠002377 国创高新 sig=2025-09-11 typ=CSB_PROBE sc=76.01 mfe=4.26 hit=否 exit=阶梯跟踪止损 pnl=-0.33 full=-1.31 hold=6 vol=0.5879 band=0.028 touch=3 entry=2025-09-12
+⁠600351 亚宝药业 sig=2025-12-17 typ=CSB_PROBE sc=89.77 mfe=2.92 hit=否 exit=到期平仓 pnl=-0.31 full=-0.31 hold=10 vol=0.6036 band=0.0209 touch=4 entry=2025-12-18
+⁠603366 日出东方 sig=2025-07-07 typ=CSB_PROBE sc=85.7 mfe=3.05 hit=否 exit=阶梯跟踪止损 pnl=-0.2 full=2.04 hold=6 vol=0.576 band=0.0092 touch=2 entry=2025-07-08
+⁠600789 鲁抗医药 sig=2025-09-05 typ=CSB_PROBE sc=89.39 mfe=3.22 hit=否 exit=阶梯跟踪止损 pnl=-0.2 full=-0.2 hold=10 vol=0.6901 band=0.0345 touch=3 entry=2025-09-08
+⁠301533 威马农机 sig=2026-01-29 typ=CSB_PROBE sc=76.17 mfe=7.63 hit=否 exit=阶梯跟踪止损 pnl=-0.2 full=-4.27 hold=2 vol=0.6783 band=0.0177 touch=3 entry=2026-01-30
+⁠688277 天智航 sig=2025-10-29 typ=CSB_PROBE sc=72.6 mfe=7.22 hit=否 exit=阶梯跟踪止损 pnl=-0.17 full=-2.69 hold=4 vol=0.7409 band=0.0296 touch=2 entry=2025-10-30
+⁠605300 佳禾食品 sig=2025-07-25 typ=CSB_PROBE sc=82.03 mfe=1.29 hit=否 exit=到期平仓 pnl=-0.14 full=-0.14 hold=10 vol=0.5205 band=0.0159 touch=2 entry=2025-07-28
+⁠301001 凯淳股份 sig=2025-07-11 typ=CSB_PROBE sc=82.05 mfe=1.04 hit=否 exit=到期平仓 pnl=-0.09 full=-0.09 hold=10 vol=0.7545 band=0.0134 touch=3 entry=2025-07-14
+⁠300792 壹网壹创 sig=2025-07-01 typ=CSB_PROBE sc=84.68 mfe=2.35 hit=否 exit=到期平仓 pnl=-0.08 full=-0.08 hold=10 vol=0.7103 band=0.0149 touch=5 entry=2025-07-02
+⁠000048 京基智农 sig=2025-06-20 typ=CSB_PROBE sc=71.4 mfe=2.42 hit=否 exit=到期平仓 pnl=0.0 full=0.0 hold=10 vol=0.5478 band=0.0344 touch=6 entry=2025-06-23
+⁠002570 贝因美 sig=2025-07-15 typ=CSB_PROBE sc=77.39 mfe=15.53 hit=是 exit=通道失效 pnl=0.0 full=8.74 hold=5 vol=0.66 band=0.0176 touch=3 entry=2025-07-16
+⁠002310 东方新能 sig=2025-07-23 typ=CSB_PROBE sc=73.7 mfe=3.76 hit=否 exit=阶梯跟踪止损 pnl=0.0 full=-0.94 hold=3 vol=0.6203 band=0.0116 touch=2 entry=2025-07-24
+⁠001258 立新能源 sig=2025-08-05 typ=CSB_PROBE sc=77.41 mfe=4.22 hit=否 exit=阶梯跟踪止损 pnl=0.0 full=0.84 hold=7 vol=0.6033 band=0.0271 touch=3 entry=2025-08-06
+⁠600280 中央商场 sig=2025-08-08 typ=CSB_PROBE sc=89.35 mfe=4.65 hit=否 exit=阶梯跟踪止损 pnl=0.0 full=1.45 hold=4 vol=0.5319 band=0.0186 touch=2 entry=2025-08-11
+⁠300335 迪森股份 sig=2025-09-29 typ=CSB_PROBE sc=78.12 mfe=5.15 hit=否 exit=阶梯跟踪止损 pnl=0.0 full=4.97 hold=8 vol=0.7243 band=0.0355 touch=6 entry=2025-09-30
+⁠002535 林州重机 sig=2025-12-01 typ=CSB_PROBE sc=77.3 mfe=7.59 hit=否 exit=阶梯跟踪止损 pnl=0.0 full=-4.3 hold=6 vol=0.7921 band=0.0348 touch=2 entry=2025-12-02
+⁠605179 一鸣食品 sig=2026-01-08 typ=CSB_PROBE sc=81.07 mfe=5.48 hit=否 exit=阶梯跟踪止损 pnl=0.0 full=-0.33 hold=6 vol=0.532 band=0.0237 touch=4 entry=2026-01-09
+⁠002669 康达新材 sig=2025-11-17 typ=CSB_PROBE sc=81.89 mfe=15.45 hit=是 exit=通道失效 pnl=0.08 full=-0.23 hold=3 vol=0.7566 band=0.0164 touch=4 entry=2025-11-18
+⁠430556 雅达股份 sig=2025-06-03 typ=CSB_PROBE sc=71.22 mfe=4.0 hit=否 exit=阶梯跟踪止损 pnl=0.09 full=-2.27 hold=3 vol=0.5421 band=0.0231 touch=3 entry=2025-06-04
+⁠600371 万向德农 sig=2025-06-04 typ=CSB_PROBE sc=73.46 mfe=5.3 hit=否 exit=阶梯跟踪止损 pnl=0.11 full=-1.19 hold=6 vol=0.5319 band=0.0221 touch=2 entry=2025-06-05
+⁠600814 杭州解百 sig=2025-05-26 typ=CSB_PROBE sc=85.06 mfe=3.4 hit=否 exit=阶梯跟踪止损 pnl=0.13 full=-1.26 hold=8 vol=0.6878 band=0.0182 touch=4 entry=2025-05-27
+⁠603169 兰石重装 sig=2025-08-05 typ=CSB_PROBE sc=81.64 mfe=2.18 hit=否 exit=到期平仓 pnl=0.13 full=0.13 hold=10 vol=0.5033 band=0.0334 touch=3 entry=2025-08-06
+⁠002302 西部建设 sig=2025-11-03 typ=CSB_PROBE sc=84.66 mfe=3.93 hit=否 exit=阶梯跟踪止损 pnl=0.15 full=2.27 hold=3 vol=0.5196 band=0.0334 touch=4 entry=2025-11-04
+⁠600292 电投水电 sig=2025-06-05 typ=CSB_PROBE sc=73.4 mfe=4.23 hit=否 exit=阶梯跟踪止损 pnl=0.16 full=-1.06 hold=7 vol=0.4566 band=0.0224 touch=2 entry=2025-06-06
+⁠002819 东方中科 sig=2025-07-25 typ=CSB_PROBE sc=80.54 mfe=4.14 hit=否 exit=阶梯跟踪止损 pnl=0.17 full=0.17 hold=10 vol=0.6774 band=0.0098 touch=3 entry=2025-07-28
+⁠600738 丽尚国潮 sig=2025-08-06 typ=CSB_PROBE sc=75.29 mfe=4.72 hit=否 exit=阶梯跟踪止损 pnl=0.19 full=0.57 hold=6 vol=0.4211 band=0.0308 touch=3 entry=2025-08-07
+⁠603017 中衡设计 sig=2025-09-10 typ=CSB_PROBE sc=91.6 mfe=8.24 hit=否 exit=阶梯跟踪止损 pnl=0.2 full=3.05 hold=9 vol=0.7214 band=0.0096 touch=2 entry=2025-09-11
+⁠603186 华正新材 sig=2025-06-12 typ=CSB_PROBE sc=74.41 mfe=17.08 hit=是 exit=阶梯跟踪止损 pnl=0.23 full=13.99 hold=3 vol=0.7804 band=0.0247 touch=3 entry=2025-06-13
+⁠600310 广西能源 sig=2025-08-06 typ=CSB_PROBE sc=72.48 mfe=2.44 hit=否 exit=到期平仓 pnl=0.24 full=0.24 hold=10 vol=0.4998 band=0.0277 touch=3 entry=2025-08-07
+⁠603615 茶花股份 sig=2025-11-17 typ=CSB_PROBE sc=73.22 mfe=3.17 hit=否 exit=通道失效 pnl=0.24 full=-0.85 hold=3 vol=0.7753 band=0.0183 touch=2 entry=2025-11-18
+⁠000048 京基智农 sig=2025-07-07 typ=CSB_PROBE sc=87.57 mfe=4.96 hit=否 exit=阶梯跟踪止损 pnl=0.25 full=1.72 hold=9 vol=0.7006 band=0.0217 touch=5 entry=2025-07-08
+⁠600758 辽宁能源 sig=2025-09-10 typ=CSB_PROBE sc=80.47 mfe=3.39 hit=否 exit=阶梯跟踪止损 pnl=0.26 full=-1.82 hold=6 vol=0.6117 band=0.0261 touch=4 entry=2025-09-11
+⁠000543 皖能电力 sig=2025-06-05 typ=CSB_PROBE sc=85.34 mfe=2.86 hit=否 exit=到期平仓 pnl=0.27 full=0.27 hold=10 vol=0.6924 band=0.0106 touch=2 entry=2025-06-06
+⁠002746 仙坛股份 sig=2025-05-28 typ=CSB_PROBE sc=83.06 mfe=3.9 hit=否 exit=阶梯跟踪止损 pnl=0.34 full=0.34 hold=10 vol=0.7716 band=0.0118 touch=2 entry=2025-05-29
+⁠688037 芯源微 sig=2025-05-29 typ=CSB_PROBE sc=79.8 mfe=6.19 hit=否 exit=阶梯跟踪止损 pnl=0.34 full=-0.38 hold=7 vol=0.6597 band=0.0248 touch=8 entry=2025-05-30
+⁠301265 华新科技 sig=2025-11-12 typ=CSB_PROBE sc=84.96 mfe=4.36 hit=否 exit=阶梯跟踪止损 pnl=0.34 full=2.05 hold=7 vol=0.6313 band=0.0161 touch=3 entry=2025-11-13
+⁠603085 天成自控 sig=2025-07-02 typ=CSB_PROBE sc=95.46 mfe=2.73 hit=否 exit=到期平仓 pnl=0.35 full=0.35 hold=10 vol=0.7238 band=0.0222 touch=6 entry=2025-07-03
+⁠603711 香飘飘 sig=2025-07-22 typ=CSB_PROBE sc=85.71 mfe=2.69 hit=否 exit=到期平仓 pnl=0.36 full=0.36 hold=10 vol=0.6359 band=0.0172 touch=3 entry=2025-07-23
+⁠002086 东方海洋 sig=2025-09-05 typ=CSB_PROBE sc=75.45 mfe=4.36 hit=否 exit=阶梯跟踪止损 pnl=0.36 full=-1.82 hold=9 vol=0.6836 band=0.0342 touch=3 entry=2025-09-08
+⁠000507 珠海港 sig=2025-09-05 typ=CSB_PROBE sc=89.88 mfe=1.84 hit=否 exit=到期平仓 pnl=0.37 full=0.37 hold=10 vol=0.5845 band=0.0205 touch=5 entry=2025-09-08
+⁠301206 三元生物 sig=2025-08-06 typ=CSB_PROBE sc=79.87 mfe=1.76 hit=否 exit=到期平仓 pnl=0.41 full=0.41 hold=10 vol=0.7525 band=0.0125 touch=3 entry=2025-08-07
+⁠920799 艾融软件 sig=2025-09-15 typ=CSB_PROBE sc=72.81 mfe=6.41 hit=否 exit=阶梯跟踪止损 pnl=0.41 full=-2.93 hold=3 vol=0.4921 band=0.0336 touch=4 entry=2025-09-16
+⁠600987 航民股份 sig=2025-06-25 typ=CSB_PROBE sc=85.12 mfe=1.27 hit=否 exit=到期平仓 pnl=0.42 full=0.42 hold=10 vol=0.4797 band=0.0275 touch=3 entry=2025-06-26
+⁠605338 巴比食品 sig=2025-07-07 typ=CSB_PROBE sc=74.3 mfe=8.92 hit=否 exit=阶梯跟踪止损 pnl=0.42 full=-0.74 hold=6 vol=0.6977 band=0.0228 touch=4 entry=2025-07-08
+⁠600527 江南高纤 sig=2025-08-08 typ=CSB_PROBE sc=86.6 mfe=1.88 hit=否 exit=到期平仓 pnl=0.47 full=0.47 hold=10 vol=0.6445 band=0.0056 touch=2 entry=2025-08-11
+⁠000735 罗 牛 山 sig=2025-09-26 typ=CSB_PROBE sc=88.42 mfe=10.56 hit=是 exit=阶梯跟踪止损 pnl=0.48 full=8.0 hold=3 vol=0.6636 band=0.0183 touch=4 entry=2025-09-29
+⁠300013 新宁物流 sig=2025-07-17 typ=CSB_PROBE sc=82.04 mfe=4.66 hit=否 exit=阶梯跟踪止损 pnl=0.49 full=-1.47 hold=8 vol=0.7199 band=0.0078 touch=3 entry=2025-07-18
+⁠600121 郑州煤电 sig=2025-09-08 typ=CSB_PROBE sc=80.49 mfe=3.96 hit=否 exit=阶梯跟踪止损 pnl=0.5 full=0.99 hold=8 vol=0.5813 band=0.0221 touch=4 entry=2025-09-09
+⁠300054 鼎龙股份 sig=2025-06-04 typ=CSB_PROBE sc=69.9 mfe=3.21 hit=否 exit=阶梯跟踪止损 pnl=0.54 full=-3.29 hold=3 vol=0.7458 band=0.0268 touch=2 entry=2025-06-05
+⁠600679 上海凤凰 sig=2025-08-06 typ=CSB_PROBE sc=75.15 mfe=7.66 hit=否 exit=阶梯跟踪止损 pnl=0.55 full=5.55 hold=6 vol=0.6986 band=0.0354 touch=3 entry=2025-08-07
+⁠600300 维维股份 sig=2025-08-08 typ=CSB_PROBE sc=77.76 mfe=2.33 hit=否 exit=到期平仓 pnl=0.58 full=0.58 hold=10 vol=0.6285 band=0.0209 touch=3 entry=2025-08-11
+⁠002748 世龙实业 sig=2026-02-12 typ=CSB_PROBE sc=76.22 mfe=9.21 hit=否 exit=阶梯跟踪止损 pnl=0.63 full=6.27 hold=7 vol=0.7994 band=0.0207 touch=2 entry=2026-02-13
+⁠300220 金运激光 sig=2025-08-05 typ=CSB_PROBE sc=64.06 mfe=4.56 hit=否 exit=阶梯跟踪止损 pnl=0.7 full=3.5 hold=3 vol=0.7873 band=0.0358 touch=2 entry=2025-08-06
+⁠600868 梅雁吉祥 sig=2025-08-08 typ=CSB_PROBE sc=81.71 mfe=4.33 hit=否 exit=到期平仓 pnl=0.72 full=0.72 hold=10 vol=0.5484 band=0.0171 touch=4 entry=2025-08-11
+⁠601133 柏诚股份 sig=2025-10-29 typ=CSB_PROBE sc=86.55 mfe=4.41 hit=否 exit=阶梯跟踪止损 pnl=0.79 full=0.79 hold=10 vol=0.7751 band=0.0258 touch=6 entry=2025-10-30
+⁠600551 时代出版 sig=2025-09-02 typ=CSB_PROBE sc=65.92 mfe=2.16 hit=否 exit=到期平仓 pnl=0.8 full=0.8 hold=10 vol=0.7927 band=0.0283 touch=2 entry=2025-09-03
+⁠002570 贝因美 sig=2026-02-02 typ=CSB_PROBE sc=93.8 mfe=2.3 hit=否 exit=到期平仓 pnl=0.82 full=0.82 hold=10 vol=0.5295 band=0.0168 touch=3 entry=2026-02-03
+⁠600223 福瑞达 sig=2025-08-08 typ=CSB_PROBE sc=82.06 mfe=3.31 hit=否 exit=到期平仓 pnl=0.83 full=0.83 hold=10 vol=0.7884 band=0.0158 touch=2 entry=2025-08-11
+⁠603366 日出东方 sig=2025-08-01 typ=CSB_PROBE sc=85.75 mfe=3.8 hit=否 exit=阶梯跟踪止损 pnl=0.84 full=0.74 hold=7 vol=0.7328 band=0.037 touch=5 entry=2025-08-04
+⁠300989 蕾奥规划 sig=2025-09-29 typ=CSB_PROBE sc=72.62 mfe=4.76 hit=否 exit=阶梯跟踪止损 pnl=0.84 full=0.48 hold=7 vol=0.6279 band=0.0391 touch=5 entry=2025-09-30
+⁠600249 两面针 sig=2025-07-22 typ=CSB_PROBE sc=73.57 mfe=3.07 hit=否 exit=到期平仓 pnl=0.85 full=0.85 hold=10 vol=0.7682 band=0.0137 touch=3 entry=2025-07-23
+⁠600638 新黄浦 sig=2025-09-10 typ=CSB_PROBE sc=76.05 mfe=4.83 hit=否 exit=阶梯跟踪止损 pnl=0.86 full=-2.07 hold=6 vol=0.5544 band=0.0318 touch=3 entry=2025-09-11
+⁠600467 好当家 sig=2025-05-28 typ=CSB_PROBE sc=89.32 mfe=3.04 hit=否 exit=阶梯跟踪止损 pnl=0.87 full=1.3 hold=5 vol=0.7309 band=0.0147 touch=4 entry=2025-05-29
+⁠301011 华立科技 sig=2025-07-30 typ=CSB_PROBE sc=77.57 mfe=4.61 hit=否 exit=阶梯跟踪止损 pnl=0.88 full=0.07 hold=7 vol=0.7759 band=0.0337 touch=4 entry=2025-07-31
+⁠300577 开润股份 sig=2025-07-14 typ=CSB_PROBE sc=89.64 mfe=8.0 hit=否 exit=阶梯跟踪止损 pnl=0.89 full=2.04 hold=7 vol=0.715 band=0.0215 touch=4 entry=2025-07-15
+⁠000019 深粮控股 sig=2025-06-25 typ=CSB_PROBE sc=86.22 mfe=2.09 hit=否 exit=到期平仓 pnl=0.9 full=0.9 hold=10 vol=0.7025 band=0.0351 touch=5 entry=2025-06-26
+⁠600006 东风股份 sig=2025-10-27 typ=CSB_PROBE sc=83.68 mfe=3.38 hit=否 exit=到期平仓 pnl=0.91 full=0.91 hold=10 vol=0.5481 band=0.0093 touch=2 entry=2025-10-28
+⁠001337 四川黄金 sig=2025-07-10 typ=CSB_PROBE sc=78.52 mfe=3.1 hit=否 exit=阶梯跟踪止损 pnl=0.92 full=0.92 hold=10 vol=0.5409 band=0.0299 touch=5 entry=2025-07-11
+⁠605228 神通科技 sig=2025-06-23 typ=CSB_PROBE sc=75.31 mfe=13.43 hit=是 exit=阶梯跟踪止损 pnl=0.94 full=12.58 hold=3 vol=0.5795 band=0.0307 touch=3 entry=2025-06-24
+⁠002570 贝因美 sig=2025-07-22 typ=CSB_PROBE sc=77.75 mfe=34.3 hit=是 exit=阶梯跟踪止损 pnl=0.97 full=14.56 hold=3 vol=0.6306 band=0.025 touch=3 entry=2025-07-23
+⁠600903 贵州燃气 sig=2025-07-07 typ=CSB_PROBE sc=89.15 mfe=1.88 hit=否 exit=到期平仓 pnl=1.01 full=1.01 hold=10 vol=0.4846 band=0.0114 touch=3 entry=2025-07-08
+⁠002510 天汽模 sig=2025-11-03 typ=CSB_PROBE sc=68.57 mfe=3.86 hit=否 exit=阶梯跟踪止损 pnl=1.04 full=1.04 hold=10 vol=0.5435 band=0.0337 touch=3 entry=2025-11-04
+⁠920445 龙竹科技 sig=2025-07-10 typ=CSB_PROBE sc=79.48 mfe=2.44 hit=否 exit=到期平仓 pnl=1.07 full=1.07 hold=10 vol=0.7118 band=0.0141 touch=3 entry=2025-07-11
+⁠600650 锦江在线 sig=2025-09-11 typ=CSB_PROBE sc=71.22 mfe=5.35 hit=否 exit=阶梯跟踪止损 pnl=1.11 full=0.98 hold=5 vol=0.6584 band=0.0215 touch=2 entry=2025-09-12
+⁠600975 新五丰 sig=2025-11-04 typ=CSB_PROBE sc=74.7 mfe=2.88 hit=否 exit=到期平仓 pnl=1.12 full=1.12 hold=10 vol=0.7873 band=0.0212 touch=2 entry=2025-11-05
+⁠600819 耀皮玻璃 sig=2025-09-09 typ=CSB_BREAKOUT sc=82.59 mfe=8.29 hit=否 exit=到期平仓 pnl=1.14 full=1.14 hold=10 vol=3.352 band=0.0166 touch=3 entry=2025-09-10
+⁠000551 创元科技 sig=2025-10-29 typ=CSB_PROBE sc=83.54 mfe=2.48 hit=否 exit=到期平仓 pnl=1.15 full=1.15 hold=10 vol=0.6389 band=0.0259 touch=3 entry=2025-10-30
+⁠001216 华瓷股份 sig=2026-02-27 typ=CSB_BREAKOUT sc=79.67 mfe=11.45 hit=是 exit=到期平仓 pnl=1.18 full=1.18 hold=10 vol=4.0538 band=0.0375 touch=3 entry=2026-03-02
+⁠300040 九洲集团 sig=2025-08-11 typ=CSB_PROBE sc=78.0 mfe=3.3 hit=否 exit=到期平仓 pnl=1.19 full=1.19 hold=10 vol=0.6645 band=0.02 touch=3 entry=2025-08-12
+⁠603015 弘讯科技 sig=2025-07-09 typ=CSB_PROBE sc=82.84 mfe=4.6 hit=否 exit=阶梯跟踪止损 pnl=1.21 full=1.21 hold=10 vol=0.5427 band=0.0126 touch=5 entry=2025-07-10
+⁠002561 徐家汇 sig=2025-06-10 typ=CSB_PROBE sc=85.18 mfe=8.3 hit=否 exit=阶梯跟踪止损 pnl=1.22 full=0.98 hold=5 vol=0.7341 band=0.0073 touch=4 entry=2025-06-11
+⁠000507 珠海港 sig=2025-07-18 typ=CSB_PROBE sc=91.48 mfe=3.27 hit=否 exit=阶梯跟踪止损 pnl=1.27 full=-0.91 hold=6 vol=0.7328 band=0.0061 touch=5 entry=2025-07-21
+⁠000507 珠海港 sig=2025-08-06 typ=CSB_PROBE sc=88.76 mfe=6.92 hit=否 exit=阶梯跟踪止损 pnl=1.28 full=2.19 hold=6 vol=0.7733 band=0.025 touch=5 entry=2025-08-07
+⁠300159 新研股份 sig=2026-02-10 typ=CSB_PROBE sc=79.28 mfe=9.35 hit=否 exit=阶梯跟踪止损 pnl=1.29 full=0.97 hold=9 vol=0.6412 band=0.0365 touch=5 entry=2026-02-11
+⁠300718 长盛轴承 sig=2026-02-04 typ=CSB_PROBE sc=83.18 mfe=9.72 hit=否 exit=阶梯跟踪止损 pnl=1.37 full=1.37 hold=10 vol=0.4871 band=0.0393 touch=5 entry=2026-02-05
+⁠002641 公元股份 sig=2025-12-23 typ=CSB_PROBE sc=81.36 mfe=1.84 hit=否 exit=到期平仓 pnl=1.38 full=1.38 hold=10 vol=0.6332 band=0.0106 touch=3 entry=2025-12-24
+⁠688597 煜邦电力 sig=2025-06-04 typ=CSB_PROBE sc=75.84 mfe=3.7 hit=否 exit=阶梯跟踪止损 pnl=1.39 full=1.39 hold=10 vol=0.7847 band=0.0326 touch=3 entry=2025-06-05
+⁠000862 银星能源 sig=2025-08-07 typ=CSB_PROBE sc=70.17 mfe=1.96 hit=否 exit=到期平仓 pnl=1.42 full=1.42 hold=10 vol=0.6836 band=0.0209 touch=2 entry=2025-08-08
+⁠300908 仲景食品 sig=2025-06-23 typ=CSB_PROBE sc=94.95 mfe=4.28 hit=否 exit=阶梯跟踪止损 pnl=1.44 full=2.23 hold=9 vol=0.5458 band=0.0242 touch=4 entry=2025-06-24
+⁠600313 农发种业 sig=2025-05-30 typ=CSB_PROBE sc=71.97 mfe=5.31 hit=否 exit=阶梯跟踪止损 pnl=1.45 full=0.97 hold=8 vol=0.5862 band=0.0345 touch=3 entry=2025-06-03
+⁠600706 曲江文旅 sig=2026-01-29 typ=CSB_PROBE sc=75.85 mfe=4.86 hit=否 exit=阶梯跟踪止损 pnl=1.47 full=-1.47 hold=9 vol=0.6035 band=0.0142 touch=3 entry=2026-01-30
+⁠000420 吉林化纤 sig=2025-08-05 typ=CSB_PROBE sc=86.69 mfe=5.91 hit=否 exit=阶梯跟踪止损 pnl=1.48 full=3.94 hold=7 vol=0.6788 band=0.0133 touch=3 entry=2025-08-06
+⁠301182 凯旺科技 sig=2025-11-12 typ=CSB_PROBE sc=76.37 mfe=7.9 hit=否 exit=通道失效 pnl=1.49 full=2.73 hold=3 vol=0.7007 band=0.0385 touch=5 entry=2025-11-13
+⁠603085 天成自控 sig=2025-06-18 typ=CSB_PROBE sc=85.07 mfe=4.21 hit=否 exit=阶梯跟踪止损 pnl=1.52 full=1.43 hold=6 vol=0.6218 band=0.0317 touch=6 entry=2025-06-19
+⁠600726 华电能源 sig=2025-09-09 typ=CSB_PROBE sc=77.11 mfe=6.85 hit=否 exit=阶梯跟踪止损 pnl=1.61 full=-2.02 hold=8 vol=0.749 band=0.0276 touch=3 entry=2025-09-10
+⁠000582 北部湾港 sig=2025-06-09 typ=CSB_PROBE sc=74.92 mfe=3.94 hit=否 exit=阶梯跟踪止损 pnl=1.62 full=-2.89 hold=2 vol=0.4084 band=0.0179 touch=3 entry=2025-06-10
+⁠002627 三峡旅游 sig=2025-06-25 typ=CSB_PROBE sc=80.03 mfe=2.25 hit=否 exit=到期平仓 pnl=1.69 full=1.69 hold=10 vol=0.5053 band=0.0279 touch=6 entry=2025-06-26
+⁠430556 雅达股份 sig=2025-06-23 typ=CSB_PROBE sc=81.99 mfe=4.42 hit=否 exit=阶梯跟踪止损 pnl=1.75 full=3.5 hold=9 vol=0.7445 band=0.02 touch=6 entry=2025-06-24
+⁠000995 皇台酒业 sig=2025-09-24 typ=CSB_PROBE sc=77.9 mfe=6.57 hit=否 exit=阶梯跟踪止损 pnl=1.77 full=-2.4 hold=4 vol=0.512 band=0.0364 touch=6 entry=2025-09-25
+⁠301001 凯淳股份 sig=2025-10-29 typ=CSB_PROBE sc=76.59 mfe=3.04 hit=否 exit=阶梯跟踪止损 pnl=1.8 full=0.8 hold=6 vol=0.7591 band=0.0296 touch=3 entry=2025-10-30
+⁠600628 新世界 sig=2025-06-23 typ=CSB_PROBE sc=92.26 mfe=2.78 hit=否 exit=到期平仓 pnl=1.81 full=1.81 hold=10 vol=0.7135 band=0.035 touch=5 entry=2025-06-24
+⁠002039 黔源电力 sig=2025-06-17 typ=CSB_PROBE sc=75.08 mfe=2.01 hit=否 exit=到期平仓 pnl=1.82 full=1.82 hold=10 vol=0.7442 band=0.0061 touch=2 entry=2025-06-18
+⁠301028 鼎熔岩 sig=2025-06-25 typ=CSB_PROBE sc=73.18 mfe=3.39 hit=否 exit=到期平仓 pnl=1.82 full=1.82 hold=10 vol=0.6423 band=0.0321 touch=4 entry=2025-06-26
+⁠301171 易点天下 sig=2025-07-04 typ=CSB_PROBE sc=82.59 mfe=11.55 hit=是 exit=阶梯跟踪止损 pnl=1.88 full=8.54 hold=6 vol=0.6537 band=0.0176 touch=4 entry=2025-07-07
+⁠600313 农发种业 sig=2025-06-25 typ=CSB_PROBE sc=83.56 mfe=2.88 hit=否 exit=到期平仓 pnl=1.92 full=1.92 hold=10 vol=0.7712 band=0.0338 touch=3 entry=2025-06-26
+⁠301287 康力源 sig=2025-12-04 typ=CSB_PROBE sc=79.73 mfe=6.76 hit=否 exit=阶梯跟踪止损 pnl=1.92 full=3.71 hold=6 vol=0.7525 band=0.0171 touch=3 entry=2025-12-05
+⁠600054 黄山旅游 sig=2025-05-28 typ=CSB_PROBE sc=74.32 mfe=3.77 hit=否 exit=阶梯跟踪止损 pnl=1.93 full=1.93 hold=10 vol=0.5407 band=0.0387 touch=3 entry=2025-05-29
+⁠000597 东北制药 sig=2025-06-25 typ=CSB_PROBE sc=81.89 mfe=4.25 hit=否 exit=到期平仓 pnl=1.93 full=1.93 hold=10 vol=0.7573 band=0.0244 touch=2 entry=2025-06-26
+⁠002112 三变科技 sig=2025-09-29 typ=CSB_PROBE sc=76.12 mfe=8.66 hit=否 exit=阶梯跟踪止损 pnl=1.93 full=1.55 hold=4 vol=0.5254 band=0.0395 touch=4 entry=2025-09-30
+⁠601033 永兴股份 sig=2025-08-06 typ=CSB_PROBE sc=86.89 mfe=1.95 hit=否 exit=到期平仓 pnl=1.95 full=1.95 hold=10 vol=0.706 band=0.0324 touch=4 entry=2025-08-07
+⁠603183 建研院 sig=2025-05-28 typ=CSB_PROBE sc=78.39 mfe=3.2 hit=否 exit=到期平仓 pnl=1.97 full=1.97 hold=10 vol=0.7928 band=0.0064 touch=2 entry=2025-05-29
+⁠603107 上海汽配 sig=2025-10-27 typ=CSB_PROBE sc=89.01 mfe=2.55 hit=否 exit=到期平仓 pnl=1.97 full=1.97 hold=10 vol=0.5813 band=0.024 touch=5 entry=2025-10-28
+⁠603390 通达电气 sig=2025-09-10 typ=CSB_PROBE sc=79.41 mfe=5.11 hit=否 exit=阶梯跟踪止损 pnl=1.98 full=-0.15 hold=6 vol=0.472 band=0.0304 touch=5 entry=2025-09-11
+⁠600597 光明乳业 sig=2025-05-07 typ=CSB_PROBE sc=88.9 mfe=2.98 hit=否 exit=到期平仓 pnl=2.02 full=2.02 hold=10 vol=0.4936 band=0.0164 touch=4 entry=2025-05-08
+⁠603788 宁波高发 sig=2025-07-08 typ=CSB_PROBE sc=91.07 mfe=3.48 hit=否 exit=到期平仓 pnl=2.02 full=2.02 hold=10 vol=0.5277 band=0.0117 touch=2 entry=2025-07-09
+⁠002039 黔源电力 sig=2025-08-11 typ=CSB_PROBE sc=91.86 mfe=2.52 hit=否 exit=到期平仓 pnl=2.02 full=2.02 hold=10 vol=0.5441 band=0.0125 touch=4 entry=2025-08-12
+⁠002799 环球印务 sig=2025-09-05 typ=CSB_PROBE sc=74.59 mfe=6.97 hit=否 exit=阶梯跟踪止损 pnl=2.04 full=-1.2 hold=6 vol=0.5597 band=0.0264 touch=6 entry=2025-09-08
+⁠000952 广济药业 sig=2026-03-04 typ=CSB_PROBE sc=72.72 mfe=4.55 hit=否 exit=阶梯跟踪止损 pnl=2.14 full=1.6 hold=5 vol=0.7851 band=0.0291 touch=2 entry=2026-03-05
+⁠601002 XD晋亿实 sig=2025-06-23 typ=CSB_PROBE sc=74.27 mfe=11.18 hit=是 exit=阶梯跟踪止损 pnl=2.15 full=10.97 hold=3 vol=0.7683 band=0.0349 touch=3 entry=2025-06-24
+⁠000523 红棉股份 sig=2025-06-20 typ=CSB_PROBE sc=83.83 mfe=3.74 hit=否 exit=阶梯跟踪止损 pnl=2.18 full=1.87 hold=4 vol=0.6333 band=0.0327 touch=3 entry=2025-06-23
+⁠600722 金牛化工 sig=2025-11-04 typ=CSB_PROBE sc=70.91 mfe=8.28 hit=否 exit=阶梯跟踪止损 pnl=2.19 full=2.19 hold=10 vol=0.6841 band=0.0244 touch=3 entry=2025-11-05
+⁠600054 黄山旅游 sig=2025-06-23 typ=CSB_PROBE sc=84.4 mfe=10.13 hit=是 exit=阶梯跟踪止损 pnl=2.2 full=2.56 hold=9 vol=0.667 band=0.0304 touch=3 entry=2025-06-24
+⁠600697 欧亚集团 sig=2025-06-30 typ=CSB_PROBE sc=86.35 mfe=2.47 hit=否 exit=到期平仓 pnl=2.22 full=2.22 hold=10 vol=0.7564 band=0.0266 touch=4 entry=2025-07-01
+⁠002385 大北农 sig=2025-06-30 typ=CSB_PROBE sc=81.5 mfe=3.47 hit=否 exit=到期平仓 pnl=2.23 full=2.23 hold=10 vol=0.7792 band=0.026 touch=2 entry=2025-07-01
+⁠002312 川发龙蟒 sig=2025-08-11 typ=CSB_PROBE sc=89.5 mfe=3.09 hit=否 exit=到期平仓 pnl=2.29 full=2.29 hold=10 vol=0.6598 band=0.01 touch=3 entry=2025-08-12
+⁠600790 轻纺城 sig=2025-08-07 typ=CSB_PROBE sc=73.98 mfe=3.43 hit=否 exit=到期平仓 pnl=2.37 full=2.37 hold=10 vol=0.6635 band=0.0169 touch=3 entry=2025-08-08
+⁠600221 海航控股 sig=2026-01-27 typ=CSB_PROBE sc=89.49 mfe=4.14 hit=否 exit=到期平仓 pnl=2.37 full=2.37 hold=10 vol=0.678 band=0.034 touch=3 entry=2026-01-28
+⁠002186 全 聚 德 sig=2025-06-25 typ=CSB_PROBE sc=84.29 mfe=5.14 hit=否 exit=到期平仓 pnl=2.38 full=2.38 hold=10 vol=0.7709 band=0.0308 touch=3 entry=2025-06-26
+⁠002195 岩山科技 sig=2025-07-10 typ=CSB_PROBE sc=85.93 mfe=7.56 hit=否 exit=阶梯跟踪止损 pnl=2.4 full=3.87 hold=9 vol=0.6161 band=0.0083 touch=2 entry=2025-07-11
+⁠300921 南凌科技 sig=2025-09-04 typ=CSB_PROBE sc=76.14 mfe=7.02 hit=否 exit=通道失效 pnl=2.43 full=2.77 hold=3 vol=0.7091 band=0.0395 touch=2 entry=2025-09-05
+⁠002746 仙坛股份 sig=2025-06-23 typ=CSB_PROBE sc=85.42 mfe=2.79 hit=否 exit=到期平仓 pnl=2.44 full=2.44 hold=10 vol=0.7478 band=0.0383 touch=6 entry=2025-06-24
+⁠603209 兴通股份 sig=2025-08-06 typ=CSB_PROBE sc=82.97 mfe=2.77 hit=否 exit=到期平仓 pnl=2.44 full=2.44 hold=10 vol=0.6237 band=0.0049 touch=3 entry=2025-08-07
+⁠300873 海晨股份 sig=2025-05-23 typ=CSB_PROBE sc=75.19 mfe=7.36 hit=否 exit=阶梯跟踪止损 pnl=2.52 full=1.06 hold=5 vol=0.67 band=0.0353 touch=3 entry=2025-05-26
+⁠000151 中成股份 sig=2025-08-06 typ=CSB_PROBE sc=68.56 mfe=3.82 hit=否 exit=到期平仓 pnl=2.57 full=2.57 hold=10 vol=0.4164 band=0.0178 touch=2 entry=2025-08-07
+⁠300868 杰美特 sig=2025-08-06 typ=CSB_PROBE sc=74.16 mfe=3.59 hit=否 exit=到期平仓 pnl=2.63 full=2.63 hold=10 vol=0.6213 band=0.0282 touch=5 entry=2025-08-07
+⁠002761 浙江建投 sig=2025-11-03 typ=CSB_PROBE sc=91.97 mfe=2.98 hit=否 exit=到期平仓 pnl=2.66 full=2.66 hold=10 vol=0.7607 band=0.0121 touch=4 entry=2025-11-04
+⁠301397 溯联股份 sig=2025-06-20 typ=CSB_PROBE sc=78.33 mfe=7.95 hit=否 exit=阶梯跟踪止损 pnl=2.67 full=5.75 hold=8 vol=0.4998 band=0.0347 touch=4 entry=2025-06-23
+⁠300473 德尔股份 sig=2025-08-08 typ=CSB_PROBE sc=75.68 mfe=5.77 hit=否 exit=到期平仓 pnl=2.67 full=2.67 hold=10 vol=0.7413 band=0.0269 touch=6 entry=2025-08-11
+⁠000957 中通客车 sig=2025-08-06 typ=CSB_PROBE sc=74.41 mfe=3.45 hit=否 exit=到期平仓 pnl=2.72 full=2.72 hold=10 vol=0.5642 band=0.02 touch=3 entry=2025-08-07
+⁠605180 华生科技 sig=2025-11-11 typ=CSB_PROBE sc=89.29 mfe=10.7 hit=是 exit=到期平仓 pnl=2.74 full=2.74 hold=10 vol=0.7824 band=0.0148 touch=4 entry=2025-11-12
+⁠430556 雅达股份 sig=2025-07-04 typ=CSB_PROBE sc=95.54 mfe=12.06 hit=是 exit=阶梯跟踪止损 pnl=2.79 full=2.79 hold=10 vol=0.7272 band=0.0218 touch=5 entry=2025-07-07
+⁠301289 国缆检测 sig=2025-07-16 typ=CSB_PROBE sc=69.22 mfe=5.04 hit=否 exit=到期平仓 pnl=2.82 full=2.82 hold=10 vol=0.7719 band=0.0151 touch=2 entry=2025-07-17
+⁠603836 海程邦达 sig=2025-06-26 typ=CSB_PROBE sc=80.68 mfe=17.63 hit=是 exit=阶梯跟踪止损 pnl=2.84 full=2.84 hold=10 vol=0.7121 band=0.0173 touch=2 entry=2025-06-27
+⁠600727 鲁北化工 sig=2025-07-11 typ=CSB_PROBE sc=79.16 mfe=5.03 hit=否 exit=到期平仓 pnl=2.84 full=2.84 hold=10 vol=0.6192 band=0.0033 touch=2 entry=2025-07-14
+⁠600510 黑牡丹 sig=2025-07-04 typ=CSB_PROBE sc=70.56 mfe=8.0 hit=否 exit=阶梯跟踪止损 pnl=3.0 full=2.8 hold=9 vol=0.6714 band=0.0097 touch=2 entry=2025-07-07
+⁠600108 亚盛集团 sig=2025-06-23 typ=CSB_PROBE sc=91.41 mfe=4.48 hit=否 exit=到期平仓 pnl=3.1 full=3.1 hold=10 vol=0.7829 band=0.0103 touch=2 entry=2025-06-24
+⁠002067 景兴纸业 sig=2026-02-09 typ=CSB_PROBE sc=79.91 mfe=10.62 hit=是 exit=阶梯跟踪止损 pnl=3.11 full=-2.56 hold=9 vol=0.4479 band=0.0292 touch=6 entry=2026-02-10
+⁠600444 国机通用 sig=2025-12-31 typ=CSB_PROBE sc=76.91 mfe=7.19 hit=否 exit=到期平仓 pnl=3.14 full=3.14 hold=10 vol=0.6162 band=0.0324 touch=2 entry=2026-01-05
+⁠300096 易联众 sig=2025-12-29 typ=CSB_PROBE sc=74.81 mfe=4.57 hit=否 exit=到期平仓 pnl=3.23 full=3.23 hold=10 vol=0.7349 band=0.0208 touch=6 entry=2025-12-30
+⁠002307 北新路桥 sig=2025-05-06 typ=CSB_PROBE sc=69.79 mfe=11.06 hit=是 exit=到期平仓 pnl=3.27 full=3.27 hold=10 vol=0.7993 band=0.0288 touch=3 entry=2025-05-07
+⁠000008 神州高铁 sig=2025-06-20 typ=CSB_PROBE sc=82.4 mfe=4.83 hit=否 exit=阶梯跟踪止损 pnl=3.35 full=3.35 hold=4 vol=0.7691 band=0.0144 touch=2 entry=2025-06-23
+⁠603836 海程邦达 sig=2025-10-09 typ=CSB_PROBE sc=88.91 mfe=12.27 hit=是 exit=阶梯跟踪止损 pnl=3.35 full=9.29 hold=3 vol=0.7279 band=0.0244 touch=4 entry=2025-10-10
+⁠600787 中储股份 sig=2025-08-06 typ=CSB_PROBE sc=76.43 mfe=3.54 hit=否 exit=到期平仓 pnl=3.37 full=3.37 hold=10 vol=0.6725 band=0.0143 touch=2 entry=2025-08-07
+⁠002186 全 聚 德 sig=2025-05-28 typ=CSB_PROBE sc=75.63 mfe=6.15 hit=否 exit=到期平仓 pnl=3.46 full=3.46 hold=10 vol=0.7254 band=0.0319 touch=4 entry=2025-05-29
+⁠002772 众兴菌业 sig=2025-06-27 typ=CSB_PROBE sc=76.2 mfe=3.72 hit=否 exit=到期平仓 pnl=3.47 full=3.47 hold=10 vol=0.6497 band=0.0152 touch=2 entry=2025-06-30
+⁠920799 艾融软件 sig=2025-08-01 typ=CSB_PROBE sc=79.57 mfe=9.13 hit=否 exit=到期平仓 pnl=3.51 full=3.51 hold=10 vol=0.6036 band=0.0161 touch=4 entry=2025-08-04
+⁠002301 齐心集团 sig=2025-08-08 typ=CSB_PROBE sc=84.03 mfe=4.81 hit=否 exit=到期平仓 pnl=3.54 full=3.54 hold=10 vol=0.7754 band=0.0159 touch=2 entry=2025-08-11
+⁠920111 聚星科技 sig=2026-02-11 typ=CSB_PROBE sc=77.13 mfe=6.97 hit=否 exit=到期平仓 pnl=3.59 full=3.59 hold=10 vol=0.4589 band=0.0235 touch=3 entry=2026-02-12
+⁠003015 日久光电 sig=2025-06-10 typ=CSB_PROBE sc=72.81 mfe=26.16 hit=是 exit=阶梯跟踪止损 pnl=3.65 full=24.16 hold=3 vol=0.6216 band=0.0288 touch=4 entry=2025-06-11
+⁠002753 永东股份 sig=2025-09-19 typ=CSB_PROBE sc=79.73 mfe=6.17 hit=否 exit=到期平仓 pnl=3.67 full=3.67 hold=10 vol=0.7829 band=0.0291 touch=4 entry=2025-09-22
+⁠605507 国邦医药 sig=2025-11-05 typ=CSB_PROBE sc=87.22 mfe=7.52 hit=否 exit=阶梯跟踪止损 pnl=3.78 full=3.74 hold=9 vol=0.6745 band=0.0231 touch=5 entry=2025-11-06
+⁠000025 特 力Ａ sig=2025-08-05 typ=CSB_PROBE sc=78.98 mfe=8.18 hit=否 exit=到期平仓 pnl=3.86 full=3.86 hold=10 vol=0.7937 band=0.0281 touch=2 entry=2025-08-06
+⁠000430 张家界 sig=2025-06-09 typ=CSB_PROBE sc=81.33 mfe=10.82 hit=是 exit=到期平仓 pnl=3.91 full=3.91 hold=10 vol=0.7161 band=0.0163 touch=3 entry=2025-06-10
+⁠300314 戴维医疗 sig=2025-05-23 typ=CSB_PROBE sc=78.46 mfe=6.85 hit=否 exit=到期平仓 pnl=3.92 full=3.92 hold=10 vol=0.7342 band=0.0221 touch=3 entry=2025-05-26
+⁠603656 泰禾智能 sig=2025-07-11 typ=CSB_PROBE sc=81.69 mfe=6.03 hit=否 exit=到期平仓 pnl=3.95 full=3.95 hold=10 vol=0.4517 band=0.0252 touch=2 entry=2025-07-14
+⁠600686 金龙汽车 sig=2025-08-06 typ=CSB_PROBE sc=78.57 mfe=4.27 hit=否 exit=到期平仓 pnl=3.95 full=3.95 hold=10 vol=0.5435 band=0.0337 touch=5 entry=2025-08-07
+⁠000592 平潭发展 sig=2025-05-27 typ=CSB_PROBE sc=86.42 mfe=4.35 hit=否 exit=到期平仓 pnl=4.01 full=4.01 hold=10 vol=0.7221 band=0.0143 touch=3 entry=2025-05-28
+⁠300933 中辰股份 sig=2025-06-17 typ=CSB_PROBE sc=74.22 mfe=5.66 hit=否 exit=到期平仓 pnl=4.01 full=4.01 hold=10 vol=0.7371 band=0.0207 touch=3 entry=2025-06-18
+⁠601519 大智慧 sig=2025-05-27 typ=CSB_PROBE sc=70.33 mfe=6.03 hit=否 exit=到期平仓 pnl=4.13 full=4.13 hold=10 vol=0.5912 band=0.0155 touch=2 entry=2025-05-28
+⁠002768 国恩股份 sig=2025-05-29 typ=CSB_PROBE sc=81.06 mfe=8.02 hit=否 exit=到期平仓 pnl=4.17 full=4.17 hold=10 vol=0.5987 band=0.0125 touch=3 entry=2025-05-30
+⁠600628 新世界 sig=2025-07-07 typ=CSB_PROBE sc=93.17 mfe=4.37 hit=否 exit=到期平仓 pnl=4.23 full=4.23 hold=10 vol=0.6605 band=0.0193 touch=3 entry=2025-07-08
+⁠000505 京粮控股 sig=2025-06-20 typ=CSB_PROBE sc=85.32 mfe=4.68 hit=否 exit=到期平仓 pnl=4.35 full=4.35 hold=10 vol=0.7092 band=0.0307 touch=5 entry=2025-06-23
+⁠002800 天顺股份 sig=2025-11-04 typ=CSB_PROBE sc=86.27 mfe=12.09 hit=是 exit=到期平仓 pnl=4.39 full=4.39 hold=10 vol=0.6228 band=0.0181 touch=4 entry=2025-11-05
+⁠002267 陕天然气 sig=2026-04-13 typ=CSB_PROBE sc=83.8 mfe=5.19 hit=否 exit=到期平仓 pnl=4.41 full=4.41 hold=10 vol=0.578 band=0.0232 touch=4 entry=2026-04-14
+⁠002661 克明食品 sig=2025-06-20 typ=CSB_PROBE sc=89.72 mfe=5.04 hit=否 exit=到期平仓 pnl=4.63 full=4.63 hold=10 vol=0.6315 band=0.0211 touch=6 entry=2025-06-23
+⁠601188 龙江交通 sig=2025-10-13 typ=CSB_PROBE sc=94.17 mfe=11.05 hit=是 exit=到期平仓 pnl=4.65 full=4.65 hold=10 vol=0.4373 band=0.0273 touch=4 entry=2025-10-14
+⁠000066 中国长城 sig=2025-07-10 typ=CSB_PROBE sc=94.02 mfe=6.55 hit=否 exit=到期平仓 pnl=4.74 full=4.74 hold=10 vol=0.6961 band=0.0279 touch=5 entry=2025-07-11
+⁠920819 颖泰生物 sig=2025-08-06 typ=CSB_PROBE sc=88.22 mfe=8.55 hit=否 exit=到期平仓 pnl=4.75 full=4.75 hold=10 vol=0.6648 band=0.0271 touch=4 entry=2025-08-07
+⁠300464 星徽股份 sig=2025-07-30 typ=CSB_PROBE sc=82.78 mfe=7.17 hit=否 exit=到期平仓 pnl=4.78 full=4.78 hold=10 vol=0.7844 band=0.0057 touch=3 entry=2025-07-31
+⁠002478 常宝股份 sig=2025-06-23 typ=CSB_PROBE sc=82.97 mfe=5.58 hit=否 exit=到期平仓 pnl=4.81 full=4.81 hold=10 vol=0.7178 band=0.0361 touch=3 entry=2025-06-24
+⁠001368 通达创智 sig=2025-05-30 typ=CSB_PROBE sc=87.51 mfe=11.86 hit=是 exit=阶梯跟踪止损 pnl=4.87 full=8.32 hold=9 vol=0.5377 band=0.01 touch=3 entry=2025-06-03
+⁠688709 成都华微 sig=2025-07-14 typ=CSB_PROBE sc=84.27 mfe=7.33 hit=否 exit=到期平仓 pnl=4.89 full=4.89 hold=10 vol=0.6126 band=0.0349 touch=6 entry=2025-07-15
+⁠603626 科森科技 sig=2025-06-18 typ=CSB_PROBE sc=80.07 mfe=7.32 hit=否 exit=到期平仓 pnl=4.92 full=4.92 hold=10 vol=0.6401 band=0.0237 touch=4 entry=2025-06-19
+⁠002159 三特索道 sig=2025-05-28 typ=CSB_PROBE sc=70.79 mfe=5.74 hit=否 exit=到期平仓 pnl=4.93 full=4.93 hold=10 vol=0.6706 band=0.0393 touch=3 entry=2025-05-29
+⁠600017 日照港 sig=2025-06-30 typ=CSB_PROBE sc=80.42 mfe=6.45 hit=否 exit=到期平仓 pnl=5.16 full=5.16 hold=10 vol=0.766 band=0.0143 touch=3 entry=2025-07-01
+⁠603799 华友钴业 sig=2025-06-05 typ=CSB_PROBE sc=67.63 mfe=8.25 hit=否 exit=到期平仓 pnl=5.18 full=5.18 hold=10 vol=0.6674 band=0.0215 touch=2 entry=2025-06-06
+⁠002937 兴瑞科技 sig=2025-11-13 typ=CSB_PROBE sc=72.52 mfe=7.88 hit=否 exit=到期平仓 pnl=5.23 full=5.23 hold=10 vol=0.7047 band=0.0299 touch=5 entry=2025-11-14
+⁠002033 丽江股份 sig=2025-12-12 typ=CSB_PROBE sc=81.5 mfe=8.64 hit=否 exit=到期平仓 pnl=5.23 full=5.23 hold=10 vol=0.6937 band=0.01 touch=3 entry=2025-12-15
+⁠600467 好当家 sig=2025-06-25 typ=CSB_PROBE sc=94.61 mfe=10.48 hit=是 exit=到期平仓 pnl=5.24 full=5.24 hold=10 vol=0.7333 band=0.0255 touch=5 entry=2025-06-26
+⁠300847 中船汉光 sig=2025-06-10 typ=CSB_PROBE sc=77.27 mfe=7.86 hit=否 exit=到期平仓 pnl=5.34 full=5.34 hold=10 vol=0.7949 band=0.0117 touch=2 entry=2025-06-11
+⁠600749 西藏旅游 sig=2025-05-28 typ=CSB_PROBE sc=76.17 mfe=6.79 hit=否 exit=到期平仓 pnl=5.45 full=5.45 hold=10 vol=0.7518 band=0.0313 touch=3 entry=2025-05-29
+⁠002469 三维化学 sig=2025-08-04 typ=CSB_PROBE sc=83.38 mfe=8.56 hit=否 exit=到期平仓 pnl=5.47 full=5.47 hold=10 vol=0.7798 band=0.0105 touch=2 entry=2025-08-05
+⁠301175 中科环保 sig=2025-06-23 typ=CSB_PROBE sc=86.47 mfe=5.91 hit=否 exit=到期平仓 pnl=5.51 full=5.51 hold=10 vol=0.5741 band=0.0341 touch=6 entry=2025-06-24
+⁠601388 怡球资源 sig=2025-06-25 typ=CSB_PROBE sc=96.06 mfe=9.64 hit=否 exit=到期平仓 pnl=5.62 full=5.62 hold=10 vol=0.7634 band=0.0198 touch=4 entry=2025-06-26
+⁠600157 永泰能源 sig=2025-12-23 typ=CSB_PROBE sc=76.07 mfe=9.38 hit=否 exit=到期平仓 pnl=5.62 full=5.62 hold=10 vol=0.6596 band=0.0301 touch=5 entry=2025-12-24
+⁠600354 敦煌种业 sig=2025-06-30 typ=CSB_PROBE sc=87.84 mfe=9.85 hit=否 exit=到期平仓 pnl=5.82 full=5.82 hold=10 vol=0.5966 band=0.0086 touch=3 entry=2025-07-01
+⁠000518 四环生物 sig=2025-10-09 typ=CSB_BREAKOUT sc=86.66 mfe=8.05 hit=否 exit=到期平仓 pnl=5.93 full=5.93 hold=10 vol=2.6203 band=0.0158 touch=2 entry=2025-10-10
+⁠000957 中通客车 sig=2025-06-25 typ=CSB_PROBE sc=78.36 mfe=7.04 hit=否 exit=到期平仓 pnl=6.31 full=6.31 hold=10 vol=0.5301 band=0.0305 touch=2 entry=2025-06-26
+⁠000779 甘咨询 sig=2025-06-20 typ=CSB_PROBE sc=78.43 mfe=8.04 hit=否 exit=到期平仓 pnl=6.43 full=6.43 hold=10 vol=0.6818 band=0.0343 touch=5 entry=2025-06-23
+⁠002404 嘉欣丝绸 sig=2025-06-20 typ=CSB_PROBE sc=81.32 mfe=9.17 hit=否 exit=到期平仓 pnl=6.5 full=6.5 hold=10 vol=0.6458 band=0.0187 touch=6 entry=2025-06-23
+⁠002574 明牌珠宝 sig=2025-11-04 typ=CSB_PROBE sc=78.39 mfe=7.94 hit=否 exit=到期平仓 pnl=6.53 full=6.53 hold=10 vol=0.5962 band=0.0208 touch=5 entry=2025-11-05
+⁠600152 维科技术 sig=2025-10-27 typ=CSB_PROBE sc=90.25 mfe=11.19 hit=是 exit=到期平仓 pnl=6.72 full=6.72 hold=10 vol=0.5568 band=0.011 touch=4 entry=2025-10-28
+⁠300350 华鹏飞 sig=2025-11-06 typ=CSB_PROBE sc=89.54 mfe=10.14 hit=是 exit=到期平仓 pnl=6.76 full=6.76 hold=10 vol=0.7099 band=0.0051 touch=4 entry=2025-11-07
+⁠002136 安 纳 达 sig=2025-08-06 typ=CSB_PROBE sc=75.22 mfe=8.64 hit=否 exit=到期平仓 pnl=6.78 full=6.78 hold=10 vol=0.7095 band=0.0351 touch=3 entry=2025-08-07
+⁠000735 罗 牛 山 sig=2025-10-09 typ=CSB_PROBE sc=95.55 mfe=10.21 hit=是 exit=到期平仓 pnl=7.02 full=7.02 hold=10 vol=0.7979 band=0.0098 touch=3 entry=2025-10-10
+⁠603738 泰晶科技 sig=2025-11-13 typ=CSB_PROBE sc=73.96 mfe=11.1 hit=是 exit=到期平仓 pnl=7.02 full=7.02 hold=10 vol=0.7709 band=0.0242 touch=4 entry=2025-11-14
+⁠600727 鲁北化工 sig=2025-06-03 typ=CSB_PROBE sc=74.42 mfe=8.51 hit=否 exit=到期平仓 pnl=7.05 full=7.05 hold=10 vol=0.6141 band=0.0391 touch=3 entry=2025-06-04
+⁠300012 华测检测 sig=2026-01-05 typ=CSB_BREAKOUT sc=82.35 mfe=8.17 hit=否 exit=到期平仓 pnl=7.11 full=7.11 hold=10 vol=3.062 band=0.0268 touch=2 entry=2026-01-06
+⁠300221 银禧科技 sig=2025-07-01 typ=CSB_PROBE sc=79.5 mfe=8.81 hit=否 exit=到期平仓 pnl=7.36 full=7.36 hold=10 vol=0.6368 band=0.026 touch=4 entry=2025-07-02
+⁠300777 中简科技 sig=2025-06-20 typ=CSB_PROBE sc=89.72 mfe=10.46 hit=是 exit=到期平仓 pnl=7.7 full=7.7 hold=10 vol=0.6983 band=0.0131 touch=4 entry=2025-06-23
+⁠600419 天润乳业 sig=2025-07-07 typ=CSB_PROBE sc=75.27 mfe=12.31 hit=是 exit=到期平仓 pnl=7.73 full=7.73 hold=10 vol=0.73 band=0.0293 touch=2 entry=2025-07-08
+⁠600318 新力金融 sig=2026-02-09 typ=CSB_PROBE sc=85.98 mfe=11.02 hit=是 exit=到期平仓 pnl=7.81 full=7.81 hold=10 vol=0.5617 band=0.0241 touch=3 entry=2026-02-10
+⁠601133 柏诚股份 sig=2025-11-17 typ=CSB_PROBE sc=87.83 mfe=9.52 hit=否 exit=到期平仓 pnl=7.89 full=7.89 hold=10 vol=0.7953 band=0.0167 touch=3 entry=2025-11-18
+⁠603612 索通发展 sig=2025-06-03 typ=CSB_PROBE sc=68.4 mfe=10.4 hit=是 exit=派发离场 pnl=8.0 full=9.23 hold=9 vol=0.7782 band=0.0392 touch=3 entry=2025-06-04
+⁠603656 泰禾智能 sig=2025-06-13 typ=CSB_PROBE sc=70.47 mfe=10.11 hit=是 exit=派发离场 pnl=8.1 full=1.01 hold=1 vol=0.7581 band=0.0381 touch=2 entry=2025-06-16
+⁠300604 长川科技 sig=2025-06-18 typ=CSB_PROBE sc=82.8 mfe=12.76 hit=是 exit=派发离场 pnl=8.27 full=6.16 hold=6 vol=0.6259 band=0.0168 touch=5 entry=2025-06-19
+⁠603042 华脉科技 sig=2025-06-05 typ=CSB_BREAKOUT sc=75.05 mfe=15.56 hit=是 exit=派发离场 pnl=8.33 full=-4.78 hold=2 vol=4.1604 band=0.034 touch=2 entry=2025-06-06
+⁠002331 皖通科技 sig=2025-06-20 typ=CSB_PROBE sc=77.54 mfe=9.85 hit=否 exit=到期平仓 pnl=8.37 full=8.37 hold=10 vol=0.5752 band=0.0242 touch=6 entry=2025-06-23
+⁠605066 天正电气 sig=2025-08-07 typ=CSB_PROBE sc=84.27 mfe=11.17 hit=是 exit=派发离场 pnl=8.41 full=8.02 hold=7 vol=0.7578 band=0.0149 touch=2 entry=2025-08-08
+⁠002261 拓维信息 sig=2025-07-07 typ=CSB_PROBE sc=80.78 mfe=12.8 hit=是 exit=派发离场 pnl=8.43 full=6.65 hold=8 vol=0.759 band=0.0129 touch=3 entry=2025-07-08
+⁠002580 圣阳股份 sig=2025-08-01 typ=CSB_PROBE sc=76.12 mfe=9.85 hit=否 exit=到期平仓 pnl=8.71 full=8.71 hold=10 vol=0.764 band=0.0131 touch=3 entry=2025-08-04
+⁠002593 日上集团 sig=2025-10-23 typ=CSB_PROBE sc=82.13 mfe=13.85 hit=是 exit=派发离场 pnl=8.73 full=8.92 hold=7 vol=0.7965 band=0.0035 touch=3 entry=2025-10-24
+⁠002545 东方铁塔 sig=2025-05-29 typ=CSB_PROBE sc=77.43 mfe=16.69 hit=是 exit=派发离场 pnl=8.8 full=14.19 hold=5 vol=0.6956 band=0.0199 touch=4 entry=2025-05-30
+⁠002331 皖通科技 sig=2025-11-12 typ=CSB_PROBE sc=82.15 mfe=24.85 hit=是 exit=派发离场 pnl=8.83 full=9.99 hold=3 vol=0.7669 band=0.0234 touch=2 entry=2025-11-13
+⁠002479 富春环保 sig=2025-06-26 typ=CSB_PROBE sc=77.2 mfe=10.28 hit=是 exit=到期平仓 pnl=8.87 full=8.87 hold=10 vol=0.7106 band=0.0272 touch=3 entry=2025-06-27
+⁠300277 汽轮科技 sig=2025-07-16 typ=CSB_PROBE sc=75.29 mfe=11.22 hit=是 exit=派发离场 pnl=8.93 full=1.58 hold=4 vol=0.7021 band=0.0149 touch=2 entry=2025-07-17
+⁠603956 威派格 sig=2025-09-11 typ=CSB_PROBE sc=87.38 mfe=16.17 hit=是 exit=派发离场 pnl=8.98 full=5.99 hold=8 vol=0.5992 band=0.0305 touch=6 entry=2025-09-12
+⁠301001 凯淳股份 sig=2025-11-11 typ=CSB_PROBE sc=89.02 mfe=15.95 hit=是 exit=派发离场 pnl=9.01 full=13.59 hold=9 vol=0.7009 band=0.0239 touch=4 entry=2025-11-12
+⁠002942 新农股份 sig=2025-12-29 typ=CSB_PROBE sc=75.56 mfe=13.5 hit=是 exit=派发离场 pnl=9.02 full=5.92 hold=4 vol=0.6824 band=0.0338 touch=3 entry=2025-12-30
+⁠002910 庄园牧场 sig=2025-06-20 typ=CSB_PROBE sc=85.77 mfe=10.78 hit=是 exit=到期平仓 pnl=9.06 full=9.06 hold=10 vol=0.6999 band=0.0289 touch=4 entry=2025-06-23
+⁠002170 芭田股份 sig=2025-06-24 typ=CSB_PROBE sc=76.91 mfe=9.79 hit=否 exit=到期平仓 pnl=9.1 full=9.1 hold=10 vol=0.7129 band=0.0124 touch=4 entry=2025-06-25
+⁠603687 大胜达 sig=2025-12-10 typ=CSB_PROBE sc=81.69 mfe=12.97 hit=是 exit=到期平仓 pnl=9.18 full=9.18 hold=10 vol=0.7756 band=0.0212 touch=5 entry=2025-12-11
+⁠000430 张家界 sig=2026-04-07 typ=CSB_PROBE sc=78.19 mfe=10.68 hit=是 exit=派发离场 pnl=9.19 full=7.43 hold=6 vol=0.5962 band=0.0072 touch=2 entry=2026-04-08
+⁠300892 品渥食品 sig=2025-08-11 typ=CSB_PROBE sc=82.16 mfe=19.95 hit=是 exit=派发离场 pnl=9.24 full=14.22 hold=7 vol=0.5986 band=0.0346 touch=5 entry=2025-08-12
+⁠002703 浙江世宝 sig=2025-09-11 typ=CSB_PROBE sc=87.7 mfe=18.18 hit=是 exit=派发离场 pnl=9.25 full=12.55 hold=3 vol=0.6856 band=0.0292 touch=5 entry=2025-09-12
+⁠603280 南方路机 sig=2025-06-26 typ=CSB_PROBE sc=77.85 mfe=13.65 hit=是 exit=派发离场 pnl=9.26 full=4.71 hold=5 vol=0.6781 band=0.0246 touch=3 entry=2025-06-27
+⁠600721 百花医药 sig=2025-11-07 typ=CSB_PROBE sc=72.52 mfe=21.2 hit=是 exit=派发离场 pnl=9.32 full=0.55 hold=5 vol=0.7053 band=0.0259 touch=2 entry=2025-11-10
+⁠300527 中船应急 sig=2025-06-04 typ=CSB_PROBE sc=69.32 mfe=11.91 hit=是 exit=派发离场 pnl=9.35 full=9.35 hold=10 vol=0.594 band=0.0307 touch=3 entry=2025-06-05
+⁠300236 上海新阳 sig=2025-06-18 typ=CSB_PROBE sc=81.91 mfe=14.15 hit=是 exit=派发离场 pnl=9.36 full=8.57 hold=8 vol=0.7897 band=0.0204 touch=4 entry=2025-06-19
+⁠002442 龙星科技 sig=2025-06-20 typ=CSB_PROBE sc=93.52 mfe=12.33 hit=是 exit=到期平仓 pnl=9.42 full=9.42 hold=10 vol=0.7252 band=0.0299 touch=4 entry=2025-06-23
+⁠300228 富瑞特装 sig=2025-06-12 typ=CSB_PROBE sc=73.62 mfe=13.4 hit=是 exit=派发离场 pnl=9.68 full=2.92 hold=5 vol=0.7863 band=0.0135 touch=3 entry=2025-06-13
+⁠600199 金种子酒 sig=2025-08-07 typ=CSB_PROBE sc=76.37 mfe=12.66 hit=是 exit=派发离场 pnl=9.68 full=6.23 hold=9 vol=0.4313 band=0.0169 touch=3 entry=2025-08-08
+⁠603915 国茂股份 sig=2025-12-18 typ=CSB_PROBE sc=75.35 mfe=10.97 hit=是 exit=派发离场 pnl=9.78 full=7.41 hold=8 vol=0.7217 band=0.0186 touch=6 entry=2025-12-19
+⁠603777 来伊份 sig=2025-08-06 typ=CSB_PROBE sc=66.56 mfe=12.23 hit=是 exit=派发离场 pnl=10.06 full=8.2 hold=3 vol=0.6647 band=0.0306 touch=2 entry=2025-08-07
+⁠300019 硅宝科技 sig=2026-02-12 typ=CSB_PROBE sc=75.6 mfe=12.56 hit=是 exit=派发离场 pnl=10.25 full=3.12 hold=3 vol=0.4871 band=0.0336 touch=3 entry=2026-02-13
+⁠603662 柯力传感 sig=2025-07-07 typ=CSB_PROBE sc=78.25 mfe=12.21 hit=是 exit=派发离场 pnl=10.31 full=10.31 hold=10 vol=0.6213 band=0.0262 touch=4 entry=2025-07-08
+⁠605338 巴比食品 sig=2025-07-29 typ=CSB_PROBE sc=96.89 mfe=13.63 hit=是 exit=派发离场 pnl=10.57 full=10.84 hold=7 vol=0.7784 band=0.0164 touch=5 entry=2025-07-30
+⁠600711 盛屯矿业 sig=2025-05-30 typ=CSB_PROBE sc=80.63 mfe=11.65 hit=是 exit=到期平仓 pnl=10.91 full=10.91 hold=10 vol=0.6866 band=0.0263 touch=4 entry=2025-06-03
+⁠600726 华电能源 sig=2025-07-01 typ=CSB_BREAKOUT sc=88.09 mfe=14.23 hit=是 exit=派发离场 pnl=11.07 full=3.95 hold=9 vol=5.2956 band=0.0136 touch=3 entry=2025-07-02
+⁠002510 天汽模 sig=2025-08-06 typ=CSB_PROBE sc=75.77 mfe=14.8 hit=是 exit=派发离场 pnl=11.63 full=11.63 hold=10 vol=0.633 band=0.0361 touch=5 entry=2025-08-07
+⁠300538 同益股份 sig=2025-06-19 typ=CSB_PROBE sc=78.08 mfe=14.34 hit=是 exit=派发离场 pnl=11.79 full=10.24 hold=8 vol=0.6529 band=0.0317 touch=2 entry=2025-06-20
+⁠300780 德恩精工 sig=2025-06-20 typ=CSB_PROBE sc=81.84 mfe=15.33 hit=是 exit=派发离场 pnl=11.9 full=9.94 hold=7 vol=0.775 band=0.0207 touch=5 entry=2025-06-23
+⁠601177 杭齿前进 sig=2025-08-05 typ=CSB_PROBE sc=77.73 mfe=16.69 hit=是 exit=派发离场 pnl=12.08 full=13.86 hold=2 vol=0.4943 band=0.0211 touch=3 entry=2025-08-06
+⁠002162 悦心健康 sig=2025-05-29 typ=CSB_PROBE sc=83.24 mfe=16.98 hit=是 exit=派发离场 pnl=12.74 full=1.65 hold=2 vol=0.6805 band=0.027 touch=3 entry=2025-05-30
+⁠600076 康欣新材 sig=2025-12-17 typ=CSB_PROBE sc=80.03 mfe=24.29 hit=是 exit=派发离场 pnl=12.86 full=20.36 hold=3 vol=0.5638 band=0.0287 touch=4 entry=2025-12-18
+⁠605208 永茂泰 sig=2025-08-05 typ=CSB_PROBE sc=82.45 mfe=29.34 hit=是 exit=派发离场 pnl=12.9 full=22.24 hold=6 vol=0.7854 band=0.0262 touch=3 entry=2025-08-06
+⁠000158 常山北明 sig=2025-07-10 typ=CSB_PROBE sc=73.16 mfe=17.84 hit=是 exit=派发离场 pnl=13.35 full=7.39 hold=6 vol=0.6791 band=0.0274 touch=2 entry=2025-07-11
+⁠000973 佛塑科技 sig=2025-06-23 typ=CSB_PROBE sc=67.99 mfe=29.61 hit=是 exit=派发离场 pnl=13.75 full=10.36 hold=4 vol=0.5267 band=0.036 touch=3 entry=2025-06-24
+⁠600586 金晶科技 sig=2025-10-22 typ=CSB_PROBE sc=77.7 mfe=23.67 hit=是 exit=派发离场 pnl=15.1 full=21.22 hold=8 vol=0.547 band=0.0372 touch=4 entry=2025-10-23
+⁠002453 华软科技 sig=2025-06-20 typ=CSB_PROBE sc=79.67 mfe=22.54 hit=是 exit=派发离场 pnl=15.22 full=14.26 hold=3 vol=0.5843 band=0.0293 touch=4 entry=2025-06-23
+⁠002631 德尔未来 sig=2026-03-04 typ=CSB_LPS sc=73.52 mfe=36.7 hit=是 exit=派发离场 pnl=15.99 full=24.58 hold=4 vol= band=0.0187 touch=3 entry=2026-03-05
+⁠002820 桂发祥 sig=2025-06-20 typ=CSB_PROBE sc=79.6 mfe=19.81 hit=是 exit=派发离场 pnl=16.15 full=13.27 hold=4 vol=0.6879 band=0.0296 touch=6 entry=2025-06-23
+⁠688669 聚石化学 sig=2025-11-04 typ=CSB_PROBE sc=74.04 mfe=22.11 hit=是 exit=派发离场 pnl=16.97 full=13.85 hold=5 vol=0.7873 band=0.0334 touch=5 entry=2025-11-05
+⁠002164 宁波东力 sig=2025-08-01 typ=CSB_PROBE sc=77.41 mfe=30.62 hit=是 exit=派发离场 pnl=21.92 full=17.63 hold=7 vol=0.5771 band=0.0223 touch=3 entry=2025-08-04
+⁠603396 金辰股份 sig=2025-10-27 typ=CSB_PROBE sc=71.39 mfe=22.44 hit=是 exit=到期平仓 pnl=22.44 full=22.44 hold=10 vol=0.5508 band=0.0224 touch=3 entry=2025-10-28
+⁠600722 金牛化工 sig=2025-06-11 typ=CSB_PROBE sc=75.22 mfe=62.31 hit=是 exit=派发离场 pnl=34.04 full=23.85 hold=4 vol=0.773 band=0.0167 touch=3 entry=2025-06-12
+⁠002201 九鼎新材 sig=2025-07-01 typ=CSB_BREAKOUT sc=80.38 mfe=46.91 hit=是 exit=派发离场 pnl=39.26 full=19.41 hold=6 vol=2.6064 band=0.0273 touch=2 entry=2025-07-02
+⁠603093 南华期货 sig=2025-05-27 typ=CSB_PROBE sc=73.58 mfe=83.2 hit=是 exit=派发离场 pnl=41.89 full=68.44 hold=6 vol=0.5694 band=0.0257 touch=2 entry=2025-05-28
