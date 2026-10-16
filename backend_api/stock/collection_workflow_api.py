@@ -322,6 +322,36 @@ async def api_restart_node(
     }
 
 
+@router.post("/runs/{run_id}/rerun-node")
+async def api_rerun_failed_node(
+    run_id: str,
+    body: Optional[RestartNodeRequest] = None,
+    db: Session = Depends(get_db),
+):
+    """流程结束后只重跑一个失败节点，不继续执行其他节点。"""
+    run = db.query(CollectionWorkflowRun).filter(CollectionWorkflowRun.run_id == run_id).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="运行记录不存在")
+    order_index = body.order_index if body else None
+    ok = workflow_engine.rerun_failed_node(run_id, order_index=order_index)
+    if not ok:
+        raise HTTPException(
+            status_code=409,
+            detail="无法重跑：仅支持已结束流程中的失败节点，或互斥占用中",
+        )
+    db.refresh(run)
+    return {
+        "success": True,
+        "data": {
+            "rerun": True,
+            "isolated": True,
+            "run_id": run_id,
+            "order_index": order_index if order_index is not None else run.current_node_index,
+            "status": run.status,
+        },
+    }
+
+
 @router.post("/runs/{run_id}/resume")
 async def api_resume_run(
     run_id: str,

@@ -642,6 +642,60 @@ def test_resume_from_failed_run_respawns(monkeypatch):
     db.close.assert_called()
 
 
+def test_rerun_failed_node_only_resets_target(monkeypatch):
+    """流程结束后单独重跑：只重置目标失败节点，并写入 isolated 标记。"""
+    from backend_core.data_collectors.workflow import engine as eng_mod
+    from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine
+
+    run_id = "cwr_rerun_one_ut"
+    engine = CollectionWorkflowEngine()
+    spawned = []
+
+    run = MagicMock()
+    run.run_id = run_id
+    run.status = "completed"
+    run.current_node_index = 5
+    run.context = {"node_snapshot": [], "params": {}}
+    run.finished_at = "x"
+    run.error_message = None
+
+    node_run = MagicMock()
+    node_run.status = "failed"
+    node_run.order_index = 3
+    node_run.message = "boom"
+
+    db = MagicMock()
+    q = MagicMock()
+    db.query.return_value = q
+    q.filter.return_value = q
+    q.order_by.return_value = q
+    q.first.side_effect = [run, node_run]
+
+    monkeypatch.setattr(eng_mod, "SessionLocal", lambda: db)
+    monkeypatch.setattr(eng_mod, "is_engine_thread_alive", lambda rid: False)
+    monkeypatch.setattr(eng_mod, "clear_cancel", lambda rid: None)
+    monkeypatch.setattr(eng_mod, "clear_restart", lambda rid: None)
+    monkeypatch.setattr(
+        eng_mod,
+        "mutex_try_acquire",
+        lambda kind, rid: (True, None, None),
+    )
+    monkeypatch.setattr(
+        engine,
+        "_spawn_engine_thread",
+        lambda rid: spawned.append(rid) or True,
+    )
+
+    assert engine.rerun_failed_node(run_id, 3) is True
+    assert spawned == [run_id]
+    assert run.status == "running"
+    assert run.current_node_index == 3
+    assert node_run.status == "pending"
+    assert run.context["isolated_rerun_order_index"] == 3
+    assert "不执行其他节点" in (run.error_message or "")
+    db.commit.assert_called()
+
+
 def test_restart_node_delegates_to_resume_when_failed(monkeypatch):
     from backend_core.data_collectors.workflow import engine as eng_mod
     from backend_core.data_collectors.workflow.engine import CollectionWorkflowEngine

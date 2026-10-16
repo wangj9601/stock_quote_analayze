@@ -388,6 +388,11 @@ class ThsFundFlowDailyCollector:
             for n in names:
                 if n in col_map:
                     return col_map[n]
+            # 同花顺表头已改为「流入资金(元)」「净额(元)」等，按前缀匹配
+            for key, raw in col_map.items():
+                base = key.split("(", 1)[0].split("（", 1)[0].strip()
+                if base in names:
+                    return raw
             return None
 
         c_code = col("股票代码", "代码")

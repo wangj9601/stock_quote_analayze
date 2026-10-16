@@ -138,6 +138,36 @@ def test_sina_records_keep_a_shares_only():
     assert float(frame.iloc[0]["净额"]) == pytest.approx(1116534015.13)
 
 
+def test_dataframe_to_rows_accepts_yuan_suffix_columns():
+    import pandas as pd
+
+    from backend_core.data_collectors.akshare.ths_fund_flow_daily import (
+        ThsFundFlowDailyCollector,
+    )
+
+    df = pd.DataFrame(
+        [
+            {
+                "序号": 1,
+                "股票代码": "600519",
+                "股票简称": "贵州茅台",
+                "最新价": 1400.0,
+                "涨跌幅": "1.20%",
+                "换手率": "0.30%",
+                "流入资金(元)": 1.0e8,
+                "流出资金(元)": 4.0e7,
+                "净额(元)": 6.0e7,
+                "成交额(元)": 1.4e8,
+            }
+        ]
+    )
+    rows = ThsFundFlowDailyCollector(trade_date="2026-10-16").dataframe_to_rows(df)
+    assert rows[0]["code"] == "600519"
+    assert rows[0]["inflow_amount"] == pytest.approx(1.0e8)
+    assert rows[0]["net_amount"] == pytest.approx(6.0e7)
+    assert rows[0]["turnover_amount"] == pytest.approx(1.4e8)
+
+
 def test_fetch_dataframe_falls_back_to_sina(monkeypatch):
     from backend_core.data_collectors.akshare import ths_fund_flow_daily as mod
 

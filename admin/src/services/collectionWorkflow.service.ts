@@ -151,6 +151,22 @@ class CollectionWorkflowService {
     }>
   }
 
+  /** 流程结束后只重跑一个失败节点，不继续其他节点。orderIndex 省略则取首个失败节点 */
+  rerunFailedNode(runId: string, orderIndex?: number) {
+    return apiService.post(`/collection-workflows/runs/${runId}/rerun-node`, {
+      order_index: orderIndex ?? null,
+    }) as Promise<{
+      success: boolean
+      data: {
+        rerun: boolean
+        isolated?: boolean
+        run_id: string
+        order_index?: number | null
+        status?: string
+      }
+    }>
+  }
+
   /** 失败/取消后从失败环节继续 */
   resumeRun(runId: string, orderIndex?: number) {
     return apiService.post(`/collection-workflows/runs/${runId}/resume`, {

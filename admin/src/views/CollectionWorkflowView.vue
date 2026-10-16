@@ -252,74 +252,118 @@
       </el-tab-pane>
 
       <el-tab-pane label="运行监控" name="runs">
-        <div class="runs-toolbar">
-          <el-select v-model="runFilterWf" clearable placeholder="按流程筛选" style="width: 220px" @change="loadRuns">
-            <el-option v-for="w in workflows" :key="w.id" :label="w.name" :value="w.id" />
-          </el-select>
-          <el-button @click="loadRuns">刷新</el-button>
-        </div>
-        <el-table :data="runs" v-loading="loadingRuns" @row-click="selectRun" highlight-current-row>
-          <el-table-column prop="run_id" label="Run ID" min-width="180" />
-          <el-table-column prop="workflow_name" label="流程" min-width="140" />
-          <el-table-column prop="trigger_source" label="来源" width="90" />
-          <el-table-column label="状态" width="110">
-            <template #default="{ row }">
-              <el-tag size="small" :type="statusTag(row.status)">{{ row.status }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="开始" min-width="150">
-            <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
-          </el-table-column>
-          <el-table-column label="结束" min-width="150">
-            <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="160">
-            <template #default="{ row }">
-              <el-button
-                v-if="row.status === 'running' || row.status === 'pending'"
-                link
-                type="danger"
-                @click.stop="cancelRun(row.run_id)"
-              >取消</el-button>
-              <el-button
-                v-if="row.status === 'failed' || row.status === 'cancelled'"
-                link
-                type="warning"
-                :loading="restartingKey === `${row.run_id}:resume`"
-                @click.stop="resumeFailedRun(row.run_id)"
-              >从失败继续</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <div v-if="currentRunDetail" class="run-detail">
-          <h3>运行详情 · {{ currentRunDetail.run_id }}</h3>
-          <p v-if="currentRunDetail.error_message" class="error-text">{{ currentRunDetail.error_message }}</p>
-          <el-timeline>
-            <el-timeline-item
-              v-for="nr in currentRunDetail.node_runs || []"
-              :key="nr.id"
-              :type="timelineType(nr.status)"
-              :timestamp="formatTime(nr.started_at)"
+        <div class="runs-monitor" :class="{ 'detail-open': isNarrow && detailOpen }">
+          <div class="runs-list">
+            <div class="runs-toolbar">
+              <el-select v-model="runFilterWf" clearable placeholder="按流程筛选" style="width: 220px" @change="loadRuns">
+                <el-option v-for="w in workflows" :key="w.id" :label="w.name" :value="w.id" />
+              </el-select>
+              <el-button @click="loadRuns">刷新</el-button>
+            </div>
+            <el-table
+              ref="runsTableRef"
+              :data="runs"
+              v-loading="loadingRuns"
+              row-key="run_id"
+              highlight-current-row
+              max-height="calc(100vh - 280px)"
+              @row-click="selectRun"
             >
-              <div class="node-run-row">
-                <div>
-                  <strong>#{{ nr.order_index + 1 }} {{ nr.node_key }}</strong>
-                  <el-tag size="small" class="ml-2" :type="statusTag(nr.status)">{{ nr.status }}</el-tag>
-                </div>
-                <el-button
-                  v-if="canRestartNode(currentRunDetail, nr)"
-                  link
-                  type="warning"
-                  size="small"
-                  :loading="restartingKey === `${currentRunDetail.run_id}:${nr.order_index}`"
-                  @click.stop="restartNode(currentRunDetail.run_id, nr.order_index, currentRunDetail.status)"
-                >{{ isFailedRun(currentRunDetail) ? '从失败继续' : '重启' }}</el-button>
+              <el-table-column prop="run_id" label="Run ID" min-width="168" show-overflow-tooltip />
+              <el-table-column prop="workflow_name" label="流程" min-width="140" show-overflow-tooltip />
+              <el-table-column prop="trigger_source" label="来源" width="80" />
+              <el-table-column label="状态" width="110">
+                <template #default="{ row }">
+                  <el-tag size="small" :type="statusTag(row.status)">{{ row.status }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="开始" min-width="150">
+                <template #default="{ row }">{{ formatTime(row.started_at) }}</template>
+              </el-table-column>
+              <el-table-column label="结束" min-width="150">
+                <template #default="{ row }">{{ formatTime(row.finished_at) }}</template>
+              </el-table-column>
+              <el-table-column label="操作" width="148" fixed="right">
+                <template #default="{ row }">
+                  <el-button
+                    v-if="row.status === 'running' || row.status === 'pending'"
+                    link
+                    type="danger"
+                    @click.stop="cancelRun(row.run_id)"
+                  >取消</el-button>
+                  <el-button
+                    v-if="row.status === 'failed' || row.status === 'cancelled'"
+                    link
+                    type="warning"
+                    :loading="restartingKey === `${row.run_id}:rerun`"
+                    @click.stop="rerunFailedNode(row.run_id)"
+                  >重跑失败节点</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+
+          <aside class="run-detail" :aria-hidden="isNarrow && !detailOpen">
+            <div class="run-detail-head">
+              <h3>运行详情</h3>
+              <el-button v-if="isNarrow" link @click="detailOpen = false">关闭</el-button>
+            </div>
+            <template v-if="currentRunDetail">
+              <div class="run-detail-meta">
+                <strong>{{ currentRunDetail.workflow_name || '未命名流程' }}</strong>
+                <el-tag size="small" :type="statusTag(currentRunDetail.status)">{{ currentRunDetail.status }}</el-tag>
               </div>
-              <div class="muted">{{ nr.message }}</div>
-              <div v-if="nr.error" class="error-text">{{ nr.error }}</div>
-            </el-timeline-item>
-          </el-timeline>
+              <p class="muted run-id-line">{{ currentRunDetail.run_id }}</p>
+              <p class="muted">
+                {{ currentRunDetail.trigger_source }}
+                · {{ formatTime(currentRunDetail.started_at) }}
+                <template v-if="currentRunDetail.finished_at"> → {{ formatTime(currentRunDetail.finished_at) }}</template>
+              </p>
+              <p v-if="currentRunDetail.error_message" class="error-text">{{ currentRunDetail.error_message }}</p>
+              <el-timeline>
+                <el-timeline-item
+                  v-for="nr in currentRunDetail.node_runs || []"
+                  :key="nr.id"
+                  :type="timelineType(nr.status)"
+                  :timestamp="formatTime(nr.started_at)"
+                >
+                  <div class="node-run-row">
+                    <div>
+                      <strong>#{{ nr.order_index + 1 }} {{ nr.node_key }}</strong>
+                      <el-tag size="small" class="ml-2" :type="statusTag(nr.status)">{{ nr.status }}</el-tag>
+                    </div>
+                    <el-button
+                      v-if="canRestartNode(currentRunDetail, nr)"
+                      link
+                      type="warning"
+                      size="small"
+                      :loading="restartingKey === `${currentRunDetail.run_id}:${nr.order_index}`"
+                      @click.stop="restartNode(currentRunDetail.run_id, nr.order_index)"
+                    >重启</el-button>
+                    <el-button
+                      v-if="canRerunFailedNode(currentRunDetail, nr)"
+                      link
+                      type="warning"
+                      size="small"
+                      :loading="restartingKey === `${currentRunDetail.run_id}:${nr.order_index}`"
+                      @click.stop="rerunFailedNode(currentRunDetail.run_id, nr.order_index)"
+                    >重跑该节点</el-button>
+                  </div>
+                  <div class="muted">{{ nr.message }}</div>
+                  <div v-if="nr.error" class="error-text">{{ nr.error }}</div>
+                </el-timeline-item>
+              </el-timeline>
+              <el-empty v-if="!(currentRunDetail.node_runs && currentRunDetail.node_runs.length)" description="这条运行没有节点记录" />
+            </template>
+            <el-empty v-else description="点一条运行记录，节点明细显示在这里" />
+          </aside>
+          <button
+            v-if="isNarrow && detailOpen"
+            type="button"
+            class="detail-backdrop"
+            aria-label="关闭运行详情"
+            @click="detailOpen = false"
+          />
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -327,7 +371,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   collectionWorkflowService,
@@ -337,7 +381,13 @@ import {
   type WorkflowRun,
 } from '@/services/collectionWorkflow.service'
 
+const NARROW_QUERY = '(max-width: 1100px)'
+
 const activeTab = ref('list')
+const isNarrow = ref(false)
+const detailOpen = ref(false)
+const runsTableRef = ref<{ setCurrentRow: (row?: WorkflowRun | null) => void } | null>(null)
+let narrowMedia: MediaQueryList | null = null
 const loadingList = ref(false)
 const loadingRuns = ref(false)
 const saving = ref(false)
@@ -467,11 +517,30 @@ async function loadNodes() {
   }
 }
 
+function syncNarrow(event?: MediaQueryList | MediaQueryListEvent) {
+  isNarrow.value = event ? event.matches : window.matchMedia(NARROW_QUERY).matches
+  if (!isNarrow.value) detailOpen.value = false
+}
+
+function onDetailEscape(event: KeyboardEvent) {
+  if (event.key === 'Escape' && isNarrow.value && detailOpen.value) {
+    detailOpen.value = false
+  }
+}
+
+async function syncCurrentRow() {
+  await nextTick()
+  const id = currentRunDetail.value?.run_id
+  const row = id ? runs.value.find((item) => item.run_id === id) : null
+  runsTableRef.value?.setCurrentRow(row || null)
+}
+
 async function loadRuns() {
   loadingRuns.value = true
   try {
     const res = await collectionWorkflowService.listRuns(runFilterWf.value)
     runs.value = res.data || []
+    await syncCurrentRow()
   } catch (e: any) {
     ElMessage.error(e?.message || '加载运行历史失败')
   } finally {
@@ -675,6 +744,8 @@ async function selectRun(row: WorkflowRun) {
   try {
     const res = await collectionWorkflowService.getRun(row.run_id)
     currentRunDetail.value = res.data
+    if (isNarrow.value) detailOpen.value = true
+    await syncCurrentRow()
   } catch (e: any) {
     ElMessage.error(e?.message || '加载运行详情失败')
   }
@@ -693,58 +764,55 @@ async function cancelRun(runId: string) {
   }
 }
 
-function isFailedRun(run: WorkflowRun) {
-  return run.status === 'failed' || run.status === 'cancelled'
-}
-
 function canRestartNode(run: WorkflowRun, nr: { status: string; order_index: number }) {
   if (run.status === 'running' || run.status === 'pending') {
     if (nr.status === 'running') return true
     return run.current_node_index === nr.order_index
   }
-  if (isFailedRun(run)) {
-    // 失败/取消后：允许在失败节点或当前节点重启继续
-    if (nr.status === 'failed') return true
-    return run.current_node_index === nr.order_index && nr.status !== 'completed'
-  }
   return false
 }
 
-async function resumeFailedRun(runId: string) {
+function canRerunFailedNode(run: WorkflowRun, nr: { status: string }) {
+  if (run.status !== 'completed' && run.status !== 'failed' && run.status !== 'cancelled') {
+    return false
+  }
+  return nr.status === 'failed'
+}
+
+async function rerunFailedNode(runId: string, orderIndex?: number) {
   try {
     await ElMessageBox.confirm(
-      '确认从失败环节重新执行并继续后续节点？已完成环节将跳过。',
-      '从失败继续',
-      { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' }
+      orderIndex == null
+        ? '确认只重新执行失败节点？不会继续执行其他采集节点。'
+        : `确认只重新执行第 ${orderIndex + 1} 个失败节点？不会继续执行其他采集节点。`,
+      '重跑失败节点',
+      { type: 'warning', confirmButtonText: '重跑', cancelButtonText: '取消' }
     )
   } catch {
     return
   }
-  restartingKey.value = `${runId}:resume`
+  restartingKey.value = orderIndex == null ? `${runId}:rerun` : `${runId}:${orderIndex}`
   try {
-    await collectionWorkflowService.resumeRun(runId)
-    ElMessage.success('已从失败环节恢复执行')
+    await collectionWorkflowService.rerunFailedNode(runId, orderIndex)
+    ElMessage.success('已开始单独重跑失败节点')
     await selectRun({ run_id: runId } as WorkflowRun)
     await loadRuns()
   } catch (e: any) {
-    ElMessage.error(e?.response?.data?.detail || e?.message || '恢复失败')
+    ElMessage.error(e?.response?.data?.detail || e?.message || '重跑失败')
   } finally {
     restartingKey.value = null
   }
 }
 
-async function restartNode(runId: string, orderIndex: number, runStatus?: string) {
+async function restartNode(runId: string, orderIndex: number) {
   const key = `${runId}:${orderIndex}`
-  const resume = runStatus === 'failed' || runStatus === 'cancelled'
   try {
     await ElMessageBox.confirm(
-      resume
-        ? `确认从第 ${orderIndex + 1} 个环节重新执行并继续后续？已完成环节将跳过。`
-        : `确认强制停止并重跑第 ${orderIndex + 1} 个环节？将立即终止当前节点进程，然后重新执行该节点并继续后续环节。`,
-      resume ? '从失败继续' : '强制重启环节',
+      `确认强制停止并重跑第 ${orderIndex + 1} 个环节？将立即终止当前节点进程，然后重新执行该节点并继续后续环节。`,
+      '强制重启环节',
       {
         type: 'warning',
-        confirmButtonText: resume ? '继续' : '强制重启',
+        confirmButtonText: '强制重启',
         cancelButtonText: '取消',
       }
     )
@@ -753,13 +821,8 @@ async function restartNode(runId: string, orderIndex: number, runStatus?: string
   }
   restartingKey.value = key
   try {
-    if (resume) {
-      await collectionWorkflowService.resumeRun(runId, orderIndex)
-      ElMessage.success('已从失败环节恢复执行')
-    } else {
-      await collectionWorkflowService.restartNode(runId, orderIndex)
-      ElMessage.success('已强制停止该环节，即将重跑')
-    }
+    await collectionWorkflowService.restartNode(runId, orderIndex)
+    ElMessage.success('已强制停止该环节，即将重跑')
     await selectRun({ run_id: runId } as WorkflowRun)
     await loadRuns()
   } catch (e: any) {
@@ -797,12 +860,20 @@ watch(activeTab, (tab) => {
 })
 
 onMounted(async () => {
+  syncNarrow()
+  narrowMedia = window.matchMedia(NARROW_QUERY)
+  narrowMedia.addEventListener('change', syncNarrow)
+  window.addEventListener('keydown', onDetailEscape)
   await loadAll()
   await loadRuns()
   startPolling()
 })
 
-onUnmounted(() => stopPolling())
+onUnmounted(() => {
+  stopPolling()
+  narrowMedia?.removeEventListener('change', syncNarrow)
+  window.removeEventListener('keydown', onDetailEscape)
+})
 </script>
 
 <style scoped>
@@ -958,17 +1029,50 @@ onUnmounted(() => stopPolling())
   gap: 8px;
   justify-content: flex-end;
 }
+.runs-monitor {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
 .runs-toolbar {
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
 }
 .run-detail {
-  margin-top: 20px;
-  padding: 12px;
+  position: sticky;
+  top: 8px;
+  max-height: calc(100vh - 220px);
+  overflow: auto;
+  padding: 16px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fafafa;
+}
+.run-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.run-detail-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.run-detail-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.run-id-line {
+  margin: 4px 0;
+  word-break: break-all;
+}
+.detail-backdrop {
+  display: none;
 }
 .node-run-row {
   display: flex;
@@ -987,6 +1091,40 @@ onUnmounted(() => stopPolling())
   }
   .panel {
     max-height: none;
+  }
+  .runs-monitor {
+    grid-template-columns: 1fr;
+  }
+  .run-detail {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 80;
+    width: min(420px, 100vw);
+    max-height: none;
+    border-radius: 0;
+    border-top: 0;
+    border-bottom: 0;
+    border-right: 0;
+    box-shadow: -8px 0 24px rgba(15, 23, 42, 0.16);
+    transform: translateX(100%);
+    visibility: hidden;
+    transition: transform 180ms ease-out;
+  }
+  .runs-monitor.detail-open .run-detail {
+    transform: translateX(0);
+    visibility: visible;
+  }
+  .runs-monitor.detail-open .detail-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    border: 0;
+    padding: 0;
+    background: rgba(17, 24, 39, 0.35);
+    cursor: pointer;
   }
 }
 </style>

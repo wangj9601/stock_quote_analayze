@@ -697,6 +697,7 @@ class CollectionWorkflowEngine:
                 + (f"；原错误：{prev_err}" if prev_err else "")
             )
             ctx = dict(run.context or {})
+            ctx.pop("isolated_rerun_order_index", None)
             ctx["resumed_from_order_index"] = target
             ctx["resumed_at"] = datetime.now().isoformat(timespec="seconds")
             run.context = ctx
@@ -719,6 +720,96 @@ class CollectionWorkflowEngine:
                 run_id,
                 target,
             )
+            return True
+        finally:
+            db.close()
+
+    def rerun_failed_node(self, run_id: str, order_index: Optional[int] = None) -> bool:
+        """
+        流程已结束后，只重跑一个失败节点，不执行其他节点。
+
+        适用于 completed / failed / cancelled。不重置后续节点，引擎按 isolated 标记只跑目标节点。
+        """
+        db = SessionLocal()
+        try:
+            run = (
+                db.query(CollectionWorkflowRun)
+                .filter(CollectionWorkflowRun.run_id == run_id)
+                .first()
+            )
+            if not run:
+                return False
+            if run.status not in ("completed", "failed", "cancelled"):
+                return False
+
+            target = order_index
+            if target is None:
+                first_failed = (
+                    db.query(CollectionWorkflowNodeRun)
+                    .filter(
+                        CollectionWorkflowNodeRun.run_id == run_id,
+                        CollectionWorkflowNodeRun.status == "failed",
+                    )
+                    .order_by(CollectionWorkflowNodeRun.order_index.asc())
+                    .first()
+                )
+                if first_failed is None:
+                    return False
+                target = int(first_failed.order_index)
+            target = int(target)
+
+            node_run = (
+                db.query(CollectionWorkflowNodeRun)
+                .filter(
+                    CollectionWorkflowNodeRun.run_id == run_id,
+                    CollectionWorkflowNodeRun.order_index == target,
+                )
+                .first()
+            )
+            if not node_run or node_run.status != "failed":
+                return False
+
+            ok, kind, existing = mutex_try_acquire("workflow", run_id)
+            if not ok and existing != run_id:
+                logger.warning(
+                    "单独重跑失败节点被拒绝：互斥占用中 kind=%s existing=%s run_id=%s",
+                    kind,
+                    existing,
+                    run_id,
+                )
+                return False
+
+            clear_cancel(run_id)
+            clear_restart(run_id)
+            _clear_persisted_restart(run)
+
+            node_run.status = "pending"
+            node_run.progress = 0
+            node_run.error = None
+            node_run.result = {}
+            node_run.finished_at = None
+            node_run.started_at = None
+            node_run.message = "流程结束后单独重跑，不执行其他节点"
+
+            run.status = "running"
+            run.current_node_index = target
+            run.finished_at = None
+            run.error_message = f"单独重跑环节 #{target + 1}，不执行其他节点"
+            ctx = dict(run.context or {})
+            ctx["isolated_rerun_order_index"] = target
+            ctx["isolated_rerun_at"] = datetime.now().isoformat(timespec="seconds")
+            run.context = ctx
+            db.commit()
+
+            if is_engine_thread_alive(run_id):
+                logger.warning(
+                    "rerun_failed_node 时引擎线程仍存活，仍启动执行 run_id=%s order=%s",
+                    run_id,
+                    target,
+                )
+            self._spawn_engine_thread(run_id)
+
+            logger.info("已单独重跑失败节点 run_id=%s order_index=%s", run_id, target)
             return True
         finally:
             db.close()
@@ -834,6 +925,8 @@ class CollectionWorkflowEngine:
 
             ctx_data = dict(run.context or {})
             snapshot: List[Dict[str, Any]] = list(ctx_data.get("node_snapshot") or [])
+            isolated_raw = ctx_data.get("isolated_rerun_order_index")
+            isolated_order: Optional[int] = int(isolated_raw) if isolated_raw is not None else None
             ctx = WorkflowContext(
                 run_id=run_id,
                 workflow_id=run.workflow_id,
@@ -874,6 +967,10 @@ class CollectionWorkflowEngine:
                     .first()
                 )
                 if not node_run:
+                    continue
+
+                # 流程结束后的单独重跑：只执行目标失败节点
+                if isolated_order is not None and int(order_index) != isolated_order:
                     continue
 
                 # 已完成节点跳过（除非正请求重启该节点）
@@ -969,10 +1066,18 @@ class CollectionWorkflowEngine:
                         )
                     break
 
+                if isolated_order is not None and int(order_index) == isolated_order:
+                    if run.status == "running":
+                        self._finish_isolated_rerun(db, run)
+                    break
+
                 if is_cancel_requested(run_id) or run.status != "running":
                     break
             else:
-                if run.status == "running":
+                if isolated_order is not None:
+                    if run.status == "running":
+                        self._finish_isolated_rerun(db, run)
+                elif run.status == "running":
                     self._mark_run(db, run, "completed", None)
         except Exception as e:
             logger.exception("流程 run_id=%s 异常", run_id)
@@ -1076,6 +1181,33 @@ class CollectionWorkflowEngine:
         db.commit()
         return last
 
+    def _finish_isolated_rerun(self, db: Session, run: CollectionWorkflowRun) -> None:
+        """单独重跑结束后收口：不补跑其他节点。"""
+        nodes = (
+            db.query(CollectionWorkflowNodeRun)
+            .filter(CollectionWorkflowNodeRun.run_id == run.run_id)
+            .all()
+        )
+        failed = [n for n in nodes if n.status == "failed"]
+        pending = [n for n in nodes if n.status in ("pending", "running")]
+        ctx = dict(run.context or {})
+        ctx.pop("isolated_rerun_order_index", None)
+        run.context = ctx
+        if failed:
+            sample = failed[0]
+            self._mark_run(
+                db,
+                run,
+                "failed",
+                sample.error or sample.message or f"节点 {sample.node_key} 失败",
+            )
+            return
+        if pending:
+            self._mark_run(db, run, "failed", "已单独重跑失败节点，未继续后续节点")
+            return
+        run.error_message = None
+        self._mark_run(db, run, "completed", None)
+
     @staticmethod
     def _mark_run(
         db: Session,
@@ -1086,6 +1218,9 @@ class CollectionWorkflowEngine:
         run.status = status
         if error_message:
             run.error_message = error_message
+        ctx = dict(run.context or {})
+        if ctx.pop("isolated_rerun_order_index", None) is not None:
+            run.context = ctx
         run.finished_at = datetime.now()
         db.commit()
 

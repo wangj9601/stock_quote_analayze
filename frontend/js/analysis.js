@@ -2,23 +2,170 @@
 const AnalysisPage = {
     currentTab: 'board-analysis',
     currentStockCode: '', // 当前分析的股票代码
+    _scriptPromises: {},
+    _booted: {},
+    _tabSeq: 0,
+
+    /** 非默认 Tab 的脚本。板块分析留在 HTML 里同步加载。 */
+    TAB_SCRIPTS: {
+        'leader-mid': [
+            'js/leader_mid_analysis.js',
+        ],
+        'stock-ai': [
+            'js/echarts.min.js',
+            'js/kde_levels_tool.js?v=20261015-idxlv',
+            'js/pattern_tool.js?v=20260921d',
+            'js/market_structure_tool.js?v=20260930-smcfold',
+            'js/gann_trend_tool.js?v=20260917c',
+            'js/stock_trade_plan.js?v=20260929-rr',
+            'js/page_scroll_fab.js',
+            'js/stock_analysis_pdf.js?v=20260929-rr',
+            'js/stock_analysis_png.js',
+            'js/stock_multi_strategy.js?v=20260927-smc',
+        ],
+        'index-ai': [
+            'js/kde_levels_tool.js?v=20261015-idxlv',
+            'js/pattern_tool.js?v=20260921d',
+            'js/market_structure_tool.js?v=20260930-smcfold',
+            'js/gann_trend_tool.js?v=20260917c',
+            'js/stock_trade_plan.js?v=20260929-rr',
+            'js/stock_analysis_png.js',
+            'js/index_analysis_pdf.js?v=20261015-idxpdf',
+            'js/index_analysis.js?v=20261015-idxlv',
+        ],
+        'rs-rating': [
+            'js/rs_rating_analysis.js?v=20261007-rsa',
+        ],
+        'trade-observe': [
+            'js/trade_observe.js?v=20261007-csb',
+        ],
+        recommend: [
+            'js/recommend.js?v=20260930-rv',
+        ],
+        'market-analysis': [
+            'js/echarts.min.js',
+            'js/market_analysis.js?v=20260925a',
+        ],
+        'market-review': [
+            'js/daily_review.js?v=20261009-sector-fold',
+            'js/period_review.js?v=20260930-rv',
+        ],
+        'technical-tools': [
+            'js/kde_levels_tool.js?v=20261015-idxlv',
+            'js/pattern_tool.js?v=20260921d',
+        ],
+    },
+
+    loadScript(src) {
+        if (this._scriptPromises[src]) return this._scriptPromises[src];
+        const path = src.split('?')[0];
+        const existing = document.querySelector(
+            `script[src="${src}"], script[src^="${path}?"], script[src="${path}"]`
+        );
+        if (existing) {
+            this._scriptPromises[src] = Promise.resolve();
+            return this._scriptPromises[src];
+        }
+        const pending = new Promise((resolve, reject) => {
+            const el = document.createElement('script');
+            el.src = src;
+            el.onload = () => resolve();
+            el.onerror = () => {
+                if (path.endsWith('echarts.min.js') && el.dataset.fallback !== '1') {
+                    el.dataset.fallback = '1';
+                    el.src = 'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';
+                    return;
+                }
+                reject(new Error(`加载失败: ${src}`));
+            };
+            document.body.appendChild(el);
+        });
+        pending.catch(() => {
+            if (this._scriptPromises[src] === pending) delete this._scriptPromises[src];
+        });
+        this._scriptPromises[src] = pending;
+        return pending;
+    },
+
+    async ensureTabScripts(tabId) {
+        const list = this.TAB_SCRIPTS[tabId] || [];
+        for (const src of list) {
+            await this.loadScript(src);
+        }
+        this.bootTabModules(tabId);
+    },
+
+    bootTabModules(tabId) {
+        const once = (key, fn) => {
+            if (this._booted[key]) return;
+            this._booted[key] = true;
+            try {
+                fn();
+            } catch (err) {
+                console.error(err);
+                this._booted[key] = false;
+            }
+        };
+        const needsTools = tabId === 'stock-ai' || tabId === 'technical-tools' || tabId === 'index-ai';
+        if (needsTools) {
+            once('kde', () => {
+                if (window.KdeLevelsTool) KdeLevelsTool.init();
+            });
+            once('pattern', () => {
+                if (window.PatternTool) PatternTool.init();
+            });
+        }
+        if (tabId === 'leader-mid') {
+            once('leader', () => {
+                if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();
+            });
+        }
+        if (tabId === 'stock-ai') {
+            once('ssa', () => {
+                if (window.StockMultiStrategy) StockMultiStrategy.init();
+            });
+        }
+        if (tabId === 'index-ai') {
+            once('index', () => {
+                if (!window.IndexAnalysis) return;
+                const orig = IndexAnalysis.redirectDeepLinkIfNeeded;
+                IndexAnalysis.redirectDeepLinkIfNeeded = () => false;
+                try {
+                    IndexAnalysis.init();
+                } finally {
+                    IndexAnalysis.redirectDeepLinkIfNeeded = orig;
+                }
+            });
+        }
+        if (tabId === 'market-analysis') {
+            once('market', () => {
+                if (window.MarketAnalysis) MarketAnalysis.init();
+            });
+        }
+    },
+
+    redirectIndexDeepLink() {
+        try {
+            const params = new URLSearchParams(window.location.search || '');
+            const tab = (params.get('tab') || '').trim();
+            const index = (params.get('index') || params.get('code') || '').trim();
+            if (tab === 'index-ai' && index) {
+                const popup = params.get('popup') === '1' ? '&popup=1' : '';
+                window.location.replace(`index_detail.html?index=${encodeURIComponent(index)}${popup}`);
+                return true;
+            }
+        } catch (e) { /* ignore */ }
+        return false;
+    },
 
     // 初始化
     init() {
         if (window.StockTradeLink && StockTradeLink.redirectFromAnalysisDeepLink()) {
             return;
         }
-        // 指数分析深链 → 指数详情页
-        if (window.IndexAnalysis && typeof IndexAnalysis.redirectDeepLinkIfNeeded === 'function') {
-            if (IndexAnalysis.redirectDeepLinkIfNeeded()) return;
-        }
+        if (this.redirectIndexDeepLink()) return;
         this.bindEvents();
         if (window.BoardAnalysis) BoardAnalysis.init();
-        if (window.MarketAnalysis) MarketAnalysis.init();
-        if (window.LeaderMidAnalysis) LeaderMidAnalysis.init();
-        if (window.KdeLevelsTool) KdeLevelsTool.init();
-        if (window.StockMultiStrategy) StockMultiStrategy.init();
-        if (window.IndexAnalysis) IndexAnalysis.init();
         this.applyPopupWindowMode();
         const initialTab = this.resolveInitialTab();
         if (initialTab && initialTab !== this.currentTab) {
@@ -213,7 +360,16 @@ const AnalysisPage = {
     },
 
     // 加载标签数据
-    loadTabData(tabId) {
+    async loadTabData(tabId) {
+        const seq = ++this._tabSeq;
+        try {
+            await this.ensureTabScripts(tabId);
+        } catch (err) {
+            console.error(err);
+            if (window.CommonUtils) CommonUtils.showToast('功能模块加载失败，请刷新重试', 'error');
+            return;
+        }
+        if (seq !== this._tabSeq) return;
         switch (tabId) {
             case 'board-analysis':
                 break;
