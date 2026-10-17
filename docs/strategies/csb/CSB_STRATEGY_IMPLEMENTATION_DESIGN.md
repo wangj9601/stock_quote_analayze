@@ -16,7 +16,7 @@
   → 买点1 PROBE（缩量止跌/Spring）
   → 买点2 BREAKOUT（放量实体阳线突破上轨）
   → 买点3 LPS（突破后缩量回踩确认）
-  → 防守：三日不重回 / 基准止损 / 派发 / MA10-MA20+波段阶梯跟踪
+  → 防守：假突破 / 基准止损 / 通道失效 / 派发 / 阶梯跟踪 / 到期平仓
 ```
 
 ---
@@ -30,7 +30,7 @@
 | `channel.py` | 通道：MA5/10/20/60 计算、上下轨、粘合带宽、连续粘合天数、HH20、通道状态 |
 | `setup_detector.py` | SETUP：换手初筛、年线斜率、独立回踩计数、Spring、地量（**地量默认不含信号日**） |
 | `entry_detector.py` | 买点：`detect_probe` / `detect_breakout` / `confirm_lps` / `detect_lps` / `detect_entry`（优先级 BREAKOUT>LPS>PROBE；BREAKOUT 当日 setup 失败时可回退前一日） |
-| `defense_exit.py` | 防守出场：假突破、基准止损、派发、阶梯跟踪；`evaluate_structure_exit_rules` / `evaluate_risk_exit_rules` |
+| `defense_exit.py` | 防守出场：假突破、基准止损、通道失效、派发、阶梯跟踪、到期平仓；`evaluate_structure_exit_rules` / `evaluate_risk_exit_rules` |
 | `strategy_engine.py` | `evaluate_one`（单票）、`CSBStrategyEngine.screen`（全市场/池扫描）、`screen_universe_for_dates`（区间一次扫描）、`compute_score_detail` |
 | `data_loader.py` | `CSBDataLoader`：候选池、日 K 加载（单票/区间/批量分块流式，OOM 自动降级）、交易日解析、批量分块估算 |
 | `trace_store.py` | `csb_signal_trace` 读写：upsert、按股查询、按日买点查询、purge、扫描标记 `__CSB_SCANNED__`、覆盖度判定 |

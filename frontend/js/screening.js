@@ -83,36 +83,181 @@ const ScreeningPage = {
     _gmsBoardPickerRefreshing: false,
     /** 服务端 ENABLE_ETF：默认 true，与后端兼容 */
     enableEtf: true,
+    /** 策略切换串行，避免面板还没插入就改子页 */
+    _switchChain: Promise.resolve(),
+    _loadedScriptKeys: null,
+    /** 切到标签时再拉的脚本。创业板中线等基础策略只依赖 screening.js */
+    _strategyScripts: {
+        gms: ['js/gms_score_detail.js', 'js/board_roles_panel.js'],
+        urt: ['js/urt_score_detail.js', 'js/board_roles_panel.js'],
+        rpe: ['js/rpe_score_detail.js', 'js/rpe_screening.js?v=20260917a', 'js/board_roles_panel.js'],
+        sbbr: ['js/sbbr_score_detail.js', 'js/sbbr_screening.js?v=20260918a', 'js/board_roles_panel.js'],
+        csb: ['js/csb_score_detail.js?v=20261007-csb', 'js/csb_screening.js?v=20261017-lazy-panels', 'js/board_roles_panel.js'],
+    },
 
     // 初始化
     async init() {
         await this.loadHeader();
-        this.bindEvents();
         this.initStrategyTabs();
+        this.bindEvents(document);
+        const cyb = document.getElementById('cyb-midline-content');
+        if (cyb) cyb.dataset.eventsBound = '1';
         this.initStrategyInfoCollapse();
-        this.initVsbIntegratedTabs();
-        this.initGmsIntegratedTabs();
-        this.initUrtIntegratedTabs();
+        this.initOpsSelects();
         // 权限引擎需在 Tab 事件绑定后再应用，以便正确切换到首个有权限的策略
         if (typeof loadPermissionEngine === 'function') {
             await loadPermissionEngine();
         }
-        this.ensureActiveStrategyVisible();
+        if (!this._prepareHashTarget()) {
+            this.ensureActiveStrategyVisible();
+        }
         this.applyVsbHashOnLoad();
         this.applyStrategyHashOnLoad();
+        await this._switchChain;
         void this.applyRpeDeepLinkOnLoad();
-        void this.initUrtStrategyConfig();
-        void this.loadGmsUiConfig();
-        this.initOpsSelects();
+    },
+
+    _initialStrategyFromHash() {
+        const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
+        if (!h) return null;
+        if (h === 'vsb-observe' || h === 'vsb-observe-daily' || h === 'triple-volume-observe'
+            || h === 'vsb-trade-observe' || h === 'vsb-pick') {
+            return 'volume-shrink-breakout';
+        }
+        const allowed = new Set([
+            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim',
+            'volume-shrink-breakout', 'one-yang-three-lines',
+            'cyb-midline', 'high-tight-flag'
+        ]);
+        return allowed.has(h) ? h : null;
+    },
+
+    /** 深链不是默认策略时，先收起创业板面板，避免等分片加载时闪一下错误策略 */
+    _prepareHashTarget() {
+        const strategy = this._initialStrategyFromHash();
+        if (!strategy || strategy === 'cyb-midline') return false;
+        const tab = document.querySelector(`.strategy-tab[data-strategy="${strategy}"]`);
+        if (!tab || getComputedStyle(tab).display === 'none') return false;
+        const perm = tab.getAttribute('data-perm');
+        if (perm && window.PermissionEngine && !PermissionEngine.has(perm)) return false;
+        document.querySelectorAll('.strategy-tab, .strategy-content').forEach((el) => {
+            el.classList.remove('active');
+        });
+        const host = document.getElementById('strategy-panel-host');
+        if (host && !host.children.length) host.textContent = '正在加载策略…';
+        return true;
+    },
+
+    _scriptKey(src) {
+        return String(src).split('?')[0];
+    },
+
+    _loadScript(src) {
+        if (!this._loadedScriptKeys) this._loadedScriptKeys = new Set();
+        const key = this._scriptKey(src);
+        if (this._loadedScriptKeys.has(key)) return Promise.resolve();
+        return new Promise((resolve, reject) => {
+            const el = document.createElement('script');
+            el.src = src;
+            el.onload = () => {
+                this._loadedScriptKeys.add(key);
+                resolve();
+            };
+            el.onerror = () => reject(new Error('脚本加载失败: ' + src));
+            document.body.appendChild(el);
+        });
+    },
+
+    async _loadStrategyScripts(strategy) {
+        const list = this._strategyScripts[strategy] || [];
+        for (const src of list) {
+            await this._loadScript(src);
+        }
+    },
+
+    async _mountStrategyPanel(strategy) {
+        if (document.getElementById(`${strategy}-content`)) return;
+        const host = document.getElementById('strategy-panel-host');
+        if (!host) throw new Error('选股面板容器不存在');
+        host.textContent = '';
+        const res = await fetch(`partials/screening/${strategy}.html`);
+        if (!res.ok) throw new Error('策略面板加载失败');
+        const html = await res.text();
+        host.insertAdjacentHTML('beforeend', html);
+    },
+
+    _applyPermToPanel(strategy, panel) {
+        const map = window.PERMISSION_TAB_MAP || {};
+        const perm = map[strategy];
+        if (perm) panel.setAttribute('data-perm', perm);
+        const engine = window.PermissionEngine;
+        if (engine && perm && !engine.has(perm)) {
+            panel.style.display = 'none';
+            panel.setAttribute('aria-hidden', 'true');
+        }
+        panel.querySelectorAll('.refresh-btn[data-strategy]').forEach((btn) => {
+            const tabPerm = map[btn.getAttribute('data-strategy')];
+            if (!tabPerm) return;
+            const suffix = tabPerm.replace('channel.screening.tab.', '');
+            btn.setAttribute('data-perm', 'channel.screening.tab.' + suffix + '.btn.refresh');
+            if (engine && !engine.has(btn.getAttribute('data-perm'))) {
+                btn.style.display = 'none';
+            }
+        });
+    },
+
+    _initStrategyWidgets(strategy, panel) {
+        if (strategy === 'gms' && !this._gmsWidgetsReady) {
+            this._gmsWidgetsReady = true;
+            this.initGmsIntegratedTabs();
+            void this.loadGmsUiConfig();
+        }
+        if (strategy === 'urt' && !this._urtWidgetsReady) {
+            this._urtWidgetsReady = true;
+            this.initUrtIntegratedTabs();
+        }
+        if (strategy === 'volume-shrink-breakout' && !this._vsbWidgetsReady) {
+            this._vsbWidgetsReady = true;
+            this.initVsbIntegratedTabs();
+        }
+        if (strategy === 'one-yang-three-lines' && !this._oneYangWidgetsReady) {
+            this._oneYangWidgetsReady = true;
+            const resetParamsBtn = document.getElementById('resetParamsBtn');
+            const saveParamsBtn = document.getElementById('saveParamsBtn');
+            if (resetParamsBtn) {
+                resetParamsBtn.addEventListener('click', () => this.resetOneYangThreeLinesParams());
+            }
+            if (saveParamsBtn) {
+                saveParamsBtn.addEventListener('click', () => this.saveOneYangThreeLinesParams());
+            }
+            this.loadOneYangThreeLinesParams();
+        }
+        this.initStrategyInfoCollapse();
+        this.initOpsSelects(panel);
+    },
+
+    async ensureStrategyReady(strategy) {
+        await this._mountStrategyPanel(strategy);
+        const panel = document.getElementById(`${strategy}-content`);
+        if (!panel) throw new Error('策略面板未就绪');
+        this._applyPermToPanel(strategy, panel);
+        await this._loadStrategyScripts(strategy);
+        if (panel.dataset.eventsBound !== '1') {
+            this.bindEvents(panel);
+            panel.dataset.eventsBound = '1';
+        }
+        this._initStrategyWidgets(strategy, panel);
     },
 
     /**
      * 参数区原生 select 展开为系统浅蓝菜单，深底上刺眼。
      * 用暗色自定义下拉替换观感，仍驱动原 select 的 value/change（不改筛选契约）。
      */
-    initOpsSelects() {
-        const root = document.querySelector('.screening-container') || document;
-        root.querySelectorAll('select.param-input, select.param-select').forEach((sel) => {
+    initOpsSelects(root) {
+        const scope = (root && root.querySelectorAll)
+            ? root
+            : (document.querySelector('.screening-container') || document);
+        scope.querySelectorAll('select.param-input, select.param-select').forEach((sel) => {
             this.enhanceOpsSelect(sel);
         });
     },
@@ -343,8 +488,16 @@ const ScreeningPage = {
         });
     },
 
-    // 切换策略标签页
+    // 切换策略标签页（面板与策略脚本按需加载，多次切换串行执行）
     switchStrategy(strategy) {
+        const run = this._switchChain.then(() => this._switchStrategyNow(strategy));
+        this._switchChain = run.catch((err) => {
+            console.error('switchStrategy', err);
+        });
+        return run;
+    },
+
+    async _switchStrategyNow(strategy) {
         // 检查是否为隐藏的策略
         const hiddenStrategies = ['parking-apron', 'backtrace-ma250', 'high-tight-flag'];
         if (hiddenStrategies.includes(strategy)) {
@@ -357,6 +510,16 @@ const ScreeningPage = {
         if (tabPerm && window.PermissionEngine && !PermissionEngine.has(tabPerm)) {
             if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
                 CommonUtils.showToast('您没有该选股策略的访问权限', 'warning');
+            }
+            return;
+        }
+
+        try {
+            await this.ensureStrategyReady(strategy);
+        } catch (err) {
+            console.error(err);
+            if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
+                CommonUtils.showToast('策略面板加载失败', 'error');
             }
             return;
         }
@@ -412,10 +575,14 @@ const ScreeningPage = {
         } else if (window.RpeScreening && typeof window.RpeScreening.setScrollFabVisible === 'function') {
             window.RpeScreening.setScrollFabVisible(false);
         }
-        if (strategy === 'volume-shrink-breakout' && !this._vsbOpenFromHash) {
-            this.switchVsbSubPanel('pick');
-        }
         if (strategy === 'volume-shrink-breakout') {
+            if (this._vsbHashSub) {
+                this.switchVsbSubPanel(this._vsbHashSub);
+                this._vsbHashSub = null;
+            } else if (!this._vsbOpenFromHash) {
+                this.switchVsbSubPanel('pick');
+            }
+            this._vsbOpenFromHash = false;
             void this.loadTvoTradeObserveCodes();
         }
     },
@@ -2689,28 +2856,25 @@ const ScreeningPage = {
         const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
         if (h === 'vsb-observe' || h === 'vsb-observe-daily' || h === 'triple-volume-observe') {
             this._vsbOpenFromHash = true;
-            this.switchStrategy('volume-shrink-breakout');
-            this._vsbOpenFromHash = false;
+            this._vsbHashSub = 'observe';
             if (h === 'vsb-observe-daily' || h === 'triple-volume-observe') {
                 this.vsbObserveSource = 'daily';
             } else {
                 this.vsbObserveSource = 'vsb';
             }
-            this.switchVsbSubPanel('observe');
+            void this.switchStrategy('volume-shrink-breakout');
             return;
         }
         if (h === 'vsb-trade-observe') {
             this._vsbOpenFromHash = true;
-            this.switchStrategy('volume-shrink-breakout');
-            this._vsbOpenFromHash = false;
-            this.switchVsbSubPanel('trade-observe');
+            this._vsbHashSub = 'trade-observe';
+            void this.switchStrategy('volume-shrink-breakout');
             return;
         }
         if (h === 'vsb-pick') {
             this._vsbOpenFromHash = true;
-            this.switchStrategy('volume-shrink-breakout');
-            this._vsbOpenFromHash = false;
-            this.switchVsbSubPanel('pick');
+            this._vsbHashSub = 'pick';
+            void this.switchStrategy('volume-shrink-breakout');
         }
     },
 
@@ -2722,7 +2886,7 @@ const ScreeningPage = {
         const h = (window.location.hash || '').replace(/^#/, '').split('&')[0];
         if (h !== 'rpe') return;
 
-        this.switchStrategy('rpe');
+        await this.switchStrategy('rpe');
 
         let params;
         try {
@@ -4340,12 +4504,18 @@ const ScreeningPage = {
         }
     },
 
-    // 绑定事件
-    bindEvents() {
+    // 绑定事件。root 为某个策略面板时只绑定该面板，避免后加载的面板重复绑到已有节点。
+    bindEvents(root) {
+        const scope = (root && root.nodeType === 1) ? root : document;
+        const byId = (id) => {
+            const el = document.getElementById(id);
+            if (!el || scope === document) return el;
+            return scope.contains(el) ? el : null;
+        };
         // 绑定所有刷新按钮（仅带 data-strategy 的真正「刷新筛选」）
         // rpe / sbbr / csb 由独立脚本自行处理，勿走通用 loadScreeningResults
         const externalRefreshStrategies = new Set(['rpe', 'sbbr', 'csb']);
-        document.querySelectorAll('.refresh-btn').forEach(btn => {
+        scope.querySelectorAll('.refresh-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const strategy = btn.dataset.strategy;
                 if (!strategy || externalRefreshStrategies.has(strategy)) return;
@@ -4354,7 +4524,7 @@ const ScreeningPage = {
         });
 
         // 绑定各策略「导出 CSV」：仅 id 为 exportBtn-<策略名> 的按钮（与 GMS 导出 Excel、观察股池导出 Excel、定位清除等区分）
-        document.querySelectorAll('.export-btn').forEach(btn => {
+        scope.querySelectorAll('.export-btn').forEach(btn => {
             if (btn.id === 'exportExcelBtn-gms') return; // GMS Excel 单独绑定
             if (!btn.id || !btn.id.startsWith('exportBtn-')) return;
             btn.addEventListener('click', () => {
@@ -4366,13 +4536,13 @@ const ScreeningPage = {
                 }
             });
         });
-        const exportExcelBtnGms = document.getElementById('exportExcelBtn-gms');
+        const exportExcelBtnGms = byId('exportExcelBtn-gms');
         if (exportExcelBtnGms) {
             exportExcelBtnGms.addEventListener('click', () => void this.exportToExcelGms());
         }
-        const gmsLocateBtn = document.getElementById('gmsLocateBtn');
-        const gmsLocateClearBtn = document.getElementById('gmsLocateClearBtn');
-        const gmsLocateInput = document.getElementById('gmsLocateInput');
+        const gmsLocateBtn = byId('gmsLocateBtn');
+        const gmsLocateClearBtn = byId('gmsLocateClearBtn');
+        const gmsLocateInput = byId('gmsLocateInput');
         if (gmsLocateBtn) {
             gmsLocateBtn.addEventListener('click', () => void this.locateGmsStock());
         }
@@ -4380,7 +4550,7 @@ const ScreeningPage = {
             gmsLocateClearBtn.addEventListener('click', () => {
                 this.gmsLocateActive = false;
                 if (gmsLocateInput) gmsLocateInput.value = '';
-                const hint = document.getElementById('gmsLocateHint');
+                const hint = byId('gmsLocateHint');
                 if (hint) {
                     hint.textContent = '';
                     hint.style.display = 'none';
@@ -4398,8 +4568,8 @@ const ScreeningPage = {
             });
         }
 
-        const gmsPrev = document.getElementById('gmsPaginationPrev');
-        const gmsNext = document.getElementById('gmsPaginationNext');
+        const gmsPrev = byId('gmsPaginationPrev');
+        const gmsNext = byId('gmsPaginationNext');
         if (gmsPrev) {
             gmsPrev.addEventListener('click', () => {
                 if (this.gmsPage <= 1) return;
@@ -4409,7 +4579,7 @@ const ScreeningPage = {
         }
         if (gmsNext) {
             gmsNext.addEventListener('click', () => {
-                const bar = document.getElementById('gmsPaginationBar');
+                const bar = byId('gmsPaginationBar');
                 const maxP = bar ? parseInt(bar.getAttribute('data-total-pages') || '0', 10) : 0;
                 if (maxP <= 0 || this.gmsPage >= maxP) return;
                 this.gmsPage += 1;
@@ -4418,21 +4588,21 @@ const ScreeningPage = {
         }
 
         // 绑定PVFARS策略范围切换事件
-        document.querySelectorAll('input[name="pvfrsScope"]').forEach(radio => {
+        scope.querySelectorAll('input[name="pvfrsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 this.loadScreeningResults('pvfrs');
             });
         });
 
         // 绑定 GMS 策略范围切换事件（仅更新 UI，不自动触发选股计算）
-        document.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
+        scope.querySelectorAll('input[name="gmsScope"]').forEach(radio => {
             radio.addEventListener('change', () => {
                 this.syncGmsWatchlistMarketWrap();
                 this.syncGmsCnBoardWrap();
                 this.syncGmsIndustryBoardWrap();
                 this.syncGmsConceptBoardWrap();
                 this.syncGmsSingleStockWrap();
-                const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+                const scopeEl = scope.querySelector('input[name="gmsScope"]:checked');
                 if (scopeEl && scopeEl.value === 'industry_board') {
                     void this.loadGmsIndustryBoardOptions().then(() => {
                         this._applyGmsTradeObserveBoardDefaults('industry');
@@ -4448,7 +4618,7 @@ const ScreeningPage = {
                 }
             });
         });
-        document.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach((radio) => {
+        scope.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach((radio) => {
             radio.addEventListener('change', () => this.syncGmsWatchlistBoardWrap());
         });
         this.syncGmsWatchlistMarketWrap();
@@ -4457,11 +4627,11 @@ const ScreeningPage = {
         this.syncGmsConceptBoardWrap();
         this.syncGmsSingleStockWrap();
         this.refreshBoardRolesPanelForOwner('gms');
-        const gmsSingleInput = document.getElementById('gmsSingleStockInput');
+        const gmsSingleInput = byId('gmsSingleStockInput');
         if (gmsSingleInput) {
             gmsSingleInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
-                    const scopeEl = document.querySelector('input[name="gmsScope"]:checked');
+                    const scopeEl = scope.querySelector('input[name="gmsScope"]:checked');
                     if (scopeEl && scopeEl.value === 'single') {
                         e.preventDefault();
                         void this.loadScreeningResults('gms');
@@ -4471,14 +4641,14 @@ const ScreeningPage = {
         }
 
         // URT 数据来源切换（仅更新 UI，不自动触发选股）
-        document.querySelectorAll('input[name="urtScope"]').forEach((radio) => {
+        scope.querySelectorAll('input[name="urtScope"]').forEach((radio) => {
             radio.addEventListener('change', () => {
                 this.syncUrtCnBoardWrap();
                 this.syncUrtIndustryBoardWrap();
                 this.syncUrtConceptBoardWrap();
                 this.syncUrtSingleStockWrap();
                 this.syncUrtFilterParamsForScope();
-                const scopeEl = document.querySelector('input[name="urtScope"]:checked');
+                const scopeEl = scope.querySelector('input[name="urtScope"]:checked');
                 if (scopeEl && scopeEl.value === 'industry_board') {
                     void this.loadGmsIndustryBoardOptions().then(() => {
                         this.refreshBoardRolesPanelForOwner('urt');
@@ -4498,11 +4668,11 @@ const ScreeningPage = {
         this.syncUrtSingleStockWrap();
         this.syncUrtFilterParamsForScope();
         this.refreshBoardRolesPanelForOwner('urt');
-        const urtSingleInput = document.getElementById('urtSingleStockInput');
+        const urtSingleInput = byId('urtSingleStockInput');
         if (urtSingleInput) {
             urtSingleInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
-                    const scopeEl = document.querySelector('input[name="urtScope"]:checked');
+                    const scopeEl = scope.querySelector('input[name="urtScope"]:checked');
                     if (scopeEl && scopeEl.value === 'single') {
                         e.preventDefault();
                         void this.loadScreeningResults('urt');
@@ -4512,15 +4682,15 @@ const ScreeningPage = {
         }
 
         // GMS 策略参数：保存 / 同步
-        const gmsParamsSaveBtn = document.getElementById('gmsParamsSaveBtn');
+        const gmsParamsSaveBtn = byId('gmsParamsSaveBtn');
         if (gmsParamsSaveBtn) {
             gmsParamsSaveBtn.addEventListener('click', () => this.saveGmsParams());
         }
-        const gmsParamsSyncBtn = document.getElementById('gmsParamsSyncBtn');
+        const gmsParamsSyncBtn = byId('gmsParamsSyncBtn');
         if (gmsParamsSyncBtn) {
             gmsParamsSyncBtn.addEventListener('click', () => this.syncGmsParamsFromServer());
         }
-        const gmsConfigSelect = document.getElementById('gms-config_id');
+        const gmsConfigSelect = byId('gms-config_id');
         if (gmsConfigSelect) {
             gmsConfigSelect.addEventListener('change', () => {
                 const v = gmsConfigSelect.value;
@@ -4531,7 +4701,7 @@ const ScreeningPage = {
         this.initGmsParamOverrideCollapse();
 
         // GMS 得分明细：点击「得分明细」展开/收起（事件委托）
-        const gmsContainer = document.getElementById('resultsContainer-gms');
+        const gmsContainer = byId('resultsContainer-gms');
         if (gmsContainer) {
             gmsContainer.addEventListener('click', (e) => {
                 const observeBtn = e.target.closest('.gms-trade-observe-add');
@@ -4555,7 +4725,7 @@ const ScreeningPage = {
                 if (!btn) return;
                 e.preventDefault();
                 const rowIndex = btn.getAttribute('data-row');
-                const tbody = document.getElementById('resultsTableBody-gms');
+                const tbody = byId('resultsTableBody-gms');
                 if (!tbody) return;
                 const detailRow = tbody.querySelector(`tr.gms-score-detail-row[data-detail-for="${rowIndex}"]`);
                 if (detailRow) {
@@ -4565,7 +4735,7 @@ const ScreeningPage = {
         }
 
         // URT 得分明细：展开/收起（风格对齐 GMS）
-        const urtContainer = document.getElementById('resultsContainer-urt');
+        const urtContainer = byId('resultsContainer-urt');
         if (urtContainer) {
             urtContainer.addEventListener('click', (e) => {
                 const observeBtn = e.target.closest('.urt-trade-observe-add');
@@ -4581,7 +4751,7 @@ const ScreeningPage = {
                 if (!btn) return;
                 e.preventDefault();
                 const rowIndex = btn.getAttribute('data-row');
-                const tbody = document.getElementById('resultsTableBody-urt');
+                const tbody = byId('resultsTableBody-urt');
                 if (!tbody) return;
                 const detailRow = tbody.querySelector(`tr.urt-score-detail-row[data-detail-for="${rowIndex}"]`);
                 if (detailRow) {
@@ -4591,20 +4761,20 @@ const ScreeningPage = {
         }
 
         // PVFARS 策略参数：保存按钮
-        const pvfrsParamsSaveBtn = document.getElementById('pvfrsParamsSaveBtn');
+        const pvfrsParamsSaveBtn = byId('pvfrsParamsSaveBtn');
         if (pvfrsParamsSaveBtn) {
             pvfrsParamsSaveBtn.addEventListener('click', () => this.savePvfrsParams());
         }
 
         // PVFARS 得分明细：点击「得分明细」展开/收起（事件委托，绑定在结果容器上）
-        const pvfrsContainer = document.getElementById('resultsContainer-pvfrs');
+        const pvfrsContainer = byId('resultsContainer-pvfrs');
         if (pvfrsContainer) {
             pvfrsContainer.addEventListener('click', (e) => {
                 const btn = e.target.closest('.pvfrs-score-detail-toggle');
                 if (!btn) return;
                 e.preventDefault();
                 const rowIndex = btn.getAttribute('data-row');
-                const tbody = document.getElementById('resultsTableBody-pvfrs');
+                const tbody = byId('resultsTableBody-pvfrs');
                 if (!tbody) return;
                 const detailRow = tbody.querySelector(`tr.pvfrs-score-detail-row[data-detail-for="${rowIndex}"]`);
                 if (detailRow) {
@@ -4687,7 +4857,7 @@ const ScreeningPage = {
     getGmsQuerySearchParams(options = {}) {
         const includePagination = options.includePagination !== false;
         const page = options.page != null ? options.page : this.gmsPage;
-        const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
+        const scopeElement = scope.querySelector('input[name="gmsScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'all';
         const gmsParams = this.getGmsParams();
         const q = new URLSearchParams();
@@ -4699,17 +4869,17 @@ const ScreeningPage = {
             q.set('scope', scope);
         }
         if (scope === 'gms_watchlist') {
-            const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
+            const mEl = scope.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
             if (!mEl || mEl.value !== 'hk') {
-                document.querySelectorAll('input[name="gmsWatchlistBoardSegment"]:checked').forEach((cb) => {
+                scope.querySelectorAll('input[name="gmsWatchlistBoardSegment"]:checked').forEach((cb) => {
                     const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
                     if (v && v !== 'ALL') q.append('cn_board_segment', v);
                 });
             }
         }
         if (scope === 'cn' || scope === 'industry_board' || scope === 'concept_board') {
-            document.querySelectorAll('input[name="gmsCnBoardSegment"]:checked').forEach((cb) => {
+            scope.querySelectorAll('input[name="gmsCnBoardSegment"]:checked').forEach((cb) => {
                 const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
                 if (v && v !== 'ALL') q.append('cn_board_segment', v);
             });
@@ -4722,12 +4892,12 @@ const ScreeningPage = {
             this.getGmsSelectedConceptBoardCodes().forEach((code) => q.append('concept_board_code', code));
             q.set('board_code_source', this._gmsPreferredBoardCodeSource('concept'));
         }
-        const configEl = document.getElementById('gms-config_id');
+        const configEl = byId('gms-config_id');
         const configId = configEl && configEl.value ? parseInt(configEl.value, 10) : this.gmsConfigId;
         if (configId) {
             q.set('config_id', String(configId));
         }
-        const overrideEl = document.getElementById('gms-param-override');
+        const overrideEl = byId('gms-param-override');
         const useOverride = overrideEl && overrideEl.checked;
         if (useOverride) {
             if (gmsParams.start_date) q.set('date', gmsParams.start_date);
@@ -4754,7 +4924,7 @@ const ScreeningPage = {
         } else if (gmsParams.start_date) {
             q.set('date', gmsParams.start_date);
         }
-        const excludeStEl = document.getElementById('gmsExcludeSt');
+        const excludeStEl = byId('gmsExcludeSt');
         if (excludeStEl && excludeStEl.checked) {
             q.set('exclude_st', 'true');
         }
@@ -4772,7 +4942,7 @@ const ScreeningPage = {
 
     /** 构建 GMS 查询串（含单只股票代码解析） */
     async buildGmsQuerySearchParams(options = {}) {
-        const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
+        const scopeElement = scope.querySelector('input[name="gmsScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'all';
         if (scope === 'industry_board') {
             if (this.getGmsSelectedIndustryBoardCodes().length === 0) {
@@ -4785,7 +4955,7 @@ const ScreeningPage = {
             }
         }
         if (scope === 'single') {
-            const inputEl = document.getElementById('gmsSingleStockInput');
+            const inputEl = byId('gmsSingleStockInput');
             const raw = inputEl ? String(inputEl.value || '').trim() : '';
             if (!raw) {
                 throw new Error('请输入股票代码或名称');
@@ -4805,7 +4975,7 @@ const ScreeningPage = {
 
     /** 构建 URT 选股查询参数（数据来源对齐 GMS） */
     async buildUrtQuerySearchParams() {
-        const scopeElement = document.querySelector('input[name="urtScope"]:checked');
+        const scopeElement = scope.querySelector('input[name="urtScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'cn';
         if (scope === 'industry_board') {
             if (this.getUrtSelectedIndustryBoardCodes().length === 0) {
@@ -4818,7 +4988,7 @@ const ScreeningPage = {
             }
         }
         if (scope === 'single') {
-            const inputEl = document.getElementById('urtSingleStockInput');
+            const inputEl = byId('urtSingleStockInput');
             const raw = inputEl ? String(inputEl.value || '').trim() : '';
             if (!raw) {
                 throw new Error('请输入股票代码或名称');
@@ -4829,7 +4999,7 @@ const ScreeningPage = {
         params.set('scope', scope);
 
         if (scope === 'cn' || scope === 'industry_board' || scope === 'concept_board') {
-            document.querySelectorAll('input[name="urtCnBoardSegment"]:checked').forEach((cb) => {
+            scope.querySelectorAll('input[name="urtCnBoardSegment"]:checked').forEach((cb) => {
                 const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
                 if (v && v !== 'ALL') params.append('cn_board_segment', v);
             });
@@ -4849,30 +5019,30 @@ const ScreeningPage = {
             params.set('board_code_source', this._gmsPreferredBoardCodeSource('concept', cbCodes));
         }
         if (scope === 'single') {
-            const inputEl = document.getElementById('urtSingleStockInput');
+            const inputEl = byId('urtSingleStockInput');
             params.set('stock_code', String(inputEl?.value || '').trim());
         }
 
-        const urtDateEl = document.getElementById('urtScreeningDate');
+        const urtDateEl = byId('urtScreeningDate');
         if (urtDateEl && urtDateEl.value) {
             params.set('date', urtDateEl.value);
         }
         if (scope === 'cn' || scope === 'hk') {
-            const limEl = document.getElementById('urtLimit');
+            const limEl = byId('urtLimit');
             const limRaw = limEl && limEl.value != null ? String(limEl.value).trim() : '';
             if (limRaw !== '') {
                 const lim = parseInt(limRaw, 10);
                 if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
             }
         }
-        const configEl = document.getElementById('urt-config_id');
+        const configEl = byId('urt-config_id');
         const cid = configEl && configEl.value ? parseInt(configEl.value, 10) : NaN;
         if (!isNaN(cid) && cid > 0) params.set('config_id', String(cid));
 
         // 量能/最低得分：仅用户填写非空时才覆盖；默认空 → 用参数版本，可走预计算缓存
         if (scope === 'cn' || scope === 'hk') {
-            const vmRaw = String(document.getElementById('urtVolumeMultiple')?.value || '').trim();
-            const msRaw = String(document.getElementById('urtMinScore')?.value || '').trim();
+            const vmRaw = String(byId('urtVolumeMultiple')?.value || '').trim();
+            const msRaw = String(byId('urtMinScore')?.value || '').trim();
             if (vmRaw !== '') {
                 const vm = parseFloat(vmRaw);
                 if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
@@ -4882,7 +5052,7 @@ const ScreeningPage = {
                 if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
             }
         }
-        const sqmEl = document.getElementById('urtSignalQualityMode');
+        const sqmEl = byId('urtSignalQualityMode');
         const sqm = sqmEl && sqmEl.value ? String(sqmEl.value).trim().toLowerCase() : '';
         if (sqm === 'premium' || sqm === 'standard') {
             params.set('signal_quality_mode', sqm);
@@ -4890,7 +5060,7 @@ const ScreeningPage = {
 
         // 全部 A/H：勾选「优先读预计算」→ prefer_cache + trace_only；取消 → force_realtime
         if (scope === 'cn' || scope === 'hk') {
-            const preferEl = document.getElementById('urtPreferPrecompute');
+            const preferEl = byId('urtPreferPrecompute');
             const prefer = !preferEl || preferEl.checked;
             if (prefer) {
                 params.set('prefer_cache', 'true');
@@ -4906,8 +5076,8 @@ const ScreeningPage = {
     },
 
     _updateUrtConfigAlignHint(defaultId) {
-        const hintEl = document.getElementById('urtConfigAlignHint');
-        const selectEl = document.getElementById('urt-config_id');
+        const hintEl = byId('urtConfigAlignHint');
+        const selectEl = byId('urt-config_id');
         if (!hintEl || !selectEl) return;
         const cid = selectEl.value ? parseInt(selectEl.value, 10) : NaN;
         if (!isNaN(cid) && defaultId != null && cid !== Number(defaultId)) {
@@ -4920,7 +5090,7 @@ const ScreeningPage = {
     },
 
     _updateUrtTraceStaleHint(result) {
-        const hintEl = document.getElementById('urtTraceStaleHint');
+        const hintEl = byId('urtTraceStaleHint');
         if (!hintEl) return;
         if (result && (result.stale || result.need_recompute) && result.data_source === 'urt_signal_trace') {
             hintEl.style.display = 'block';
@@ -4942,7 +5112,7 @@ const ScreeningPage = {
     },
 
     _canslimLetterEnabled(elId, defaultOn) {
-        const el = document.getElementById(elId);
+        const el = byId(elId);
         if (!el) return defaultOn !== false;
         if (el.tagName === 'SELECT') {
             return String(el.value || 'true').toLowerCase() !== 'false';
@@ -4952,7 +5122,7 @@ const ScreeningPage = {
     },
 
     _canslimOptionalNumber(elId) {
-        const el = document.getElementById(elId);
+        const el = byId(elId);
         if (!el || el.value === '' || el.value == null) return null;
         const n = Number(el.value);
         return Number.isFinite(n) ? n : null;
@@ -4979,13 +5149,13 @@ const ScreeningPage = {
         if (nearHigh != null) params.set('near_high_min_pct', String(nearHigh));
         const circ = this._canslimOptionalNumber('canslimCircMax');
         if (circ != null && circ > 0) params.set('circ_shares_max_yi', String(circ));
-        const dEl = document.getElementById('canslimDate');
+        const dEl = byId('canslimDate');
         if (dEl && dEl.value) params.set('asof', dEl.value);
         return params;
     },
 
     _updateCanslimMarketHint(market) {
-        const hint = document.getElementById('canslimMarketHint');
+        const hint = byId('canslimMarketHint');
         if (!hint) return;
         const m = market || {};
         hint.textContent = m.reason || '';
@@ -5001,20 +5171,20 @@ const ScreeningPage = {
     },
 
     _resetUrtOverrideInputs() {
-        const vmEl = document.getElementById('urtVolumeMultiple');
-        const msEl = document.getElementById('urtMinScore');
-        const sqmEl = document.getElementById('urtSignalQualityMode');
+        const vmEl = byId('urtVolumeMultiple');
+        const msEl = byId('urtMinScore');
+        const sqmEl = byId('urtSignalQualityMode');
         if (vmEl) vmEl.value = '';
         if (msEl) msEl.value = '';
         if (sqmEl) sqmEl.value = '';
-        const preferEl = document.getElementById('urtPreferPrecompute');
+        const preferEl = byId('urtPreferPrecompute');
         if (preferEl) preferEl.checked = true;
     },
 
     _fillUrtParamPlaceholders(item) {
-        const vmEl = document.getElementById('urtVolumeMultiple');
-        const msEl = document.getElementById('urtMinScore');
-        const sqmEl = document.getElementById('urtSignalQualityMode');
+        const vmEl = byId('urtVolumeMultiple');
+        const msEl = byId('urtMinScore');
+        const sqmEl = byId('urtSignalQualityMode');
         if (vmEl && item && item.volume_multiple != null) {
             vmEl.placeholder = `版本 ${item.volume_multiple}`;
         }
@@ -5032,7 +5202,7 @@ const ScreeningPage = {
 
     /** 加载 URT 策略参数版本列表（默认锁定生效版本；切换后不自动刷新，须点「刷新筛选」） */
     async initUrtStrategyConfig() {
-        const selectEl = document.getElementById('urt-config_id');
+        const selectEl = byId('urt-config_id');
         if (!selectEl) return;
         selectEl.innerHTML = '<option value="">加载中…</option>';
         try {
@@ -5085,9 +5255,9 @@ const ScreeningPage = {
 
     /** GMS：按代码/名称精准定位（全量拉取后匹配） */
     async locateGmsStock() {
-        const inputEl = document.getElementById('gmsLocateInput');
-        const clearBtn = document.getElementById('gmsLocateClearBtn');
-        const hintEl = document.getElementById('gmsLocateHint');
+        const inputEl = byId('gmsLocateInput');
+        const clearBtn = byId('gmsLocateClearBtn');
+        const hintEl = byId('gmsLocateHint');
         const keywordRaw = inputEl ? String(inputEl.value || '').trim() : '';
         if (!keywordRaw) {
             if (window.CommonUtils) CommonUtils.showToast('请输入股票代码或名称', 'warning');
@@ -5139,7 +5309,7 @@ const ScreeningPage = {
                 hintEl.textContent = `定位结果：${hitCode} ${hitName}`;
                 hintEl.style.display = 'inline-block';
             }
-            const searchDate = document.getElementById('searchDate-gms');
+            const searchDate = byId('searchDate-gms');
             if (searchDate && result.search_date) searchDate.textContent = `筛选时间: ${result.search_date}`;
         } catch (e) {
             const msg = e && e.message ? e.message : String(e);
@@ -5170,10 +5340,10 @@ const ScreeningPage = {
     },
 
     updateGmsPaginationUi(paging) {
-        const bar = document.getElementById('gmsPaginationBar');
-        const label = document.getElementById('gmsPaginationLabel');
-        const prev = document.getElementById('gmsPaginationPrev');
-        const next = document.getElementById('gmsPaginationNext');
+        const bar = byId('gmsPaginationBar');
+        const label = byId('gmsPaginationLabel');
+        const prev = byId('gmsPaginationPrev');
+        const next = byId('gmsPaginationNext');
         if (!bar || !label) return;
         if (!paging || !paging.enabled) {
             bar.style.display = 'none';
@@ -7371,24 +7541,5 @@ const ScreeningPage = {
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
     ScreeningPage.init();
-
-    // 绑定一阳穿三线策略参数按钮事件
-    const resetParamsBtn = document.getElementById('resetParamsBtn');
-    const saveParamsBtn = document.getElementById('saveParamsBtn');
-
-    if (resetParamsBtn) {
-        resetParamsBtn.addEventListener('click', () => {
-            ScreeningPage.resetOneYangThreeLinesParams();
-        });
-    }
-
-    if (saveParamsBtn) {
-        saveParamsBtn.addEventListener('click', () => {
-            ScreeningPage.saveOneYangThreeLinesParams();
-        });
-    }
-
-    // 加载保存的参数
-    ScreeningPage.loadOneYangThreeLinesParams();
 });
 

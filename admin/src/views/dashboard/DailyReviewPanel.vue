@@ -349,15 +349,6 @@
       </el-col>
     </el-row>
 
-    <el-card v-if="markdown" class="dr-block" shadow="never">
-      <template #header>
-        <button type="button" class="dr-fold-btn" @click="mdOpen = !mdOpen">
-          Markdown 预览
-          <span>{{ mdOpen ? '收起' : '展开' }}</span>
-        </button>
-      </template>
-      <div v-show="mdOpen" class="dr-md" v-html="markdownHtml"></div>
-    </el-card>
   </div>
 </template>
 
@@ -379,10 +370,6 @@ const status = ref('')
 const data = ref<any>(null)
 const viewpoint = ref('')
 const advice = ref('')
-const markdown = ref('')
-const mdOpen = ref(false)
-const markdownHtml = computed(() => renderReviewMarkdown(markdown.value))
-
 function yesterday(): string {
   const d = new Date()
   d.setDate(d.getDate() - 1)
@@ -562,99 +549,6 @@ function tone(v: any): string {
   return n > 0 ? 'dr-up' : 'dr-down'
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-function mdInline(s: string): string {
-  return escapeHtml(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`]+)`/g, '<code>$1</code>')
-}
-
-function renderReviewMarkdown(src: string): string {
-  const text = String(src || '').replace(/\r\n/g, '\n')
-  if (!text.trim()) return '<p class="muted">暂无预览</p>'
-  const lines = text.split('\n')
-  const out: string[] = []
-  let i = 0
-  const special = (line: string) => /^(#{1,3}\s|\||>|---+\s*$|\d+\.\s|[-*]\s)/.test(line)
-  while (i < lines.length) {
-    const line = lines[i]
-    if (!line.trim()) {
-      i += 1
-      continue
-    }
-    if (/^---+\s*$/.test(line.trim())) {
-      out.push('<hr>')
-      i += 1
-      continue
-    }
-    const heading = /^(#{1,3})\s+(.*)$/.exec(line)
-    if (heading) {
-      out.push(`<h${heading[1].length}>${mdInline(heading[2])}</h${heading[1].length}>`)
-      i += 1
-      continue
-    }
-    if (line.trim().startsWith('|')) {
-      const block: string[] = []
-      while (i < lines.length && lines[i].trim().startsWith('|')) {
-        block.push(lines[i])
-        i += 1
-      }
-      const rows = block
-        .map((row) => row.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()))
-        .filter((cells) => !(cells.length && cells.every((c) => /^:?-+:?$/.test(c))))
-      if (rows.length) {
-        const head = rows[0]
-        const toneIdx = head.map((h, idx) => (/涨跌|涨幅|净流入/.test(h) ? idx : -1)).filter((idx) => idx >= 0)
-        const cell = (c: string, tag: string, idx: number) => {
-          let html = mdInline(c)
-          const num = tag === 'td' && toneIdx.includes(idx)
-          if (num) {
-            const n = Number(String(c).replace(/[^\d.+-]/g, ''))
-            if (Number.isFinite(n) && n !== 0) html = `<span class="${n > 0 ? 'dr-up' : 'dr-down'}">${html}</span>`
-          }
-          return `<${tag}${num ? ' class="num"' : ''}>${html}</${tag}>`
-        }
-        const tr = (cells: string[], tag: string) => `<tr>${cells.map((c, idx) => cell(c, tag, idx)).join('')}</tr>`
-        out.push(`<table class="md-table"><thead>${tr(head, 'th')}</thead><tbody>${rows.slice(1).map((r) => tr(r, 'td')).join('')}</tbody></table>`)
-      }
-      continue
-    }
-    if (/^>\s?/.test(line)) {
-      const bits: string[] = []
-      while (i < lines.length && /^>\s?/.test(lines[i])) {
-        bits.push(lines[i].replace(/^>\s?/, ''))
-        i += 1
-      }
-      out.push(`<blockquote>${mdInline(bits.join(' '))}</blockquote>`)
-      continue
-    }
-    if (/^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-      const ordered = /^\d+\.\s+/.test(line)
-      const re = ordered ? /^\d+\.\s+(.*)$/ : /^[-*]\s+(.*)$/
-      const items: string[] = []
-      while (i < lines.length && re.test(lines[i])) {
-        items.push(`<li>${mdInline((lines[i].match(re) || [])[1] || '')}</li>`)
-        i += 1
-      }
-      out.push(ordered ? `<ol>${items.join('')}</ol>` : `<ul>${items.join('')}</ul>`)
-      continue
-    }
-    const para = [line]
-    i += 1
-    while (i < lines.length && lines[i].trim() && !special(lines[i])) {
-      para.push(lines[i])
-      i += 1
-    }
-    out.push(`<p>${mdInline(para.join(' '))}</p>`)
-  }
-  return out.join('')
-}
-
 function boardHref(kind: 'industry' | 'concept', row: any): string {
   return boardDetailUrl({
     boardKind: kind,
@@ -668,7 +562,6 @@ function applyData(d: any) {
   data.value = d
   viewpoint.value = d?.viewpoint_md || ''
   advice.value = d?.advice_md || ''
-  markdown.value = d?.markdown || ''
   leadersExpanded.value = false
   laggardsExpanded.value = false
 }
@@ -838,35 +731,6 @@ onMounted(() => {
   color: #64748b;
   font-size: 13px;
 }
-.dr-fold-btn {
-  border: none;
-  background: transparent;
-  padding: 0;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  color: inherit;
-}
-.dr-fold-btn span {
-  margin-left: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #64748b;
-}
-.dr-md {
-  color: #0f172a;
-  line-height: 1.65;
-  font-size: 14px;
-}
-.dr-md h1 { font-size: 20px; margin: 0 0 10px; }
-.dr-md h2 { font-size: 16px; margin: 16px 0 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
-.dr-md h3 { font-size: 15px; margin: 12px 0 6px; }
-.dr-md :deep(table.md-table) { width: 100%; border-collapse: collapse; margin: 8px 0 12px; font-size: 13px; }
-.dr-md :deep(table.md-table th),
-.dr-md :deep(table.md-table td) { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
-.dr-md :deep(table.md-table th) { background: #f8fafc; }
-.dr-md :deep(.num) { text-align: right; font-variant-numeric: tabular-nums; }
-.dr-md blockquote { margin: 8px 0; padding: 8px 12px; background: #f8fafc; border-left: 3px solid #cbd5e1; color: #475569; }
 .dr-board-link,
 .dr-stock-link {
   color: #1d4ed8;

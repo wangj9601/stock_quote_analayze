@@ -1,0 +1,135 @@
+<div id="pvfrs-content" class="strategy-content" style="display:none;">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围:</strong>全部A股或港股（排除ST股票）</li>
+                    <li><strong>时间范围:</strong>最近20个交易日</li>
+                    <li><strong>选股条件:</strong></li>
+                    <li class="condition-item">1. <strong>价格维度:</strong> 宏观位移为正(Δ>0) 且 即时强度为正(d₂₀>d)；幅度
+                        |Δ|、Δ/d₂₀、Δ/d₁、横盘判断</li>
+                    <li class="condition-item">2. <strong>频率维度:</strong> 上涨频率优势(Z>F) 且 无虚假繁荣</li>
+                    <li class="condition-item">3. <strong>成交量维度:</strong> 进出效率提升(m₂₀>m) 且 量价共振</li>
+                    <li class="condition-item">4. <strong>三维共振:</strong> 价格、频率、成交量三个维度同时满足条件</li>
+                    <li class="condition-item">5. <strong>入场时机:</strong> 价格穿越平均价格且成交量突破平均量</li>
+                    <li class="condition-item">6. 自动排除所有ST股票（包括ST、*ST、S*ST等）</li>
+                </ul>
+            </div>
+
+            <!-- 数据来源选择 -->
+            <div class="strategy-params-card">
+                <h3>数据来源</h3>
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="scopeCN" name="pvfrsScope" value="cn" checked
+                            style="margin-right: 5px;">
+                        <label for="scopeCN" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="scopeHK" name="pvfrsScope" value="hk" style="margin-right: 5px;">
+                        <label for="scopeHK" style="cursor: pointer;">全部港股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="scopeWatchlist" name="pvfrsScope" value="watchlist"
+                            style="margin-right: 5px;">
+                        <label for="scopeWatchlist" style="cursor: pointer;">我的自选</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PVFARS 策略参数（可编辑） -->
+            <div class="strategy-params-card" id="pvfrsStrategyParamsCard">
+                <h3>PVFARS 策略参数</h3>
+                <div class="params-grid pvfrs-params-grid">
+                    <div class="parameter-group">
+                        <label for="pvfrs-observation_period">观察周期（天）</label>
+                        <input type="number" id="pvfrs-observation_period" class="param-input" min="5" max="60"
+                            step="1">
+                        <span class="param-rule">计算规则：取最近 N 个交易日，用于计算 d₁、d₂₀、Z/F 等；d₁=第1日收盘价，d₂₀=第N日收盘价。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_ratio_d20_max">Δ/d₂₀ 上限（0=不启用）</label>
+                        <input type="number" id="pvfrs-buy_ratio_d20_max" class="param-input" min="0" max="1"
+                            step="0.05">
+                        <span class="param-rule">计算规则：Δ/d₂₀ = (d₂₀−d₁)/d₂₀，即 20 日涨幅占当前价比例；买点要求该值 &lt;
+                            此上限，越小越不易追高。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_exclude_sideways">横盘不参与买点</label>
+                        <select id="pvfrs-buy_exclude_sideways" class="param-select">
+                            <option value="true">是</option>
+                            <option value="false">否</option>
+                        </select>
+                        <span class="param-rule">计算规则：当 |Δ| &lt; ε（幅度近似为 0）时判为横盘；选「是」则横盘时不发出买点。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_macro_displacement_min">宏观位移最小值</label>
+                        <input type="number" id="pvfrs-buy_macro_displacement_min" class="param-input" step="0.001">
+                        <span class="param-rule">计算规则：Δ = d₂₀ − d₁（期末价减期初价）；买点要求 Δ ≥ 此值，通常设为 0 表示仅做多上涨。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_instant_deviation_min">即时强度最小值</label>
+                        <input type="number" id="pvfrs-buy_instant_deviation_min" class="param-input" step="0.001">
+                        <span class="param-rule">计算规则：即时强度 = d₂₀ − d，其中 d = 20 日均价；买点要求该值 ≥ 此值，表示当前价高于均线。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_bias_min">最小偏离度（如 0.02=2%）</label>
+                        <input type="number" id="pvfrs-buy_bias_min" class="param-input" min="0" max="0.5" step="0.01">
+                        <span class="param-rule">计算规则：乖离率 = (当前价−均线)/均线；买点要求乖离率 ≥ 此值，如 0.02 表示至少 2% 偏离。</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="pvfrs-buy_relative_displacement_min">最小相对位移（如 0.05=5%）</label>
+                        <input type="number" id="pvfrs-buy_relative_displacement_min" class="param-input" min="0"
+                            max="1" step="0.01">
+                        <span class="param-rule">计算规则：相对位移 = Δ / 20日均价，即宏观位移占均价比率；买点要求 ≥ 此值，如 0.05 表示 5%。</span>
+                    </div>
+                </div>
+                <div class="parameter-actions" style="margin-top: 12px;">
+                    <button type="button" id="pvfrsParamsSaveBtn" class="refresh-btn">保存参数</button>
+                    <span id="pvfrsParamsSaveStatus" class="search-date" style="margin-left: 8px;"></span>
+                </div>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-pvfrs" class="refresh-btn" data-strategy="pvfrs">刷新筛选</button>
+                <button id="exportBtn-pvfrs" class="export-btn" style="display:none;">导出CSV</button>
+                <span id="searchDate-pvfrs" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-pvfrs" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-pvfrs" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-pvfrs" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-pvfrs" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-pvfrs" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>信号强度</th>
+                                <th>当前价格</th>
+                                <th>价格维度</th>
+                                <th>频率维度</th>
+                                <th>成交量维度</th>
+                                <th>共振状态</th>
+                                <th>入场时机</th>
+                                <th>投资建议</th>
+                                <th>当前涨跌幅</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-pvfrs">
+                            <tr>
+                                <td colspan="12" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>

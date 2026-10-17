@@ -1,0 +1,102 @@
+<div id="long-lower-shadow-content" class="strategy-content" style="display:none;">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围:</strong>全部A股（排除创业板、科创板和北证A股）</li>
+                    <li><strong>时间范围:</strong>最近20个交易日</li>
+                    <li><strong>选股条件:</strong></li>
+                    <li class="condition-item">1. 下跌趋势: 当日最低价 < MA20（20日移动平均线）</li>
+                    <li class="condition-item">2. 长下影线: 最近2个交易日内出现(阳线或阴线均可)</li>
+                    <li class="condition-item"> - 下影线长度 >= 实体长度的1倍</li>
+                    <li class="condition-item"> - 上影线很短或几乎没有（<= 实体长度的30%）</li>
+                    <li class="condition-item"> - 出现长下影线当日振幅超过2%</li>
+                </ul>
+            </div>
+
+            <!-- 参数配置区域 -->
+            <div class="strategy-params-card">
+                <h3>策略参数配置</h3>
+                <div class="params-grid">
+                    <div class="param-item">
+                        <label for="lowerShadowRatio">
+                            <span class="param-label">下影线倍数</span>
+                            <span class="param-range">(0.5-3.0)</span>
+                        </label>
+                        <input type="number" id="lowerShadowRatio" class="param-input" min="0.5" max="3.0" step="0.1"
+                            value="1.0">
+                        <span class="param-desc">下影线长度 >= 实体长度的倍数</span>
+                    </div>
+
+                    <div class="param-item">
+                        <label for="upperShadowRatio">
+                            <span class="param-label">上影线比例</span>
+                            <span class="param-range">(0.1-0.5)</span>
+                        </label>
+                        <input type="number" id="upperShadowRatio" class="param-input" min="0.1" max="0.5" step="0.05"
+                            value="0.3">
+                        <span class="param-desc">上影线 <= 实体长度的比例</span>
+                    </div>
+
+                    <div class="param-item">
+                        <label for="minAmplitude">
+                        </label>
+                        <input type="number" id="recentDays" class="param-input" min="1" max="10" step="1" value="2">
+                        <span class="param-desc">检查最近N个交易日</span>
+                    </div>
+                </div>
+
+                <div class="param-presets">
+                    <span class="preset-label">快速预设：</span>
+                    <button class="preset-btn" onclick="setLongShadowPreset('conservative')">保守</button>
+                    <button class="preset-btn" onclick="setLongShadowPreset('balanced')">平衡</button>
+                    <button class="preset-btn" onclick="setLongShadowPreset('aggressive')">激进</button>
+                    <button class="preset-btn" onclick="setLongShadowPreset('default')">默认</button>
+                </div>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-long-lower-shadow" class="refresh-btn"
+                    data-strategy="long-lower-shadow">刷新筛选</button>
+                <button id="exportBtn-long-lower-shadow" class="export-btn" style="display:none;">导出CSV</button>
+                <span id="searchDate-long-lower-shadow" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-long-lower-shadow" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-long-lower-shadow" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-long-lower-shadow" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-long-lower-shadow" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-long-lower-shadow" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>形态日期</th>
+                                <th>形态收盘价</th>
+                                <th>下影线长度</th>
+                                <th>实体长度</th>
+                                <th>影线/实体比</th>
+                                <th>当日振幅</th>
+                                <th>当前价格</th>
+                                <th>当前涨跌幅</th>
+                                <th>MA20</th>
+                                <th>偏离MA20</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-long-lower-shadow">
+                            <tr>
+                                <td colspan="13" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>

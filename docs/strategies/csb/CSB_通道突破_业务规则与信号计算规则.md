@@ -20,7 +20,7 @@
 2. **买点2 · BREAKOUT（突破）**：换手显著放大的 **实体阳线** 收盘突破通道上轨，主仓加仓。
 3. **买点3 · LPS（回踩确认）**：突破后缩量回踩上轨/突破阳线中位而不破，转强时补仓。
 
-买入后以 **假突破 / 基准止损 / 派发 / 均线-波段阶梯跟踪** 进行纪律化防守。
+买入后以 **假突破 / 基准止损 / 通道失效 / 派发 / 阶梯跟踪 / 到期平仓** 进行纪律化防守。
 
 ---
 
@@ -150,37 +150,74 @@
 
 ## 6. 防守出场规则
 
+入场价是信号日 **下一根 K 线开盘价**。信号日本身不做出场判断。观察期默认 `horizon_days = 10` 个交易日。结构出场同一天只记最先触发的一条，判断用 **收盘价**。
+
+回测明细「出场原因」与代码枚举对照：
+
+| 出场原因（导出） | `exit_reason` | 适用 |
+|------|------|------|
+| 假突破 | `false_break` | 仅 BREAKOUT |
+| 基准止损 | `baseline_stop` | 全部买点 |
+| 通道失效 | `channel_fail` | 仅 PROBE |
+| 派发离场 | `distribution` | 全部买点 |
+| 阶梯跟踪止损 | `ma_trail` | 全部买点 |
+| 到期平仓 | `horizon_end` | 全部买点 |
+| 价格止损 | `price_stop` | 仅 `risk_exit` |
+
 ### 6.1 假突破（全出场，最高优先级）
 
-突破后 **T+1 ~ T+`false_break_days`**（默认 **3**）内任一日 **收盘 < 通道上轨** → 假突破信号 `CSB_FALSE_BREAK`，`exit_reason=false_break`。
+仅 **BREAKOUT**。突破后 **T+1 ~ T+`false_break_days`**（默认 **3**）内任一日 **收盘 < 通道上轨** → `CSB_FALSE_BREAK`，`exit_reason=false_break`（导出「假突破」）。PROBE 入场本就在通道内，LPS 是回踩上轨，这两类不做「三日不重回上轨」。
 
 ### 6.2 基准止损
 
-以 **买点日的 `entry_low`（当日最低价）** 为基准，止损价 `= entry_low × (1 − stop_buffer_pct)`（默认缓冲 0，即跌破买点日最低价收盘止损）。
-`risk_exit` 模式另加 **固定百分比止损**（默认 8%）。
+止损锚是信号里的 `entry_low`：PROBE、BREAKOUT 取 **信号日最低价**；LPS 取 **当初突破那根 K 线的最低价**。
 
-### 6.3 派发减仓
+- BREAKOUT、LPS，以及 `risk_exit` 的全部买点：止损价 `= entry_low × (1 − stop_buffer_pct)`，默认缓冲 **0**。收盘价小于或等于止损价，当天离场。
+- 结构出场里的 PROBE：止损价 `= entry_low × (1 − probe_stop_buffer_pct)`，默认再下移 **1%**，并且要 **连续 `probe_stop_confirm_days` 天**（默认 **2**）收盘都在止损价之下才离场。
 
-浮盈 `≥ distribution_min_gain`（默认 **8%**）后，出现以下任一：
+→ `CSB_STOP`，`exit_reason=baseline_stop`（导出「基准止损」）。
 
-- **天量滞涨**：换手或量 `≥ 20 日均值 × distribution_turnover_mult`（默认 2.0），但 `实体 < distribution_body_max`（0.03）或 `上影 > distribution_shadow_max`（0.20）；
-- **放量跌破 MA10**：`close < MA10` 且同时满足放量条件。
+`risk_exit` 在基准止损之后另加 **固定百分比止损**：收盘价小于或等于入场价的 **92%**（默认下跌 8%）→ `exit_reason=price_stop`（导出「价格止损」）。该模式不用 PROBE 的缓冲和连续确认。
 
-→ `CSB_DISTRIBUTE`，`exit_reason=distribution`。
+### 6.3 通道失效（仅 PROBE）
 
-### 6.4 阶梯跟踪（浮盈保护）
+结构出场在基准止损之后检查。收盘价 **连续 `channel_fail_confirm_days` 天**（默认 **3**）都小于或等于 `通道下轨 × (1 − channel_fail_buffer_pct)`（默认下移 **1.5%**），在确认日收盘离场。用来避免下轨被一根 K 线刺穿就卖出。
 
-前序最高价相对入场价的涨幅达到 `trail_arm_gain`（默认 **3%**）后 **启用**（当日新高次日才参与判断）：
-跟踪线取 **已确认波段低点**（左右各 `swing_window` 根更高）、**MA10**、**MA20** 与 **武装价** `入场价×(1+trail_arm_gain)` 中 **位于收盘价之下** 的 **最高者**，且 **只上移不下移**。
-跟踪线不低于武装价，避免浮盈后跟回成本附近。收盘跌破跟踪线或跌破武装价 → `CSB_TRAIL`，`exit_reason=ma_trail`。
+→ `CSB_STOP`，`exit_reason=channel_fail`（导出「通道失效」）。BREAKOUT、LPS 不走这条。
 
-### 6.5 出场模式对照
+### 6.4 派发离场
+
+浮盈 `≥ distribution_min_gain`（默认 **8%**，按当日收盘相对入场价）后，成交量或换手率达到近 20 日正值均值的 `distribution_turnover_mult` 倍（默认 **2.0**），再满足以下任一：
+
+- **天量滞涨**：实体涨幅 `< distribution_body_max`（默认 0.03；阴线实体为负，也算不足），或上影线长度 `> 实体 × distribution_shadow_max`（默认 0.20）；
+- **放量跌破 MA10**：`close < MA10`（周期 `trail_ma_fast`，默认 10）。
+
+→ `CSB_DISTRIBUTE`，`exit_reason=distribution`（导出「派发离场」）。
+
+### 6.5 阶梯跟踪止损（浮盈保护）
+
+此前某根 K 线的最高价曾经达到入场价的 `1 + trail_arm_gain`（默认 **1.03**）之后才武装。当天新高留到收盘后才计入，避免同一根 K 线冲高回落就离场。
+
+武装之后，跟踪线在下面四者中取 **仍低于当日收盘** 的最高者，并且 **只上移**、不低于武装价（入场价 × 1.03）：
+
+- 已确认波段低点（左右各 `swing_window` 根，默认 2，低点都更高）
+- MA10（`trail_ma_fast`）
+- MA20（`trail_ma`）
+- 武装价
+
+收盘价回到武装价或以下，或低于这条跟踪线 → `CSB_TRAIL`，`exit_reason=ma_trail`（导出「阶梯跟踪止损」）。
+
+### 6.6 到期平仓
+
+观察期内以上规则都没触发，用窗口最后一根 K 线的收盘价离场。`exit_reason=horizon_end`（导出「到期平仓」）。`hit_rate` 模式不止损，同样持有到期，按末日收盘计盈亏；目标涨幅只统计期间最高价是否碰到，不提前卖出。
+
+### 6.7 出场模式对照
 
 | 模式 | 出场规则 |
 |------|----------|
-| `hit_rate` | **不止损**；信号次日开盘入场，观察 `horizon_days`，按前瞻最高价是否触及目标涨幅统计命中率 |
-| `risk_exit` | 基准止损 + 固定百分比止损（默认 8%） |
-| `structure_exit` | 假突破 → 基准止损 → 派发 → MA10/MA20 + 波段阶梯跟踪 → 到期 |
+| `hit_rate` | **不止损**；信号次日开盘入场，观察 `horizon_days`，按前瞻最高价是否触及目标涨幅统计命中率，到期平仓 |
+| `risk_exit` | 基准止损（缓冲 0、当日确认）→ 固定百分比止损（默认 8%）→ 到期平仓 |
+| `structure_exit` | 假突破（仅 BREAKOUT）→ 基准止损 → 通道失效（仅 PROBE）→ 派发离场 → 阶梯跟踪止损 → 到期平仓 |
 
 ---
 
@@ -192,10 +229,10 @@
 | `CSB_PROBE` | 买点1 缩量止跌试仓 |
 | `CSB_BREAKOUT` | 买点2 放量突破上轨 |
 | `CSB_LPS` | 买点3 突破后缩量回踩确认 |
-| `CSB_FALSE_BREAK` | 突破后三日收盘跌回上轨下 |
-| `CSB_STOP` | 基准/百分比止损 |
-| `CSB_TRAIL` | 均线-波段阶梯跟踪卖出 |
-| `CSB_DISTRIBUTE` | 主升后放量派发 |
+| `CSB_FALSE_BREAK` | 突破后三日收盘跌回上轨下（假突破） |
+| `CSB_STOP` | 基准止损、通道失效或百分比止损 |
+| `CSB_TRAIL` | 阶梯跟踪止损 |
+| `CSB_DISTRIBUTE` | 主升后放量派发离场 |
 
 ---
 
@@ -214,7 +251,9 @@
                 "lps_window": 3, "lps_vol_ratio_max": 0.80 },
   "position": { "probe_pct": 0.12, "breakout_add_pct": 0.25, "lps_add_pct": 0.12 },
   "defense":  { "false_break_days": 3, "trail_ma": 20, "trail_ma_fast": 10,
-                "stop_buffer_pct": 0.0, "trail_arm_gain": 0.03, "swing_window": 2,
+                "stop_buffer_pct": 0.0, "probe_stop_buffer_pct": 0.01,
+                "probe_stop_confirm_days": 2, "trail_arm_gain": 0.03, "swing_window": 2,
+                "channel_fail_buffer_pct": 0.015, "channel_fail_confirm_days": 3,
                 "distribution_min_gain": 0.08, "distribution_turnover_mult": 2.0,
                 "distribution_body_max": 0.03, "distribution_shadow_max": 0.20 },
   "scan":     { "history_bars": 280, "max_results": 0, "batch_size": 200 },

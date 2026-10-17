@@ -1,0 +1,51 @@
+<div id="parking-apron-content" class="strategy-content">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围：</strong>全部A股</li>
+                    <li><strong>时间范围：</strong>最近15个交易日</li>
+                    <li><strong>选股条件：</strong></li>
+                    <li class="condition-item">1. 最近15日有涨幅大于9.5%，且必须是放量上涨</li>
+                    <li class="condition-item">2. 紧接的下个交易日必须高开，收盘价必须上涨，且与开盘价不能大于等于相差3%</li>
+                    <li class="condition-item">3. 接下2、3个交易日必须高开，收盘价必须上涨，且与开盘价不能大于等于相差3%，且每天涨跌幅在5%间</li>
+                </ul>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-parking" class="refresh-btn" data-strategy="parking-apron">刷新筛选</button>
+                <span id="searchDate-parking" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-parking" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-parking" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-parking" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-parking" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-parking" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>涨停日期</th>
+                                <th>涨停价格</th>
+                                <th>当前价格</th>
+                                <th>当前涨跌幅</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-parking">
+                            <tr>
+                                <td colspan="7" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>

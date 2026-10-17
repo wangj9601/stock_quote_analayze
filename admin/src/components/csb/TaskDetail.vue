@@ -233,7 +233,7 @@
         <h4 v-if="exitReasonRows.length" class="mt-4 mb-2">离场原因分布</h4>
         <el-table v-if="exitReasonRows.length" :data="exitReasonRows" size="small" border>
           <el-table-column prop="name" label="原因" />
-          <el-table-column prop="label" label="中文" width="120" />
+          <el-table-column prop="label" label="中文" min-width="140" />
           <el-table-column prop="count" label="笔数" width="100" />
         </el-table>
       </template>
@@ -426,6 +426,11 @@ const EXIT_REASON_ZH: Record<string, string> = {
   fallback_trail: '移动止盈',
   rule_exit: '规则离场',
   stop_loss: '止损',
+  false_break: '假突破',
+  baseline_stop: '基准止损',
+  channel_fail: '通道失效',
+  distribution: '派发离场',
+  ma_trail: '阶梯跟踪止损',
 }
 
 const tradeLogic = computed(() => {

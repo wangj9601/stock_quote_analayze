@@ -1,0 +1,54 @@
+<div id="backtrace-ma250-content" class="strategy-content">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围：</strong>全部A股</li>
+                    <li><strong>时间范围：</strong>最近60个交易日</li>
+                    <li><strong>选股条件：</strong></li>
+                    <li class="condition-item">1. 时间段：前段=最近60交易日最高收盘价之前交易日(长度>0)，后段=最高价当日及后面的交易日</li>
+                    <li class="condition-item">2. 前段由年线(250日)以下向上突破</li>
+                    <li class="condition-item">3. 后段必须在年线以上运行，且后段最低价日与最高价日相差必须在10-50日间</li>
+                    <li class="condition-item">4. 回踩伴随缩量：最高价日交易量/后段最低价日交易量>2,后段最低价/最高价&lt;0.8</li>
+                </ul>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-backtrace" class="refresh-btn" data-strategy="backtrace-ma250">刷新筛选</button>
+                <span id="searchDate-backtrace" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-backtrace" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-backtrace" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-backtrace" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-backtrace" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-backtrace" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>最高价日期</th>
+                                <th>最高价</th>
+                                <th>最低价日期</th>
+                                <th>最低价</th>
+                                <th>当前价格</th>
+                                <th>当前涨跌幅</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-backtrace">
+                            <tr>
+                                <td colspan="9" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>

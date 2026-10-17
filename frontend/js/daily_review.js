@@ -261,7 +261,6 @@ const DailyReviewPage = {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '';
         });
-        this.setMarkdownPreview('');
     },
 
     fmt(v, digits) {
@@ -417,107 +416,6 @@ const DailyReviewPage = {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
-    },
-
-    setMarkdownPreview(md) {
-        const el = document.getElementById('drMarkdownPreview');
-        if (el) el.innerHTML = this.renderMarkdown(md || '');
-    },
-
-    mdInline(s) {
-        return this.escapeHtml(s)
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>');
-    },
-
-    mdTable(block) {
-        const rows = [];
-        block.forEach((line) => {
-            const cells = line.replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
-            if (cells.length && cells.every((c) => /^:?-+:?$/.test(c))) return;
-            rows.push(cells);
-        });
-        if (!rows.length) return '';
-        const head = rows[0];
-        const toneIdx = head
-            .map((h, i) => (/涨跌|涨幅|净流入/.test(h) ? i : -1))
-            .filter((i) => i >= 0);
-        const cell = (c, tag, i) => {
-            let html = this.mdInline(c);
-            const num = tag === 'td' && toneIdx.indexOf(i) >= 0;
-            if (num) {
-                const n = Number(String(c).replace(/[^\d.+-]/g, ''));
-                if (!Number.isNaN(n) && n !== 0) html = `<span class="${n > 0 ? 'dr-up' : 'dr-down'}">${html}</span>`;
-            }
-            return `<${tag}${num ? ' class="num"' : ''}>${html}</${tag}>`;
-        };
-        const tr = (cells, tag) => `<tr>${cells.map((c, i) => cell(c, tag, i)).join('')}</tr>`;
-        return `<div class="dr-table-wrap"><table class="dr-table"><thead>${tr(head, 'th')}</thead><tbody>${rows.slice(1).map((r) => tr(r, 'td')).join('')}</tbody></table></div>`;
-    },
-
-    renderMarkdown(src) {
-        const text = String(src || '').replace(/\r\n/g, '\n');
-        if (!text.trim()) return '<p class="dr-empty">暂无预览</p>';
-        const lines = text.split('\n');
-        const out = [];
-        let i = 0;
-        const isSpecial = (line) => /^(#{1,3}\s|\||>|---+\s*$|\d+\.\s|[-*]\s)/.test(line);
-        while (i < lines.length) {
-            const line = lines[i];
-            if (!line.trim()) {
-                i += 1;
-                continue;
-            }
-            if (/^---+\s*$/.test(line.trim())) {
-                out.push('<hr>');
-                i += 1;
-                continue;
-            }
-            const heading = /^(#{1,3})\s+(.*)$/.exec(line);
-            if (heading) {
-                const level = heading[1].length;
-                out.push(`<h${level}>${this.mdInline(heading[2])}</h${level}>`);
-                i += 1;
-                continue;
-            }
-            if (line.trim().startsWith('|')) {
-                const block = [];
-                while (i < lines.length && lines[i].trim().startsWith('|')) {
-                    block.push(lines[i]);
-                    i += 1;
-                }
-                out.push(this.mdTable(block));
-                continue;
-            }
-            if (/^>\s?/.test(line)) {
-                const bits = [];
-                while (i < lines.length && /^>\s?/.test(lines[i])) {
-                    bits.push(lines[i].replace(/^>\s?/, ''));
-                    i += 1;
-                }
-                out.push(`<blockquote><p>${this.mdInline(bits.join(' '))}</p></blockquote>`);
-                continue;
-            }
-            if (/^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line)) {
-                const ordered = /^\d+\.\s+/.test(line);
-                const re = ordered ? /^\d+\.\s+(.*)$/ : /^[-*]\s+(.*)$/;
-                const items = [];
-                while (i < lines.length && re.test(lines[i])) {
-                    items.push(`<li>${this.mdInline(lines[i].match(re)[1])}</li>`);
-                    i += 1;
-                }
-                out.push(ordered ? `<ol>${items.join('')}</ol>` : `<ul>${items.join('')}</ul>`);
-                continue;
-            }
-            const para = [line];
-            i += 1;
-            while (i < lines.length && lines[i].trim() && !isSpecial(lines[i])) {
-                para.push(lines[i]);
-                i += 1;
-            }
-            out.push(`<p>${this.mdInline(para.join(' '))}</p>`);
-        }
-        return out.join('');
     },
 
     boardDetailHref(kind, code, name) {
@@ -864,8 +762,6 @@ const DailyReviewPage = {
         if (vp) vp.value = data.viewpoint_md || '';
         const ad = document.getElementById('drAdvice');
         if (ad) ad.value = data.advice_md || '';
-        const pre = document.getElementById('drMarkdownPreview');
-        if (pre) pre.innerHTML = this.renderMarkdown(data.markdown || '');
     },
 };
 

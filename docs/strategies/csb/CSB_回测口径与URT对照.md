@@ -21,12 +21,12 @@
 | 模式 | 说明 |
 |------|------|
 | `hit_rate` | 以 BREAKOUT/LPS/PROBE（过门槛）为样本，次日开盘入场；前瞻 `horizon_days` 内 **最高价** 是否触及 `target_pct`；**不止损**，到期按末日收盘计盈亏；统计命中率。 |
-| `risk_exit` | 纪律出场：**基准止损**（跌破买点日最低）+ **固定百分比止损**（默认 8%）；汇总胜率 / 均盈亏 / `exit_reason`。 |
-| `structure_exit` | 结构出场：**假突破(3日)** → **基准止损(无缓冲)** → **派发** → **MA10/MA20 + 波段阶梯跟踪** → **到期**；跟踪线只上移。 |
+| `risk_exit` | 纪律出场：**基准止损**（缓冲 0、当日确认）→ **价格止损**（默认入场价下跌 8%）→ **到期平仓**。 |
+| `structure_exit` | 结构出场：**假突破**（仅 BREAKOUT，3 日）→ **基准止损**（PROBE 默认下移 1% 且连续 2 日）→ **通道失效**（仅 PROBE，下轨下移 1.5%、连续 3 日）→ **派发离场** → **阶梯跟踪止损** → **到期平仓**。 |
 
 **命中率对照**：非 `hit_rate` 模式下（`compare_hit_rate` 默认开），任务完成后 **自动排队一条同配置 `hit_rate` 对照任务**（`backtest_worker._maybe_start_hit_rate_compare`），回填 `paired_hit_rate_summary` 到父任务。
 
-**出场原因枚举** `exit_reason`：`false_break` / `baseline_stop` / `price_stop` / `distribution` / `ma_trail` / `horizon_end`。
+**出场原因枚举** `exit_reason`（导出中文见《CSB_通道突破_业务规则与信号计算规则》第 6 节）：`false_break` 假突破 / `baseline_stop` 基准止损 / `channel_fail` 通道失效 / `distribution` 派发离场 / `ma_trail` 阶梯跟踪止损 / `price_stop` 价格止损 / `horizon_end` 到期平仓。
 
 ---
 

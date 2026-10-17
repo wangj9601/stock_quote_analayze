@@ -1,0 +1,278 @@
+<div id="urt-content" class="strategy-content" data-perm="channel.screening.tab.urt">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>趋势确认：</strong>收盘价站上 20 日均线</li>
+                    <li><strong>动能连阳：</strong>4 日内 ≥3 根阳线，或 5 日内 ≥4 根阳线</li>
+                    <li><strong>中期阳线 / 多头：</strong>展示 10/15/20 日阳线数与 MA5&gt;MA10&gt;MA20；缺省作为硬筛（可在管理端参数版本关闭）</li>
+                    <li><strong>资金确认：</strong>当日成交量 ≥ 近 20 日均量 × 倍数（缺省 3.0）</li>
+                    <li><strong>结构 / 过热：</strong>支撑阻力硬闸 + 过热硬闸；得分默认最低 70 分</li>
+                    <li><strong>数据来源：</strong>全部 A 股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票；A 股板块（主板/创业板/中小板/科创板/北证）可多选</li>
+                    <li><strong>预计算：</strong>全部 A/H 股默认只读当日 urt_signal_trace（与数据采集预计算同一参数版本），按信号得分降序；无预计算不回退全市场现算</li>
+                    <li class="condition-item">全市场实时扫描较慢且易超时，联调请先确认预计算或设置 limit；系统仅作量化初筛，介入需结合基本面终选</li>
+                </ul>
+            </div>
+
+            <div class="strategy-params-card" id="urtDataSourceCard">
+                <h3>数据来源</h3>
+                <p class="gms-params-refresh-hint">修改数据来源或板块后，须点击「刷新筛选」才会重新计算。</p>
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; padding: 10px 0;">
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeCN" name="urtScope" value="cn" checked style="margin-right: 5px;">
+                        <label for="urtScopeCN" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeHK" name="urtScope" value="hk" style="margin-right: 5px;">
+                        <label for="urtScopeHK" style="cursor: pointer;">全部港股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeWatchlist" name="urtScope" value="watchlist" style="margin-right: 5px;">
+                        <label for="urtScopeWatchlist" style="cursor: pointer;">我的自选</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeIndustryBoard" name="urtScope" value="industry_board" style="margin-right: 5px;">
+                        <label for="urtScopeIndustryBoard" style="cursor: pointer;">行业板块</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeConceptBoard" name="urtScope" value="concept_board" style="margin-right: 5px;">
+                        <label for="urtScopeConceptBoard" style="cursor: pointer;">概念板块</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="urtScopeSingle" name="urtScope" value="single" style="margin-right: 5px;">
+                        <label for="urtScopeSingle" style="cursor: pointer;">单只股票</label>
+                    </div>
+                </div>
+                <div id="urtCnBoardWrap" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;"
+                    title="可多选；不勾选表示不限 A 股板块（等同全部 A 股）。">
+                    <span style="color: #666; font-size: 13px;">A股板块（可多选）：</span>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="urtCnBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
+                    <span style="color: #888; font-size: 12px;">不选=不限板块</span>
+                </div>
+                <div id="urtIndustryBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">行业板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="urtIndustryBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="urtIndustryBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="urtConceptBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">概念板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="urtConceptBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="urtConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                </div>
+                <div id="urtBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
+                <div id="urtSingleStockWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <label for="urtSingleStockInput" style="color: #666; font-size: 13px;">股票代码或名称：</label>
+                    <input type="text" id="urtSingleStockInput" class="param-input" placeholder="如 000001 或 平安银行"
+                        style="min-width: 220px; max-width: 320px;">
+                    <span style="color: #888; font-size: 12px;">输入后按 Enter 或点击「刷新筛选」</span>
+                </div>
+            </div>
+
+            <div class="parameters-card">
+                <h3>可选参数</h3>
+                <p class="gms-params-refresh-hint">默认与每日数据采集预计算一致：使用「生效（默认）」参数版本，量能/最低得分/信号质量留空即不覆盖，直接查当日 urt_signal_trace 买点并按得分排序。仅在「全部A股 / 全部港股」填写覆盖值时才会过滤买点并关闭缓存。切换版本或覆盖项后须点「刷新筛选」。</p>
+                <div class="parameters-grid">
+                    <div class="parameter-group">
+                        <label for="urt-config_id">策略参数版本</label>
+                        <select id="urt-config_id" class="param-input">
+                            <option value="">加载中…</option>
+                        </select>
+                        <span id="urtConfigAlignHint" class="param-hint" style="display:none;color:#b45309;"></span>
+                        <span id="urtTraceStaleHint" class="param-hint" style="display:none;color:#b45309;"></span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="urtScreeningDate">筛选基准日</label>
+                        <input type="date" id="urtScreeningDate" class="param-input">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="urtLimit">limit（空=全市场）</label>
+                        <input type="number" id="urtLimit" class="param-input" min="1" max="10000" step="1" placeholder="如 200">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="urtVolumeMultiple">量能倍数（空=用版本）</label>
+                        <input type="number" id="urtVolumeMultiple" class="param-input" min="1" max="30" step="0.1" placeholder="生效配置">
+                    </div>
+                    <div class="parameter-group">
+                        <label for="urtMinScore">最低得分（空=用版本）</label>
+                        <input type="number" id="urtMinScore" class="param-input" min="0" max="100" step="1" placeholder="生效配置" value="">
+                    </div>
+                    <div class="param-item">
+                        <label for="urtSignalQualityMode">信号质量</label>
+                        <select id="urtSignalQualityMode" class="param-input">
+                            <option value="" selected>用参数版本（与预计算一致）</option>
+                            <option value="standard">标准（排除均线多头分中段）</option>
+                            <option value="premium">精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）</option>
+                        </select>
+                    </div>
+                    <div class="parameter-group" id="urtPreferPrecomputeWrap" title="仅全部A股/全部港股：读取 urt_signal_trace；无预计算时不回退全市场现算。取消勾选则强制现算。">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;margin-top:22px;">
+                            <input type="checkbox" id="urtPreferPrecompute" checked>
+                            优先读预计算
+                        </label>
+                    </div>
+                </div>
+                <p id="urtSingleSkipFilterHint" class="param-hint" style="display:none;margin:8px 0 0;color:#64748b;font-size:13px;">
+                    单只股票模式：不应用量能倍数、最低得分等筛选条件，直接计算并展示策略信号（含未通过买点）。
+                </p>
+            </div>
+            <div class="screening-actions">
+                <button id="refreshBtn-urt" class="refresh-btn" data-strategy="urt" data-perm="channel.screening.tab.urt.btn.refresh">刷新筛选</button>
+                <button type="button" id="urtQfqLevelsBtn" class="gms-btn-outline" title="仅按前复权重算列表中的 KDE 支撑/阻力（优先读 stock_adj_factor，无因子再拉外网并入库；不改写策略信号与得分）">按前复权计算</button>
+                <button id="exportBtn-urt" class="export-btn gms-btn-outline" style="display:none;" data-perm="channel.screening.tab.urt.btn.export">导出CSV</button>
+                <span id="searchDate-urt" class="search-date gms-meta-text"></span>
+            </div>
+
+            <div class="gms-integrated-head">
+                <div class="gms-segmented-tabs" role="tablist" aria-label="URT 列表类型">
+                    <button type="button" class="gms-sub-tab active" data-urt-sub="signals" id="urtSubTabSignals">策略信号</button>
+                    <button type="button" class="gms-sub-tab" data-urt-sub="trade-observe" id="urtSubTabTradeObserve">交易观察</button>
+                    <button type="button" class="gms-sub-tab" data-urt-sub="formal-trade" id="urtSubTabFormalTrade">正式交易</button>
+                </div>
+                <p class="gms-integrated-hint">策略信号为当前筛选结果；交易观察为您从信号中标记、便于跟进的股票；正式交易记录实际入场与仓位。
+                    <a href="analysis.html?tab=trade-observe" style="margin-left:0.5rem;">查看全部观察 →</a>
+                </p>
+            </div>
+
+            <div id="urt-sub-signals-wrap" class="gms-sub-panel active">
+            <div id="loadingIndicator-urt" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+            <div id="errorMessage-urt" class="error-message" style="display:none;"></div>
+            <div id="resultsContainer-urt" class="results-container gms-results-card">
+                <div class="gms-table-meta-bar">
+                    <span id="resultsCount-urt" class="gms-table-meta-summary results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-urt" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th class="gms-col-code">股票代码</th>
+                                <th class="gms-col-name">股票名称</th>
+                                <th class="gms-col-narrow">信号日</th>
+                                <th class="gms-col-price">收盘</th>
+                                <th class="gms-col-price">MA20</th>
+                                <th class="gms-col-narrow">4日阳</th>
+                                <th class="gms-col-narrow">5日阳</th>
+                                <th class="gms-col-narrow">10日阳</th>
+                                <th class="gms-col-narrow">15日阳</th>
+                                <th class="gms-col-narrow">20日阳</th>
+                                <th class="gms-col-narrow">多头</th>
+                                <th class="gms-col-narrow">量能倍数</th>
+                                <th class="gms-col-narrow">量比</th>
+                                <th class="gms-col-narrow">换手%</th>
+                                <th class="gms-col-price">支撑</th>
+                                <th class="gms-col-price">阻力</th>
+                                <th class="gms-col-risk">风险</th>
+                                <th class="gms-col-narrow">得分</th>
+                                <th class="gms-col-actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-urt">
+                            <tr>
+                                <td colspan="19" class="empty-state">点击「刷新筛选」开始</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
+
+            <div id="urt-sub-trade-observe-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="urtTradeObserveRefreshBtn" class="refresh-btn">刷新列表</button>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="urtTradeObserveCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <p class="gms-integrated-hint">展示加入观察时的信号快照（收盘/MA20/连阳、支撑/阻力、买点与得分等）；「明细」可查看完整买点逻辑。</p>
+                <div id="urtTradeObserveError" class="error-message" style="display:none;"></div>
+                <div id="urtTradeObserveLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载交易观察列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-urt-trade-observe" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-price">收盘</th>
+                                    <th class="gms-col-price">MA20</th>
+                                    <th class="gms-col-narrow">4/5日阳</th>
+                                    <th class="gms-col-price">支撑</th>
+                                    <th class="gms-col-price">阻力</th>
+                                    <th class="gms-col-narrow">买点</th>
+                                    <th class="gms-col-narrow">得分</th>
+                                    <th class="gms-col-narrow">加入时间</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="urtTradeObserveTableBody">
+                                <tr>
+                                    <td colspan="12" class="empty-state">请在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="urt-sub-formal-trade-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="urtFormalTradeRefreshBtn" class="refresh-btn">刷新列表</button>
+                        <select id="urtFormalTradeStatusFilter" class="gms-search-input" style="width:auto; min-width:120px;">
+                            <option value="">全部状态</option>
+                            <option value="open">持仓中</option>
+                            <option value="closed">已平仓</option>
+                        </select>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="urtFormalTradeCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <div id="urtFormalTradeError" class="error-message" style="display:none;"></div>
+                <div id="urtFormalTradeLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载正式交易列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-urt-formal-trade" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-price">入场价</th>
+                                    <th class="gms-col-narrow">仓位(手)</th>
+                                    <th class="gms-col-price">出场价</th>
+                                    <th class="gms-col-narrow">盈亏(元)</th>
+                                    <th class="gms-col-narrow">盈亏%</th>
+                                    <th class="gms-col-narrow">状态</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-narrow">入场时间</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="urtFormalTradeTableBody">
+                                <tr>
+                                    <td colspan="11" class="empty-state">请登录后，在「交易观察」中点击「转正式交易」，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>

@@ -1,0 +1,51 @@
+<div id="high-tight-flag-content" class="strategy-content">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围：</strong>全部A股</li>
+                    <li><strong>时间范围：</strong>最近60个交易日</li>
+                    <li><strong>选股条件：</strong></li>
+                    <li class="condition-item">1. 必须至少上市交易60日</li>
+                    <li class="condition-item">2. 当日收盘价/之前24~10日的最低价>=1.9</li>
+                    <li class="condition-item">3. 之前24~10日必须连续两天涨幅大于等于9.5%</li>
+                </ul>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-high-tight" class="refresh-btn" data-strategy="high-tight-flag">刷新筛选</button>
+                <span id="searchDate-high-tight" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-high-tight" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-high-tight" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-high-tight" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-high-tight" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-high-tight" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>当前价格</th>
+                                <th>当前涨跌幅</th>
+                                <th>24~10日最低价</th>
+                                <th>价格倍数</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-high-tight">
+                            <tr>
+                                <td colspan="7" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>

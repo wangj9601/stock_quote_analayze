@@ -1,0 +1,53 @@
+<div id="keep-increasing-content" class="strategy-content" style="display:none;">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>股票范围：</strong>全部A股</li>
+                    <li><strong>时间范围：</strong>最近30个交易日</li>
+                    <li><strong>选股条件：</strong></li>
+                    <li class="condition-item">1. 均线多头：30日前的30日均线 < 20日前的30日均线 < 10日前的30日均线 < 当日的30日均线</li>
+                    <li class="condition-item">2. 涨幅要求：(当日的30日均线 / 30日前的30日均线) > 1.2</li>
+                </ul>
+            </div>
+
+            <div class="screening-actions">
+                <button id="refreshBtn-keep-increasing" class="refresh-btn"
+                    data-strategy="keep-increasing">刷新筛选</button>
+                <button id="exportBtn-keep-increasing" class="export-btn" style="display:none;">导出CSV</button>
+                <span id="searchDate-keep-increasing" class="search-date"></span>
+            </div>
+
+            <div id="loadingIndicator-keep-increasing" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-keep-increasing" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-keep-increasing" class="results-container">
+                <div class="results-header">
+                    <span id="resultsCount-keep-increasing" class="results-count">共找到 0 只符合条件的股票</span>
+                </div>
+                <div id="resultsTable-keep-increasing" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>当前价格</th>
+                                <th>当前涨跌幅</th>
+                                <th>当日MA30</th>
+                                <th>30日前MA30</th>
+                                <th>MA30涨幅</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-keep-increasing">
+                            <tr>
+                                <td colspan="8" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>

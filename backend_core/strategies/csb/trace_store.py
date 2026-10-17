@@ -281,20 +281,20 @@ def query_buy_signals_for_date(
     config_id: int,
     min_score: Optional[float] = None,
     limit: Optional[int] = None,
+    entry_only: bool = True,
 ) -> List[Dict[str, Any]]:
     from backend_api.models import CSBSignalTrace
 
-    q = (
-        db.query(CSBSignalTrace)
-        .filter(
-            CSBSignalTrace.trade_date == str(trade_date)[:10],
-            CSBSignalTrace.config_id == int(config_id),
-            CSBSignalTrace.entry_signal.is_(True),
-            CSBSignalTrace.code != CSB_TRACE_SCANNED_MARKER,
-        )
-        .order_by(CSBSignalTrace.score.desc())
+    q = db.query(CSBSignalTrace).filter(
+        CSBSignalTrace.trade_date == str(trade_date)[:10],
+        CSBSignalTrace.config_id == int(config_id),
+        CSBSignalTrace.code != CSB_TRACE_SCANNED_MARKER,
     )
-    if min_score is not None:
+    if entry_only:
+        q = q.filter(CSBSignalTrace.entry_signal.is_(True))
+    q = q.order_by(CSBSignalTrace.score.desc())
+    # 仅入场时按最低分过滤；未勾选时入场行也要保留，不能被最低分丢掉
+    if entry_only and min_score is not None:
         q = q.filter(CSBSignalTrace.score >= float(min_score))
     if limit:
         q = q.limit(int(limit))

@@ -745,8 +745,7 @@ body.ops-map[data-channel="analyze"] .dr-status.is-busy,
 body.ops-map[data-channel="analyze"] .dr-empty,
 body.ops-map[data-channel="analyze"] .dr-table td.dr-empty-cell,
 body.ops-map[data-channel="analyze"] .dr-metric span,
-body.ops-map[data-channel="analyze"] .dr-metric em,
-body.ops-map[data-channel="analyze"] .dr-md-fold details > summary::after {
+body.ops-map[data-channel="analyze"] .dr-metric em {
     color: var(--ops-ink-muted) !important;
 }
 
@@ -759,15 +758,13 @@ body.ops-map[data-channel="analyze"] .dr-status.is-error {
 }
 
 body.ops-map[data-channel="analyze"] .dr-section > h3:not(.dr-subhead),
-body.ops-map[data-channel="analyze"] .dr-editors h3,
-body.ops-map[data-channel="analyze"] .dr-md-fold details > summary {
+body.ops-map[data-channel="analyze"] .dr-editors h3 {
     font-family: var(--font-mark);
     letter-spacing: 0.04em;
     color: var(--ops-ink) !important;
 }
 
-body.ops-map[data-channel="analyze"] .dr-section > h3:not(.dr-subhead)::before,
-body.ops-map[data-channel="analyze"] .dr-md-fold details > summary::before {
+body.ops-map[data-channel="analyze"] .dr-section > h3:not(.dr-subhead)::before {
     display: none;
 }
 
@@ -779,7 +776,6 @@ body.ops-map[data-channel="analyze"] .dr-section > h3 small {
     color: var(--ops-ink-muted) !important;
 }
 
-body.ops-map[data-channel="analyze"] .dr-md-fold details > summary:focus-visible,
 body.ops-map[data-channel="analyze"] .dr-editors textarea:focus-visible {
     outline: none;
     box-shadow: var(--ops-focus) !important;
@@ -824,31 +820,6 @@ body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-stock-link:hover
 body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-stock-link:focus-visible {
     text-decoration: underline !important;
     text-underline-offset: 3px;
-}
-
-body.ops-map[data-channel="analyze"] .dr-section .dr-md-preview {
-    background: transparent !important;
-    border: none !important;
-    padding: 0.15rem 0 0.25rem !important;
-}
-
-body.ops-map[data-channel="analyze"] .dr-md-preview h2,
-body.ops-map[data-channel="analyze"] .dr-md-preview hr {
-    border-color: var(--color-border) !important;
-}
-
-body.ops-map[data-channel="analyze"] .dr-md-preview blockquote {
-    background: rgba(217, 226, 236, 0.05) !important;
-    border-left: 1px solid rgba(217, 226, 236, 0.35) !important;
-}
-
-body.ops-map[data-channel="analyze"] .dr-md-preview blockquote p {
-    color: var(--ops-ink-muted) !important;
-}
-
-body.ops-map[data-channel="analyze"] .dr-md-preview code {
-    background: rgba(0, 0, 0, 0.32) !important;
-    color: var(--ops-ink) !important;
 }
 
 @media (max-width: 767px) {

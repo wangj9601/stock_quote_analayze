@@ -260,10 +260,7 @@ function createPeriodReview(kind, prefix) {
                     <div><h3>操作建议</h3>
                         <textarea id="${this.prefix}Advice" rows="5">${esc(data.advice_md || '')}</textarea>
                     </div>
-                </section>
-                <section class="dr-section dr-md-fold"><details><summary>Markdown 预览</summary>
-                    <div class="dr-md-preview">${mdHtml(data.markdown || '')}</div>
-                </details></section>`;
+                </section>`;
         },
     };
 }
@@ -343,13 +340,6 @@ function table(headers, rows) {
         ? rows.map((r) => `<tr>${r.map((c, i) => `<td${cls(i)}>${c}</td>`).join('')}</tr>`).join('')
         : `<tr><td colspan="${headers.length}" class="dr-empty-cell">暂无</td></tr>`;
     return `<div class="dr-table-wrap"><table class="dr-table"><thead><tr>${th}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-
-function mdHtml(src) {
-    if (window.DailyReviewPage && typeof DailyReviewPage.renderMarkdown === 'function') {
-        return DailyReviewPage.renderMarkdown(src);
-    }
-    return `<pre>${esc(src)}</pre>`;
 }
 
 window.PeriodReviewWeek = createPeriodReview('week', 'wr');

@@ -163,6 +163,45 @@ def test_screen_date_ready_zero_hits_not_need_precompute():
     assert "无符合条件" in (out.get("message") or "")
 
 
+def test_screen_trace_only_without_entry_filter_keeps_entry_rows():
+    """未勾选仅入场时仍读预计算，已有入场信号不能被当成「暂无预计算」。"""
+    db = MagicMock()
+    probe = {
+        "code": "600449",
+        "name": "宁夏建材",
+        "signal_type": "CSB_PROBE",
+        "entry_signal": True,
+        "score": 70,
+    }
+    with patch.object(CSBFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.csb.frontend_interface.CSBConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.csb.frontend_interface.CSBDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.csb.frontend_interface.query_buy_signals_for_date",
+        return_value=[probe],
+    ) as query_cache, patch(
+        "backend_core.strategies.csb.frontend_interface.dates_ready_for_universe_backtest",
+        return_value={"2026-10-09"},
+    ):
+        CM.return_value.get_config.return_value = {"min_score": 60}
+        Loader.return_value.resolve_effective_trade_date.return_value = "2026-10-09"
+        Loader.return_value.is_trading_day.return_value = True
+        out = CSBFrontendInterface.screen(
+            db,
+            screening_date="2026-10-09",
+            config_id=1,
+            trace_only=True,
+            prefer_cache=True,
+            require_entry=False,
+        )
+    assert out.get("need_precompute") is False
+    assert out.get("source") == "csb_signal_trace"
+    assert out.get("total") == 1
+    assert out["data"][0]["code"] == "600449"
+    assert query_cache.call_args.kwargs.get("entry_only") is False
+
+
 def test_screen_non_trading_day_no_fallback():
     """显式选节假日：不回退上一交易日，空结果 + 固定文案。"""
     db = MagicMock()

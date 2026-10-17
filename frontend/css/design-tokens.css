@@ -1,7 +1,7 @@
 /* 作战标图台 — design tokens (Impeccable direction a802e0ce)
  * 底图策略：无满屏方格；仅极淡暗角大气。抬升面不透明，靠色阶与细线分层。
  */
-@import url("fonts-local.css");
+@import url("fonts-local.css?v=20261017-w400-600");
 
 :root {
     /* World */

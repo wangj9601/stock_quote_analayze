@@ -113,14 +113,15 @@ class CSBFrontendInterface:
         date_ready = False
         hint: Optional[str] = None
 
-        if prefer_cache and not force_realtime and resolved_id is not None and require_entry:
+        if prefer_cache and not force_realtime and resolved_id is not None:
             try:
                 cached = query_buy_signals_for_date(
                     db,
                     trade_date=effective,
                     config_id=int(resolved_id),
-                    min_score=float(cfg.get("min_score") or 0),
+                    min_score=float(cfg.get("min_score") or 0) if require_entry else None,
                     limit=limit,
+                    entry_only=bool(require_entry),
                 ) or []
                 if stock_codes is not None:
                     allow = {
@@ -135,7 +136,11 @@ class CSBFrontendInterface:
                     data = cached
                     data_source = "csb_signal_trace"
                     if not cached and date_ready:
-                        hint = f"基准日 {effective} 已有预计算，当日无符合条件的买点。"
+                        hint = (
+                            f"基准日 {effective} 已有预计算，当日无符合条件的买点。"
+                            if require_entry
+                            else f"基准日 {effective} 已有预计算，当日无信号。"
+                        )
             except Exception as e:
                 logger.debug("CSB cache read failed: %s", e)
 

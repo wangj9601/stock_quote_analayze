@@ -1,0 +1,463 @@
+<div id="gms-content" class="strategy-content">
+            <div class="strategy-info-card">
+                <h2>策略说明</h2>
+                <ul class="strategy-conditions">
+                    <li><strong>数据来源：</strong>【单只股票】输入代码或名称，仅计算该股的 GMS 策略信号；【GMS观察股】使用管理端维护的启用版本观察股；【我的自选】显示当前用户自选股的 GMS 指标列表；【行业板块】按所选行业板块成分股筛选，可进一步限定主板、创业板、中小板、科创板或北证；【概念板块】按所选概念板块成分股筛选，同样支持上述 A 股板块过滤；【全部港股】显示港股基本信息表中全部港股的 GMS 指标列表；【全部A股】显示 A
+                        股当日有行情的股票池，可进一步限定主板、创业板、中小板、科创板或北证；<span id="gmsScopeEtfHelpText">【全部ETF】显示 ETF 基本信息表中全部 ETF 的 GMS 指标列表。</span></li>
+                    <li><strong>时间范围：</strong>最近 20 个交易日</li>
+                    <li><strong>双模块阶梯式评分：</strong></li>
+                    <li class="condition-item"><strong>【均值收敛态】</strong>
+                        F/Z(≥2.5→30;[1.5,2.5)→20)、|Δ/d|(≤1%→40;≤1.5%→20)、m₂₀/m(≤0.6→30;(0.6,0.8]→15)。总分≥85 S级，[70,85) A级
+                    </li>
+                    <li class="condition-item"><strong>【动量溢出态】</strong>
+                        Δ/d₁(0~3%→40;刚过0→20)、d₂₀-d(站稳3日→30;仅当日→15;&lt;0→-10)、m₂₀/m(≥2.0→30;[1.5,2.0)→20)。总分≥90
+                        全速切入，[80,90) 分批买入</li>
+                    <li class="condition-item">5. <strong>左侧买点</strong>：均值收敛态 S/A 级 + 粘合 +
+                        地量；<strong>右侧买点</strong>：动量溢出态全速/分批 + 放量</li>
+                    <li class="condition-item">6. <strong>退出</strong>：d₂₀ 跌破 d 或乖离过大（Δ/d₂₀&gt;15%）</li>
+                </ul>
+            </div>
+
+            <!-- 数据来源选择 -->
+            <div class="strategy-params-card" id="gmsDataSourceCard">
+                <h3>数据来源</h3>
+                <p class="gms-params-refresh-hint">修改数据来源、板块选择、剔除 ST 或策略参数后，须点击下方「刷新筛选」才会触发 GMS 策略打分选股。</p>
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeCN" name="gmsScope" value="cn" checked
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeCN" style="cursor: pointer;">全部A股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeHK" name="gmsScope" value="hk" style="margin-right: 5px;">
+                        <label for="gmsScopeHK" style="cursor: pointer;">全部港股</label>
+                    </div>
+                    <div class="param-item" id="gmsScopeETFWrap" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeETF" name="gmsScope" value="etf" style="margin-right: 5px;">
+                        <label for="gmsScopeETF" style="cursor: pointer;">全部ETF</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeWatchlist" name="gmsScope" value="watchlist"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeWatchlist" style="cursor: pointer;">我的自选</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeIndustryBoard" name="gmsScope" value="industry_board"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeIndustryBoard" style="cursor: pointer;">行业板块</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeConceptBoard" name="gmsScope" value="concept_board"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeConceptBoard" style="cursor: pointer;">概念板块</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeGmsWatchlist" name="gmsScope" value="gms_watchlist"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeGmsWatchlist" style="cursor: pointer;">GMS观察股</label>
+                    </div>
+                    <div class="param-item" style="display: flex; align-items: center;">
+                        <input type="radio" id="gmsScopeSingle" name="gmsScope" value="single"
+                            style="margin-right: 5px;">
+                        <label for="gmsScopeSingle" style="cursor: pointer;">单只股票</label>
+                    </div>
+                </div>
+                <div id="gmsCnBoardWrap" style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;"
+                    title="可多选；不勾选表示不限 A 股板块（等同全部 A 股代码段）。">
+                    <span style="color: #666; font-size: 13px;">A股板块（可多选）：</span>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsCnBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
+                    <span id="gmsCnBoardHint" style="color: #888; font-size: 12px;">不选=不限；在 A 股池内按代码段筛选（全部A股为当日有行情池；行业/概念板块为成分股池）</span>
+                </div>
+                <div id="gmsIndustryBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">行业板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="gmsIndustryBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="gmsIndustryBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                    <span style="color: #888; font-size: 12px;">可多选；选定后点击「刷新筛选」，计算所选板块成分股并集</span>
+                </div>
+                <div id="gmsConceptBoardWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">概念板块：</span>
+                    <div class="gms-board-picker-row">
+                        <button type="button" id="gmsConceptBoardPickBtn" class="refresh-btn gms-board-pick-btn">选择板块</button>
+                        <span id="gmsConceptBoardSummary" class="gms-board-picker-summary">未选择板块，点击「选择板块」</span>
+                    </div>
+                    <span style="color: #888; font-size: 12px;">可多选；选定后点击「刷新筛选」，计算所选板块成分股并集</span>
+                </div>
+                <div id="gmsBoardRolesPanel" class="gms-board-roles-panel" style="display:none;" aria-live="polite"></div>
+                <div id="gmsSingleStockWrap" style="display: none; flex-wrap: wrap; gap: 12px; align-items: center; padding: 10px 0 0 0;">
+                    <label for="gmsSingleStockInput" style="color: #666; font-size: 13px;">股票代码或名称：</label>
+                    <input type="text" id="gmsSingleStockInput" class="param-input" placeholder="如 000001 或 平安银行"
+                        style="min-width: 220px; max-width: 320px;">
+                    <span style="color: #888; font-size: 12px;">输入后按 Enter 或点击「刷新筛选」计算该股 GMS 信号</span>
+                </div>
+                <div id="gmsWatchlistMarketWrap" style="display: none; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;">
+                    <span style="color: #666; font-size: 13px;">观察股市场：</span>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="all" checked style="margin-right: 5px;">全部</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="cn" style="margin-right: 5px;">仅A股</label>
+                    <label style="cursor: pointer;"><input type="radio" name="gmsWatchlistMarket" value="hk" style="margin-right: 5px;">仅港股</label>
+                </div>
+                <div id="gmsWatchlistBoardWrap" style="display: none; flex-wrap: wrap; gap: 16px; align-items: center; padding: 10px 0 0 0;"
+                    title="可多选；不勾选表示不限 A 股板块。">
+                    <span style="color: #666; font-size: 13px;">A股板块（可多选）：</span>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="MAIN" style="margin-right: 5px;">主板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="CYB" style="margin-right: 5px;">创业板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="SZ_SME" style="margin-right: 5px;">中小板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="KCB" style="margin-right: 5px;">科创板</label>
+                    <label style="cursor: pointer;"><input type="checkbox" name="gmsWatchlistBoardSegment" value="BJ" style="margin-right: 5px;">北证</label>
+                    <span style="color: #888; font-size: 12px;">不选=不限；在 GMS 观察股池内按代码段筛选</span>
+                </div>
+                <div style="padding: 10px 0 0 0;">
+                    <label for="gmsExcludeSt" style="cursor: pointer; font-size: 13px; color: #666;">
+                        <input type="checkbox" id="gmsExcludeSt" checked style="margin-right: 6px;">
+                        剔除 ST 相关股（含 ST、*ST、S*ST 等，适用于以上各数据来源）
+                    </label>
+                </div>
+            </div>
+
+            <!-- GMS 策略参数（可配置） -->
+            <div class="strategy-params-card" id="gmsStrategyParamsCard">
+                <h3>GMS 策略参数</h3>
+                <div class="parameter-group" style="margin-bottom: 12px; max-width: 480px;">
+                    <label for="gms-config_id">参数版本（服务端）</label>
+                    <select id="gms-config_id" class="param-input">
+                        <option value="">加载中…</option>
+                    </select>
+                    <span class="param-rule">与回测管理中心「策略配置」同源；切换版本会从服务端同步下方参数</span>
+                    <div class="gms-param-override-bar">
+                        <label class="gms-param-override-check" for="gms-param-override">
+                            <input type="checkbox" id="gms-param-override">
+                            临时用下方表单覆盖服务端参数（高级）
+                        </label>
+                        <button
+                            type="button"
+                            id="gms-param-override-toggle"
+                            class="gms-param-collapse-toggle"
+                            aria-expanded="false"
+                            aria-controls="gms-param-override-panel"
+                        >
+                            <span class="gms-param-collapse-label">展开参数表单</span>
+                            <span class="gms-param-collapse-icon" aria-hidden="true">▼</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="gms-param-override-panel" class="gms-param-override-panel is-collapsed" aria-hidden="true">
+                <div class="params-grid gms-params-grid">
+                    <div class="parameter-group">
+                        <label for="gms-start_date">策略起始交易日期</label>
+                        <input type="date" id="gms-start_date" class="param-input">
+                        <span class="param-rule">留空则取历史行情表最近一日，格式 YYYY-MM-DD</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-observation_period">观察周期（天）</label>
+                        <input type="number" id="gms-observation_period" class="param-input" min="10" max="60" step="1">
+                        <span class="param-rule">默认 20 天</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-ratio_d20_max">左侧买点 Δ/d₂₀ 上限</label>
+                        <input type="number" id="gms-ratio_d20_max" class="param-input" min="0" max="0.1" step="0.005">
+                        <span class="param-rule">如 0.015 表示 1.5%</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-volume_ratio_max">左侧买点 量比上限</label>
+                        <input type="number" id="gms-volume_ratio_max" class="param-input" min="0.1" max="2" step="0.1">
+                        <span class="param-rule">地量 m₂₀/m &lt; 此值，默认 0.8</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-left_buy_min_accumulation">左侧 蓄势分下限</label>
+                        <input type="number" id="gms-left_buy_min_accumulation" class="param-input" min="0" max="100" step="1" value="0">
+                        <span class="param-rule">0=关闭；&gt;0 时标「左侧」需均值收敛态得分≥此值</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-volume_ratio_min">右侧买点 量比下限</label>
+                        <input type="number" id="gms-volume_ratio_min" class="param-input" min="0.5" max="5" step="0.1">
+                        <span class="param-rule">放量 m₂₀/m &gt; 此值，默认 1.5</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-accumulation_fz_min">蓄势 F/Z 下限</label>
+                        <input type="number" id="gms-accumulation_fz_min" class="param-input" min="0.5" max="5"
+                            step="0.1">
+                        <span class="param-rule">F/Z &gt; 此值得 30 分，默认 1.5</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-balance_ratio_max">平衡 |Δ/d₂₀| 上限</label>
+                        <input type="number" id="gms-balance_ratio_max" class="param-input" min="0" max="0.1"
+                            step="0.005">
+                        <span class="param-rule">|Δ/d₂₀| &lt; 此值得 40 分，默认 0.01</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-watch_threshold">重点关注分数</label>
+                        <input type="number" id="gms-watch_threshold" class="param-input" min="0" max="100" step="1">
+                        <span class="param-rule">总分 &gt; 此值重点关注，默认 60</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-alert_threshold">动量突变预警分数</label>
+                        <input type="number" id="gms-alert_threshold" class="param-input" min="0" max="100" step="1">
+                        <span class="param-rule">总分 &gt; 此值预警，默认 90</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-overbought_ratio">乖离过大阈值</label>
+                        <input type="number" id="gms-overbought_ratio" class="param-input" min="0" max="0.5"
+                            step="0.01">
+                        <span class="param-rule">Δ/d₂₀ &gt; 此值退出，默认 0.15</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-accumulation_s_threshold">均值收敛态 S 级阈值</label>
+                        <input type="number" id="gms-accumulation_s_threshold" class="param-input" min="60" max="100"
+                            step="1">
+                        <span class="param-rule">均值收敛态总分≥此值为 S 级，默认 85</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-accumulation_a_threshold">均值收敛态 A 级阈值</label>
+                        <input type="number" id="gms-accumulation_a_threshold" class="param-input" min="50" max="90"
+                            step="1">
+                        <span class="param-rule">均值收敛态总分≥此值为 A 级，默认 70</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-momentum_full_threshold">动量溢出态全速切入阈值</label>
+                        <input type="number" id="gms-momentum_full_threshold" class="param-input" min="70" max="100"
+                            step="1">
+                        <span class="param-rule">动量溢出态总分≥此值全速切入，默认 90</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-momentum_batch_threshold">动量溢出态分批买入阈值</label>
+                        <input type="number" id="gms-momentum_batch_threshold" class="param-input" min="60" max="95"
+                            step="1">
+                        <span class="param-rule">动量溢出态总分≥此值分批买入，默认 80</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-instant_deviation_stable_days">推力支撑站稳天数</label>
+                        <input type="number" id="gms-instant_deviation_stable_days" class="param-input" min="1" max="5"
+                            step="1">
+                        <span class="param-rule">d₂₀&gt;d 连续此日得 30 分，否则 15 分，默认 3</span>
+                    </div>
+                </div>
+                <div class="params-grid gms-params-grid"
+                    style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e8e8e8;">
+                    <h4 style="grid-column: 1 / -1; margin: 0 0 8px 0;">评分权重（每模块合计建议 100）</h4>
+                    <div class="parameter-group">
+                        <label for="gms-weight_acc_fz">均值收敛态 时间耗散 F/Z 权重</label>
+                        <input type="number" id="gms-weight_acc_fz" class="param-input" min="0" max="100" step="1"
+                            value="30">
+                        <span class="param-rule">默认 30，权重为0时该维度不参与计分</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-weight_acc_balance">均值收敛态 引力粘合 |Δ/d| 权重</label>
+                        <input type="number" id="gms-weight_acc_balance" class="param-input" min="0" max="100" step="1"
+                            value="40">
+                        <span class="param-rule">默认 40</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-weight_acc_volume">均值收敛态 成交量缩 权重</label>
+                        <input type="number" id="gms-weight_acc_volume" class="param-input" min="0" max="100" step="1"
+                            value="30">
+                        <span class="param-rule">默认 30</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-weight_mom_ratio_d1">动量溢出态 盈亏反转 Δ/d₁ 权重</label>
+                        <input type="number" id="gms-weight_mom_ratio_d1" class="param-input" min="0" max="100" step="1"
+                            value="40">
+                        <span class="param-rule">默认 40</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-weight_mom_deviation">动量溢出态 推力支撑 d₂₀-d 权重</label>
+                        <input type="number" id="gms-weight_mom_deviation" class="param-input" min="0" max="100"
+                            step="1" value="30">
+                        <span class="param-rule">默认 30</span>
+                    </div>
+                    <div class="parameter-group">
+                        <label for="gms-weight_mom_volume">动量溢出态 攻击强度 m₂₀/m 权重</label>
+                        <input type="number" id="gms-weight_mom_volume" class="param-input" min="0" max="100" step="1"
+                            value="30">
+                        <span class="param-rule">默认 30</span>
+                    </div>
+                </div>
+                <div class="parameter-actions" style="margin-top: 12px;">
+                    <button type="button" id="gmsParamsSyncBtn" class="gms-btn-outline" type="button">从服务端同步</button>
+                    <button type="button" id="gmsParamsSaveBtn" class="refresh-btn">保存到本地</button>
+                    <span id="gmsParamsSaveStatus" class="search-date" style="margin-left: 8px;"></span>
+                </div>
+                </div>
+            </div>
+
+            <div class="gms-integrated-head">
+                <div class="gms-segmented-tabs" role="tablist" aria-label="GMS 列表类型">
+                    <button type="button" class="gms-sub-tab active" data-gms-sub="signals" id="gmsSubTabSignals">策略信号</button>
+                    <button type="button" class="gms-sub-tab" data-gms-sub="trade-observe" id="gmsSubTabTradeObserve">交易观察</button>
+                    <button type="button" class="gms-sub-tab" data-gms-sub="formal-trade" id="gmsSubTabFormalTrade">正式交易</button>
+                </div>
+                <p class="gms-integrated-hint">策略信号为当前筛选结果；交易观察为您从信号中标记、便于跟进的股票；正式交易记录实际入场、仓位与出场。
+                    <a href="analysis.html?tab=trade-observe" style="margin-left:0.5rem;">查看全部观察 →</a>
+                </p>
+            </div>
+
+            <div id="gms-sub-signals-wrap" class="gms-sub-panel active">
+            <div class="gms-toolbar">
+                <div class="gms-toolbar-group">
+                    <button id="refreshBtn-gms" class="refresh-btn" data-strategy="gms">刷新筛选</button>
+                    <button id="exportBtn-gms" class="gms-btn-outline" type="button" style="display:none;">导出 CSV</button>
+                    <button id="exportExcelBtn-gms" class="gms-btn-outline" type="button" style="display:none;">导出 Excel</button>
+                </div>
+                <div class="gms-toolbar-group gms-toolbar-search">
+                    <input type="text" id="gmsLocateInput" class="gms-search-input" placeholder="代码或名称定位">
+                    <button id="gmsLocateBtn" class="gms-btn-outline" type="button">定位</button>
+                    <button id="gmsLocateClearBtn" class="gms-btn-outline gms-btn-outline--muted" type="button" style="display:none;">清除</button>
+                </div>
+                <div class="gms-toolbar-group gms-toolbar-meta">
+                    <span id="gmsLocateHint" class="gms-meta-chip" style="display:none;"></span>
+                    <span id="searchDate-gms" class="gms-meta-text"></span>
+                </div>
+            </div>
+
+            <div id="loadingIndicator-gms" class="loading-indicator" style="display:none;">
+                <div class="spinner"></div>
+                <span>正在筛选股票，请稍候...</span>
+            </div>
+
+            <div id="errorMessage-gms" class="error-message" style="display:none;"></div>
+
+            <div id="resultsContainer-gms" class="results-container gms-results-card">
+                <div class="gms-table-meta-bar">
+                    <span id="resultsCount-gms" class="gms-table-meta-summary">共找到 0 只符合条件的股票</span>
+                    <div id="gmsPaginationBar" class="gms-pagination-inline" style="display:none;" data-total-pages="0">
+                        <button type="button" id="gmsPaginationPrev" class="gms-pagination-btn" disabled aria-label="上一页">上一页</button>
+                        <span id="gmsPaginationLabel" class="gms-pagination-label"></span>
+                        <button type="button" id="gmsPaginationNext" class="gms-pagination-btn" disabled aria-label="下一页">下一页</button>
+                    </div>
+                </div>
+                <div id="resultsTable-gms" class="results-table-wrapper">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th class="gms-col-code">股票代码</th>
+                                <th class="gms-col-name">股票名称</th>
+                                <th class="gms-col-industry">所属行业</th>
+                                <th class="gms-col-industry">主行业板</th>
+                                <th class="gms-col-narrow" title="成分量权基准近N日斜率；&lt;0 视为走弱">板斜率</th>
+                                <th class="gms-col-narrow" title="主行业板环境：走弱时软减分">板环境</th>
+                                <th style="display:none;">总分</th>
+                                <th class="gms-col-narrow">信号强度</th>
+                                <th class="gms-col-narrow">买点类型</th>
+                                <th class="gms-col-risk">风险</th>
+                                <th class="gms-col-price">当前价格</th>
+                                <th class="gms-col-price">支撑</th>
+                                <th class="gms-col-price">阻力</th>
+                                <th class="gms-th-stack"><span class="gms-th-main">Δ</span><span class="gms-th-sub">(20日位移)</span></th>
+                                <th class="gms-th-stack"><span class="gms-th-main">F</span><span class="gms-th-sub">(下跌天)</span></th>
+                                <th class="gms-th-stack"><span class="gms-th-main">Z</span><span class="gms-th-sub">(上涨天)</span></th>
+                                <th class="gms-th-stack"><span class="gms-th-main">d</span><span class="gms-th-sub">(20日均价)</span></th>
+                                <th class="gms-th-stack gms-th-stack--wide"><span class="gms-th-main">Δ/d</span><span class="gms-th-sub">(位移/均价)</span></th>
+                                <th class="gms-col-pct">Δ/d₂₀</th>
+                                <th class="gms-col-pct">Δ/d₁</th>
+                                <th class="gms-col-narrow">F/Z</th>
+                                <th class="gms-col-pct">当前涨跌幅</th>
+                                <th class="gms-col-actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsTableBody-gms">
+                            <tr>
+                                <td colspan="22" class="empty-state">点击"刷新筛选"按钮开始筛选</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
+
+            <div id="gms-sub-trade-observe-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="gmsTradeObserveRefreshBtn" class="refresh-btn">刷新列表</button>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="gmsTradeObserveCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <div id="gmsTradeObserveError" class="error-message" style="display:none;"></div>
+                <div id="gmsTradeObserveLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载交易观察列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-gms-trade-observe" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-industry">所属行业</th>
+                                    <th class="gms-col-narrow">信号强度</th>
+                                    <th class="gms-col-narrow">买点类型</th>
+                                    <th class="gms-col-price">加入时价格</th>
+                                    <th class="gms-col-price">最新价格</th>
+                                    <th class="gms-col-price">建议买入</th>
+                                    <th class="gms-col-price">止损价</th>
+                                    <th class="gms-col-price">止盈价</th>
+                                    <th class="gms-col-price">参考卖点</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-narrow">加入时间</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gmsTradeObserveTableBody">
+                                <tr>
+                                    <td colspan="14" class="empty-state">请登录后，在「策略信号」中点击「观察」加入，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="gms-sub-formal-trade-wrap" class="gms-sub-panel">
+                <div class="gms-toolbar">
+                    <div class="gms-toolbar-group">
+                        <button type="button" id="gmsFormalTradeRefreshBtn" class="refresh-btn">刷新列表</button>
+                        <select id="gmsFormalTradeStatusFilter" class="gms-search-input" style="width:auto; min-width:120px;">
+                            <option value="">全部状态</option>
+                            <option value="open">持仓中</option>
+                            <option value="closed">已平仓</option>
+                        </select>
+                    </div>
+                    <div class="gms-toolbar-group gms-toolbar-meta">
+                        <span id="gmsFormalTradeCount" class="gms-meta-text"></span>
+                    </div>
+                </div>
+                <div id="gmsFormalTradeError" class="error-message" style="display:none;"></div>
+                <div id="gmsFormalTradeLoading" class="loading-indicator" style="display:none;">
+                    <div class="spinner"></div>
+                    <span>正在加载正式交易列表...</span>
+                </div>
+                <div class="results-container">
+                    <div id="resultsTable-gms-formal-trade" class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th class="gms-col-code">股票代码</th>
+                                    <th class="gms-col-name">股票名称</th>
+                                    <th class="gms-col-price">入场价</th>
+                                    <th class="gms-col-narrow">仓位(手)</th>
+                                    <th class="gms-col-price">出场价</th>
+                                    <th class="gms-col-narrow">盈亏(元)</th>
+                                    <th class="gms-col-narrow">盈亏%</th>
+                                    <th class="gms-col-narrow">状态</th>
+                                    <th class="gms-col-narrow">信号日</th>
+                                    <th class="gms-col-narrow">入场时间</th>
+                                    <th class="gms-col-narrow">出场时间</th>
+                                    <th class="gms-col-actions gms-col-actions--wide">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="gmsFormalTradeTableBody">
+                                <tr>
+                                    <td colspan="12" class="empty-state">请登录后，在「交易观察」中点击「转正式交易」，或点击「刷新列表」</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
