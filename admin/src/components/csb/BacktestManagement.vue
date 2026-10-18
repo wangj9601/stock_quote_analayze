@@ -614,6 +614,24 @@ const PRESET_FIELDS: Record<string, Record<string, any>> = {
       channel_fail_confirm_days: 3,
     },
   },
+  structure_v7: {
+    exit_mode: 'structure_exit',
+    target_pct: 0.05,
+    target_pct_max: 0.05,
+    compare_hit_rate: true,
+    min_touch_count: 4,
+    max_touch_count: 5,
+    min_channel_width_pct: 0.02,
+    min_entry_pos_in_channel: 0,
+    max_signals_per_day: 30,
+    allowed_signal_types: ['CSB_PROBE', 'CSB_BREAKOUT', 'CSB_LPS'],
+    defense_overrides: {
+      probe_stop_buffer_pct: 0.02,
+      probe_stop_confirm_days: 3,
+      channel_fail_buffer_pct: 0.015,
+      channel_fail_confirm_days: 3,
+    },
+  },
 }
 
 function onPresetChange(id: string | undefined) {
@@ -636,6 +654,12 @@ function onPresetChange(id: string | undefined) {
   form.min_channel_width_pct = undefined
   form.min_entry_pos_in_channel = undefined
   Object.assign(form, fields)
+  // v7：不锁定分数（清空→用手填或参数版本默认）；观察日保留当前值可改，预设不强制写入
+  if (id === 'structure_v7') {
+    form.min_score = undefined
+    form.probe_min_score = undefined
+    if (form.horizon_days == null) form.horizon_days = 10
+  }
 }
 
 function clampPctDecimal(v: number) {

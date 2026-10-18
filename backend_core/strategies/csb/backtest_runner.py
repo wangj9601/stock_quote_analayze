@@ -474,6 +474,9 @@ def build_csb_trade_meta(
             f"{float(dcfg.get('channel_fail_buffer_pct', 0.015)) * 100:.1f}% × "
             f"连续 {int(dcfg.get('channel_fail_confirm_days', 3))} 日；派发减仓 + "
             f"MA{dcfg.get('trail_ma_fast', 10)}/MA{dcfg.get('trail_ma', 20)} 阶梯跟踪；"
+            f"浮盈≥{float(dcfg.get('profit_lock_gain', 0.10)) * 100:.0f}% 后锁定"
+            f"≥{float(dcfg.get('profit_lock_floor_pct', 0.05)) * 100:.0f}% 并收紧回撤"
+            f"（前高回撤 {float(dcfg.get('profit_lock_giveback_pct', 0.08)) * 100:.0f}%）；"
             f"同时统计 +{tp:.1f}% 命中；最低得分 {ms:.0f}。"
         )
     elif mode == "risk_exit":

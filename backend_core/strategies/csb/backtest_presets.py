@@ -195,7 +195,8 @@ _PRESETS: List[Dict[str, Any]] = [
         "label": "结构 v6（v5+入场不低于下轨）",
         "description": (
             "在 v5（通道宽≥2%、回踩 4～5、分≥80、出场 v3）上，"
-            "增加入场位置 entry_pos≥0（信号价不低于通道下轨）"
+            "增加入场位置 entry_pos≥0（信号价不低于通道下轨）。"
+            "分数/观察日仍由预设锁定；灵活分段请用结构 v7。"
         ),
         "fields": {
             "exit_mode": "structure_exit",
@@ -209,6 +210,33 @@ _PRESETS: List[Dict[str, Any]] = [
             "min_channel_width_pct": 0.02,
             "min_entry_pos_in_channel": 0.0,
             "probe_min_score": 80,
+            "max_signals_per_day": 30,
+            "allowed_signal_types": [CSB_PROBE, CSB_BREAKOUT, CSB_LPS],
+            "defense_overrides": {
+                "probe_stop_buffer_pct": 0.02,
+                "probe_stop_confirm_days": 3,
+                "channel_fail_buffer_pct": 0.015,
+                "channel_fail_confirm_days": 3,
+            },
+        },
+    },
+    {
+        "id": "structure_v7",
+        "label": "结构 v7（v6 入场过滤，分数/观察日不锁定）",
+        "description": (
+            "保留 v6 入场过滤（通道宽≥2%、回踩 4～5、entry_pos≥0）与出场 v3；"
+            "不锁定最低得分与观察日数，便于 60/70/80 分段或改 horizon；"
+            "空则用参数版本默认（当前基线分≥80、观察 10 日）。"
+        ),
+        "fields": {
+            "exit_mode": "structure_exit",
+            "target_pct": 0.05,
+            "target_pct_max": 0.05,
+            "compare_hit_rate": True,
+            "min_touch_count": 4,
+            "max_touch_count": 5,
+            "min_channel_width_pct": 0.02,
+            "min_entry_pos_in_channel": 0.0,
             "max_signals_per_day": 30,
             "allowed_signal_types": [CSB_PROBE, CSB_BREAKOUT, CSB_LPS],
             "defense_overrides": {
@@ -248,5 +276,13 @@ def apply_backtest_preset(preset_id: str, body: Dict[str, Any] | None = None) ->
     fields = preset.get("fields") or {}
     for k, v in fields.items():
         out[k] = deepcopy(v)
+    # v7：明确不锁定分数/观察日——若创建体未传则去掉，回退参数版本默认
+    if preset["id"] == "structure_v7":
+        if "min_score" not in (body or {}):
+            out.pop("min_score", None)
+        if "probe_min_score" not in (body or {}):
+            out.pop("probe_min_score", None)
+        if "horizon_days" not in (body or {}):
+            out.pop("horizon_days", None)
     out["preset_id"] = preset["id"]
     return out

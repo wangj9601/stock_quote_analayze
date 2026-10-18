@@ -73,12 +73,16 @@ def get_default_csb_config() -> Dict[str, Any]:
             "trail_ma": 20,
             "trail_ma_fast": 10,
             "stop_buffer_pct": 0.0,
-            # PROBE 基准止损：缓冲 + 连续确认，降低次日阴线误杀
-            "probe_stop_buffer_pct": 0.01,
-            "probe_stop_confirm_days": 2,
+            # PROBE 基准止损：对齐结构出场 v3（缓冲 2%、连续 3 日）
+            "probe_stop_buffer_pct": 0.02,
+            "probe_stop_confirm_days": 3,
             "trail_arm_gain": 0.03,
             "swing_window": 2,
-            # PROBE 通道失效：加宽下轨缓冲 + 更长确认，降低窄通道误杀（结构 v2）
+            # 利润保护：前高浮盈达阈值后抬升跟踪地板、改用快线，并可按相对前高回撤离场
+            "profit_lock_gain": 0.10,
+            "profit_lock_floor_pct": 0.05,
+            "profit_lock_giveback_pct": 0.08,
+            # PROBE 通道失效：下轨缓冲 1.5%、连续 3 日（出场 v3）
             "channel_fail_buffer_pct": 0.015,
             "channel_fail_confirm_days": 3,
             "distribution_min_gain": 0.08,
@@ -112,7 +116,8 @@ def get_default_csb_config() -> Dict[str, Any]:
             "min_touches": 3,
             "vol_expand_mult": 2.5,
         },
-        "min_score": 60.0,
+        # 结构基线：与回测常用门槛对齐；trace 仍按得分落库，读时再筛
+        "min_score": 80.0,
         "min_listing_bars": 250,
         "signal_quality_mode": "standard",
     }
@@ -170,7 +175,32 @@ class CSBConfigManager:
 
     def ensure_default_row(self, db) -> Optional[int]:
         try:
-            return self._ensure_default_row_exists(db)
+            cid = self._ensure_default_row_exists(db)
+            # 同 config_id 静默升到出场 v3 + 分≥80（仅改写工厂旧值）
+            try:
+                from backend_api.models import CSBStrategyConfig
+
+                row = db.query(CSBStrategyConfig).filter(CSBStrategyConfig.id == int(cid)).first()
+                params = dict(row.config_params or {}) if row else {}
+                d = params.get("defense") or {}
+                need = False
+                try:
+                    need = need or abs(float(params.get("min_score", 80)) - 60.0) < 1e-9
+                except (TypeError, ValueError):
+                    need = True
+                try:
+                    need = need or abs(float(d.get("probe_stop_buffer_pct", 0.02)) - 0.01) < 1e-9
+                except (TypeError, ValueError):
+                    need = True
+                try:
+                    need = need or int(d.get("probe_stop_confirm_days", 3)) == 2
+                except (TypeError, ValueError):
+                    need = True
+                if need:
+                    self.sync_default_row_baseline(db)
+            except Exception as up_e:
+                logger.debug("CSB default baseline sync skipped: %s", up_e)
+            return cid
         except Exception as e:
             logger.warning("CSB ensure_default_row failed: %s", e)
             try:
@@ -212,9 +242,9 @@ class CSBConfigManager:
                 db.close()
 
     def _apply_v2_runtime(self, cfg: Dict[str, Any]) -> Dict[str, Any]:
-        """已落库的 1.0 默认值在读取时升到 2.0，避免旧配置整包覆盖新默认。
+        """已落库的工厂旧值在读取时升到当前基线，避免旧配置整包覆盖新默认。
 
-        只改写工厂旧值（上影 0.30、粘合加权门槛 20）。用户改成其他数值的保留。
+        只改写已知工厂旧值；用户改成其他数值的保留。
         """
         entry = cfg.setdefault("entry", {})
         try:
@@ -231,8 +261,19 @@ class CSBConfigManager:
         defense = cfg.setdefault("defense", {})
         if "stop_buffer_pct" not in defense:
             defense["stop_buffer_pct"] = 0.0
-        defense.setdefault("probe_stop_buffer_pct", 0.01)
-        defense.setdefault("probe_stop_confirm_days", 2)
+        # 旧工厂 1%/2 日 → 出场 v3：2%/3 日
+        try:
+            if abs(float(defense.get("probe_stop_buffer_pct", 0.02)) - 0.01) < 1e-9:
+                defense["probe_stop_buffer_pct"] = 0.02
+        except (TypeError, ValueError):
+            defense["probe_stop_buffer_pct"] = 0.02
+        try:
+            if int(defense.get("probe_stop_confirm_days", 3)) == 2:
+                defense["probe_stop_confirm_days"] = 3
+        except (TypeError, ValueError):
+            defense["probe_stop_confirm_days"] = 3
+        defense.setdefault("probe_stop_buffer_pct", 0.02)
+        defense.setdefault("probe_stop_confirm_days", 3)
         # 旧工厂默认 0.5%/2 日 → 升到 1.5%/3 日；用户改过的其它值保留
         try:
             if abs(float(defense.get("channel_fail_buffer_pct", 0.015)) - 0.005) < 1e-9:
@@ -246,6 +287,15 @@ class CSBConfigManager:
             defense["channel_fail_confirm_days"] = 3
         defense.setdefault("channel_fail_buffer_pct", 0.015)
         defense.setdefault("channel_fail_confirm_days", 3)
+        defense.setdefault("profit_lock_gain", 0.10)
+        defense.setdefault("profit_lock_floor_pct", 0.05)
+        defense.setdefault("profit_lock_giveback_pct", 0.08)
+        # 旧工厂 min_score=60 → 80（基线）；其它自定义分数保留
+        try:
+            if abs(float(cfg.get("min_score", 80)) - 60.0) < 1e-9:
+                cfg["min_score"] = 80.0
+        except (TypeError, ValueError):
+            cfg["min_score"] = 80.0
         bt = cfg.setdefault("backtest", {})
         bt.setdefault("min_touch_count", 0)
         bt.setdefault("max_touch_count", 0)
@@ -255,6 +305,46 @@ class CSBConfigManager:
         bt.setdefault("max_signals_per_day", 0)
         bt.setdefault("allowed_signal_types", None)
         return cfg
+
+    def sync_default_row_baseline(self, db) -> Optional[Dict[str, Any]]:
+        """将默认参数版本落库值升到当前基线（同 config_id，无需重跑预计算）。"""
+        from backend_api.models import CSBStrategyConfig
+
+        row = (
+            db.query(CSBStrategyConfig)
+            .filter(CSBStrategyConfig.is_default.is_(True))
+            .order_by(CSBStrategyConfig.id.asc())
+            .first()
+        )
+        if not row:
+            return None
+        merged = self._apply_v2_runtime(
+            self._deep_merge(self.get_default_config(), dict(row.config_params or {}))
+        )
+        # 去掉运行期附加字段再落库
+        to_store = copy.deepcopy(merged)
+        to_store.pop("_config_id", None)
+        row.config_params = to_store
+        if not (row.description or "").strip() or "基线" not in str(row.description or ""):
+            row.description = "CSB 默认参数（出场 v3 + 分≥80 + 利润保护；同 config_id 升级，无需重跑预计算）"
+        db.commit()
+        self._invalidate_cache(int(row.id))
+        return {
+            "config_id": int(row.id),
+            "min_score": to_store.get("min_score"),
+            "defense": {
+                k: (to_store.get("defense") or {}).get(k)
+                for k in (
+                    "probe_stop_buffer_pct",
+                    "probe_stop_confirm_days",
+                    "channel_fail_buffer_pct",
+                    "channel_fail_confirm_days",
+                    "profit_lock_gain",
+                    "profit_lock_floor_pct",
+                    "profit_lock_giveback_pct",
+                )
+            },
+        }
 
     def merge_overrides(self, base: Optional[Dict[str, Any]] = None, **overrides) -> Dict[str, Any]:
         cfg = copy.deepcopy(base or self.get_default_config())

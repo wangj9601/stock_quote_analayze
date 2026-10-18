@@ -290,3 +290,73 @@ def test_lps_skips_false_break():
         signal_type="CSB_LPS",
     )
     assert r.get("exit_reason") != "false_break"
+
+
+def test_profit_lock_raises_floor_after_10pct_peak():
+    """前高浮盈≥10% 后，跟踪地板抬到入场×1.05；收盘跌破即离场（仍高于武装线 3%）。"""
+    cfg = get_default_csb_config()
+    prior = [_bar(f"2024-05-{i+1:02d}", 10, 10.1, 9.9, 10.0, vol=1_000_000) for i in range(25)]
+    after = [
+        _bar("2024-06-01", 10.0, 10.2, 9.95, 10.1, vol=1_000_000),
+        _bar("2024-06-02", 10.1, 11.2, 10.05, 11.1, vol=1_000_000),  # 前高 +11% 武装利润锁
+        # 回落到 +4%：高于武装线 3%，但低于利润地板 5%
+        _bar("2024-06-03", 11.0, 11.05, 10.3, 10.4, vol=1_000_000),
+    ]
+    r = evaluate_structure_exit_rules(
+        entry_price=10.0,
+        entry_low=9.0,
+        channel_upper=None,
+        bars_after_entry=after,
+        signal_date="2024-05-31",
+        config=cfg,
+        prior_bars=prior,
+    )
+    assert r.get("exit_reason") == "ma_trail"
+    assert r.get("trail_kind") == "profit_lock"
+    assert float(r.get("trail_level") or 0) >= 10.0 * 1.05
+    assert r.get("exit_date") == "2024-06-03"
+
+
+def test_profit_lock_giveback_from_peak():
+    """利润锁启用后，相对前高回撤超过 giveback 也离场。"""
+    cfg = get_default_csb_config()
+    # giveback 8%：前高 12.0 → 止损线 11.04；收盘 11.0 触发
+    prior = [_bar(f"2024-05-{i+1:02d}", 10, 10.1, 9.9, 10.0, vol=1_000_000) for i in range(25)]
+    after = [
+        _bar("2024-06-01", 10.0, 10.3, 9.95, 10.2, vol=1_000_000),
+        _bar("2024-06-02", 10.2, 12.0, 10.1, 11.8, vol=1_000_000),  # 前高 +20%
+        _bar("2024-06-03", 11.7, 11.8, 10.9, 11.0, vol=1_000_000),  # 相对前高回撤 >8%
+    ]
+    r = evaluate_structure_exit_rules(
+        entry_price=10.0,
+        entry_low=9.0,
+        channel_upper=None,
+        bars_after_entry=after,
+        signal_date="2024-05-31",
+        config=cfg,
+        prior_bars=prior,
+    )
+    assert r.get("exit_reason") == "ma_trail"
+    assert r.get("trail_kind") == "profit_lock"
+    assert r.get("profit_locked") is True
+
+
+def test_below_10pct_peak_keeps_3pct_arm_floor():
+    """前高未达 +10% 时，仍按武装线 3% 地板，不启用利润锁。"""
+    cfg = get_default_csb_config()
+    prior = [_bar(f"2024-05-{i+1:02d}", 10, 10.1, 9.9, 10.0, vol=1_000_000) for i in range(25)]
+    after = [
+        _bar("2024-06-01", 10.0, 10.2, 9.95, 10.1, vol=1_000_000),
+        _bar("2024-06-02", 10.1, 10.8, 10.05, 10.7, vol=1_000_000),  # 前高 +8% < 10%
+        _bar("2024-06-03", 10.6, 10.65, 10.35, 10.4, vol=1_000_000),  # 仍高于 3% 地板
+    ]
+    r = evaluate_structure_exit_rules(
+        entry_price=10.0,
+        entry_low=9.0,
+        channel_upper=None,
+        bars_after_entry=after,
+        signal_date="2024-05-31",
+        config=cfg,
+        prior_bars=prior,
+    )
+    assert r.get("exit_reason") != "ma_trail" or r.get("trail_kind") != "profit_lock"

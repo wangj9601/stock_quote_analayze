@@ -190,16 +190,19 @@ def evaluate_structure_exit_rules(
     channel_lower: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    结构出场：假突破（仅 BREAKOUT）→ 基准止损（无缓冲）→ 派发 → 阶梯跟踪 → 到期。
+    结构出场：假突破（仅 BREAKOUT）→ 基准止损 → 派发 → 阶梯跟踪 → 到期。
     PROBE / LPS 不做「三日不重回上轨」；PROBE 以「下轨×(1−缓冲)」连续确认作为通道失效。
-    前序最高价达到入场价×(1+trail_arm_gain) 后武装。跟踪线取波段低点、MA10、MA20
-    与武装价中仍低于收盘价的较高者，只上移，且不低于武装价，避免浮盈后跟回成本附近。
+    前序最高价达入场价×(1+trail_arm_gain) 后武装跟踪；达 profit_lock_gain（默认 +10%）后
+    抬升利润地板、改用快线跟踪，并可按相对前高回撤（profit_lock_giveback_pct）离场。
     """
     dcfg = (config or {}).get("defense") or {}
     false_days = int(dcfg.get("false_break_days", 3))
     trail_ma = int(dcfg.get("trail_ma", 20))
     trail_fast = int(dcfg.get("trail_ma_fast", 10))
     arm_gain = float(dcfg.get("trail_arm_gain", 0.03))
+    lock_gain = max(0.0, float(dcfg.get("profit_lock_gain", 0.10)))
+    lock_floor_pct = max(0.0, float(dcfg.get("profit_lock_floor_pct", 0.05)))
+    lock_giveback = max(0.0, float(dcfg.get("profit_lock_giveback_pct", 0.08)))
     swing_w = int(dcfg.get("swing_window", 2))
     cf_buf = max(0.0, float(dcfg.get("channel_fail_buffer_pct", 0.015)))
     cf_confirm = max(1, int(dcfg.get("channel_fail_confirm_days", 3)))
@@ -301,24 +304,40 @@ def evaluate_structure_exit_rules(
             return dist
 
         # 用前序最高价判断武装，当日新高留到收盘后再计入，避免同一根 K 线冲高回落即跟踪离场。
+        peak_gain = float(running_high) / float(entry_price) - 1.0 if entry_price > 0 else 0.0
+        profit_locked = lock_gain > 0 and peak_gain >= lock_gain
         if running_high >= float(entry_price) * (1.0 + arm_gain):
             floor = float(entry_price) * (1.0 + arm_gain)
+            if profit_locked:
+                floor = max(floor, float(entry_price) * (1.0 + lock_floor_pct))
             swing = latest_swing_low(path, swing_w)
             ma_fast = sma(closes + [cl], trail_fast)
-            ma_slow = sma(closes + [cl], trail_ma)
+            # 利润保护后只用快线，收紧冲高回落防守
+            ma_slow = None if profit_locked else sma(closes + [cl], trail_ma)
             cands = [lvl for lvl in (swing, ma_fast, ma_slow, floor) if lvl is not None and lvl < cl]
             if cands:
                 proposed = max(cands)
                 if ratchet is None or proposed > ratchet:
                     ratchet = proposed
             level = floor if ratchet is None else max(float(ratchet), floor)
-            if cl <= floor or (ratchet is not None and cl < ratchet):
+
+            giveback_hit = False
+            if profit_locked and lock_giveback > 0 and running_high > 0:
+                peak_stop = float(running_high) * (1.0 - lock_giveback)
+                if cl <= peak_stop:
+                    giveback_hit = True
+                    level = max(level, peak_stop)
+
+            if giveback_hit or cl <= floor or (ratchet is not None and cl < ratchet):
                 return {
                     "exit_reason": "ma_trail",
                     "signal_type": CSB_TRAIL,
                     "exit_date": bar_date,
                     "exit_price": cl,
                     "trail_level": level,
+                    "trail_kind": "profit_lock" if profit_locked else "armed",
+                    "profit_locked": bool(profit_locked),
+                    "peak_gain": round(peak_gain, 4),
                 }
 
         running_high = max(running_high, hi)

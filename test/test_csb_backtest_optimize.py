@@ -285,6 +285,23 @@ def test_presets_exist_and_apply():
     assert abs(float(o6.get("probe_stop_buffer_pct")) - 0.02) < 1e-9
     assert int(o6.get("channel_fail_confirm_days")) == 3
 
+    assert "structure_v7" in names
+    v7 = apply_backtest_preset("structure_v7", {})
+    assert v7.get("min_touch_count") == 4
+    assert v7.get("max_touch_count") == 5
+    assert abs(float(v7.get("min_channel_width_pct")) - 0.02) < 1e-9
+    assert abs(float(v7.get("min_entry_pos_in_channel")) - 0.0) < 1e-9
+    assert "min_score" not in v7
+    assert "probe_min_score" not in v7
+    assert "horizon_days" not in v7
+    o7 = v7.get("defense_overrides") or {}
+    assert abs(float(o7.get("probe_stop_buffer_pct")) - 0.02) < 1e-9
+    assert int(o7.get("channel_fail_confirm_days")) == 3
+    # 创建体显式传入时保留（分段测试）
+    v7b = apply_backtest_preset("structure_v7", {"min_score": 70, "horizon_days": 20})
+    assert float(v7b["min_score"]) == 70
+    assert int(v7b["horizon_days"]) == 20
+
 
 def test_structure_v3_probe_stop_needs_three_confirms():
     """结构 v3：缓冲 2% + 连续 3 日才基准止损；2 日破线仍持有。"""
