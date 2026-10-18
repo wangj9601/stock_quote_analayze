@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-16T12:18:34Z",
+  "generatedAt": "2026-10-18T15:30:00Z",
   "title": "Design System: 股票分析 · 冰枫堂",
   "extensions": {
     "colorMeta": {
@@ -334,6 +334,14 @@
       "description": "深底日期与下拉：日历图标和下拉箭头用墨色 SVG，悬停与焦点转金，不用 invert 滤镜。",
       "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">交易日</span><input class=\"ds-date\" type=\"text\" value=\"2026-10-16\" readonly><select class=\"ds-select\"><option>前复权</option><option>不复权</option></select></label>",
       "css": ".ds-field{display:flex;flex-direction:column;gap:8px;font-family:Noto Sans SC,sans-serif;color:#d9e2ec}.ds-field-label{font-family:Barlow Condensed,Noto Sans SC,sans-serif;font-size:.8125rem;font-weight:600;letter-spacing:.08em;color:#8b9aab}.ds-date,.ds-select{color-scheme:dark;background-color:rgba(0,0,0,.28);color:#d9e2ec;border:1px solid rgba(217,226,236,.14);border-radius:2px;padding:6px 10px;font-size:14px}.ds-date{background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Crect x='1.5' y='3' width='13' height='11.5' rx='1.5' stroke='%23d9e2ec' stroke-width='1.6'/%3E%3Cpath d='M1.5 6.5h13' stroke='%23d9e2ec' stroke-width='1.6'/%3E%3Cpath d='M5 1.5v3M11 1.5v3' stroke='%23d9e2ec' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 8px center;background-size:16px 16px;padding-right:32px}.ds-date:hover{background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Crect x='1.5' y='3' width='13' height='11.5' rx='1.5' stroke='%23c9a227' stroke-width='1.6'/%3E%3Cpath d='M1.5 6.5h13' stroke='%23c9a227' stroke-width='1.6'/%3E%3Cpath d='M5 1.5v3M11 1.5v3' stroke='%23c9a227' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E\")}.ds-select{appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23d9e2ec' d='M0 1h12L6 8z'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}.ds-select:hover,.ds-select:focus{background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c9a227' d='M0 1h12L6 8z'/%3E%3C/svg%3E\")}.ds-date:focus,.ds-select:focus{outline:none;border-color:#c9a227;box-shadow:0 0 0 2px #0f1419,0 0 0 4px #c9a227}"
+    },
+    {
+      "name": "Admin Duty Nav",
+      "kind": "nav",
+      "refersTo": null,
+      "description": "管理端浅色值班台：枫金墨署名，暖纸标出当前子项，分组只加粗。",
+      "html": "<aside class=\"ds-admin-nav\"><div class=\"ds-admin-brand\">冰枫堂</div><button class=\"ds-admin-group\" type=\"button\">策略</button><a class=\"ds-admin-child\" href=\"#\">做小做底 SBBR</a><a class=\"ds-admin-child is-current\" href=\"#\" aria-current=\"page\">通道突破 CSB</a></aside>",
+      "css": ".ds-admin-nav{display:flex;flex-direction:column;gap:4px;width:220px;padding:16px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1),0 4px 6px -4px rgb(0 0 0 / 0.1);font-family:system-ui,sans-serif}.ds-admin-brand{margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:.08em;color:#6b5420}.ds-admin-group{border:0;background:transparent;text-align:left;font-size:14px;font-weight:600;color:#6b5420;padding:8px 12px;border-radius:8px;cursor:pointer}.ds-admin-group:hover{background:#f3f4f6}.ds-admin-group:focus-visible,.ds-admin-child:focus-visible{outline:2px solid #6b5420;outline-offset:2px}.ds-admin-child{display:block;margin-left:12px;padding:8px 12px;border-radius:8px;color:#374151;text-decoration:none;font-size:13px}.ds-admin-child:hover{background:#f3f4f6}.ds-admin-child.is-current{background:#f4efe3;color:#6b5420;font-weight:600}"
     }
   ],
   "narrative": {
@@ -344,7 +352,7 @@
       "策略以芯片/Tab 叠层开关出现，不做成游戏 HUD",
       "不透明抬升面板盖住底图；白卡贴深底是反模式",
       "A 股涨红跌绿语义固定；龙头/中军用对向力关系呈现",
-      "管理端（Vue/Element）不在本文件约束范围内；本系统描述用户站 MPA `body.ops-map`"
+      "上文只约束用户站 MPA `body.ops-map`。管理端浅色壳层见文末「管理端：浅色值班台」，不进入本文件色板与组件令牌"
     ],
     "rules": [
       {
@@ -386,6 +394,21 @@
         "name": "The Control Indicator Rule",
         "body": "作战板上原生日期/时间控件的日历图标，以及 `<select>` / `.ops-select` 下拉箭头，必须与 `--ops-ink` 同级可读。不要用 `invert` 滤镜硬拧系统图标（`color-scheme: dark` 下会越拧越暗）；统一换成 `--ops-date-picker-icon` / `--ops-select-chevron`（静止墨色、hover/焦点金色）SVG。实现集中在 `design-tokens.css`，`ops-surfaces.css` 末级重申；后续样式用 `background-color` 而非 `background` 简写。勿在各页单独糊补丁。",
         "section": "shapes"
+      },
+      {
+        "name": "The Duty Desk Rule",
+        "body": "管理端保持浅色操作密度。品牌只署名和标出当前位置，不把页面涂成作战标图台。",
+        "section": "admin"
+      },
+      {
+        "name": "The Maple Ink Rule",
+        "body": "浅底上的品牌字用枫金墨，当前项用暖纸。用户站叠层金不作为管理端正文色。",
+        "section": "admin"
+      },
+      {
+        "name": "The Shell Shadow Rule",
+        "body": "内容区保持平面。轻阴影只给侧栏、抽屉遮罩和展开条。",
+        "section": "admin"
       }
     ],
     "dos": [
@@ -397,7 +420,8 @@
     "donts": [
       "Don't 复活满屏方格底纹或白卡贴深底。",
       "Don't 做成 FPS/电竞 HUD、玻璃拟态、紫色霓虹金融皮肤。",
-      "Don't 把管理端 Element 默认主题当成用户站规范。",
+      "Don't 把管理端 Element 默认主题当成用户站规范，也不要把用户站深色作战板涂到管理端。",
+      "Don't 在管理端用紫、靛装饰色标状态或当前项。",
       "Don't 为装饰引入大圆角卡片网格仪表盘作为默认布局。",
       "Don't 用 PowerShell 默认编码改含中文的 HTML（易乱码）；改前端文案用 UTF-8 工具链。"
     ]

@@ -69,34 +69,52 @@ if __name__ == "__main__":
     if sys.platform == "win32":
         env.setdefault("PYTHONUTF8", "1")
 
-    cmd = [sys.executable, "-m", "uvicorn", "backend_api.main:app",
-           "--host", "0.0.0.0", "--port", port]
     _uvicorn_log_cfg = os.path.join(root_dir, "uvicorn_log_timestamp.yaml")
+    log_config = None
     if os.path.isfile(_uvicorn_log_cfg):
         try:
             import yaml  # noqa: F401 — uvicorn 加载 YAML 日志配置同样需要 PyYAML
-            cmd += ["--log-config", _uvicorn_log_cfg]
+            log_config = _uvicorn_log_cfg
         except ImportError:
             print("[WARN] PyYAML missing; skip --log-config (pip install PyYAML). Using uvicorn default logging.")
-    if is_prod:
-        # 生产环境用多 worker 提升并发；注意 workers>1 为多进程（uvicorn 机制）
-        cmd += ["--workers", str(workers)]
-    else:
-        # 仅监视业务代码目录，避免 test/admin/文档等误触发热重载打断采集子进程
-        _reload_dirs = (
+
+    # Windows 上 Click 会把命令行中的 *.xlsx 展开成当前目录里的真实文件。
+    # 根目录一旦有两份及以上表格，第二份会变成 uvicorn 的多余参数并直接退出。
+    # 开发模式改走进程内 API，排除规则不再经过命令行。
+    _reload_excludes = ("*.xls", "*.xlsx", "*.csv", "*.pyc", "*__pycache__*")
+    if not is_prod:
+        _reload_dirs = [
             os.path.join(root_dir, "backend_api"),
             os.path.join(root_dir, "backend_core"),
-        )
-        cmd += ["--reload"]
-        for _d in _reload_dirs:
-            cmd += ["--reload-dir", _d]
-        for _ex in ("*.xls", "*.xlsx", "*.csv", "*.pyc", "*__pycache__*"):
-            cmd += ["--reload-exclude", _ex]
+        ]
         print(f"[ENV] reload 目录: {', '.join(_reload_dirs)}")
+        os.environ.update(env)
+        try:
+            import uvicorn
+            uvicorn.run(
+                "backend_api.main:app",
+                host="0.0.0.0",
+                port=int(port),
+                reload=True,
+                reload_dirs=_reload_dirs,
+                reload_excludes=list(_reload_excludes),
+                log_config=log_config,
+            )
+        except KeyboardInterrupt:
+            print("\n[STOP] Service stopped")
+        except Exception as e:
+            print(f"[ERROR] Failed to start service: {e}")
+    else:
+        cmd = [sys.executable, "-m", "uvicorn", "backend_api.main:app",
+               "--host", "0.0.0.0", "--port", port]
+        if log_config:
+            cmd += ["--log-config", log_config]
+        # 生产环境用多 worker 提升并发；注意 workers>1 为多进程（uvicorn 机制）
+        cmd += ["--workers", str(workers)]
 
-    try:
-        subprocess.run(cmd, env=env, cwd=root_dir)
-    except KeyboardInterrupt:
-        print("\n[STOP] Service stopped")
-    except Exception as e:
-        print(f"[ERROR] Failed to start service: {e}")
+        try:
+            subprocess.run(cmd, env=env, cwd=root_dir)
+        except KeyboardInterrupt:
+            print("\n[STOP] Service stopped")
+        except Exception as e:
+            print(f"[ERROR] Failed to start service: {e}")

@@ -115,6 +115,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { confirmStrategyJob } from '@/utils/confirmDanger'
 import rpeApi from '@/services/rpeApi'
 
 const activeTab = ref('config')
@@ -207,6 +208,11 @@ async function onSetDefault(id: number) {
 }
 
 async function onPrecompute() {
+  try {
+    await confirmStrategyJob('RPE', '比价效应将按当前参数写入预计算。旧命中不一定删除。')
+  } catch {
+    return
+  }
   precomputing.value = true
   try {
     const data: any = await rpeApi.triggerPrecompute({ max_boards: 20 })

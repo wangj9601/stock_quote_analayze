@@ -311,6 +311,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { confirmStrategyJob } from '@/utils/confirmDanger'
 import BoardPickerDialog from '@/components/common/BoardPickerDialog.vue'
 import sbbrApi, { type SbbrBacktestCreateBody, type SbbrStockPoolMode } from '@/services/sbbrApi'
 
@@ -514,6 +515,13 @@ function openPrecompute() {
 }
 
 async function onPrecompute() {
+  const day = precomputeForm.trade_date || '未指定交易日'
+  const version = precomputeForm.config_id ? `版本 ${precomputeForm.config_id}` : '默认或全部启用版本'
+  try {
+    await confirmStrategyJob('SBBR', `做小做底将写入 ${day}（${version}）。旧命中不一定删除。`)
+  } catch {
+    return
+  }
   precomputing.value = true
   try {
     const params: { config_id?: number; trade_date?: string } = {}

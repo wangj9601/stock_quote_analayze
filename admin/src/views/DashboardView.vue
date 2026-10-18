@@ -587,7 +587,7 @@ function buildChartOption(
         data: values.map((v) => ({
           value: v,
           itemStyle: {
-            color: v >= 0 ? '#dc2626' : '#16a34a',
+            color: v >= 0 ? '#c23b3b' : '#2f9e6b',
             borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
           }
         })),
@@ -748,7 +748,7 @@ function buildConstituentsChartOption(rows: BoardConstituentFundFlowItem[], peri
         data: values.map((v) => ({
           value: v,
           itemStyle: {
-            color: v >= 0 ? '#dc2626' : '#16a34a',
+            color: v >= 0 ? '#c23b3b' : '#2f9e6b',
             borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
           }
         })),
@@ -1010,7 +1010,7 @@ function buildSlopeChartOption(rows: BoardSectorTrendItem[], titleHint: string) 
         data: values.map((v) => ({
           value: v,
           itemStyle: {
-            color: v >= 0 ? '#dc2626' : '#16a34a',
+            color: v >= 0 ? '#c23b3b' : '#2f9e6b',
             borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
           }
         })),
@@ -1187,7 +1187,7 @@ function buildStockFlowChartOption(rows: StockFundFlowRankItem[], periodLabel: s
         data: values.map((v) => ({
           value: v,
           itemStyle: {
-            color: v >= 0 ? '#dc2626' : '#16a34a',
+            color: v >= 0 ? '#c23b3b' : '#2f9e6b',
             borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
           }
         })),
@@ -1430,11 +1430,11 @@ onBeforeUnmount(() => {
 }
 
 .net-pos {
-  color: #dc2626;
+  color: #c23b3b;
 }
 
 .net-neg {
-  color: #16a34a;
+  color: #2f9e6b;
 }
 
 .slope-trend-charts {

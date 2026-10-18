@@ -2,11 +2,11 @@
   <div class="min-h-screen bg-gray-100 flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
     <div class="max-w-md w-full space-y-8 flex-1 flex flex-col justify-center">
       <div>
-        <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-          管理后台登录
+        <h2 class="text-center text-3xl font-extrabold text-gray-900 login-brand">
+          冰枫堂
         </h2>
         <p class="mt-2 text-center text-sm text-gray-600">
-          请输入您的登录凭据
+          管理后台
         </p>
       </div>
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
@@ -19,7 +19,7 @@
               name="username"
               type="text"
               required
-              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-gray-700 focus:border-gray-700 focus:z-10 sm:text-sm"
               placeholder="用户名"
             />
           </div>
@@ -31,7 +31,7 @@
               name="password"
             type="password"
               required
-              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
+              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-gray-700 focus:border-gray-700 focus:z-10 sm:text-sm"
               placeholder="密码"
             />
           </div>
@@ -41,7 +41,7 @@
           <button
             type="submit"
             :disabled="loading"
-            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-700 disabled:opacity-50"
           >
             <span v-if="loading" class="absolute left-0 inset-y-0 flex items-center pl-3">
               <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -117,6 +117,11 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
+.login-brand {
+  letter-spacing: 0.12em;
+  color: #6b5420;
+}
+
 .login-container {
   min-height: 100vh;
   display: flex;

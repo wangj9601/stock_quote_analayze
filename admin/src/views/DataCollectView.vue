@@ -1305,7 +1305,7 @@ HK,2026-01-01,New Year's Day</pre>
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { 
-  ElMessage, 
+  ElMessage,
   ElMessageBox,
   ElRadioGroup,
   ElRadio,
@@ -1314,6 +1314,7 @@ import {
   ElTabs,
   ElTabPane
 } from 'element-plus'
+import { confirmForceOverwrite } from '@/utils/confirmDanger'
 import { 
   DataAnalysis, 
   Warning, 
@@ -1846,6 +1847,14 @@ const startHKCollection = async () => {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
     }
+
+    if (hkForm.value.force_update) {
+      try {
+        await confirmForceOverwrite('港股历史', hkForm.value.start_date, hkForm.value.end_date)
+      } catch {
+        return
+      }
+    }
     
     // 准备请求数据
     const requestData: RequestData = {
@@ -2023,6 +2032,14 @@ const startTushareCollection = async () => {
       return
     }
 
+    if (tushareForm.value.force_update) {
+      try {
+        await confirmForceOverwrite('TuShare 历史', tushareForm.value.start_date, tushareForm.value.end_date)
+      } catch {
+        return
+      }
+    }
+
     // 使用TuShare采集全量历史数据时，强制附加 MA、MAVOL、PVFRS 指标
     const indicatorsToRun = Array.from(
       new Set([...safeTushareIndicators.value, 'ma', 'mavol', 'pvfrs'])
@@ -2175,6 +2192,14 @@ const startFileCollection = async () => {
       return
     }
 
+    if (fileForm.value.force_update) {
+      try {
+        await confirmForceOverwrite('文件历史', fileForm.value.start_date, fileForm.value.end_date)
+      } catch {
+        return
+      }
+    }
+
     console.log('发送文件采集请求:', fileForm.value)
     
     // 指标
@@ -2226,6 +2251,14 @@ const startHKFileHistoricalCollection = async () => {
     if (currentTaskIsRunning.value) {
       ElMessage.error('已有采集任务正在运行，请等待完成后再启动新任务')
       return
+    }
+
+    if (hkFileForm.value.force_update) {
+      try {
+        await confirmForceOverwrite('港股文件', hkFileForm.value.start_date, hkFileForm.value.end_date)
+      } catch {
+        return
+      }
     }
 
     console.log('发送港股文件采集请求:', hkFileForm.value)

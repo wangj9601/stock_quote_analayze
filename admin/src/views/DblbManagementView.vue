@@ -252,6 +252,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { confirmStrategyJob } from '@/utils/confirmDanger'
 import dblbApi, { type DblbScopeBody } from '@/services/dblbApi'
 import { boardConstituentsService, type BoardSummary } from '@/services/boardConstituents.service'
 
@@ -451,6 +452,11 @@ async function onForce() {
 }
 
 async function onPrecompute() {
+  try {
+    await confirmStrategyJob('DBLB', '双底策略将按当前范围写入预计算。旧命中不一定删除。')
+  } catch {
+    return
+  }
   precomputing.value = true
   try {
     const data = await dblbApi.triggerPrecompute({ ...buildScopeBody(), force: true })

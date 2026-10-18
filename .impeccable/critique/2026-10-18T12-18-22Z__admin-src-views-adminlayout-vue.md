@@ -10,6 +10,7 @@ target_fingerprint: "sha256:2a736013b6fad12cb645ee201e621a7c407f36d216f06e087476
 target_path: "E:\\wangxw\\work\\stock_quote_analayze\\admin\\src\\views\\AdminLayout.vue"
 timestamp: 2026-10-18T12-18-22Z
 slug: admin-src-views-adminlayout-vue
+closed: true
 ---
 Method: dual-agent (A: f459396c-25b6-407d-ab7e-60dca51ae98d · B: bdf2e8dd-81a3-4e1c-8a96-84ef8c645605)
 

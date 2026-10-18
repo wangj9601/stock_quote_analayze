@@ -395,6 +395,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { confirmStrategyJob } from '@/utils/confirmDanger'
 import { QuestionFilled } from '@element-plus/icons-vue'
 import * as XLSX from 'xlsx'
 import cupbApi, { type CupbScopeBody } from '@/services/cupbApi'
@@ -659,6 +660,11 @@ async function onForce() {
 }
 
 async function onPrecompute() {
+  try {
+    await confirmStrategyJob('CUPB', '杯底形态将按当前范围写入预计算。旧命中不一定删除。')
+  } catch {
+    return
+  }
   precomputing.value = true
   try {
     const data = await cupbApi.triggerPrecompute({ ...buildScopeBody(), force: true })

@@ -482,10 +482,16 @@ async function confirmPush() {
   const mods = selectedModules.value.join('、')
   const range = formatConfirmRange()
   try {
-    await ElMessageBox.confirm(
-      `将把本地选中模块数据覆盖写入生产环境（选中：${mods}）${range}\n请确认生产已备份且 Sync Key 正确。是否继续？`,
+    await ElMessageBox.prompt(
+      `将把本地选中模块覆盖写入生产（${mods}）${range}\n请确认生产已备份。输入 PUSH 以继续。`,
       'Push 到生产',
-      { type: 'warning', confirmButtonText: '确认 Push', cancelButtonText: '取消' }
+      {
+        confirmButtonText: '确认覆盖生产',
+        cancelButtonText: '取消',
+        inputPattern: /^PUSH$/,
+        inputErrorMessage: '请输入大写 PUSH',
+        confirmButtonClass: 'el-button--danger',
+      }
     )
   } catch {
     return

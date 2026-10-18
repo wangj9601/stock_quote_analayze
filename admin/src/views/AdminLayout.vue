@@ -3,23 +3,32 @@
     class="admin-layout"
     :class="{ 'sidebar-open': sidebarOpen, 'sidebar-collapsed': sidebarCollapsed }"
   >
+    <a class="skip-link" href="#admin-main" @click.prevent="skipToMain">跳到主内容</a>
+
     <div
       class="sidebar-overlay"
       :class="{ show: sidebarOpen }"
       @click="closeSidebar"
     />
 
-    <aside class="admin-sidebar" :class="{ open: sidebarOpen }">
+    <aside
+      ref="sidebarEl"
+      class="admin-sidebar"
+      :class="{ open: sidebarOpen }"
+      aria-label="管理菜单"
+      :inert="sidebarHidden ? true : undefined"
+    >
       <div class="sidebar-header">
         <div class="sidebar-header-text">
-          <h2 class="text-xl font-bold text-gray-900">管理后台</h2>
-          <p class="text-sm text-gray-600">{{ user?.username || '管理员' }}</p>
+          <h2 class="sidebar-brand">冰枫堂</h2>
+          <p class="sidebar-brand-sub">管理后台 · {{ user?.username || '管理员' }}</p>
         </div>
         <button
           type="button"
           class="sidebar-collapse-btn"
           aria-label="收起菜单"
           title="收起菜单"
+          :aria-expanded="!sidebarCollapsed"
           @click="toggleSidebarCollapsed"
         >
           <el-icon><Fold /></el-icon>
@@ -52,7 +61,7 @@
       </nav>
 
       <div class="sidebar-footer">
-        <el-button type="danger" size="small" class="w-full" @click="handleLogout">
+        <el-button size="small" class="w-full" @click="handleLogout">
           退出登录
         </el-button>
       </div>
@@ -60,31 +69,45 @@
 
     <button
       v-show="sidebarCollapsed"
+      ref="expandRailEl"
       type="button"
       class="sidebar-expand-rail"
       aria-label="展开菜单"
       title="展开菜单"
+      :aria-expanded="false"
       @click="toggleSidebarCollapsed"
     >
       <el-icon><Expand /></el-icon>
     </button>
 
-    <main class="admin-main">
+    <main id="admin-main" class="admin-main" tabindex="-1" :inert="drawerModal ? true : undefined">
       <header class="admin-topbar">
-        <button type="button" class="menu-toggle" aria-label="打开菜单" @click="toggleSidebar">
+        <button
+          ref="menuToggleEl"
+          type="button"
+          class="menu-toggle"
+          aria-label="打开菜单"
+          :aria-expanded="sidebarOpen"
+          @click="toggleSidebar"
+        >
           <span /><span /><span />
         </button>
         <div class="topbar-title">
           <span class="topbar-page">{{ currentPageName }}</span>
           <span class="topbar-user">{{ user?.username || '管理员' }}</span>
         </div>
-        <el-button type="danger" size="small" class="topbar-logout" @click="handleLogout">
+        <el-button size="small" class="topbar-logout" @click="handleLogout">
           退出
         </el-button>
       </header>
 
       <div class="admin-content">
-        <router-view :key="$route.fullPath" />
+        <div class="admin-crumb">
+          <span class="crumb-mark">冰枫堂</span>
+          <span class="crumb-sep" aria-hidden="true">/</span>
+          <span class="crumb-page">{{ currentPageName }}</span>
+        </div>
+        <router-view :key="$route.path" />
       </div>
 
       <footer class="icp-footer">
@@ -99,20 +122,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import {
   DataBoard,
-  Document,
-  TrendCharts,
-  Setting,
   DataAnalysis,
-  Histogram,
-  Monitor,
-  Cpu,
-  Tickets,
-  Select,
   Star,
   Lock,
   Fold,
@@ -136,39 +151,63 @@ const route = useRoute()
 const authStore = useAuthStore()
 const sidebarOpen = ref(false)
 const sidebarCollapsed = ref(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1')
+const isMobile = ref(window.innerWidth <= 768)
+const sidebarEl = ref<HTMLElement | null>(null)
+const menuToggleEl = ref<HTMLButtonElement | null>(null)
+const drawerModal = computed(() => isMobile.value && sidebarOpen.value)
+const sidebarHidden = computed(() => (isMobile.value ? !sidebarOpen.value : sidebarCollapsed.value))
+const expandRailEl = ref<HTMLButtonElement | null>(null)
 
 const menuItems: MenuItem[] = [
-  { path: '/dashboard', name: '仪表板', icon: DataBoard },
-  { path: '/access-management', name: '用户管理', icon: Lock },
-  { path: '/quotes', name: '行情数据', icon: TrendCharts },
-  { path: '/stock-basic', name: '股票基本信息', icon: Tickets },
-  { path: '/board-constituents', name: '板块成分股维护', icon: Histogram },
-  { path: '/selection-results', name: '选股管理', icon: Select },
-  { path: '/gms-watchlist', name: 'GMS策略版本', icon: Star },
-  { path: '/indicators', name: '指标管理', icon: Histogram },
-  { path: '/gms-management', name: 'GMS策略回测管理', icon: TrendCharts },
   {
-    name: '形态策略',
-    icon: TrendCharts,
+    name: '今日看板',
+    icon: DataBoard,
     children: [
-      { path: '/sbbr-management', name: '做小做底 SBBR' },
-      { path: '/dblb-management', name: '双底策略 DBLB' },
-      { path: '/cupb-management', name: '杯底形态 CUPB' },
-      { path: '/kgt-management', name: '袋鼠尾 KGT' },
-      { path: '/rpe-management', name: '比价效应 RPE' },
+      { path: '/dashboard', name: '仪表板' },
+      { path: '/recommend-brief', name: '策略推荐' },
     ],
   },
-  { path: '/urt-management', name: 'URT上升趋势策略', icon: TrendCharts },
-  { path: '/csb-management', name: 'CSB低位通道突破', icon: TrendCharts },
-  { path: '/recommend-brief', name: '策略推荐', icon: TrendCharts },
-  { path: '/datasource', name: '数据源配置', icon: Setting },
-  { path: '/env-sync', name: '环境数据同步', icon: Setting },
-  { path: '/datacollect', name: '数据采集', icon: DataAnalysis },
-  { path: '/collection-workflows', name: '采集流程', icon: DataAnalysis },
-  { path: '/monitoring', name: '系统监控', icon: Monitor },
-  { path: '/models', name: '预测模型', icon: Cpu },
-  { path: '/logs', name: '系统日志', icon: Document },
-  { path: '/report-management', name: '报告管理', icon: Setting }
+  {
+    name: '策略',
+    icon: Star,
+    children: [
+      { path: '/gms-watchlist', name: 'GMS 策略版本' },
+      { path: '/gms-management', name: 'GMS 回测' },
+      { path: '/selection-results', name: '选股管理' },
+      { path: '/indicators', name: '指标管理' },
+      { path: '/sbbr-management', name: '做小做底 SBBR' },
+      { path: '/dblb-management', name: '双底 DBLB' },
+      { path: '/cupb-management', name: '杯底 CUPB' },
+      { path: '/kgt-management', name: '袋鼠尾 KGT' },
+      { path: '/rpe-management', name: '比价 RPE' },
+      { path: '/urt-management', name: '上升趋势 URT' },
+      { path: '/csb-management', name: '通道突破 CSB' },
+    ],
+  },
+  {
+    name: '行情与采集',
+    icon: DataAnalysis,
+    children: [
+      { path: '/quotes', name: '行情数据' },
+      { path: '/stock-basic', name: '股票基本信息' },
+      { path: '/board-constituents', name: '板块成分股' },
+      { path: '/datasource', name: '数据源配置' },
+      { path: '/env-sync', name: '环境数据同步' },
+      { path: '/datacollect', name: '数据采集' },
+      { path: '/collection-workflows', name: '采集流程' },
+    ],
+  },
+  {
+    name: '访问与审计',
+    icon: Lock,
+    children: [
+      { path: '/access-management', name: '用户管理' },
+      { path: '/monitoring', name: '系统监控' },
+      { path: '/models', name: '预测模型' },
+      { path: '/logs', name: '系统日志' },
+      { path: '/report-management', name: '报告管理' },
+    ],
+  },
 ]
 
 const user = computed(() => authStore.user)
@@ -225,27 +264,66 @@ const currentPageName = computed(() => {
     if (tab === 'triple-volume') return '选股管理 · 3倍量观察股'
     return '选股管理 · 策略选股'
   }
+  if (route.path === '/report-management') {
+    const tab = route.query.tab
+    if (tab === 'sender') return '报告管理 · 发送邮箱配置'
+    if (tab === 'push') return '报告管理 · 报告推送配置'
+    if (tab === 'logs') return '报告管理 · 报告发送日志'
+    return '报告管理'
+  }
+  if (route.path === '/pvfrs-strategy') return 'PVFRS 交易策略'
+  if (route.path === '/pvfrs-management') return 'PVFRS 策略管理'
+  if (route.path.startsWith('/reports/')) return '报告详情'
   const hit = findMenuName(route.path)
-  return hit || '管理后台'
+  return hit || '冰枫堂'
 })
 
+function isVisible(el: HTMLElement) {
+  return el.getClientRects().length > 0
+}
+function focusFirstInSidebar() {
+  const root = sidebarEl.value
+  if (!root) return
+  const candidates = root.querySelectorAll<HTMLElement>('button, a')
+  for (const el of candidates) {
+    if (isVisible(el)) {
+      el.focus()
+      return
+    }
+  }
+}
+function skipToMain() {
+  if (drawerModal.value) sidebarOpen.value = false
+  nextTick(() => document.getElementById('admin-main')?.focus())
+}
 function toggleSidebar() {
   sidebarOpen.value = !sidebarOpen.value
+  if (sidebarOpen.value) nextTick(focusFirstInSidebar)
 }
 function toggleSidebarCollapsed() {
   sidebarCollapsed.value = !sidebarCollapsed.value
   localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed.value ? '1' : '0')
   if (sidebarCollapsed.value) {
     sidebarOpen.value = false
+    nextTick(() => expandRailEl.value?.focus())
+  } else {
+    nextTick(focusFirstInSidebar)
   }
 }
 function closeSidebar() {
+  const restoreFocus = drawerModal.value
   sidebarOpen.value = false
+  if (restoreFocus) {
+    nextTick(() => menuToggleEl.value?.focus())
+  }
 }
 function onResize() {
-  if (window.innerWidth <= 768) {
-    sidebarOpen.value = false
-  }
+  const mobile = window.innerWidth <= 768
+  if (mobile && !isMobile.value) sidebarOpen.value = false
+  isMobile.value = mobile
+}
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && sidebarOpen.value) closeSidebar()
 }
 
 watch(
@@ -257,9 +335,11 @@ watch(
 
 onMounted(() => {
   window.addEventListener('resize', onResize)
+  window.addEventListener('keydown', onKeydown)
 })
 onUnmounted(() => {
   window.removeEventListener('resize', onResize)
+  window.removeEventListener('keydown', onKeydown)
 })
 
 const handleLogout = async () => {
@@ -280,6 +360,33 @@ const handleLogout = async () => {
 <style scoped lang="postcss">
 .admin-layout {
   @apply min-h-screen bg-gray-50;
+  --admin-rise: #c23b3b;
+  --admin-fall: #2f9e6b;
+  --admin-brand: #6b5420;
+  --admin-brand-soft: #f4efe3;
+}
+
+.admin-layout ::selection {
+  background: #e7d7a8;
+  color: #1c1917;
+}
+
+.sidebar-brand {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--admin-brand);
+  line-height: 1.2;
+}
+
+.sidebar-brand-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #4b5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sidebar-overlay {
@@ -296,10 +403,12 @@ const handleLogout = async () => {
 .admin-sidebar {
   @apply fixed left-0 top-0 h-full w-64 bg-white shadow-lg z-50;
   transition: transform 0.3s ease;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 .sidebar-header {
@@ -320,28 +429,35 @@ const handleLogout = async () => {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
-  color: #6b7280;
+  color: #4b5563;
   cursor: pointer;
   transition: background-color 0.2s, color 0.2s;
 }
-.sidebar-collapse-btn:hover {
+.sidebar-collapse-btn:hover,
+.sidebar-collapse-btn:active {
   background: #f3f4f6;
   color: #111827;
+}
+.sidebar-collapse-btn:focus-visible {
+  outline: 2px solid var(--admin-brand);
+  outline-offset: 2px;
 }
 
 .sidebar-expand-rail {
   display: none;
   position: fixed;
-  left: 0;
+  left: env(safe-area-inset-left);
   top: 50%;
   transform: translateY(-50%);
   z-index: 45;
-  width: 28px;
+  box-sizing: border-box;
+  width: 44px;
   height: 72px;
   border: 1px solid #e5e7eb;
   border-left: none;
@@ -353,13 +469,21 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: center;
 }
-.sidebar-expand-rail:hover {
-  background: #f9fafb;
-  color: #2563eb;
+.sidebar-expand-rail:hover,
+.sidebar-expand-rail:active {
+  background: var(--admin-brand-soft);
+  color: #111827;
+}
+.sidebar-expand-rail:focus-visible {
+  outline: 2px solid var(--admin-brand);
+  outline-offset: 2px;
 }
 
 .sidebar-nav {
   @apply flex-1 p-4 space-y-2;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-color: #d6d3d1 transparent;
 }
 
 .nav-item {
@@ -384,8 +508,14 @@ const handleLogout = async () => {
 }
 
 .nav-item.active {
-  @apply bg-blue-50 text-blue-700;
+  background: var(--admin-brand-soft);
+  color: var(--admin-brand);
   text-decoration: none;
+}
+
+.nav-item:focus-visible {
+  outline: 2px solid var(--admin-brand);
+  outline-offset: 2px;
 }
 
 .nav-icon {
@@ -397,33 +527,6 @@ const handleLogout = async () => {
   font-size: inherit;
   line-height: inherit;
   text-decoration: none;
-}
-
-.nav-group-toggle {
-  width: 100%;
-  border: none;
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  color: inherit;
-}
-
-.nav-chevron {
-  margin-left: auto;
-  font-size: 14px;
-}
-
-.nav-children {
-  @apply ml-3 pl-3 border-l border-gray-200 space-y-1 mb-1;
-}
-
-.nav-child {
-  @apply py-2;
-}
-
-.nav-child .nav-text {
-  font-size: 13px;
-  font-weight: 400;
 }
 
 .nav-item,
@@ -442,7 +545,7 @@ const handleLogout = async () => {
 .sidebar-footer .el-button {
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
-  min-height: 40px;
+  min-height: 44px;
 }
 
 .admin-main {
@@ -451,6 +554,9 @@ const handleLogout = async () => {
   display: flex;
   flex-direction: column;
 }
+.admin-main:focus {
+  outline: none;
+}
 
 .admin-topbar {
   display: none;
@@ -458,7 +564,7 @@ const handleLogout = async () => {
   gap: 12px;
   background: #fff;
   border-bottom: 1px solid #e5e7eb;
-  padding: 10px 12px;
+  padding: calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));
   position: sticky;
   top: 0;
   z-index: 30;
@@ -469,19 +575,29 @@ const handleLogout = async () => {
   flex-direction: column;
   justify-content: center;
   gap: 4px;
-  width: 40px;
-  height: 40px;
+  box-sizing: border-box;
+  width: 44px;
+  height: 44px;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   background: #fff;
   padding: 8px;
   cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.menu-toggle:active {
+  background: #f3f4f6;
 }
 .menu-toggle span {
   display: block;
   height: 2px;
   background: #374151;
   border-radius: 1px;
+}
+.menu-toggle:focus-visible {
+  outline: 2px solid var(--admin-brand);
+  outline-offset: 2px;
 }
 
 .topbar-title {
@@ -494,10 +610,16 @@ const handleLogout = async () => {
   font-weight: 600;
   color: #111827;
   font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .topbar-user {
   font-size: 12px;
-  color: #6b7280;
+  color: #4b5563;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .admin-content {
@@ -506,10 +628,37 @@ const handleLogout = async () => {
   padding-bottom: 60px;
 }
 
+.admin-crumb {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 16px;
+  font-size: 14px;
+  color: #374151;
+}
+
+.crumb-mark {
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--admin-brand);
+}
+
+.crumb-sep {
+  color: #4b5563;
+}
+
+.crumb-page {
+  font-weight: 600;
+  color: #111827;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .icp-footer {
   background: #f8f9fa;
   border-top: 1px solid #e5e7eb;
-  padding: 15px 0;
+  padding: 15px 0 max(15px, env(safe-area-inset-bottom));
   text-align: center;
   margin-top: auto;
 }
@@ -521,13 +670,18 @@ const handleLogout = async () => {
 }
 
 .icp-footer a {
-  color: #6b7280;
+  color: #4b5563;
   text-decoration: none;
   font-size: 12px;
 }
 
 .icp-footer a:hover {
-  color: #3b82f6;
+  color: var(--admin-brand);
+}
+
+.icp-footer a:focus-visible {
+  outline: 2px solid var(--admin-brand);
+  outline-offset: 2px;
 }
 
 @media (max-width: 1024px) {
@@ -579,7 +733,9 @@ const handleLogout = async () => {
   }
   .admin-content {
     @apply p-3;
-    padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+  }
+  .admin-crumb {
+    display: none;
   }
   .sidebar-header {
     @apply p-4;
@@ -588,10 +744,10 @@ const handleLogout = async () => {
     @apply p-3;
   }
   .icp-footer {
-    padding: 10px 0;
+    padding: 10px 0 max(10px, env(safe-area-inset-bottom));
   }
   .icp-footer a {
-    font-size: 11px;
+    font-size: 12px;
   }
 }
 
@@ -601,6 +757,66 @@ const handleLogout = async () => {
   }
   .topbar-logout {
     padding: 6px 8px;
+  }
+}
+
+.skip-link {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+.skip-link:focus {
+  position: fixed;
+  left: max(12px, env(safe-area-inset-left));
+  top: max(12px, env(safe-area-inset-top));
+  z-index: 80;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 8px 12px;
+  overflow: visible;
+  clip: auto;
+  background: #fff;
+  color: var(--admin-brand);
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  outline: 2px solid var(--admin-brand);
+  outline-offset: 2px;
+}
+
+.topbar-logout {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+@media (pointer: coarse) {
+  .menu-toggle,
+  .sidebar-collapse-btn,
+  .sidebar-footer .el-button,
+  .topbar-logout {
+    min-width: 48px;
+    min-height: 48px;
+  }
+  .menu-toggle,
+  .sidebar-collapse-btn {
+    width: 48px;
+    height: 48px;
+  }
+  .sidebar-expand-rail {
+    width: 48px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-sidebar,
+  .admin-main {
+    transition: none;
   }
 }
 </style>
