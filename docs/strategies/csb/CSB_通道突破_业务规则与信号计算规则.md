@@ -60,13 +60,12 @@
 **要点说明**
 
 - **年线只判斜率，不看是否站上**：`close ≥ MA250` 不能替代斜率条件；年线下行（斜率 < `slope_min`）直接否决。
-- **独立回踩计数**：连续贴轨只计 1 次；必须「离开下轨（收盘 ≥ 下轨×(1+`touch_leave_pct`)）后再回来」才计下一次。收盘 **有效跌破下轨（深于 Spring 上限）** 的触碰 **不计入** 支撑测试。
+- **独立回踩计数**：连续贴轨只计 1 次；必须「离开下轨（收盘 ≥ 下轨×(1+`touch_leave_pct`)）后再回来」才计下一次。收盘 **有效跌破下轨（深于 Spring 上限）** 的触碰 **不计入** 支撑测试。每次计入的回踩写入 `touch_episodes`：`start_date` 为计入当天，`end_date` 为离开下轨之前的最后一天。选股表展示次数，明细列出各段起止日期。已落库的旧 trace 只有次数，重算后才有区间。
 - **地量缺换手不阻断**：若 `turnover_rate` 缺失，换手比这一项视为通过，仅按成交量比判定。
 - **地量不含信号日**：蓄势期地量在 `bars[:-1]` 上计算。信号日换手放大（BREAKOUT）不得否决 `setup_ok`，否则买点2/LPS 与 SETUP 同日互斥。
-- **回测预设结构 v3**：在 PROBE 优化过滤上，任务级将 PROBE 基准止损放宽为缓冲 **2%**、连续 **3** 日确认（通道失效仍为 1.5%/3 日），用于对照基准止损过频。
-- **回测预设结构 v4**：出场沿用 v3；入场收紧为分/**PROBE 分 ≥85**、回踩 **≥4**（对照 e7b3cbe0 失效类离场占比仍高）。
-- **回测预设结构 v5**：出场沿用 v3；入场按因子对照改为 **通道宽 ≥2%**、PROBE 回踩 **4～5**、分≥80（排除极窄通道与回踩过多）。
-- **回测预设结构 v6**：在 v5 上增加 **entry_pos ≥ 0**（信号价不低于通道下轨）。
+- **当前默认基线**：`min_score=80`；PROBE 基准止损缓冲 **2%**、连续 **3** 日；通道失效缓冲 **1.5%**、连续 **3** 日；利润保护见 6.5。这就是原先「出场 v3」加上分≥80，已写进 `get_default_csb_config()`。
+- **同 config_id 升级**：`_apply_v2_runtime` 只改写已知工厂旧值（`min_score=60`、PROBE 止损 1%/2 日、通道失效缓冲 0.5% 或确认 2 日、上影 0.30、粘合加权 20 日）。用户改成其它数值的保留。trace 按实际得分落库，读选股/回测时再按 `min_score` 过滤，**只改分数不必重跑预计算**。通道、买点、出场规则变了才需要重算。
+- 回测任务级预设见第 10 节。
 - 若 `len(bars) < 60`，通道判定直接返回 `insufficient_bars`。
 
 满足 SETUP 但未触发任何买点时，信号类型回落为 **`CSB_SETUP`（观察）**。
@@ -113,6 +112,13 @@
 | 站稳 | `close ≥ 上轨` | — |
 | 转强 | `close > open` | — |
 
+LPS 在回测里很少单独成笔，原因是规则和记账方式，不是信号被关掉：
+
+- 当天若已是 BREAKOUT，`detect_entry()` 不再记 LPS。
+- `detect_lps` 从最近一日往前找突破。最近一次突破存在、但当日 LPS 条件不成立时，直接返回，不再看窗口里更早的突破日。
+- 回测同一只股票在出场日之前不开新仓。突破单中位持有约 7 日，LPS 窗口只有 3 日，窗口内的补仓信号会被冷却跳过。LPS 只有在突破单已经出场、或突破日本身没有入选时，才可能单独出现。
+- LPS 类型分 +16，且没有 BREAKOUT 的放量加分（最多 +10）。同样的蓄势结构，LPS 往往到不了默认分≥80。
+
 ### 4.4 建议仓位
 
 | 信号 | 建议仓位 | 默认 |
@@ -141,7 +147,7 @@
 | 买点类型 | `PROBE +12 / LPS +16 / BREAKOUT +20` | 20 |
 | 放量倍数 | 仅 BREAKOUT：达到 `entry.vol_expand_mult` 记 10 分，`min(10, 10×倍数/阈值)`，超过阈值不再加分 | 10 |
 
-`total = min(100, 各项之和)`；`min_score`（默认 **60**）为入选门槛。
+`total = min(100, 各项之和)`；`min_score`（默认 **80**）为入选门槛。trace 仍保存门槛以下的买点，选股和回测读取时再筛。
 
 > 示例：粘合 19 日、带宽 0.022、回踩 4 次、地量成立、换手达标、PROBE 信号
 > → `22.8 + 9.5 + 15 + 10 + 10 + 12 = 79.3`。
@@ -173,7 +179,7 @@
 止损锚是信号里的 `entry_low`：PROBE、BREAKOUT 取 **信号日最低价**；LPS 取 **当初突破那根 K 线的最低价**。
 
 - BREAKOUT、LPS，以及 `risk_exit` 的全部买点：止损价 `= entry_low × (1 − stop_buffer_pct)`，默认缓冲 **0**。收盘价小于或等于止损价，当天离场。
-- 结构出场里的 PROBE：止损价 `= entry_low × (1 − probe_stop_buffer_pct)`，默认再下移 **1%**，并且要 **连续 `probe_stop_confirm_days` 天**（默认 **2**）收盘都在止损价之下才离场。
+- 结构出场里的 PROBE：止损价 `= entry_low × (1 − probe_stop_buffer_pct)`，默认再下移 **2%**，并且要 **连续 `probe_stop_confirm_days` 天**（默认 **3**）收盘都在止损价之下才离场。
 
 → `CSB_STOP`，`exit_reason=baseline_stop`（导出「基准止损」）。
 
@@ -207,6 +213,14 @@
 
 收盘价回到武装价或以下，或低于这条跟踪线 → `CSB_TRAIL`，`exit_reason=ma_trail`（导出「阶梯跟踪止损」）。
 
+前序最高价相对入场价的浮盈达到 `profit_lock_gain`（默认 **10%**）后进入利润保护，仍记为 `ma_trail`，明细里 `trail_kind=profit_lock`：
+
+- 跟踪地板抬到入场价 × `(1 + profit_lock_floor_pct)`（默认 **+5%**），且不低于原来的武装价；
+- 跟踪线只保留快线 MA10，不再用 MA20；
+- 收盘价相对前序最高价回撤达到 `profit_lock_giveback_pct`（默认 **8%**）也离场。
+
+当日新高仍留到收盘后才计入前序最高价。利润保护在派发之后判断，派发条件先满足时不会走到这里。
+
 ### 6.6 到期平仓
 
 观察期内以上规则都没触发，用窗口最后一根 K 线的收盘价离场。`exit_reason=horizon_end`（导出「到期平仓」）。`hit_rate` 模式不止损，同样持有到期，按末日收盘计盈亏；目标涨幅只统计期间最高价是否碰到，不提前卖出。
@@ -217,7 +231,7 @@
 |------|----------|
 | `hit_rate` | **不止损**；信号次日开盘入场，观察 `horizon_days`，按前瞻最高价是否触及目标涨幅统计命中率，到期平仓 |
 | `risk_exit` | 基准止损（缓冲 0、当日确认）→ 固定百分比止损（默认 8%）→ 到期平仓 |
-| `structure_exit` | 假突破（仅 BREAKOUT）→ 基准止损 → 通道失效（仅 PROBE）→ 派发离场 → 阶梯跟踪止损 → 到期平仓 |
+| `structure_exit` | 假突破（仅 BREAKOUT）→ 基准止损 → 通道失效（仅 PROBE）→ 派发离场 → 阶梯跟踪止损（含利润保护）→ 到期平仓 |
 
 ---
 
@@ -251,22 +265,46 @@
                 "lps_window": 3, "lps_vol_ratio_max": 0.80 },
   "position": { "probe_pct": 0.12, "breakout_add_pct": 0.25, "lps_add_pct": 0.12 },
   "defense":  { "false_break_days": 3, "trail_ma": 20, "trail_ma_fast": 10,
-                "stop_buffer_pct": 0.0, "probe_stop_buffer_pct": 0.01,
-                "probe_stop_confirm_days": 2, "trail_arm_gain": 0.03, "swing_window": 2,
+                "stop_buffer_pct": 0.0, "probe_stop_buffer_pct": 0.02,
+                "probe_stop_confirm_days": 3, "trail_arm_gain": 0.03, "swing_window": 2,
+                "profit_lock_gain": 0.10, "profit_lock_floor_pct": 0.05,
+                "profit_lock_giveback_pct": 0.08,
                 "channel_fail_buffer_pct": 0.015, "channel_fail_confirm_days": 3,
                 "distribution_min_gain": 0.08, "distribution_turnover_mult": 2.0,
                 "distribution_body_max": 0.03, "distribution_shadow_max": 0.20 },
   "scan":     { "history_bars": 280, "max_results": 0, "batch_size": 200 },
-  "backtest": { "horizon_days": 10, "target_pct": 0.10, "commission_bps": 5, "slippage_bps": 5 },
+  "backtest": { "horizon_days": 10, "target_pct": 0.10, "commission_bps": 5, "slippage_bps": 5,
+                "min_touch_count": 0, "max_touch_count": 0, "min_channel_width_pct": null,
+                "min_entry_pos_in_channel": null, "probe_min_score": null,
+                "max_signals_per_day": 0, "allowed_signal_types": null },
   "premium":  { "squeeze_days_min": 30, "squeeze_bonus": 8.0, "spring_bonus": 6.0,
                 "min_touches": 3, "vol_expand_mult": 2.5 },
-  "min_score": 60.0,
+  "min_score": 80.0,
   "min_listing_bars": 250,
   "signal_quality_mode": "standard"
 }
 ```
 
-> **参数版本升级（v1 → v2 运行时兼容）**：`_apply_v2_runtime` 在读取旧配置时，会把工厂旧值 `entry.upper_shadow_max_ratio=0.30 → 0.20`、`premium.squeeze_days_min=20 → 30` 自动升级；仅改写「恰好等于旧工厂值」的记录，用户手动改过的数值会保留。
+> **参数版本升级**：`_apply_v2_runtime` 在读取旧配置时，把恰好等于旧工厂值的项升到当前基线：`upper_shadow_max_ratio` 0.30→0.20、`squeeze_days_min` 20→30、`min_score` 60→80、PROBE 止损 1%/2 日→2%/3 日、通道失效缓冲 0.5%→1.5%、确认天数 2→3。用户改成其它数值的保留。默认行还会经 `sync_default_row_baseline` 把升级后的参数写回同一 `config_id`。
+
+---
+
+## 10. 回测预设
+
+管理端一键套用，定义在 `backtest_presets.py`。预设只改本次任务的过滤和出场覆盖，不改参数版本里的默认包。
+
+| 预设 | 作用 |
+|------|------|
+| `optimized_probe` | 结构出场、目标 5%、分≥80、回踩≥3、单日最多 30 只 |
+| `breakout_lps_only` / `breakout_lps_v3` | 排除 PROBE；v3 带上当前出场基线 |
+| `hit_rate_probe` | 只做 PROBE 的命中率，不止损 |
+| `structure_v2`～`v3` | 任务级出场覆盖；v3 的止损/通道失效数值已与当前默认相同 |
+| `structure_v4` | 出场沿用 v3；分≥85、回踩≥4 |
+| `structure_v5` | 出场沿用 v3；通道宽≥2%、回踩 4～5、分≥80 |
+| `structure_v6` | 在 v5 上增加 `entry_pos≥0`（信号价不低于通道下轨），并锁定分≥80、观察 10 日 |
+| `structure_v7` | 保留 v6 的入场过滤和出场 v3；**不锁定**最低分、PROBE 分和观察日。创建任务时没填这些字段，就用参数版本默认（当前基线分≥80、观察 10 日） |
+
+60/70/80 分段对照用 `structure_v7`，在任务上分别填写最低得分。同一股票若先出现较低分信号，会占用持仓，后面紧邻的更高分信号进不了该任务，所以三档结果不是严格嵌套。
 
 ---
 

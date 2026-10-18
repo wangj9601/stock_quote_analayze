@@ -1,6 +1,6 @@
 # CSB 通道突破策略 — 优化空间分析
 
-> 分析日期：2026-10-15
+> 本文是 2026-10-15 的对照记录，不是当前默认口径。现行规则以《CSB_通道突破_业务规则与信号计算规则.md》为准：默认分≥80、PROBE 基准止损 2%/3 日、通道失效 1.5%/3 日、阶梯跟踪含利润保护。下文里的「默认分 60」「突破几乎为 0」描述的是当时样本。
 > 依据代码：`backend_core/strategies/csb/*`（channel / setup_detector / entry_detector / defense_exit / strategy_engine / backtest_runner / config）
 > 依据数据：近一年全市场回测产出 `exported_docs/CSB_*_analysis.txt`、`CSB_factor_*`（2025-10 ~ 2026-10，含 v3~v6 多组对照）
 > 结论口径：**信号是否有空间**（hit_rate / max_gain）与 **纪律出场是否合理**（avg_pnl / 出场归因）分开看。

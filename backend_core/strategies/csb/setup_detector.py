@@ -57,7 +57,11 @@ def _spring_params(config: Dict[str, Any]) -> Dict[str, float]:
     }
 
 
-def count_support_tests(
+def _bar_date(bar: Dict[str, Any]) -> str:
+    return str(bar.get("date") or "")[:10]
+
+
+def list_support_tests(
     bars: Sequence[Dict[str, Any]],
     *,
     lower: float,
@@ -65,16 +69,18 @@ def count_support_tests(
     leave_pct: float = 0.03,
     lookback: int = 60,
     config: Optional[Dict[str, Any]] = None,
-) -> int:
-    """独立回踩次数：连续贴轨只计 1 次，离开下轨后再回来才计下一次。
+) -> List[Dict[str, Any]]:
+    """独立回踩区间。连续贴轨只计 1 次，离开下轨后再回来才计下一次。
 
-    收盘有效跌破（深于 Spring 上限）的触碰不计入支撑测试。
+    收盘有效跌破（深于收回线且不是 Spring）的触碰不计入。
+    每段 ``start_date`` 是计入当天，``end_date`` 是离开下轨之前的最后一天。
     """
     if lower <= 0 or not bars:
-        return 0
+        return []
     sp = _spring_params(config or {})
     start = max(0, len(bars) - int(lookback))
-    tests = 0
+    episodes: List[Dict[str, Any]] = []
+    open_ep: Optional[Dict[str, Any]] = None
     armed = True
     touch_line = lower * (1.0 + touch_tol_pct)
     leave_line = lower * (1.0 + leave_pct)
@@ -85,6 +91,7 @@ def count_support_tests(
         close = _f(b.get("close"))
         touching = (low is not None and low <= touch_line) or (close is not None and close <= touch_line)
         left = close is not None and close >= leave_line and not touching
+        day = _bar_date(b)
         if touching and armed:
             vol_avg = _mean_volume(bars[max(0, i - 20) : i], 20)
             spring = bar_is_spring(
@@ -97,11 +104,44 @@ def count_support_tests(
             )
             reclaimed = close is not None and close >= reclaim_line
             if reclaimed or spring:
-                tests += 1
+                open_ep = {
+                    "start_date": day,
+                    "end_date": day,
+                    "kind": "spring" if spring else "reclaim",
+                }
+                episodes.append(open_ep)
+            else:
+                open_ep = None
             armed = False
+        elif open_ep is not None and not left:
+            if day:
+                open_ep["end_date"] = day
         if left:
             armed = True
-    return tests
+            open_ep = None
+    return episodes
+
+
+def count_support_tests(
+    bars: Sequence[Dict[str, Any]],
+    *,
+    lower: float,
+    touch_tol_pct: float,
+    leave_pct: float = 0.03,
+    lookback: int = 60,
+    config: Optional[Dict[str, Any]] = None,
+) -> int:
+    """独立回踩次数：连续贴轨只计 1 次，离开下轨后再回来才计下一次。"""
+    return len(
+        list_support_tests(
+            bars,
+            lower=lower,
+            touch_tol_pct=touch_tol_pct,
+            leave_pct=leave_pct,
+            lookback=lookback,
+            config=config,
+        )
+    )
 
 
 def find_springs(
@@ -226,8 +266,8 @@ def detect_setup(
 
     ma250 = check_ma250_defense(bars, config)
     lower = _f(channel.get("lower"))
-    touches = (
-        count_support_tests(
+    touch_episodes = (
+        list_support_tests(
             bars,
             lower=lower or 0.0,
             touch_tol_pct=touch_tol,
@@ -236,8 +276,9 @@ def detect_setup(
             config=config,
         )
         if lower
-        else 0
+        else []
     )
+    touches = len(touch_episodes)
     touch_ok = touches >= min_touches
     springs = find_springs(bars, lower=lower or 0.0, lookback=lookback, config=config) if lower else []
     spring_low = None
@@ -264,6 +305,7 @@ def detect_setup(
         "turnover_avg_20": avg_to,
         "turnover_ok": turnover_ok,
         "touch_count": touches,
+        "touch_episodes": touch_episodes,
         "touch_ok": touch_ok,
         "spring_ok": bool(springs),
         "spring_count": len(springs),

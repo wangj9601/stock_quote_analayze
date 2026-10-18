@@ -88,6 +88,18 @@
       const tbody = document.querySelector('#traceTable tbody');
       if (tbody) {
         tbody.addEventListener('click', (e) => {
+          const recomputeBtn = e.target.closest('.csb-recompute-stock');
+          if (recomputeBtn) {
+            e.preventDefault();
+            const scope = recomputeBtn.getAttribute('data-scope') || 'all';
+            const day = (recomputeBtn.getAttribute('data-date') || '').trim();
+            if (scope === 'day') {
+              this.forceComputeRange(day, day, `只重算 ${day} 这一天的 CSB 信号，其它日期保留。是否继续？`);
+            } else {
+              this.forceComputeRange('', '', '将重新计算该股全部历史 CSB 信号并覆盖预计算。可能需要几分钟。是否继续？');
+            }
+            return;
+          }
           const detailBtn = e.target.closest('.csb-score-detail-toggle');
           if (!detailBtn) return;
           e.preventDefault();
@@ -183,13 +195,26 @@
         return;
       }
       const label = this.getActiveConfigLabel();
-      if (!confirm(`将按「${label}」重新计算该股全部历史 CSB 信号并写入预计算表（仅影响该策略版本，耗时可能较长），是否继续？`)) {
+      const startDate = (document.getElementById('startDate')?.value || '').trim();
+      const endDate = (document.getElementById('endDate')?.value || '').trim();
+      const span = startDate || endDate ? `${startDate || '最早'}～${endDate || '最新'}` : '全部历史';
+      if (!confirm(`将按「${label}」重新计算该股 ${span} 的 CSB 信号并写入预计算。区间外的记录保留。是否继续？`)) {
         return;
       }
       void this.startForceComputeTask();
     }
 
-    async startForceComputeTask() {
+    forceComputeRange(startDate, endDate, message) {
+      if (this.forceComputeRunning) return;
+      if (!this.code) {
+        alert('请先选择股票');
+        return;
+      }
+      if (message && !confirm(message)) return;
+      void this.startForceComputeTask({ start: startDate || '', end: endDate || '' });
+    }
+
+    async startForceComputeTask(range) {
       this.clearForceComputePoll();
       this.setForceComputeRunning(true);
       const area = document.getElementById('forceComputeProgress');
@@ -200,8 +225,12 @@
       const loading = document.getElementById('loadingMsg');
       if (loading) loading.style.display = 'none';
 
-      const startDate = (document.getElementById('startDate')?.value || '').trim();
-      const endDate = (document.getElementById('endDate')?.value || '').trim();
+      const startDate = range
+        ? String(range.start || '').trim()
+        : (document.getElementById('startDate')?.value || '').trim();
+      const endDate = range
+        ? String(range.end || '').trim()
+        : (document.getElementById('endDate')?.value || '').trim();
 
       try {
         const resp = await fetch(`${apiBase}/api/stock/csb/recompute`, {
@@ -328,11 +357,12 @@
           <td>${fmt(r.channel_lower)}</td>
           <td>${fmt(r.channel_upper)}</td>
           <td>${r.squeeze_days != null ? String(r.squeeze_days) : '--'}</td>
+          <td>${r.touch_count != null ? String(r.touch_count) : '--'}</td>
           <td>${fmt(r.entry_low)}</td>
           <td><button type="button" class="action-link csb-score-detail-toggle" data-row="${index}" title="展开/收起信号计算明细">明细</button></td>
         </tr>
         <tr class="gms-score-detail-row csb-score-detail-row" data-detail-for="${index}" style="display:none;">
-          <td colspan="11" class="gms-score-detail-cell">${detailHtml}</td>
+          <td colspan="12" class="gms-score-detail-cell">${detailHtml}</td>
         </tr>`;
       }).join('');
     }

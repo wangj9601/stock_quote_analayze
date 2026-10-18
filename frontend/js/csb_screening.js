@@ -237,7 +237,7 @@
     document.getElementById('csbResultsCount').textContent = `共 ${list.length} 只`;
     if (!list.length) {
       const emptyText = opts.emptyHint || '无符合条件的结果';
-      body.innerHTML = `<tr><td colspan="9" class="empty-state">${esc(emptyText)}</td></tr>`;
+      body.innerHTML = `<tr><td colspan="10" class="empty-state">${esc(emptyText)}</td></tr>`;
       return;
     }
     body.innerHTML = list
@@ -267,10 +267,11 @@
           <td class="csb-num">${fmt(r.channel_lower)}</td>
           <td class="csb-num">${fmt(r.channel_upper)}</td>
           <td class="csb-num">${r.squeeze_days != null ? String(r.squeeze_days) : '-'}</td>
+          <td class="csb-num">${r.touch_count != null ? String(r.touch_count) : '-'}</td>
           <td class="gms-col-actions"><div class="action-links csb-action-links">${ops.join('')}</div></td>
         </tr>
         <tr class="gms-score-detail-row csb-score-detail-row" data-detail-for="${index}" hidden>
-          <td colspan="9" class="gms-score-detail-cell csb-score-detail-cell">${detailHtml}</td>
+          <td colspan="10" class="gms-score-detail-cell csb-score-detail-cell">${detailHtml}</td>
         </tr>`;
       })
       .join('');
@@ -346,6 +347,83 @@
     }
   }
 
+  let recomputeBusy = false;
+
+  async function recomputeStock(btn) {
+    if (recomputeBusy) {
+      toast('已有一只股票正在重算', 'info');
+      return;
+    }
+    const code = (btn.getAttribute('data-code') || '').trim();
+    const name = (btn.getAttribute('data-name') || '').trim() || code;
+    const configRaw = (btn.getAttribute('data-config-id') || document.getElementById('csbConfigId')?.value || '').trim();
+    const configId = /^\d+$/.test(configRaw) ? Number(configRaw) : null;
+    if (!code) {
+      toast('缺少股票代码', 'warning');
+      return;
+    }
+    const scope = (btn.getAttribute('data-scope') || 'all').trim();
+    const day = (btn.getAttribute('data-date') || '').trim();
+    if (scope === 'day' && !/^\d{4}-\d{2}-\d{2}$/.test(day)) {
+      toast('缺少基准日', 'warning');
+      return;
+    }
+    const prompt = scope === 'day'
+      ? `只重算 ${name}（${code}）在 ${day} 的 CSB 信号，并覆盖这一天的预计算。其它日期保留。是否继续？`
+      : `将按当前参数版本重算 ${name}（${code}）的全部历史 CSB 信号，并覆盖写入预计算。只影响这一只股票，可能需要几分钟。是否继续？`;
+    const ok = window.confirm(prompt);
+    if (!ok) return;
+    const actions = btn.parentElement;
+    const status = actions?.querySelector('.csb-recompute-status');
+    const setStatus = (text) => {
+      if (status) status.textContent = text;
+    };
+    recomputeBusy = true;
+    actions?.querySelectorAll('.csb-recompute-stock').forEach((el) => {
+      el.disabled = true;
+    });
+    try {
+      setStatus('正在提交…');
+      const body = { code };
+      if (configId != null) body.config_id = configId;
+      if (scope === 'day') {
+        body.start_date = day;
+        body.end_date = day;
+      }
+      const started = await api('/api/stock/csb/recompute', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      const taskId = started.data && started.data.task_id;
+      if (!taskId) throw new Error('未返回任务 ID');
+      if (started.data.already_running) setStatus(started.message || '该股正在重算');
+      for (let i = 0; i < 3600; i += 1) {
+        const st = await api(`/api/stock/csb/recompute/${encodeURIComponent(taskId)}`);
+        const task = st.data || {};
+        const pct = task.progress != null ? `${task.progress}%` : '';
+        setStatus([task.message, pct].filter(Boolean).join(' · ') || '计算中…');
+        if (task.status === 'completed') {
+          toast(`${name} 预计算已更新`, 'success');
+          await refreshSignals();
+          return;
+        }
+        if (task.status === 'failed') {
+          throw new Error(task.error || task.message || '计算失败');
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+      throw new Error('等待超时，请稍后刷新筛选');
+    } catch (e) {
+      toast(e.message || '重算失败', 'error');
+      setStatus(e.message || '重算失败');
+      actions?.querySelectorAll('.csb-recompute-stock').forEach((el) => {
+        el.disabled = false;
+      });
+    } finally {
+      recomputeBusy = false;
+    }
+  }
+
   function toggleDetail(rowIndex, btnEl) {
     const tbody = document.getElementById('csbResultsBody');
     const detailRow = tbody?.querySelector(`tr.csb-score-detail-row[data-detail-for="${rowIndex}"]`);
@@ -382,7 +460,7 @@
     if (loading) loading.style.display = 'flex';
     setLoadingTip('筛选中...');
     if (body) {
-      body.innerHTML = '<tr><td colspan="9" class="empty-state">筛选中…</td></tr>';
+      body.innerHTML = '<tr><td colspan="10" class="empty-state">筛选中…</td></tr>';
     }
     try {
       if (!observeCodesLoaded) {
@@ -517,7 +595,7 @@
       });
     } catch (e) {
       showErr(e.message || String(e));
-      if (body) body.innerHTML = '<tr><td colspan="9" class="empty-state">加载失败</td></tr>';
+      if (body) body.innerHTML = '<tr><td colspan="10" class="empty-state">加载失败</td></tr>';
     } finally {
       if (loading) loading.style.display = 'none';
       if (btn) btn.disabled = false;
@@ -540,6 +618,12 @@
       refreshSignals();
     });
     document.getElementById('csbResultsBody')?.addEventListener('click', (e) => {
+      const recomputeBtn = e.target.closest('.csb-recompute-stock');
+      if (recomputeBtn) {
+        e.preventDefault();
+        void recomputeStock(recomputeBtn);
+        return;
+      }
       const observeBtn = e.target.closest('.csb-trade-observe-add');
       if (observeBtn) {
         e.preventDefault();

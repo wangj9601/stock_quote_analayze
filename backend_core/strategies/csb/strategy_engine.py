@@ -327,7 +327,7 @@ def evaluate_one(
     score_detail = compute_score_detail(score_entry, cfg)
 
     setup_keys = (
-        "reason", "turnover_avg_20", "turnover_ok", "touch_count",
+        "reason", "turnover_avg_20", "turnover_ok", "touch_count", "touch_episodes",
         "touch_ok", "ma250", "dry_vol", "channel", "setup_ok",
         "spring_ok", "spring_count", "spring_low",
     )
@@ -357,6 +357,7 @@ def evaluate_one(
         "hh20": entry.get("channel", {}).get("hh20"),
         "resistance": entry.get("channel", {}).get("resistance") or entry.get("resistance"),
         "touch_count": entry.get("touch_count"),
+        "touch_episodes": entry.get("touch_episodes") or [],
         "entry_low": entry.get("entry_low"),
         "vol_expand_mult": entry.get("vol_expand_mult"),
         "vol_ratio_5_20": entry.get("vol_ratio_5_20"),

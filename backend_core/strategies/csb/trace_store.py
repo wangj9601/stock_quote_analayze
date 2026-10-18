@@ -45,6 +45,7 @@ def _row_to_dict(r) -> Dict[str, Any]:
         "hh20": channel.get("hh20"),
         "resistance": channel.get("resistance") or entry.get("resistance"),
         "touch_count": setup.get("touch_count"),
+        "touch_episodes": setup.get("touch_episodes") or [],
         "entry_low": r.entry_low,
         "vol_expand_mult": entry.get("vol_expand_mult"),
         "vol_ratio_5_20": entry.get("vol_ratio_5_20"),

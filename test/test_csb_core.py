@@ -129,6 +129,43 @@ def test_support_tests_cluster_counts_once():
     assert n == 2
 
 
+def test_support_test_episodes_have_start_and_end():
+    from backend_core.strategies.csb.setup_detector import list_support_tests
+
+    bars = []
+    seq = [
+        (10.00, 10.05),
+        (9.98, 10.02),
+        (9.99, 10.04),
+        (10.35, 10.50),
+        (10.00, 10.08),
+    ]
+    for i, (low, close) in enumerate(seq):
+        bars.append(
+            {
+                "date": f"2024-05-{i+1:02d}",
+                "open": close,
+                "high": close + 0.05,
+                "low": low,
+                "close": close,
+                "volume": 1_000_000,
+            }
+        )
+    episodes = list_support_tests(
+        bars,
+        lower=10.0,
+        touch_tol_pct=0.015,
+        leave_pct=0.03,
+        lookback=10,
+        config=get_default_csb_config(),
+    )
+    assert [(e["start_date"], e["end_date"]) for e in episodes] == [
+        ("2024-05-01", "2024-05-03"),
+        ("2024-05-05", "2024-05-05"),
+    ]
+    assert all(e["kind"] == "reclaim" for e in episodes)
+
+
 def test_ma250_requires_flat_or_up_slope():
     from backend_core.strategies.csb.setup_detector import check_ma250_defense
 

@@ -16,7 +16,7 @@
   → 买点1 PROBE（缩量止跌/Spring）
   → 买点2 BREAKOUT（放量实体阳线突破上轨）
   → 买点3 LPS（突破后缩量回踩确认）
-  → 防守：假突破 / 基准止损 / 通道失效 / 派发 / 阶梯跟踪 / 到期平仓
+  → 防守：假突破 / 基准止损 / 通道失效 / 派发 / 阶梯跟踪（含利润保护）/ 到期平仓
 ```
 
 ---
@@ -25,19 +25,20 @@
 
 | 文件 | 职责 |
 |------|------|
-| `config.py` | `CSBConfigManager`：默认参数、`csb_strategy_configs` 多版本 CRUD、缓存、v1→v2 运行时兼容升级；信号类型常量 |
+| `config.py` | `CSBConfigManager`：默认参数（基线分≥80、出场 v3、利润保护）、多版本 CRUD、缓存；读取时把工厂旧值升到当前基线，并可将默认行写回同一 `config_id` |
 | `indicators.py` | 纯函数指标（SMA、归一化斜率、均量/均换手、实体%、上影比）—— 可单测 |
 | `channel.py` | 通道：MA5/10/20/60 计算、上下轨、粘合带宽、连续粘合天数、HH20、通道状态 |
 | `setup_detector.py` | SETUP：换手初筛、年线斜率、独立回踩计数、Spring、地量（**地量默认不含信号日**） |
 | `entry_detector.py` | 买点：`detect_probe` / `detect_breakout` / `confirm_lps` / `detect_lps` / `detect_entry`（优先级 BREAKOUT>LPS>PROBE；BREAKOUT 当日 setup 失败时可回退前一日） |
-| `defense_exit.py` | 防守出场：假突破、基准止损、通道失效、派发、阶梯跟踪、到期平仓；`evaluate_structure_exit_rules` / `evaluate_risk_exit_rules` |
+| `defense_exit.py` | 防守出场：假突破（仅 BREAKOUT）、基准止损、通道失效（仅 PROBE）、派发、阶梯跟踪与利润保护、到期平仓 |
 | `strategy_engine.py` | `evaluate_one`（单票）、`CSBStrategyEngine.screen`（全市场/池扫描）、`screen_universe_for_dates`（区间一次扫描）、`compute_score_detail` |
 | `data_loader.py` | `CSBDataLoader`：候选池、日 K 加载（单票/区间/批量分块流式，OOM 自动降级）、交易日解析、批量分块估算 |
 | `trace_store.py` | `csb_signal_trace` 读写：upsert、按股查询、按日买点查询、purge、扫描标记 `__CSB_SCANNED__`、覆盖度判定 |
 | `signal_storage.py` | 信号落库封装（`upsert_signal_traces` / `load_traces`） |
-| `frontend_interface.py` | 对外选股入口：`CSBFrontendInterface.screen`（优先读 trace，全市场现算默认禁止） |
+| `frontend_interface.py` | 对外选股入口：优先读 trace；全市场现算默认关闭（`CSB_ALLOW_FULL_MARKET_REALTIME`）。开启后现算结果可回写 trace |
 | `scheduled_precompute.py` | 日终预计算、区间 trace 刷新、cron 入口 `scheduled_csb_signals_cn` |
-| `backtest_runner.py` | 回测执行器：多出场模式、次日开盘入场、评分/因子分桶、命中率对照 |
+| `backtest_presets.py` | 回测预设 v2～v7；v7 不锁定最低分和观察日 |
+| `backtest_runner.py` | 回测执行器：多出场模式、次日开盘入场、同股持仓冷却、评分/因子分桶、命中率对照 |
 | `backtest_worker.py` | 后台回测线程：暂停/继续/取消协作式控制、自动创建命中率对照任务 |
 | `backtest_storage.py` | 回测任务/报告持久化（`csb_backtest_tasks`） |
 | `backtest_factor_report.py` | 因子展平、评分分桶、因子分桶、命中率对照结构 |
@@ -52,6 +53,7 @@ GET /api/screening/csb-strategy
       → [prefer_cache] trace_store.query_buy_signals_for_date   （命中 → source=csb_signal_trace）
       → [未命中且限定代码池] CSBStrategyEngine.screen          （现算）
       → [未命中且全市场] 默认返回 need_precompute
+      → [环境变量允许全市场现算] 现算后 persist_realtime 回写 trace
 ```
 
 **调用链（回测）**

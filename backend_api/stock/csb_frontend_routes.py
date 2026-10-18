@@ -113,21 +113,35 @@ def _recompute_csb_trace_for_stock(
     from backend_core.strategies.csb.strategy_engine import CSBStrategyEngine
 
     code_n = _normalize_code(code)
-    q = db.query(HistoricalQuotes.date).filter(HistoricalQuotes.code == code_n)
+    start_d = None
+    end_d = None
     if start_date:
-        q = q.filter(cast(HistoricalQuotes.date, String) >= str(start_date)[:10])
+        start_d = datetime.strptime(str(start_date)[:10], "%Y-%m-%d").date()
     if end_date:
-        q = q.filter(cast(HistoricalQuotes.date, String) <= str(end_date)[:10])
+        end_d = datetime.strptime(str(end_date)[:10], "%Y-%m-%d").date()
+    scoped = start_d is not None or end_d is not None
+
+    q = db.query(HistoricalQuotes.date).filter(HistoricalQuotes.code == code_n)
+    if start_d is not None:
+        q = q.filter(cast(HistoricalQuotes.date, String) >= start_d.isoformat())
+    if end_d is not None:
+        q = q.filter(cast(HistoricalQuotes.date, String) <= end_d.isoformat())
     dates = sorted(str(r[0])[:10] for r in q.distinct().order_by(HistoricalQuotes.date).all() if r[0])
+
+    del_q = db.query(CSBSignalTrace).filter(
+        CSBSignalTrace.code == code_n,
+        CSBSignalTrace.config_id == int(config_id),
+    )
+    if scoped:
+        if start_d is not None:
+            del_q = del_q.filter(CSBSignalTrace.trade_date >= start_d)
+        if end_d is not None:
+            del_q = del_q.filter(CSBSignalTrace.trade_date <= end_d)
+    del_q.delete(synchronize_session=False)
+    db.commit()
+
     if not dates:
         return 0
-
-    (
-        db.query(CSBSignalTrace)
-        .filter(CSBSignalTrace.code == code_n, CSBSignalTrace.config_id == int(config_id))
-        .delete(synchronize_session=False)
-    )
-    db.commit()
 
     loader = CSBDataLoader(db)
     engine = CSBStrategyEngine(loader, config)
@@ -175,6 +189,13 @@ def _run_recompute_background(
             end_date=end_date,
             progress_cb=progress_cb,
         )
+        span = ""
+        if start_date or end_date:
+            span = f"{str(start_date or '')[:10] or '…'}～{str(end_date or '')[:10] or '…'}"
+        done = f"已按「{config_display}」重新计算"
+        if span:
+            done += f" {span}"
+        done += f"，写入 {count} 条"
         _update_recompute_task(
             task_id,
             status="completed",
@@ -182,7 +203,7 @@ def _run_recompute_background(
             saved_count=count,
             current=count,
             total=count,
-            message=f"已按「{config_display}」重新计算，写入 {count} 条",
+            message=done,
         )
         logger.info("CSB 追溯异步重算完成: %s config_id=%s, 写入 %s 条", code, config_id, count)
     except Exception as e:
