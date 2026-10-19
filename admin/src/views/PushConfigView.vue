@@ -437,7 +437,11 @@ function confirmTrigger(row: {
       try {
         const res = await pushService.triggerPushConfigById(row.id, { force: !row.enabled })
         if (res.success) {
-          ElMessage.success(res.message || '推送成功')
+          if (!res.record_id) {
+            ElMessage.warning(res.message || '当日没有可推送内容，未发送')
+          } else {
+            ElMessage.success(res.message || '推送成功')
+          }
         } else {
           ElMessage.error(res.message || '推送失败')
         }

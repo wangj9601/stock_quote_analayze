@@ -583,6 +583,22 @@ class PushService:
 
             report_info = report_result.report_info
             report_path = report_result.file_path
+            # 无买点 / 无自选：生成成功但没有文件，按跳过处理，不要报成缺路径
+            if report_info is not None and not report_path and not report_info.has_data:
+                reason = report_result.error_message or "当日没有可推送的信号，未发送"
+                logger.info("用户 %s 任务 %s 未发送：%s", user_id, config.report_type, reason)
+                log_data_missing(
+                    user_id=user_id,
+                    missing_stocks=[],
+                    context="no_report_file",
+                )
+                return PushResult(
+                    user_id=user_id,
+                    success=True,
+                    channel_results=[],
+                    record_id=None,
+                    error_message=reason,
+                )
             if report_info is None or not report_path:
                 error_msg = "报告生成成功但缺少报告信息或文件路径"
                 logger.error(f"用户 {user_id}: {error_msg}")

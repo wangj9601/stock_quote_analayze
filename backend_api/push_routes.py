@@ -824,6 +824,12 @@ def admin_trigger_push_config(
             force=bool(force),
         )
         if result.success:
+            if result.record_id is None:
+                return TriggerPushResponse(
+                    success=True,
+                    message=result.error_message or "当日没有可推送内容，未发送",
+                    record_id=None,
+                )
             return TriggerPushResponse(
                 success=True,
                 message=f"已立即推送（{config.report_type}）",
