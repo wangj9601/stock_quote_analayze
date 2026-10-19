@@ -29,6 +29,7 @@ VALID_PUSH_REPORT_TYPES = (
     "detailed",
     "gms_daily",
     "urt_daily",
+    "csb_daily",
     "volume_aberration",
     "triple_volume_observe_scan",
     "triple_volume_observe_eval",
@@ -801,11 +802,10 @@ def admin_trigger_push_config(
                 detail="该推送任务未启用；如需仍推送请传 force=true",
             )
         # 与定时任务区分：管理端手工「立即推送」入口
-        action_label = (
-            "URT策略通知立即推送"
-            if config.report_type == "urt_daily"
-            else "管理端立即推送"
-        )
+        action_label = {
+            "urt_daily": "URT策略通知立即推送",
+            "csb_daily": "CSB通道突破策略通知立即推送",
+        }.get(config.report_type, "管理端立即推送")
         logger.info(
             "%s（非定时任务）: config_id=%s user_id=%s report_type=%s admin_id=%s force=%s",
             action_label,

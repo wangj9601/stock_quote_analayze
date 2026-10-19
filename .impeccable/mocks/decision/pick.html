@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box} html,body{margin:0;height:900px;overflow:hidden}
+body{font-family:"Noto Sans SC",sans-serif;background:#f7f4ee;color:#161616}
+.mast{border-bottom:3px solid #161616;padding:12px 20px;display:flex;justify-content:space-between;align-items:flex-end}
+.mast h1{margin:0;font-size:28px;letter-spacing:.2em}
+.mast small{letter-spacing:.12em}
+.secs{display:flex;gap:18px;padding:8px 20px;border-bottom:1px solid #161616;font-size:13px}
+.secs b{border-bottom:2px solid #b42318}
+.cols{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:0;height:calc(900px - 92px)}
+.col{border-right:1px solid #161616;padding:14px 16px}
+.col h2{margin:0 0 8px;font-size:16px;border-bottom:1px solid #161616}
+.item{padding:8px 0;border-bottom:1px solid #ddd;font-size:13px}
+.red{color:#b42318;font-weight:700}
+</style></head><body>
+<header class="mast"><h1>冰枫堂</h1><small>管理端 · 2026-10-19</small></header>
+<nav class="secs"><b>今日</b><span>策略</span><span>采集</span><span>审计</span></nav>
+<div class="cols">
+  <section class="col"><h2>今日</h2>
+    <div class="item">每日复盘 <span class="red">未完成</span></div>
+    <div class="item">策略推荐 12 条待发</div>
+    <div class="item">推送 企业微信 已发</div>
+  </section>
+  <section class="col"><h2>策略作业</h2>
+    <div class="item">GMS default 观察股 128</div>
+    <div class="item">URT 预计算 进行中</div>
+    <div class="item">CSB 通道突破 无覆盖</div>
+  </section>
+  <section class="col"><h2>采集</h2>
+    <div class="item">行情日线 <span class="red">失败 1</span></div>
+    <div class="item">工作流 上次 09:40</div>
+    <div class="item">基础资料 正常</div>
+  </section>
+</div>
+</body></html>
+

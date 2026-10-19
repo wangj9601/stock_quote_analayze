@@ -27,6 +27,7 @@
         @click="emit('navigate')"
       >
         <span class="nav-text">{{ child.name }}</span>
+        <span class="nav-code">{{ child.code }}</span>
       </router-link>
     </div>
   </div>
@@ -37,7 +38,7 @@ import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowDown } from '@element-plus/icons-vue'
 
-type MenuChild = { path: string; name: string }
+type MenuChild = { path: string; name: string; code: string }
 
 const props = defineProps<{
   name: string
@@ -67,11 +68,13 @@ watch(
 
 <style scoped lang="postcss">
 .nav-item {
-  @apply flex items-center px-4 py-3 text-gray-700 rounded-lg;
+  @apply flex items-center px-3 py-2;
   min-height: 44px;
   box-sizing: border-box;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 20px;
+  color: var(--admin-nav-ink, #f3f1ec);
+  border-radius: 2px;
   text-decoration: none;
   cursor: pointer;
   user-select: none;
@@ -81,25 +84,25 @@ watch(
 }
 
 .nav-item:active {
-  background: #e5e7eb;
+  background: rgba(243, 241, 236, 0.12);
 }
 
 .nav-item.active {
-  background: var(--admin-brand-soft, #f4efe3);
-  color: var(--admin-brand, #6b5420);
+  background: var(--admin-manila, #d7b56d);
+  color: var(--admin-ink, #1a2332);
 }
 
 .nav-group-toggle.active {
   background: transparent;
-  color: var(--admin-brand, #6b5420);
+  color: var(--admin-nav-ink, #f3f1ec);
 }
 
 .nav-group-toggle.active .nav-text {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .nav-item:focus-visible {
-  outline: 2px solid var(--admin-brand, #6b5420);
+  outline: 2px solid var(--admin-manila, #d7b56d);
   outline-offset: 2px;
 }
 
@@ -127,7 +130,7 @@ watch(
 }
 
 .nav-group-toggle.active:active {
-  background: #e5e7eb;
+  background: rgba(243, 241, 236, 0.12);
 }
 
 .nav-chevron {
@@ -141,10 +144,21 @@ watch(
 }
 
 .nav-children {
-  @apply ml-3 pl-3 border-l border-gray-200 mb-1;
+  margin: 0 0 4px 8px;
+  padding-left: 8px;
+  border-left: 1px solid rgba(243, 241, 236, 0.28);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+}
+
+.nav-code {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
 }
 
 .nav-child {
@@ -153,7 +167,7 @@ watch(
 }
 
 .nav-child.active:active {
-  background: #e7dcc4;
+  background: #e4c98a;
 }
 
 .nav-child .nav-text {
@@ -166,13 +180,16 @@ watch(
 
 @media (hover: hover) and (pointer: fine) {
   .nav-item {
-    font-size: 14px;
+    min-height: 32px;
+    font-size: 13px;
+    padding-top: 4px;
+    padding-bottom: 4px;
   }
   .nav-item:hover {
-    background: #f3f4f6;
+    background: rgba(243, 241, 236, 0.1);
   }
   .nav-child.active:hover {
-    background: var(--admin-brand-soft, #f4efe3);
+    background: var(--admin-manila, #d7b56d);
   }
   .nav-child .nav-text {
     font-size: 13px;

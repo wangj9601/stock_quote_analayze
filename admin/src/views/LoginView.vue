@@ -1,16 +1,16 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-    <div class="max-w-md w-full space-y-8 flex-1 flex flex-col justify-center">
+  <div class="login-shell">
+    <div class="login-card">
       <div>
-        <h2 class="text-center text-3xl font-extrabold text-gray-900 login-brand">
+        <h2 class="login-brand">
           冰枫堂
         </h2>
-        <p class="mt-2 text-center text-sm text-gray-600">
-          管理后台
+        <p class="login-sub">
+          管理端
         </p>
       </div>
       <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
-        <div class="rounded-md shadow-sm -space-y-px">
+        <div class="login-fields">
           <div>
             <label for="username" class="sr-only">用户名</label>
             <input
@@ -19,7 +19,7 @@
               name="username"
               type="text"
               required
-              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-gray-700 focus:border-gray-700 focus:z-10 sm:text-sm"
+              class="login-field login-field-top"
               placeholder="用户名"
             />
           </div>
@@ -31,7 +31,7 @@
               name="password"
             type="password"
               required
-              class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-gray-700 focus:border-gray-700 focus:z-10 sm:text-sm"
+              class="login-field login-field-bottom"
               placeholder="密码"
             />
           </div>
@@ -41,7 +41,7 @@
           <button
             type="submit"
             :disabled="loading"
-            class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-gray-900 hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-700 disabled:opacity-50"
+            class="login-submit"
           >
             <span v-if="loading" class="absolute left-0 inset-y-0 flex items-center pl-3">
               <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -117,9 +117,83 @@ const handleLogin = async () => {
 </script>
 
 <style scoped>
+.login-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #f3f1ec;
+  color: #1a2332;
+  padding: 3rem 1rem 0;
+}
+
 .login-brand {
-  letter-spacing: 0.12em;
-  color: #6b5420;
+  margin: 0;
+  text-align: center;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #234e70;
+}
+
+.login-sub {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: #3e4c59;
+}
+
+.login-field {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid #c9c3b8;
+  background: #fff;
+  color: #1a2332;
+  font: inherit;
+  font-size: 14px;
+}
+
+.login-field-top {
+  border-bottom: none;
+}
+
+.login-field:focus {
+  outline: 2px solid #234e70;
+  outline-offset: 1px;
+  position: relative;
+  z-index: 1;
+}
+
+.login-submit {
+  position: relative;
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid #234e70;
+  border-radius: 2px;
+  background: #234e70;
+  color: #f3f1ec;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+}
+
+.login-submit:hover {
+  background: #1b3d58;
+}
+
+.login-submit:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.login-submit:focus-visible {
+  outline: 2px solid #d7b56d;
+  outline-offset: 2px;
 }
 
 .login-container {
@@ -148,11 +222,12 @@ const handleLogin = async () => {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 2rem;
-  background-color: white;
+  gap: 1.5rem;
+  background: #fff;
   padding: 2rem;
-  border-radius: 0.5rem;
-  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  border: 1px solid #c9c3b8;
+  border-radius: 2px;
+  box-shadow: 0 10px 24px rgba(26, 35, 50, 0.08);
 }
 
 .login-header {
@@ -173,8 +248,8 @@ const handleLogin = async () => {
 
 /* ICP备案信息样式 */
 .icp-footer {
-  background: rgba(0, 0, 0, 0.05);
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  background: transparent;
+  border-top: 1px solid #c9c3b8;
   padding: 15px 0;
   text-align: center;
   margin-top: auto;
@@ -188,14 +263,14 @@ const handleLogin = async () => {
 }
 
 .icp-footer a {
-  color: #6b7280;
+  color: #3e4c59;
   text-decoration: none;
   font-size: 12px;
   transition: color 0.3s ease;
 }
 
 .icp-footer a:hover {
-  color: #3b82f6;
+  color: #234e70;
 }
 
 /* 响应式ICP备案 */

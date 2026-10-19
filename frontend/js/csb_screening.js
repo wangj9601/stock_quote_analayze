@@ -610,6 +610,27 @@
     void loadObserveCodes();
     document.getElementById('csbScope')?.addEventListener('change', () => syncScopeUI());
     document.getElementById('csbRefreshBtn')?.addEventListener('click', () => refreshSignals());
+    document.getElementById('csbHistoryBtn')?.addEventListener('click', () => {
+      const code = (document.getElementById('csbStockCode')?.value || '').trim();
+      const end = (document.getElementById('csbDate')?.value || '').trim();
+      const configRaw = (document.getElementById('csbConfigId')?.value || '').trim();
+      const q = new URLSearchParams();
+      if (code) q.set('code', code);
+      if (end) {
+        q.set('end', end);
+        const endDate = new Date(`${end}T00:00:00`);
+        if (!Number.isNaN(endDate.getTime())) {
+          const start = new Date(endDate.getTime() - 90 * 24 * 60 * 60 * 1000);
+          const y = start.getFullYear();
+          const m = String(start.getMonth() + 1).padStart(2, '0');
+          const d = String(start.getDate()).padStart(2, '0');
+          q.set('start', `${y}-${m}-${d}`);
+        }
+      }
+      if (/^\d+$/.test(configRaw)) q.set('config_id', configRaw);
+      const href = `stock_csb_trace.html${q.toString() ? `?${q}` : ''}`;
+      window.open(href, '_blank', 'noopener');
+    });
     document.getElementById('csbStockCode')?.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       const scope = document.getElementById('csbScope')?.value || 'market';

@@ -238,12 +238,12 @@ refreshSystemStatus()
   margin: 0;
   font-size: 20px;
   font-weight: 650;
-  color: #111827;
+  color: #1a2332;
 }
 .ops-code {
   font-weight: 700;
   letter-spacing: 0.06em;
-  color: #6b5420;
+  color: #234e70;
   margin-right: 8px;
 }
 .ops-sub {
@@ -260,9 +260,9 @@ refreshSystemStatus()
   margin: 12px 0;
   padding: 8px 12px;
   background: #fff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #c9c3b8;
   border-radius: 2px;
-  color: #374151;
+  color: #1a2332;
   font-size: 13px;
 }
 .ops-status span {

@@ -223,10 +223,10 @@ class PushService:
                         )
                         skipped_count += 1
                         continue
-                # URT：仅 A 股策略，A 股休市日跳过
-                if config.report_type == "urt_daily":
-                    skip_urt = False
-                    urt_skip_reason = ""
+                # URT / CSB：仅 A 股策略，A 股休市日跳过定时通知
+                if config.report_type in ("urt_daily", "csb_daily"):
+                    skip_cn = False
+                    cn_skip_reason = ""
                     try:
                         from backend_api.utils.trading_calendar_utils import (
                             is_market_session_closed,
@@ -235,17 +235,21 @@ class PushService:
                         if is_market_session_closed(
                             self.config_service.db, "CN", push_date
                         ):
-                            skip_urt = True
-                            urt_skip_reason = "A股休市日"
+                            skip_cn = True
+                            cn_skip_reason = "A股休市日"
                     except Exception as e:
                         logger.warning(
-                            "URT 休市日判定异常 user=%s: %s", user.id, e
-                        )
-                    if skip_urt:
-                        logger.info(
-                            "用户 %s 任务 urt_daily 跳过（%s）",
+                            "%s 休市日判定异常 user=%s: %s",
+                            config.report_type,
                             user.id,
-                            urt_skip_reason,
+                            e,
+                        )
+                    if skip_cn:
+                        logger.info(
+                            "用户 %s 任务 %s 跳过（%s）",
+                            user.id,
+                            config.report_type,
+                            cn_skip_reason,
                         )
                         log_push_event(
                             event_type=PushEventType.GMS_NON_TRADING_SKIPPED,
@@ -253,8 +257,8 @@ class PushService:
                             push_time=push_time,
                             details={
                                 "push_date": str(push_date),
-                                "report_type": "urt_daily",
-                                "reason": urt_skip_reason,
+                                "report_type": config.report_type,
+                                "reason": cn_skip_reason,
                             },
                         )
                         skipped_count += 1
@@ -914,6 +918,8 @@ class PushService:
             if report_info.report_type == "gms_daily"
             else f"自选股上升趋势策略信号列表 - {report_info.report_date}"
             if report_info.report_type == "urt_daily"
+            else f"自选股通道突破策略信号列表 - {report_info.report_date}"
+            if report_info.report_type == "csb_daily"
             else f"成交量异动榜 - {report_info.report_date}"
             if report_info.report_type == "volume_aberration"
             else f"3倍量观察股·爆量侦测 - {report_info.report_date}"
@@ -1013,6 +1019,8 @@ class PushService:
             report_type_name = "自选股GSM策略指标信号列表"
         elif report_info.report_type == "urt_daily":
             report_type_name = "自选股上升趋势策略信号列表"
+        elif report_info.report_type == "csb_daily":
+            report_type_name = "自选股通道突破策略信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
         elif report_info.report_type == "triple_volume_observe_scan":
@@ -1057,6 +1065,8 @@ class PushService:
             report_type_name = "自选股GSM策略指标信号列表"
         elif report_info.report_type == "urt_daily":
             report_type_name = "自选股上升趋势策略信号列表"
+        elif report_info.report_type == "csb_daily":
+            report_type_name = "自选股通道突破策略信号列表"
         elif report_info.report_type == "volume_aberration":
             report_type_name = "成交量异动榜"
         elif report_info.report_type == "triple_volume_observe_scan":

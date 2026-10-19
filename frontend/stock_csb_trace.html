@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>通道突破 — 策略信号历史</title>
+    <title>通道突破 — 历史追溯</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
     <link rel="stylesheet" href="css/design-tokens.css?v=20261017-w400-600">
@@ -18,62 +18,76 @@
 </head>
 <body class="ops-map">
     <script src="components/header.js"></script>
-    <script>loadHeader('quotes');</script>
-    <div class="container">
-        <div class="gms-trace-card">
-            <div class="gms-trace-title">CSB 通道粘合突破 — 策略信号历史</div>
-            <p class="gms-backtest-hint" style="margin:8px 0 12px;">
-                读取 <strong>csb_signal_trace</strong> 预计算记录；需要刷新入库时可点「强制重新计算」（按当前参数版本对该股历史重算并写回 trace）。
+    <script>loadHeader('screening');</script>
+    <main class="container">
+        <section class="gms-trace-card" aria-labelledby="csbTraceTitle">
+            <h1 id="csbTraceTitle" class="gms-trace-title">通道突破 · 历史追溯</h1>
+            <p class="gms-backtest-hint">
+                按日期区间查看单股信号。已有预计算直接读出，缺的交易日按当日 K 线补算并写入记录。
+                跨度上限 180 天、最多 120 个交易日。要整段覆盖重算，用「强制重新计算」。
             </p>
-            <div class="toolbar">
+            <form class="toolbar" id="csbTraceForm">
                 <div class="toolbar-row">
-                    <label>股票: <span id="stockDisplay">--</span></label>
-                    <label>开始日期: <input type="date" id="startDate"></label>
-                    <label>结束日期: <input type="date" id="endDate"></label>
-                    <label>参数版本:
-                        <select id="configSelect"></select>
+                    <label for="stockCode">股票代码
+                        <input type="text" id="stockCode" class="csb-trace-code" name="code" placeholder="603200" autocomplete="off" inputmode="numeric" maxlength="6" spellcheck="false">
                     </label>
-                    <label><input type="checkbox" id="entryOnly"> 仅入场</label>
-                    <button id="searchBtn" type="button">查询</button>
+                    <p class="csb-trace-name-line">名称 <strong id="stockDisplay">--</strong></p>
+                    <label for="startDate">开始日期
+                        <input type="date" id="startDate" name="start">
+                    </label>
+                    <label for="endDate">结束日期
+                        <input type="date" id="endDate" name="end">
+                    </label>
+                    <label for="configSelect">参数版本
+                        <select id="configSelect" name="config_id"></select>
+                    </label>
+                    <label class="csb-trace-check" for="entryOnly">
+                        <input type="checkbox" id="entryOnly" name="entry_only"> 仅入场
+                    </label>
+                </div>
+                <div class="toolbar-row csb-trace-actions">
+                    <button id="searchBtn" type="submit">查询</button>
                     <button id="forceComputeBtn" class="btn-secondary" type="button">强制重新计算</button>
                 </div>
-            </div>
-            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>
-            <div id="metaMsg" class="gms-meta-text" style="margin:6px 0;"></div>
-            <div id="loadingMsg" class="loading-msg" style="display:none;">加载中...</div>
-            <div id="emptyMsg" class="empty-msg" style="display:none;">暂无信号记录</div>
+            </form>
+            <div id="forceComputeProgress" class="gms-trace-recompute-status" role="status" aria-live="polite" hidden></div>
+            <p id="metaMsg" class="gms-meta-text" aria-live="polite"></p>
+            <p id="loadingMsg" class="loading-msg" role="status" hidden>正在读取预计算，缺口交易日会补算…</p>
+            <p id="emptyMsg" class="empty-msg" role="status" hidden>暂无信号记录</p>
             <div class="table-wrapper">
-                <table class="trace-table" id="traceTable">
+                <table class="trace-table csb-trace-table" id="traceTable">
+                    <caption class="csb-trace-caption">通道突破历史信号</caption>
                     <thead>
                         <tr>
-                            <th>日期</th>
-                            <th>信号类型</th>
-                            <th>SETUP</th>
-                            <th>入场</th>
-                            <th>得分</th>
-                            <th>收盘</th>
-                            <th>通道下轨</th>
-                            <th>通道上轨</th>
-                            <th>粘合天数</th>
-                            <th>回踩次数</th>
-                            <th>入场下沿</th>
-                            <th>操作</th>
+                            <th scope="col">日期</th>
+                            <th scope="col">信号类型</th>
+                            <th scope="col">SETUP</th>
+                            <th scope="col">入场</th>
+                            <th scope="col">得分</th>
+                            <th scope="col">收盘</th>
+                            <th scope="col">通道下轨</th>
+                            <th scope="col">通道上轨</th>
+                            <th scope="col">粘合天数</th>
+                            <th scope="col">回踩次数</th>
+                            <th scope="col">入场下沿</th>
+                            <th scope="col">来源</th>
+                            <th scope="col">操作</th>
                         </tr>
                     </thead>
                     <tbody></tbody>
                 </table>
             </div>
-            <div class="pagination">
+            <nav class="pagination" aria-label="信号分页">
                 <button type="button" id="firstPage">第一页</button>
                 <button type="button" id="prevPage">上一页</button>
                 <span id="pageInfo"></span>
                 <button type="button" id="nextPage">下一页</button>
                 <button type="button" id="lastPage">最后一页</button>
-            </div>
-        </div>
-    </div>
+            </nav>
+        </section>
+    </main>
     <script src="js/config.js"></script>
     <script src="js/csb_score_detail.js?v=20261007-csb"></script>
-    <script src="js/stock_csb_trace.js"></script>
+    <script src="js/stock_csb_trace.js?v=20261019-config"></script>
 </body>
 </html>

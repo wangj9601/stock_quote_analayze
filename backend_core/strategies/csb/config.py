@@ -26,6 +26,8 @@ BUY_SIGNAL_TYPES = frozenset({CSB_PROBE, CSB_BREAKOUT, CSB_LPS})
 
 # 全市场扫描占位
 CSB_TRACE_SCANNED_MARKER = "__CSB_SCANNED__"
+# 单股某日已评估但无信号：避免历史追溯反复现算。选股列表不展示。
+CSB_STOCK_DAY_SCANNED = "SCANNED"
 
 
 def get_default_csb_config() -> Dict[str, Any]:

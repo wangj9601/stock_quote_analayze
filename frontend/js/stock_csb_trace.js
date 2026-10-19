@@ -21,6 +21,17 @@
     return Number.isFinite(x) ? x.toFixed(n == null ? 2 : n) : String(v);
   }
 
+  function setRegion(el, shown, display) {
+    if (!el) return;
+    if (shown) {
+      el.hidden = false;
+      if (display) el.style.display = display;
+    } else {
+      el.hidden = true;
+      el.style.display = '';
+    }
+  }
+
   function yn(v, yesClass) {
     if (v === true) return `<span class="${yesClass || 'buy-yes'}">是</span>`;
     if (v === false) return '否';
@@ -59,15 +70,17 @@
       this.forceComputePollCount = 0;
       this.maxForceComputePolls = 3600;
 
-      document.getElementById('stockDisplay').textContent =
-        this.code ? `${this.code} ${this.name}` : '--';
+      this.showName(this.name);
+      const codeEl = document.getElementById('stockCode');
+      if (codeEl && this.code) codeEl.value = this.code;
       this.setDefaultDates();
       const startEl = document.getElementById('startDate');
       const endEl = document.getElementById('endDate');
       if (startEl && params.get('start')) startEl.value = params.get('start');
       if (endEl && params.get('end')) endEl.value = params.get('end');
 
-      document.getElementById('searchBtn').addEventListener('click', () => {
+      document.getElementById('csbTraceForm')?.addEventListener('submit', (e) => {
+        e.preventDefault();
         if (this.forceComputeRunning) return;
         this.fetchData();
       });
@@ -114,6 +127,13 @@
 
       this.updatePagination();
       if (this.code) this.fetchData();
+    }
+
+    showName(name) {
+      const text = String(name || '').trim();
+      this.name = text;
+      const display = document.getElementById('stockDisplay');
+      if (display) display.textContent = text || '--';
     }
 
     setDefaultDates() {
@@ -169,7 +189,7 @@
     renderForceComputeProgress(task) {
       const area = document.getElementById('forceComputeProgress');
       if (!area) return;
-      area.style.display = 'block';
+      setRegion(area, true, 'block');
       const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
       const msg = task.message || '';
       const saved = task.saved_count != null ? Number(task.saved_count) : null;
@@ -219,11 +239,10 @@
       this.setForceComputeRunning(true);
       const area = document.getElementById('forceComputeProgress');
       if (area) {
-        area.style.display = 'block';
+        setRegion(area, true, 'block');
         area.innerHTML = '<div>正在提交重算任务…</div><div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:5%"></div></div>';
       }
-      const loading = document.getElementById('loadingMsg');
-      if (loading) loading.style.display = 'none';
+      setRegion(document.getElementById('loadingMsg'), false);
 
       const startDate = range
         ? String(range.start || '').trim()
@@ -258,6 +277,10 @@
         if (json.data?.config_id != null) {
           this.configId = json.data.config_id;
         }
+        if (json.message) {
+          const meta = document.getElementById('metaMsg');
+          if (meta) meta.textContent = json.message;
+        }
         if (json.data?.already_running) {
           this.renderForceComputeProgress({
             status: 'running',
@@ -271,7 +294,7 @@
         this.clearForceComputePoll();
         this.setForceComputeRunning(false);
         if (area) {
-          area.style.display = 'block';
+          setRegion(area, true, 'block');
           area.innerHTML = `<span class="gms-recompute-error">提交失败: ${escapeHtml(e.message || String(e))}</span>`;
         }
       }
@@ -359,10 +382,11 @@
           <td>${r.squeeze_days != null ? String(r.squeeze_days) : '--'}</td>
           <td>${r.touch_count != null ? String(r.touch_count) : '--'}</td>
           <td>${fmt(r.entry_low)}</td>
-          <td><button type="button" class="action-link csb-score-detail-toggle" data-row="${index}" title="展开/收起信号计算明细">明细</button></td>
+          <td>${escapeHtml(r.row_source === 'recompute' ? '补算' : '预计算')}</td>
+          <td><button type="button" class="gms-op-btn csb-score-detail-toggle" data-row="${index}" title="展开/收起信号计算明细">明细</button></td>
         </tr>
         <tr class="gms-score-detail-row csb-score-detail-row" data-detail-for="${index}" style="display:none;">
-          <td colspan="12" class="gms-score-detail-cell">${detailHtml}</td>
+          <td colspan="13" class="gms-score-detail-cell">${detailHtml}</td>
         </tr>`;
       }).join('');
     }
@@ -400,13 +424,23 @@
       const empty = document.getElementById('emptyMsg');
       const meta = document.getElementById('metaMsg');
       const tbody = document.querySelector('#traceTable tbody');
+      const typed = (document.getElementById('stockCode')?.value || '').trim();
+      if (typed && typed !== this.code) {
+        this.code = typed;
+        this.showName('');
+      } else if (typed) {
+        this.code = typed;
+      }
+      const card = document.querySelector('.gms-trace-card');
       if (!this.code) {
-        empty.textContent = '请从选股页通过「历史」进入并带 code 参数';
-        empty.style.display = '';
+        empty.textContent = '请填写股票代码';
+        setRegion(empty, true);
+        setRegion(loading, false);
         return;
       }
-      loading.style.display = '';
-      empty.style.display = 'none';
+      if (card) card.setAttribute('aria-busy', 'true');
+      setRegion(loading, true);
+      setRegion(empty, false);
       if (meta) meta.textContent = '';
       tbody.innerHTML = '';
       this.allData = [];
@@ -419,12 +453,12 @@
         const endDate = (document.getElementById('endDate')?.value || '').trim();
         if (!startDate || !endDate) {
           empty.textContent = '请填写开始与结束日期';
-          empty.style.display = '';
+          setRegion(empty, true);
           return;
         }
         if (startDate > endDate) {
           empty.textContent = '开始日期不能晚于结束日期';
-          empty.style.display = '';
+          setRegion(empty, true);
           return;
         }
         const entryOnly = !!document.getElementById('entryOnly')?.checked;
@@ -435,6 +469,7 @@
         });
         if (this.configId) q.set('config_id', String(this.configId));
         if (entryOnly) q.set('entry_only', 'true');
+        q.set('fill_missing', 'true');
 
         const res = await fetch(`${apiBase}/api/stock/csb/signal-history?${q}`);
         const json = await res.json().catch(() => ({}));
@@ -455,21 +490,32 @@
           ).join('') || '<option value="">默认</option>';
         }
         this.configId = json.config_id;
+        if (json.config_warning) {
+          const url = new URL(window.location.href);
+          if (url.searchParams.has('config_id')) {
+            url.searchParams.delete('config_id');
+            window.history.replaceState(null, '', url);
+          }
+        }
+        const rowName = (json.data || []).map((r) => r && r.name).find((n) => String(n || '').trim());
+        this.showName(json.name || rowName || '');
 
         this.allData = json.data || [];
         if (meta) {
           const bits = [
-            '来源 预计算',
-            json.start_date ? `起 ${json.start_date}` : '',
-            json.end_date ? `止 ${json.end_date}` : '',
-            `返回 ${json.total != null ? json.total : this.allData.length} 条`,
+            `来源 ${json.source_label || '预计算'}`,
+            json.trade_days != null ? `交易日 ${json.trade_days}` : '',
+            json.cached_days != null ? `已有预计算 ${json.cached_days} 日` : '',
+            json.recomputed_days != null ? `补算 ${json.recomputed_days} 日` : '',
+            `信号 ${json.total != null ? json.total : this.allData.length} 条`,
           ].filter(Boolean);
+          if (json.config_warning) bits.unshift(json.config_warning);
           meta.textContent = bits.join(' · ');
         }
 
         if (!this.allData.length) {
-          empty.textContent = '所选日期范围内暂无预计算信号（可点「强制重新计算」入库）';
-          empty.style.display = '';
+          empty.textContent = '所选日期范围内没有符合条件的信号（已读预计算，缺口已补算）';
+          setRegion(empty, true);
           this.updatePagination();
           return;
         }
@@ -479,11 +525,12 @@
         this.updatePagination();
       } catch (e) {
         empty.textContent = '加载失败: ' + (e.message || e);
-        empty.style.display = '';
+        setRegion(empty, true);
         this.allData = [];
         this.updatePagination();
       } finally {
-        loading.style.display = 'none';
+        setRegion(loading, false);
+        document.querySelector('.gms-trace-card')?.setAttribute('aria-busy', 'false');
       }
     }
   }

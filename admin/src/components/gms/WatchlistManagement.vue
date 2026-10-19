@@ -1,30 +1,47 @@
 <template>
   <div class="watchlist-management">
+    <table v-if="versions.length" class="version-ledger">
+      <caption>同一尺度对照策略版本，点一行切换</caption>
+      <thead>
+        <tr>
+          <th scope="col">版本</th>
+          <th scope="col">打分</th>
+          <th scope="col">状态</th>
+          <th scope="col">更新</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          v-for="v in versions"
+          :key="v.id"
+          :class="{ current: v.id === selectedVersionId }"
+          tabindex="0"
+          @click="chooseVersion(v.id)"
+          @keydown.enter.prevent="chooseVersion(v.id)"
+        >
+          <td>{{ v.strategy_code }}-V{{ v.version_no }} {{ v.version_name }}</td>
+          <td>{{ v.scoring_mechanism_label || v.scoring_mechanism || '—' }}</td>
+          <td>{{ v.is_active ? '在用' : '停用' }}</td>
+          <td>{{ formatVersionTime(v.updated_at || v.created_at) }}</td>
+        </tr>
+      </tbody>
+    </table>
+
     <el-card class="toolbar">
       <el-row :gutter="12" align="middle">
-        <el-col :span="6">
-          <el-select v-model="selectedVersionId" placeholder="选择 GMS 策略版本" filterable @change="handleVersionChange">
-            <el-option
-              v-for="v in versions"
-              :key="v.id"
-              :label="versionOptionLabel(v)"
-              :value="v.id"
-            />
-          </el-select>
-        </el-col>
-        <el-col :span="3" v-if="activeTab === 'stocks'">
+        <el-col :span="4" v-if="activeTab === 'stocks'">
           <el-select v-model="marketFilter" placeholder="市场" clearable @change="refresh">
             <el-option label="A股" value="A" />
             <el-option label="港股" value="HK" />
           </el-select>
         </el-col>
-        <el-col :span="5" v-if="activeTab === 'stocks'">
+        <el-col :span="6" v-if="activeTab === 'stocks'">
           <el-input v-model="keyword" placeholder="代码/名称" clearable @keyup.enter="refresh" />
         </el-col>
-        <el-col :span="activeTab === 'stocks' ? 10 : 15" class="actions">
+        <el-col :span="activeTab === 'stocks' ? 14 : 24" class="actions">
           <el-button type="primary" @click="openVersionDialog()">新增版本</el-button>
           <template v-if="activeTab === 'stocks'">
-            <el-button type="success" :disabled="!selectedVersionId" @click="openStockDialog()">新增观察股</el-button>
+            <el-button :disabled="!selectedVersionId" @click="openStockDialog()">新增观察股</el-button>
             <el-button :disabled="!selectedIds.length" @click="batchDelete">批量删除</el-button>
             <el-button :disabled="!selectedVersionId" @click="openImportDialog">批量导入</el-button>
             <el-button :disabled="!selectedVersionId" @click="handleExport">批量导出</el-button>
@@ -412,11 +429,6 @@ const canonicalTargetLabel = computed(() =>
     : 'default · 标准版·双模块阶梯'
 )
 
-function versionOptionLabel(v: GMSStrategyVersion) {
-  const tag = v.scoring_mechanism_label ? ` [${v.scoring_mechanism_label}]` : ''
-  return `${v.strategy_code}-V${v.version_no} ${v.version_name}${tag}`
-}
-
 function penaltyRuleMetaList(): GMSPenaltyRuleType[] {
   const fallback: GMSPenaltyRuleType[] = [
     { id: 'close_below_ma60', label: '收盘低于 MA60', default_points: 10 },
@@ -683,6 +695,17 @@ const refresh = async () => {
   } finally {
     loading.value = false
   }
+}
+
+function formatVersionTime(value?: string) {
+  if (!value) return '—'
+  return value.replace('T', ' ').slice(0, 16)
+}
+
+function chooseVersion(id: number) {
+  if (selectedVersionId.value === id) return
+  selectedVersionId.value = id
+  handleVersionChange()
 }
 
 const handleVersionChange = async () => {
@@ -977,7 +1000,7 @@ onMounted(async () => {
 .penalty-rule-item {
   padding: 12px 14px;
   border: 1px solid var(--el-border-color-lighter);
-  border-radius: 8px;
+  border-radius: 2px;
   background: var(--el-fill-color-blank);
 }
 .penalty-rule-head {
@@ -1028,5 +1051,47 @@ onMounted(async () => {
   line-height: 1.55;
   color: var(--el-text-color-secondary);
   word-break: break-word;
+}
+.version-ledger {
+  width: 100%;
+  margin: 0 0 12px;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #c9c3b8;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.version-ledger caption {
+  caption-side: top;
+  text-align: left;
+  padding: 0 0 6px;
+  color: #3e4c59;
+  font-size: 12px;
+}
+.version-ledger th,
+.version-ledger td {
+  border-bottom: 1px solid #e4dfd6;
+  padding: 6px 8px;
+  text-align: left;
+}
+.version-ledger th {
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  color: #3e4c59;
+  font-weight: 600;
+}
+.version-ledger tbody tr {
+  cursor: pointer;
+  opacity: 0.45;
+}
+.version-ledger tbody tr.current {
+  opacity: 1;
+  background: #d7b56d;
+  font-weight: 700;
+  box-shadow: 0 8px 14px -10px rgba(26, 35, 50, 0.45);
+}
+.version-ledger tbody tr:focus-visible {
+  outline: 2px solid #234e70;
+  outline-offset: -2px;
 }
 </style>

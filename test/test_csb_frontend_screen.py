@@ -235,3 +235,84 @@ def test_screen_non_trading_day_no_fallback():
     assert out.get("source") == "non_trading_day"
     query_cache.assert_not_called()
     loader.resolve_effective_trade_date.assert_not_called()
+
+
+def test_screen_single_stock_missing_row_recomputes_even_if_universe_ready():
+    """全市场已扫但该股当天没有 trace 行时，只补算这一只，不跑全市场现算。"""
+    db = MagicMock()
+    hit = {
+        "code": "603200",
+        "name": "测试",
+        "signal_type": "CSB_PROBE",
+        "entry_signal": True,
+        "score": 80,
+    }
+    with patch.object(CSBFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.csb.frontend_interface.CSBConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.csb.frontend_interface.CSBDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.csb.frontend_interface.CSBStrategyEngine"
+    ) as Eng, patch(
+        "backend_core.strategies.csb.frontend_interface.query_buy_signals_for_date",
+        side_effect=[[], [hit]],
+    ), patch(
+        "backend_core.strategies.csb.frontend_interface.dates_ready_for_universe_backtest",
+        return_value={"2026-07-28"},
+    ), patch(
+        "backend_core.strategies.csb.frontend_interface.codes_present_on_date",
+        return_value=set(),
+    ), patch(
+        "backend_core.strategies.csb.frontend_interface.fill_codes_on_date",
+        return_value=1,
+    ) as fill:
+        CM.return_value.get_config.return_value = {"min_score": 60}
+        Loader.return_value.resolve_effective_trade_date.return_value = "2026-07-28"
+        Loader.return_value.is_trading_day.return_value = True
+        out = CSBFrontendInterface.screen(
+            db,
+            screening_date="2026-07-28",
+            config_id=1,
+            stock_codes=["603200"],
+            trace_only=False,
+            prefer_cache=True,
+        )
+    assert out.get("source") == "realtime+trace"
+    assert out.get("total") == 1
+    assert out.get("need_precompute") is False
+    fill.assert_called_once()
+    Eng.assert_not_called()
+
+
+def test_screen_single_stock_with_trace_row_does_not_recompute():
+    db = MagicMock()
+    with patch.object(CSBFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.csb.frontend_interface.CSBConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.csb.frontend_interface.CSBDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.csb.frontend_interface.query_buy_signals_for_date",
+        return_value=[],
+    ), patch(
+        "backend_core.strategies.csb.frontend_interface.dates_ready_for_universe_backtest",
+        return_value={"2026-07-28"},
+    ), patch(
+        "backend_core.strategies.csb.frontend_interface.codes_present_on_date",
+        return_value={"603200"},
+    ), patch(
+        "backend_core.strategies.csb.frontend_interface.fill_codes_on_date"
+    ) as fill:
+        CM.return_value.get_config.return_value = {"min_score": 60}
+        Loader.return_value.resolve_effective_trade_date.return_value = "2026-07-28"
+        Loader.return_value.is_trading_day.return_value = True
+        out = CSBFrontendInterface.screen(
+            db,
+            screening_date="2026-07-28",
+            config_id=1,
+            stock_codes=["603200"],
+            trace_only=False,
+            prefer_cache=True,
+        )
+    assert out.get("source") == "csb_signal_trace"
+    assert out.get("total") == 0
+    fill.assert_not_called()

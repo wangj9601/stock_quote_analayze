@@ -21,7 +21,7 @@
       <div class="sidebar-header">
         <div class="sidebar-header-text">
           <h2 class="sidebar-brand">冰枫堂</h2>
-          <p class="sidebar-brand-sub">管理后台 · {{ user?.username || '管理员' }}</p>
+          <p class="sidebar-brand-sub">管理端 · {{ user?.username || '管理员' }}</p>
         </div>
         <button
           type="button"
@@ -93,7 +93,7 @@
           <span /><span /><span />
         </button>
         <div class="topbar-title">
-          <span class="topbar-page">{{ currentPageName }}</span>
+          <span class="topbar-page">{{ currentArchive.code }} {{ currentPageName }}</span>
           <span class="topbar-user">{{ user?.username || '管理员' }}</span>
         </div>
         <el-button size="small" class="topbar-logout" @click="handleLogout">
@@ -102,11 +102,26 @@
       </header>
 
       <div class="admin-content">
-        <div class="admin-crumb">
-          <span class="crumb-mark">冰枫堂</span>
-          <span class="crumb-sep" aria-hidden="true">/</span>
-          <span class="crumb-page">{{ currentPageName }}</span>
-        </div>
+        <header class="archive-head">
+          <h1 class="archive-title">
+            <span class="archive-code">{{ currentArchive.code }}</span>
+            {{ currentPageName }}
+          </h1>
+        </header>
+        <nav class="archive-doors" aria-label="工作入口">
+          <router-link
+            v-for="door in archiveDoors"
+            :key="door.group"
+            :to="door.to"
+            class="archive-door"
+            :class="{ current: currentArchive.group === door.group }"
+            :aria-current="currentArchive.group === door.group ? 'true' : undefined"
+          >
+            <span class="door-code">{{ door.code }}</span>
+            <span class="door-name">{{ door.name }}</span>
+            <span class="door-hint">{{ currentArchive.group === door.group ? '当前' : door.hint }}</span>
+          </router-link>
+        </nav>
         <router-view :key="$route.path" />
       </div>
 
@@ -135,8 +150,9 @@ import {
 } from '@element-plus/icons-vue'
 import NavMenuGroup from '@/components/layout/NavMenuGroup.vue'
 import { useAuthStore } from '@/stores/auth'
+import { archiveDoors, archiveForPath } from '@/archive/catalog'
 
-type MenuChild = { path: string; name: string }
+type MenuChild = { path: string; name: string; code: string }
 type MenuItem = {
   path?: string
   name: string
@@ -158,54 +174,58 @@ const drawerModal = computed(() => isMobile.value && sidebarOpen.value)
 const sidebarHidden = computed(() => (isMobile.value ? !sidebarOpen.value : sidebarCollapsed.value))
 const expandRailEl = ref<HTMLButtonElement | null>(null)
 
+function leaf(path: string, name: string): MenuChild {
+  return { path, name, code: archiveForPath(path).code }
+}
+
 const menuItems: MenuItem[] = [
   {
-    name: '今日看板',
+    name: '今日',
     icon: DataBoard,
     children: [
-      { path: '/dashboard', name: '仪表板' },
-      { path: '/recommend-brief', name: '策略推荐' },
+      leaf('/dashboard', '仪表板'),
+      leaf('/recommend-brief', '策略推荐'),
     ],
   },
   {
     name: '策略',
     icon: Star,
     children: [
-      { path: '/gms-watchlist', name: 'GMS 策略版本' },
-      { path: '/gms-management', name: 'GMS 回测' },
-      { path: '/selection-results', name: '选股管理' },
-      { path: '/indicators', name: '指标管理' },
-      { path: '/sbbr-management', name: '做小做底 SBBR' },
-      { path: '/dblb-management', name: '双底 DBLB' },
-      { path: '/cupb-management', name: '杯底 CUPB' },
-      { path: '/kgt-management', name: '袋鼠尾 KGT' },
-      { path: '/rpe-management', name: '比价 RPE' },
-      { path: '/urt-management', name: '上升趋势 URT' },
-      { path: '/csb-management', name: '通道突破 CSB' },
+      leaf('/gms-watchlist', 'GMS 策略版本'),
+      leaf('/gms-management', 'GMS 回测'),
+      leaf('/selection-results', '选股管理'),
+      leaf('/indicators', '指标管理'),
+      leaf('/sbbr-management', '做小做底 SBBR'),
+      leaf('/dblb-management', '双底 DBLB'),
+      leaf('/cupb-management', '杯底 CUPB'),
+      leaf('/kgt-management', '袋鼠尾 KGT'),
+      leaf('/rpe-management', '比价 RPE'),
+      leaf('/urt-management', '上升趋势 URT'),
+      leaf('/csb-management', '通道突破 CSB'),
     ],
   },
   {
-    name: '行情与采集',
+    name: '采集',
     icon: DataAnalysis,
     children: [
-      { path: '/quotes', name: '行情数据' },
-      { path: '/stock-basic', name: '股票基本信息' },
-      { path: '/board-constituents', name: '板块成分股' },
-      { path: '/datasource', name: '数据源配置' },
-      { path: '/env-sync', name: '环境数据同步' },
-      { path: '/datacollect', name: '数据采集' },
-      { path: '/collection-workflows', name: '采集流程' },
+      leaf('/quotes', '行情数据'),
+      leaf('/stock-basic', '股票基本信息'),
+      leaf('/board-constituents', '板块成分股'),
+      leaf('/datasource', '数据源配置'),
+      leaf('/env-sync', '环境数据同步'),
+      leaf('/datacollect', '数据采集'),
+      leaf('/collection-workflows', '采集流程'),
     ],
   },
   {
-    name: '访问与审计',
+    name: '审计',
     icon: Lock,
     children: [
-      { path: '/access-management', name: '用户管理' },
-      { path: '/monitoring', name: '系统监控' },
-      { path: '/models', name: '预测模型' },
-      { path: '/logs', name: '系统日志' },
-      { path: '/report-management', name: '报告管理' },
+      leaf('/access-management', '用户管理'),
+      leaf('/monitoring', '系统监控'),
+      leaf('/models', '预测模型'),
+      leaf('/logs', '系统日志'),
+      leaf('/report-management', '报告管理'),
     ],
   },
 ]
@@ -248,6 +268,8 @@ function isMenuActive(menuPath: string) {
   }
   return route.path === menuPath
 }
+
+const currentArchive = computed(() => archiveForPath(route.path))
 
 const currentPageName = computed(() => {
   if (route.path.match(/^\/users\/\d+\/permissions$/)) return '用户权限配置'
@@ -359,31 +381,53 @@ const handleLogout = async () => {
 
 <style scoped lang="postcss">
 .admin-layout {
-  @apply min-h-screen bg-gray-50;
+  @apply min-h-screen;
+  background: var(--admin-paper);
+  color: var(--admin-ink);
+  --admin-paper: #f3f1ec;
+  --admin-ink: #1a2332;
+  --admin-index: #234e70;
+  --admin-manila: #d7b56d;
+  --admin-rule: #c9c3b8;
+  --admin-sheet: #fff;
+  --admin-muted: #3e4c59;
   --admin-rise: #c23b3b;
   --admin-fall: #2f9e6b;
-  --admin-brand: #6b5420;
-  --admin-brand-soft: #f4efe3;
+  --admin-brand: var(--admin-index);
+  --admin-brand-soft: var(--admin-manila);
+  --admin-nav-ink: #f3f1ec;
 }
 
 .admin-layout ::selection {
-  background: #e7d7a8;
-  color: #1c1917;
+  background: #d7b56d;
+  color: #1a2332;
+}
+
+.sidebar-footer :deep(.el-button) {
+  background: transparent;
+  color: var(--admin-nav-ink);
+  border-color: rgba(243, 241, 236, 0.45);
+  border-radius: 2px;
+}
+.sidebar-footer :deep(.el-button:hover) {
+  background: rgba(243, 241, 236, 0.12);
+  color: var(--admin-nav-ink);
+  border-color: var(--admin-manila);
 }
 
 .sidebar-brand {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--admin-brand);
+  letter-spacing: 0.12em;
+  color: var(--admin-nav-ink);
   line-height: 1.2;
 }
 
 .sidebar-brand-sub {
   margin: 4px 0 0;
   font-size: 13px;
-  color: #4b5563;
+  color: #d5e0ea;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -401,7 +445,11 @@ const handleLogout = async () => {
 }
 
 .admin-sidebar {
-  @apply fixed left-0 top-0 h-full w-64 bg-white shadow-lg z-50;
+  @apply fixed left-0 top-0 h-full z-50;
+  width: 248px;
+  background: var(--admin-index);
+  color: var(--admin-nav-ink);
+  box-shadow: 8px 0 24px rgba(26, 35, 50, 0.18);
   transition: transform 0.3s ease;
   overflow: hidden;
   display: flex;
@@ -412,7 +460,8 @@ const handleLogout = async () => {
 }
 
 .sidebar-header {
-  @apply p-6 border-b border-gray-200;
+  @apply p-6;
+  border-bottom: 1px solid rgba(243, 241, 236, 0.2);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -432,20 +481,20 @@ const handleLogout = async () => {
   box-sizing: border-box;
   width: 44px;
   height: 44px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-  color: #4b5563;
+  border: 1px solid rgba(243, 241, 236, 0.35);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--admin-nav-ink);
   cursor: pointer;
   transition: background-color 0.2s, color 0.2s;
 }
 .sidebar-collapse-btn:hover,
 .sidebar-collapse-btn:active {
-  background: #f3f4f6;
-  color: #111827;
+  background: rgba(243, 241, 236, 0.12);
+  color: var(--admin-nav-ink);
 }
 .sidebar-collapse-btn:focus-visible {
-  outline: 2px solid var(--admin-brand);
+  outline: 2px solid var(--admin-manila);
   outline-offset: 2px;
 }
 
@@ -459,23 +508,23 @@ const handleLogout = async () => {
   box-sizing: border-box;
   width: 44px;
   height: 72px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--admin-index);
   border-left: none;
-  border-radius: 0 10px 10px 0;
-  background: #fff;
-  color: #374151;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.06);
+  border-radius: 0 2px 2px 0;
+  background: var(--admin-index);
+  color: var(--admin-nav-ink);
+  box-shadow: 4px 0 14px rgba(26, 35, 50, 0.16);
   cursor: pointer;
   align-items: center;
   justify-content: center;
 }
 .sidebar-expand-rail:hover,
 .sidebar-expand-rail:active {
-  background: var(--admin-brand-soft);
-  color: #111827;
+  background: #1b3d58;
+  color: var(--admin-nav-ink);
 }
 .sidebar-expand-rail:focus-visible {
-  outline: 2px solid var(--admin-brand);
+  outline: 2px solid var(--admin-manila);
   outline-offset: 2px;
 }
 
@@ -483,7 +532,7 @@ const handleLogout = async () => {
   @apply flex-1 p-4 space-y-2;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-color: #d6d3d1 transparent;
+  scrollbar-color: #d7b56d transparent;
 }
 
 .nav-item {
@@ -539,7 +588,8 @@ const handleLogout = async () => {
 }
 
 .sidebar-footer {
-  @apply p-4 border-t border-gray-200;
+  @apply p-4;
+  border-top: 1px solid rgba(243, 241, 236, 0.2);
 }
 
 .sidebar-footer .el-button {
@@ -549,7 +599,8 @@ const handleLogout = async () => {
 }
 
 .admin-main {
-  @apply ml-64 min-h-screen;
+  margin-left: 248px;
+  min-height: 100vh;
   transition: margin-left 0.3s ease;
   display: flex;
   flex-direction: column;
@@ -562,8 +613,9 @@ const handleLogout = async () => {
   display: none;
   align-items: center;
   gap: 12px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--admin-index);
+  color: var(--admin-nav-ink);
+  border-bottom: 1px solid rgba(243, 241, 236, 0.2);
   padding: calc(10px + env(safe-area-inset-top)) calc(12px + env(safe-area-inset-right)) 10px calc(12px + env(safe-area-inset-left));
   position: sticky;
   top: 0;
@@ -578,25 +630,25 @@ const handleLogout = async () => {
   box-sizing: border-box;
   width: 44px;
   height: 44px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid rgba(243, 241, 236, 0.35);
+  border-radius: 2px;
+  background: transparent;
   padding: 8px;
   cursor: pointer;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 .menu-toggle:active {
-  background: #f3f4f6;
+  background: rgba(243, 241, 236, 0.12);
 }
 .menu-toggle span {
   display: block;
   height: 2px;
-  background: #374151;
+  background: var(--admin-nav-ink);
   border-radius: 1px;
 }
 .menu-toggle:focus-visible {
-  outline: 2px solid var(--admin-brand);
+  outline: 2px solid var(--admin-manila);
   outline-offset: 2px;
 }
 
@@ -608,7 +660,7 @@ const handleLogout = async () => {
 }
 .topbar-page {
   font-weight: 600;
-  color: #111827;
+  color: var(--admin-nav-ink);
   font-size: 15px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -616,7 +668,7 @@ const handleLogout = async () => {
 }
 .topbar-user {
   font-size: 12px;
-  color: #4b5563;
+  color: #d5e0ea;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -628,36 +680,84 @@ const handleLogout = async () => {
   padding-bottom: 60px;
 }
 
-.admin-crumb {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: -4px 0 16px;
-  font-size: 14px;
-  color: #374151;
+.archive-head {
+  margin: 0 0 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--admin-rule);
 }
 
-.crumb-mark {
+.archive-title {
+  margin: 0;
+  font-size: 1.35rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--admin-brand);
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+  color: var(--admin-ink);
 }
 
-.crumb-sep {
-  color: #4b5563;
+.archive-code {
+  margin-right: 0.45em;
+  letter-spacing: 0.08em;
 }
 
-.crumb-page {
-  font-weight: 600;
-  color: #111827;
-  min-width: 0;
-  overflow-wrap: anywhere;
+.archive-doors {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0 0 18px;
+}
+
+.archive-door {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 72px;
+  padding: 10px 12px;
+  border: 1px solid var(--admin-rule);
+  border-radius: 2px;
+  background: var(--admin-sheet);
+  color: var(--admin-ink);
+  text-decoration: none;
+}
+
+.archive-door:hover {
+  border-color: var(--admin-index);
+}
+
+.archive-door.current {
+  background: var(--admin-manila);
+  border-color: #b0893e;
+  color: var(--admin-ink);
+}
+
+.archive-door:focus-visible {
+  outline: 2px solid var(--admin-index);
+  outline-offset: 2px;
+}
+
+.door-code {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.door-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.door-hint {
+  font-size: 12px;
+  color: var(--admin-muted);
+}
+
+.archive-door.current .door-hint {
+  color: #1a2332;
 }
 
 .icp-footer {
-  background: #f8f9fa;
-  border-top: 1px solid #e5e7eb;
+  background: transparent;
+  border-top: 1px solid var(--admin-rule);
   padding: 15px 0 max(15px, env(safe-area-inset-bottom));
   text-align: center;
   margin-top: auto;
@@ -670,7 +770,7 @@ const handleLogout = async () => {
 }
 
 .icp-footer a {
-  color: #4b5563;
+  color: var(--admin-muted);
   text-decoration: none;
   font-size: 12px;
 }
@@ -686,10 +786,10 @@ const handleLogout = async () => {
 
 @media (max-width: 1024px) {
   .admin-sidebar {
-    @apply w-56;
+    width: 224px;
   }
   .admin-main {
-    @apply ml-56;
+    margin-left: 224px;
   }
   .admin-content {
     @apply p-5;
@@ -734,8 +834,15 @@ const handleLogout = async () => {
   .admin-content {
     @apply p-3;
   }
-  .admin-crumb {
+  .archive-head {
     display: none;
+  }
+  .archive-doors {
+    gap: 8px;
+    grid-template-columns: 1fr;
+  }
+  .archive-title {
+    font-size: 1.15rem;
   }
   .sidebar-header {
     @apply p-4;
@@ -782,17 +889,25 @@ const handleLogout = async () => {
   padding: 8px 12px;
   overflow: visible;
   clip: auto;
-  background: #fff;
-  color: var(--admin-brand);
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  outline: 2px solid var(--admin-brand);
+  background: var(--admin-sheet);
+  color: var(--admin-ink);
+  border: 1px solid var(--admin-rule);
+  border-radius: 2px;
+  outline: 2px solid var(--admin-index);
   outline-offset: 2px;
 }
 
 .topbar-logout {
   min-width: 44px;
   min-height: 44px;
+  background: transparent;
+  color: var(--admin-nav-ink);
+  border-color: rgba(243, 241, 236, 0.45);
+}
+.admin-topbar :deep(.el-button:hover) {
+  background: rgba(243, 241, 236, 0.12);
+  color: var(--admin-nav-ink);
+  border-color: var(--admin-manila);
 }
 
 @media (pointer: coarse) {

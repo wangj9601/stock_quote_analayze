@@ -4,7 +4,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import Any, Dict, List, Optional, Tuple
 import logging
-from database import get_db
+
+try:
+    from backend_api.database import get_db
+except ImportError:  # 仅 backend_api 在 sys.path 上时
+    from database import get_db  # type: ignore
+
 from .stock_analysis import StockAnalysisService
 
 logger = logging.getLogger(__name__)

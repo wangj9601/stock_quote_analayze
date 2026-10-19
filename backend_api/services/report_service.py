@@ -322,6 +322,8 @@ class ReportService:
                 return self._generate_gms_report_for_user(user_id)
             elif report_type == 'urt_daily':
                 return self._generate_urt_report_for_user(user_id, stock_codes=stock_codes)
+            elif report_type == 'csb_daily':
+                return self._generate_csb_report_for_user(user_id, stock_codes=stock_codes)
             else:
                 return ReportResult(
                     success=False,
@@ -1708,6 +1710,223 @@ class ReportService:
             error_message=None,
         )
 
+    @staticmethod
+    def _csb_report_excel_row(r: Dict[str, Any], *, report_date: str, code_to_name: Dict[str, str]) -> Dict[str, Any]:
+        code = str(r.get("code") or "").replace("\u2060", "").strip()
+        if code.isdigit() and len(code) <= 6:
+            code = code.zfill(6)
+        name = (r.get("name") or "").strip() or code_to_name.get(code, "")
+        signal_date = r.get("signal_date") or r.get("trade_date") or r.get("date") or report_date
+
+        def _round(v: Any, n: int):
+            if v is None or v == "":
+                return ""
+            try:
+                return round(float(v), n)
+            except (TypeError, ValueError):
+                return ""
+
+        def _int_or_blank(v: Any):
+            if v is None or v == "":
+                return ""
+            try:
+                return int(v)
+            except (TypeError, ValueError):
+                return ""
+
+        return {
+            "股票代码": "\u2060" + str(code),
+            "股票名称": name,
+            "信号日": str(signal_date)[:10] if signal_date else "",
+            "信号类型": str(r.get("signal_type") or ""),
+            "收盘": _round(r.get("close"), 2),
+            "得分": _round(r.get("score"), 1),
+            "通道下轨": _round(r.get("channel_lower"), 2),
+            "通道上轨": _round(r.get("channel_upper"), 2),
+            "收缩天数": _int_or_blank(r.get("squeeze_days")),
+            "收缩幅度": _round(r.get("squeeze_pct"), 4),
+            "触轨次数": _int_or_blank(r.get("touch_count")),
+            "放量倍数": _round(r.get("vol_expand_mult"), 2),
+            "5日20日量比": _round(r.get("vol_ratio_5_20"), 2),
+            "入场低点": _round(r.get("entry_low"), 2),
+            "阻力": _round(r.get("resistance"), 2),
+            "是否买点": "是" if bool(r.get("buy_signal") or r.get("entry_signal")) else "否",
+        }
+
+    @staticmethod
+    def _csb_report_field_legend_rows() -> List[Dict[str, str]]:
+        return [
+            {
+                "字段名": "（列表收录）",
+                "含义": "自选 A 股当日通道突破买点",
+                "计算/取值规则": "优先读 csb_signal_trace；该股当天无记录且自选池不超过 40 只时补算。只收录 entry 买点，不含 SCANNED 占位。港股不进日报。",
+            },
+            {"字段名": "股票代码", "含义": "A 股代码", "计算/取值规则": "6 位数字，Excel 前加不可见字符以免被当成数字"},
+            {"字段名": "股票名称", "含义": "证券简称", "计算/取值规则": "信号行名称，缺省用自选股名称"},
+            {"字段名": "信号日", "含义": "买点所属交易日", "计算/取值规则": "trace.trade_date 或选股基准日"},
+            {"字段名": "信号类型", "含义": "CSB 信号种类", "计算/取值规则": "csb_signal_trace.signal_type"},
+            {"字段名": "收盘", "含义": "信号日收盘价", "计算/取值规则": "close_price，保留 2 位"},
+            {"字段名": "得分", "含义": "通道突破得分", "计算/取值规则": "score，保留 1 位"},
+            {"字段名": "通道下轨", "含义": "通道下沿", "计算/取值规则": "channel_lower"},
+            {"字段名": "通道上轨", "含义": "通道上沿", "计算/取值规则": "channel_upper"},
+            {"字段名": "收缩天数", "含义": "通道收窄持续天数", "计算/取值规则": "squeeze_days"},
+            {"字段名": "收缩幅度", "含义": "通道宽度相对收缩", "计算/取值规则": "setup.channel.squeeze_pct"},
+            {"字段名": "触轨次数", "含义": "观察期内触轨次数", "计算/取值规则": "setup.touch_count"},
+            {"字段名": "放量倍数", "含义": "突破当日放量倍数", "计算/取值规则": "entry.vol_expand_mult"},
+            {"字段名": "5日20日量比", "含义": "近 5 日与 20 日均量之比", "计算/取值规则": "entry.vol_ratio_5_20"},
+            {"字段名": "入场低点", "含义": "入场参考低点", "计算/取值规则": "entry_low"},
+            {"字段名": "阻力", "含义": "通道或突破阻力", "计算/取值规则": "channel.resistance 或 entry.resistance"},
+            {"字段名": "是否买点", "含义": "是否正式入场信号", "计算/取值规则": "entry_signal 为真则为「是」"},
+        ]
+
+    def _generate_csb_report_for_user(
+        self, user_id: int, stock_codes: Optional[List[str]] = None
+    ) -> ReportResult:
+        """自选 A 股范围内的 CSB 通道突破买点日报。stock_codes 为任务子集，None 为全部自选。"""
+        watchlist = self.get_user_watchlist(user_id, stock_codes)
+        if not watchlist:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=datetime.now().strftime("%Y-%m-%d"),
+                    report_type="csb_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="用户没有自选股",
+            )
+
+        def _norm_cn_code(raw: str) -> str:
+            s = str(raw or "").replace("\u2060", "").strip()
+            if not s or not s.isdigit():
+                return s
+            if len(s) == 5 or len(s) > 6:
+                return ""
+            return s.zfill(6)
+
+        stock_pool: List[str] = []
+        code_to_name: Dict[str, str] = {}
+        for item in watchlist:
+            market = (item.get("market") or "").strip().upper()
+            raw_code = str(item.get("stock_code") or "").replace("\u2060", "").strip()
+            if market == "HK" or (raw_code.isdigit() and len(raw_code) == 5):
+                continue
+            if market and market != "CN":
+                continue
+            code = _norm_cn_code(raw_code)
+            if not code or not code.isdigit() or len(code) != 6:
+                continue
+            stock_pool.append(code)
+            code_to_name[code] = item.get("stock_name") or ""
+
+        if not stock_pool:
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=datetime.now().strftime("%Y-%m-%d"),
+                    report_type="csb_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message="自选股中无 A 股标的",
+            )
+
+        try:
+            from backend_core.strategies.csb.frontend_interface import CSBFrontendInterface
+
+            payload = CSBFrontendInterface.screen(
+                self.db,
+                scope="watchlist",
+                stock_codes=stock_pool,
+                prefer_cache=True,
+                force_realtime=False,
+                require_entry=True,
+            )
+        except Exception as e:
+            logger.exception("CSB 自选股选股失败: %s", e)
+            return ReportResult(
+                success=False,
+                file_path=None,
+                report_info=None,
+                error_message=str(e),
+            )
+
+        raw_results = payload.get("data") or [] if isinstance(payload, dict) else []
+        report_date = (
+            str(payload.get("search_date") or "")[:10]
+            if isinstance(payload, dict) and payload.get("search_date")
+            else datetime.now().strftime("%Y-%m-%d")
+        )
+        allow = set(stock_pool)
+        results = []
+        for r in raw_results:
+            if not isinstance(r, dict):
+                continue
+            code = _norm_cn_code(str(r.get("code") or ""))
+            if code not in allow:
+                continue
+            if str(r.get("signal_type") or "").upper() == "SCANNED":
+                continue
+            if not bool(r.get("buy_signal") or r.get("entry_signal")):
+                continue
+            results.append(r)
+        results.sort(key=lambda x: float(x.get("score") or 0), reverse=True)
+
+        if not results:
+            hint = ""
+            if isinstance(payload, dict) and payload.get("message"):
+                hint = str(payload.get("message"))
+            return ReportResult(
+                success=True,
+                file_path=None,
+                report_info=ReportInfo(
+                    stock_count=0,
+                    report_date=report_date,
+                    report_type="csb_daily",
+                    file_size=0,
+                    has_data=False,
+                    missing_data_stocks=[],
+                ),
+                error_message=hint or "当日自选股范围内无通道突破买点",
+            )
+
+        rows = [
+            self._csb_report_excel_row(r, report_date=report_date, code_to_name=code_to_name)
+            for r in results
+        ]
+        gen_ts = datetime.now().strftime("%H%M%S")
+        filename = f"csb_{user_id}_{report_date.replace('-', '')}_{gen_ts}.xlsx"
+        filepath = os.path.join(self.report_dir, filename)
+        df = pd.DataFrame(rows)
+        if "股票代码" in df.columns:
+            df["股票代码"] = df["股票代码"].astype(str)
+        legend_df = pd.DataFrame(self._csb_report_field_legend_rows())
+        with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="CSB通道突破信号")
+            legend_df.to_excel(writer, index=False, sheet_name="字段说明")
+
+        file_size = os.path.getsize(filepath)
+        logger.info("生成 CSB 自选股报告成功: %s, 买点=%s", filepath, len(rows))
+        return ReportResult(
+            success=True,
+            file_path=filepath,
+            report_info=ReportInfo(
+                stock_count=len(rows),
+                report_date=report_date,
+                report_type="csb_daily",
+                file_size=file_size,
+                has_data=True,
+                missing_data_stocks=[],
+            ),
+            error_message=None,
+        )
+
     def get_report_info(self, report_path: str) -> Optional[ReportInfo]:
         """
         获取报告信息
@@ -1732,6 +1951,8 @@ class ReportService:
                 report_type = 'volume_aberration'
             elif 'gms_' in filename:
                 report_type = 'gms_daily'
+            elif 'csb_' in filename:
+                report_type = 'csb_daily'
             elif 'urt_' in filename:
                 report_type = 'urt_daily'
             elif 'summary' in filename:
@@ -1765,6 +1986,15 @@ class ReportService:
                     # GMS 推送报告默认写入该 sheet；兼容历史/异常文件时回退到首个 sheet
                     try:
                         df = pd.read_excel(report_path, sheet_name='GMS策略信号列表')
+                    except Exception:
+                        xls = pd.ExcelFile(report_path)
+                        first_sheet = xls.sheet_names[0] if xls.sheet_names else 0
+                        df = pd.read_excel(report_path, sheet_name=first_sheet)
+                    stock_count = len(df)
+                    has_data = stock_count > 0
+                elif report_type == 'csb_daily':
+                    try:
+                        df = pd.read_excel(report_path, sheet_name='CSB通道突破信号')
                     except Exception:
                         xls = pd.ExcelFile(report_path)
                         first_sheet = xls.sheet_names[0] if xls.sheet_names else 0

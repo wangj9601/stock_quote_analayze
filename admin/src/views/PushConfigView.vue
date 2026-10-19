@@ -105,6 +105,7 @@
           <el-select v-model="addForm.report_type" placeholder="请选择" style="width: 100%;">
             <el-option label="自选股GSM策略指标信号列表" value="gms_daily" />
             <el-option label="自选股上升趋势策略信号列表" value="urt_daily" />
+            <el-option label="自选股通道突破策略信号列表" value="csb_daily" />
             <el-option label="成交量异动榜" value="volume_aberration" />
             <el-option label="3倍量观察-爆量扫描" value="triple_volume_observe_scan" />
             <el-option label="3倍量观察-策略复核" value="triple_volume_observe_eval" />
@@ -168,6 +169,7 @@
           <el-select v-model="editForm.report_type" placeholder="请选择" style="width: 100%;">
             <el-option label="自选股GSM策略指标信号列表" value="gms_daily" />
             <el-option label="自选股上升趋势策略信号列表" value="urt_daily" />
+            <el-option label="自选股通道突破策略信号列表" value="csb_daily" />
             <el-option label="成交量异动榜" value="volume_aberration" />
             <el-option label="3倍量观察-爆量扫描" value="triple_volume_observe_scan" />
             <el-option label="3倍量观察-策略复核" value="triple_volume_observe_eval" />
@@ -213,6 +215,7 @@ const REPORT_TYPE_LABELS: Record<string, string> = {
   detailed: '详细报告',
   gms_daily: '自选股GSM策略指标信号列表',
   urt_daily: '自选股上升趋势策略信号列表',
+  csb_daily: '自选股通道突破策略信号列表',
   volume_aberration: '成交量异动榜',
   triple_volume_observe_scan: '3倍量观察-爆量扫描',
   triple_volume_observe_eval: '3倍量观察-策略复核'

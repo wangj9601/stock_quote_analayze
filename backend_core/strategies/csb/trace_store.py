@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 from sqlalchemy.orm import Session
 
-from .config import CSB_TRACE_SCANNED_MARKER
+from .config import CSB_STOCK_DAY_SCANNED, CSB_TRACE_SCANNED_MARKER
 from .json_safe import sanitize_for_pg_json
 
 logger = logging.getLogger(__name__)
@@ -290,6 +290,7 @@ def query_buy_signals_for_date(
         CSBSignalTrace.trade_date == str(trade_date)[:10],
         CSBSignalTrace.config_id == int(config_id),
         CSBSignalTrace.code != CSB_TRACE_SCANNED_MARKER,
+        CSBSignalTrace.signal_type != CSB_STOCK_DAY_SCANNED,
     )
     if entry_only:
         q = q.filter(CSBSignalTrace.entry_signal.is_(True))
@@ -314,7 +315,10 @@ def query_trace_by_code(
     from backend_api.models import CSBSignalTrace
 
     code_n = _normalize_code(code)
-    q = db.query(CSBSignalTrace).filter(CSBSignalTrace.code == code_n)
+    q = db.query(CSBSignalTrace).filter(
+        CSBSignalTrace.code == code_n,
+        CSBSignalTrace.signal_type != CSB_STOCK_DAY_SCANNED,
+    )
     if config_id is not None:
         q = q.filter(CSBSignalTrace.config_id == int(config_id))
     if start_date:
@@ -323,3 +327,57 @@ def query_trace_by_code(
         q = q.filter(CSBSignalTrace.trade_date <= datetime.strptime(end_date[:10], "%Y-%m-%d").date())
     rows = q.order_by(CSBSignalTrace.trade_date.desc()).limit(int(limit)).all()
     return [_row_to_dict(r) for r in rows]
+
+
+def codes_present_on_date(
+    db: Session,
+    *,
+    config_id: int,
+    trade_date: str,
+    codes: List[str],
+) -> Set[str]:
+    """该日已有任意 trace 行（含无信号占位）的代码。"""
+    from backend_api.models import CSBSignalTrace
+
+    norm = [_normalize_code(c) for c in codes if str(c).strip()]
+    if not norm:
+        return set()
+    rows = (
+        db.query(CSBSignalTrace.code)
+        .filter(
+            CSBSignalTrace.config_id == int(config_id),
+            CSBSignalTrace.trade_date == str(trade_date)[:10],
+            CSBSignalTrace.code.in_(norm),
+        )
+        .distinct()
+        .all()
+    )
+    return {_normalize_code(r[0]) for r in rows if r and r[0]}
+
+
+def dates_present_for_code(
+    db: Session,
+    *,
+    config_id: int,
+    code: str,
+    start_date: str,
+    end_date: str,
+) -> Set[str]:
+    """单股区间内已有任意 trace 行的交易日（含无信号占位）。"""
+    from backend_api.models import CSBSignalTrace
+
+    code_n = _normalize_code(code)
+    start_d = datetime.strptime(str(start_date)[:10], "%Y-%m-%d").date()
+    end_d = datetime.strptime(str(end_date)[:10], "%Y-%m-%d").date()
+    rows = (
+        db.query(CSBSignalTrace.trade_date)
+        .filter(
+            CSBSignalTrace.config_id == int(config_id),
+            CSBSignalTrace.code == code_n,
+            CSBSignalTrace.trade_date >= start_d,
+            CSBSignalTrace.trade_date <= end_d,
+        )
+        .distinct()
+        .all()
+    )
+    return {str(r[0])[:10] for r in rows if r and r[0]}

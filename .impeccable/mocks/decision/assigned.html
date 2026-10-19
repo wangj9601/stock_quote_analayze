@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box} html,body{margin:0;height:900px;overflow:hidden}
+body{font-family:"Noto Sans SC",sans-serif;background:#f3f1ec;color:#1a2332;display:grid;grid-template-columns:248px 1fr}
+nav{background:#234e70;color:#f3f1ec;padding:16px 14px}
+.brand{font-weight:700;letter-spacing:.12em;font-size:15px}
+.sub{opacity:.75;font-size:12px;margin:4px 0 16px}
+.g{font-size:11px;letter-spacing:.14em;opacity:.6;margin:14px 0 6px}
+a{display:flex;justify-content:space-between;color:#f3f1ec;text-decoration:none;font-size:13px;padding:6px 8px}
+a.on{background:#d7b56d;color:#1a2332;font-weight:700}
+main{padding:18px 22px}
+.head{display:flex;justify-content:space-between;align-items:baseline;border-bottom:1px solid #c9c3b8;padding-bottom:8px}
+.code{font-weight:700;letter-spacing:.08em}
+.doors{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:14px 0}
+.door{border:1px solid #c9c3b8;background:#fff;padding:10px}
+.door b{display:block;font-size:14px}
+.door span{font-size:12px;color:#5c6770}
+table{width:100%;border-collapse:collapse;font-size:12px;background:#fff}
+th,td{border-bottom:1px solid #e4dfd6;padding:6px 8px;text-align:left}
+th{font-size:11px;letter-spacing:.06em;color:#5c6770}
+.seal{font-size:11px;border:1px solid #234e70;padding:1px 6px}
+</style></head><body>
+<nav>
+  <div class="brand">冰枫堂</div>
+  <div class="sub">管理端 · 档案索引</div>
+  <div class="g">今日</div>
+  <a>每日复盘 <em>今-01</em></a>
+  <a>策略推荐 <em>今-02</em></a>
+  <div class="g">策略</div>
+  <a class="on">GMS <em>策-GMS</em></a>
+  <a>URT <em>策-URT</em></a>
+  <a>通道突破 <em>策-CSB</em></a>
+  <a>做小做底 <em>策-SBBR</em></a>
+  <div class="g">采集 / 审计</div>
+  <a>行情采集 <em>采-01</em></a>
+  <a>用户与日志 <em>审-01</em></a>
+</nav>
+<main>
+  <div class="head"><div class="code">策-GMS · GMS 策略版本</div><div>路径与权限不变</div></div>
+  <div class="doors">
+    <div class="door"><b>今-01 今日</b><span>复盘未完成 2</span></div>
+    <div class="door"><b>策-GMS 策略</b><span>当前页 · 参数未保存</span></div>
+    <div class="door"><b>采-01 采集</b><span>行情任务失败 1</span></div>
+  </div>
+  <table>
+    <tr><th>版本</th><th>观察股</th><th>状态</th><th>更新</th></tr>
+    <tr><td>default</td><td>128</td><td><span class="seal">在用</span></td><td>10-19 09:12</td></tr>
+    <tr><td>gms_penalty</td><td>128</td><td><span class="seal">在用</span></td><td>10-18 18:40</td></tr>
+  </table>
+</main>
+</body></html>
+

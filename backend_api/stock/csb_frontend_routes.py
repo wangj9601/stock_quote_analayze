@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CSB 前台：单股信号历史（预计算查询 / 强制重算）。"""
+"""CSB 前台：单股信号历史（优先预计算，缺口补算 / 强制重算）。"""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.database import SessionLocal, get_db
 from backend_core.strategies.csb.config import CSBConfigManager
+from backend_core.strategies.csb.frontend_interface import CSBFrontendInterface
 from backend_core.strategies.csb.trace_store import query_trace_by_code, upsert_trace_rows
 
 logger = logging.getLogger(__name__)
@@ -33,12 +34,30 @@ def _normalize_code(code: str) -> str:
     return s
 
 
-def _resolve_config_id(db: Session, cm: CSBConfigManager, config_id: Optional[int]) -> int:
+def _lookup_stock_name(db: Session, code: str) -> str:
+    """按代码取证券简称；没有记录时返回空串。"""
+    from backend_api.models import StockBasicInfo, StockBasicInfoHK
+
+    code_n = _normalize_code(code)
+    if not code_n:
+        return ""
+    row = db.query(StockBasicInfo.name).filter(StockBasicInfo.code == code_n).first()
+    if row and row[0]:
+        return str(row[0]).strip()
+    row = db.query(StockBasicInfoHK.name).filter(StockBasicInfoHK.code == code_n).first()
+    if row and row[0]:
+        return str(row[0]).strip()
+    return ""
+
+
+def _resolve_config_id(db: Session, cm: CSBConfigManager, config_id: Optional[int]):
+    """返回 (实际版本 ID, 提示)。请求的版本不存在时改用默认版本，避免整页失败。"""
+    warning = None
     if config_id is not None:
         row = cm.get_config_row(db, int(config_id))
-        if not row:
-            raise HTTPException(status_code=404, detail=f"参数版本不存在: {config_id}")
-        return int(config_id)
+        if row:
+            return int(config_id), None
+        warning = f"参数版本不存在: {config_id}，已改用默认版本"
     cm.ensure_default_row(db)
     from backend_api.models import CSBStrategyConfig
 
@@ -57,7 +76,7 @@ def _resolve_config_id(db: Session, cm: CSBConfigManager, config_id: Optional[in
         )
     if not row:
         raise HTTPException(status_code=400, detail="无可用 CSB 参数版本")
-    return int(row.id)
+    return int(row.id), warning
 
 
 def _config_display_name(cm: CSBConfigManager, db: Session, config_id: int) -> str:
@@ -232,14 +251,15 @@ async def get_csb_signal_history(
     start: Optional[str] = Query(None, alias="start", description="起始日期 YYYY-MM-DD"),
     end: Optional[str] = Query(None, alias="end", description="结束日期 YYYY-MM-DD"),
     entry_only: bool = Query(False, description="仅入场信号"),
+    fill_missing: bool = Query(True, description="区间内无预计算的交易日按 asof 补算并落库"),
     limit: int = Query(500, ge=1, le=2000),
     db: Session = Depends(get_db),
 ):
-    """读取 csb_signal_trace 中该股预计算信号序列。"""
+    """单股历史追溯：优先读预计算；fill_missing 时对缺口交易日补算。"""
     try:
         cm = CSBConfigManager()
         cm.ensure_default_row(db)
-        resolved = _resolve_config_id(db, cm, config_id)
+        resolved, config_warning = _resolve_config_id(db, cm, config_id)
         code_n = _normalize_code(code)
         if not code_n:
             raise HTTPException(status_code=400, detail="股票代码不能为空")
@@ -247,6 +267,42 @@ async def get_csb_signal_history(
         end_s = str(end).strip()[:10] if end else None
         if start_s and end_s and start_s > end_s:
             raise HTTPException(status_code=400, detail="开始日期不能晚于结束日期")
+        configs = cm.list_configs(db, active_only=True)
+        stock_name = _lookup_stock_name(db, code_n)
+        if fill_missing:
+            if not start_s or not end_s:
+                raise HTTPException(status_code=400, detail="补算缺口需要填写开始与结束日期")
+            cfg = cm.get_config(resolved, db=db)
+            try:
+                filled = CSBFrontendInterface.backfill_signal_history(
+                    db,
+                    code=code_n,
+                    config=cfg,
+                    config_id=resolved,
+                    start_date=start_s,
+                    end_date=end_s,
+                    entry_only=entry_only,
+                    limit=limit,
+                )
+            except ValueError as ve:
+                raise HTTPException(status_code=400, detail=str(ve))
+            return {
+                "success": True,
+                "code": filled.get("code") or code_n,
+                "name": stock_name,
+                "config_id": resolved,
+                "config_warning": config_warning,
+                "configs": configs,
+                "start_date": filled.get("start_date") or start_s,
+                "end_date": filled.get("end_date") or end_s,
+                "trade_days": filled.get("trade_days"),
+                "cached_days": filled.get("cached_days"),
+                "recomputed_days": filled.get("recomputed_days"),
+                "source": filled.get("source") or "trace",
+                "source_label": filled.get("source_label") or "预计算",
+                "data": filled.get("data") or [],
+                "total": int(filled.get("total") or 0),
+            }
         rows = query_trace_by_code(
             db,
             code=code_n,
@@ -257,11 +313,12 @@ async def get_csb_signal_history(
         )
         if entry_only:
             rows = [r for r in rows if r.get("entry_signal")]
-        configs = cm.list_configs(db, active_only=True)
         return {
             "success": True,
             "code": code_n,
+            "name": stock_name,
             "config_id": resolved,
+            "config_warning": config_warning,
             "configs": configs,
             "start_date": start_s,
             "end_date": end_s,
@@ -288,7 +345,7 @@ async def start_csb_recompute(
         raise HTTPException(status_code=400, detail="股票代码不能为空")
 
     cm = CSBConfigManager()
-    resolved_config_id = _resolve_config_id(db, cm, body.config_id)
+    resolved_config_id, config_warning = _resolve_config_id(db, cm, body.config_id)
     config = cm.get_config(resolved_config_id, db=db)
     config_display = _config_display_name(cm, db, resolved_config_id)
     start_s = str(body.start_date).strip()[:10] if body.start_date else None
@@ -299,8 +356,12 @@ async def start_csb_recompute(
         return JSONResponse(
             {
                 "success": True,
-                "data": {"task_id": existing, "already_running": True},
-                "message": "该股票当前策略版本正在重新计算，请稍候",
+                "data": {
+                    "task_id": existing,
+                    "already_running": True,
+                    "config_id": resolved_config_id,
+                },
+                "message": config_warning or "该股票当前策略版本正在重新计算，请稍候",
             }
         )
 
@@ -338,6 +399,7 @@ async def start_csb_recompute(
                 "config_id": resolved_config_id,
                 "config_name": config_display,
             },
+            "message": config_warning,
         }
     )
 

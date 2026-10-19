@@ -246,6 +246,8 @@ const ScreeningPage = {
             this.bindEvents(panel);
             panel.dataset.eventsBound = '1';
         }
+        // 板块按钮在分片插入之后才存在；GMS 初始化时绑过一次会漏掉后加载的策略
+        this._bindGmsBoardPickerEvents();
         this._initStrategyWidgets(strategy, panel);
     },
 
@@ -1459,7 +1461,35 @@ const ScreeningPage = {
 
     _bindGmsBoardPickerEvents() {
         const overlay = document.getElementById('gmsBoardPickerModal');
-        if (!overlay) return;
+        if (overlay && overlay.dataset.pickerBound !== '1') {
+            overlay.dataset.pickerBound = '1';
+            this._bindGmsBoardPickerModal(overlay);
+        }
+        const picks = [
+            ['gmsIndustryBoardPickBtn', 'industry', 'gms'],
+            ['gmsConceptBoardPickBtn', 'concept', 'gms'],
+            ['urtIndustryBoardPickBtn', 'industry', 'urt'],
+            ['urtConceptBoardPickBtn', 'concept', 'urt'],
+            ['rpeIndustryBoardPickBtn', 'industry', 'rpe'],
+            ['rpeConceptBoardPickBtn', 'concept', 'rpe'],
+            ['rpeIndexBoardPickBtn', 'index', 'rpe'],
+            ['sbbrIndustryBoardPickBtn', 'industry', 'sbbr'],
+            ['sbbrConceptBoardPickBtn', 'concept', 'sbbr'],
+            ['csbIndustryBoardPickBtn', 'industry', 'csb'],
+            ['csbConceptBoardPickBtn', 'concept', 'csb'],
+        ];
+        picks.forEach(([id, kind, owner]) => {
+            const btn = document.getElementById(id);
+            if (!btn || btn.dataset.boardPickBound === '1') return;
+            btn.dataset.boardPickBound = '1';
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                void this.openGmsBoardPickerModal(kind, owner);
+            });
+        });
+    },
+
+    _bindGmsBoardPickerModal(overlay) {
         const closeIds = ['gmsBoardPickerClose', 'gmsBoardPickerCancel'];
         closeIds.forEach((id) => {
             const el = document.getElementById(id);
@@ -1470,51 +1500,6 @@ const ScreeningPage = {
         });
         const card = overlay.querySelector('.gms-modal-card');
         if (card) card.addEventListener('click', (e) => e.stopPropagation());
-
-        const industryBtn = document.getElementById('gmsIndustryBoardPickBtn');
-        if (industryBtn) {
-            industryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'gms'));
-        }
-        const conceptBtn = document.getElementById('gmsConceptBoardPickBtn');
-        if (conceptBtn) {
-            conceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'gms'));
-        }
-        const urtIndustryBtn = document.getElementById('urtIndustryBoardPickBtn');
-        if (urtIndustryBtn) {
-            urtIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'urt'));
-        }
-        const urtConceptBtn = document.getElementById('urtConceptBoardPickBtn');
-        if (urtConceptBtn) {
-            urtConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'urt'));
-        }
-        const rpeIndustryBtn = document.getElementById('rpeIndustryBoardPickBtn');
-        if (rpeIndustryBtn) {
-            rpeIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'rpe'));
-        }
-        const rpeConceptBtn = document.getElementById('rpeConceptBoardPickBtn');
-        if (rpeConceptBtn) {
-            rpeConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'rpe'));
-        }
-        const rpeIndexBtn = document.getElementById('rpeIndexBoardPickBtn');
-        if (rpeIndexBtn) {
-            rpeIndexBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('index', 'rpe'));
-        }
-        const sbbrIndustryBtn = document.getElementById('sbbrIndustryBoardPickBtn');
-        if (sbbrIndustryBtn) {
-            sbbrIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'sbbr'));
-        }
-        const sbbrConceptBtn = document.getElementById('sbbrConceptBoardPickBtn');
-        if (sbbrConceptBtn) {
-            sbbrConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'sbbr'));
-        }
-        const csbIndustryBtn = document.getElementById('csbIndustryBoardPickBtn');
-        if (csbIndustryBtn) {
-            csbIndustryBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('industry', 'csb'));
-        }
-        const csbConceptBtn = document.getElementById('csbConceptBoardPickBtn');
-        if (csbConceptBtn) {
-            csbConceptBtn.addEventListener('click', () => void this.openGmsBoardPickerModal('concept', 'csb'));
-        }
 
         const confirmBtn = document.getElementById('gmsBoardPickerConfirm');
         if (confirmBtn) {
@@ -4850,6 +4835,11 @@ const ScreeningPage = {
         return parsed;
     },
 
+
+    _byId(id) {
+        return document.getElementById(id);
+    },
+
     /**
      * 构建 GMS 接口查询串（不含 trace_only）
      * @param {{ page?: number, includePagination?: boolean, resolvedSingleCode?: string }} options
@@ -4857,7 +4847,7 @@ const ScreeningPage = {
     getGmsQuerySearchParams(options = {}) {
         const includePagination = options.includePagination !== false;
         const page = options.page != null ? options.page : this.gmsPage;
-        const scopeElement = scope.querySelector('input[name="gmsScope"]:checked');
+        const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'all';
         const gmsParams = this.getGmsParams();
         const q = new URLSearchParams();
@@ -4869,17 +4859,17 @@ const ScreeningPage = {
             q.set('scope', scope);
         }
         if (scope === 'gms_watchlist') {
-            const mEl = scope.querySelector('input[name="gmsWatchlistMarket"]:checked');
+            const mEl = document.querySelector('input[name="gmsWatchlistMarket"]:checked');
             q.set('gms_watchlist_market', mEl ? mEl.value : 'all');
             if (!mEl || mEl.value !== 'hk') {
-                scope.querySelectorAll('input[name="gmsWatchlistBoardSegment"]:checked').forEach((cb) => {
+                document.querySelectorAll('input[name="gmsWatchlistBoardSegment"]:checked').forEach((cb) => {
                     const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
                     if (v && v !== 'ALL') q.append('cn_board_segment', v);
                 });
             }
         }
         if (scope === 'cn' || scope === 'industry_board' || scope === 'concept_board') {
-            scope.querySelectorAll('input[name="gmsCnBoardSegment"]:checked').forEach((cb) => {
+            document.querySelectorAll('input[name="gmsCnBoardSegment"]:checked').forEach((cb) => {
                 const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
                 if (v && v !== 'ALL') q.append('cn_board_segment', v);
             });
@@ -4892,12 +4882,12 @@ const ScreeningPage = {
             this.getGmsSelectedConceptBoardCodes().forEach((code) => q.append('concept_board_code', code));
             q.set('board_code_source', this._gmsPreferredBoardCodeSource('concept'));
         }
-        const configEl = byId('gms-config_id');
+        const configEl = this._byId('gms-config_id');
         const configId = configEl && configEl.value ? parseInt(configEl.value, 10) : this.gmsConfigId;
         if (configId) {
             q.set('config_id', String(configId));
         }
-        const overrideEl = byId('gms-param-override');
+        const overrideEl = this._byId('gms-param-override');
         const useOverride = overrideEl && overrideEl.checked;
         if (useOverride) {
             if (gmsParams.start_date) q.set('date', gmsParams.start_date);
@@ -4924,7 +4914,7 @@ const ScreeningPage = {
         } else if (gmsParams.start_date) {
             q.set('date', gmsParams.start_date);
         }
-        const excludeStEl = byId('gmsExcludeSt');
+        const excludeStEl = this._byId('gmsExcludeSt');
         if (excludeStEl && excludeStEl.checked) {
             q.set('exclude_st', 'true');
         }
@@ -4942,7 +4932,7 @@ const ScreeningPage = {
 
     /** 构建 GMS 查询串（含单只股票代码解析） */
     async buildGmsQuerySearchParams(options = {}) {
-        const scopeElement = scope.querySelector('input[name="gmsScope"]:checked');
+        const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'all';
         if (scope === 'industry_board') {
             if (this.getGmsSelectedIndustryBoardCodes().length === 0) {
@@ -4955,7 +4945,7 @@ const ScreeningPage = {
             }
         }
         if (scope === 'single') {
-            const inputEl = byId('gmsSingleStockInput');
+            const inputEl = this._byId('gmsSingleStockInput');
             const raw = inputEl ? String(inputEl.value || '').trim() : '';
             if (!raw) {
                 throw new Error('请输入股票代码或名称');
@@ -4975,7 +4965,7 @@ const ScreeningPage = {
 
     /** 构建 URT 选股查询参数（数据来源对齐 GMS） */
     async buildUrtQuerySearchParams() {
-        const scopeElement = scope.querySelector('input[name="urtScope"]:checked');
+        const scopeElement = document.querySelector('input[name="urtScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'cn';
         if (scope === 'industry_board') {
             if (this.getUrtSelectedIndustryBoardCodes().length === 0) {
@@ -4988,7 +4978,7 @@ const ScreeningPage = {
             }
         }
         if (scope === 'single') {
-            const inputEl = byId('urtSingleStockInput');
+            const inputEl = this._byId('urtSingleStockInput');
             const raw = inputEl ? String(inputEl.value || '').trim() : '';
             if (!raw) {
                 throw new Error('请输入股票代码或名称');
@@ -4999,7 +4989,7 @@ const ScreeningPage = {
         params.set('scope', scope);
 
         if (scope === 'cn' || scope === 'industry_board' || scope === 'concept_board') {
-            scope.querySelectorAll('input[name="urtCnBoardSegment"]:checked').forEach((cb) => {
+            document.querySelectorAll('input[name="urtCnBoardSegment"]:checked').forEach((cb) => {
                 const v = cb && cb.value ? String(cb.value).trim().toUpperCase() : '';
                 if (v && v !== 'ALL') params.append('cn_board_segment', v);
             });
@@ -5019,30 +5009,30 @@ const ScreeningPage = {
             params.set('board_code_source', this._gmsPreferredBoardCodeSource('concept', cbCodes));
         }
         if (scope === 'single') {
-            const inputEl = byId('urtSingleStockInput');
+            const inputEl = this._byId('urtSingleStockInput');
             params.set('stock_code', String(inputEl?.value || '').trim());
         }
 
-        const urtDateEl = byId('urtScreeningDate');
+        const urtDateEl = this._byId('urtScreeningDate');
         if (urtDateEl && urtDateEl.value) {
             params.set('date', urtDateEl.value);
         }
         if (scope === 'cn' || scope === 'hk') {
-            const limEl = byId('urtLimit');
+            const limEl = this._byId('urtLimit');
             const limRaw = limEl && limEl.value != null ? String(limEl.value).trim() : '';
             if (limRaw !== '') {
                 const lim = parseInt(limRaw, 10);
                 if (!isNaN(lim) && lim > 0) params.set('limit', String(lim));
             }
         }
-        const configEl = byId('urt-config_id');
+        const configEl = this._byId('urt-config_id');
         const cid = configEl && configEl.value ? parseInt(configEl.value, 10) : NaN;
         if (!isNaN(cid) && cid > 0) params.set('config_id', String(cid));
 
         // 量能/最低得分：仅用户填写非空时才覆盖；默认空 → 用参数版本，可走预计算缓存
         if (scope === 'cn' || scope === 'hk') {
-            const vmRaw = String(byId('urtVolumeMultiple')?.value || '').trim();
-            const msRaw = String(byId('urtMinScore')?.value || '').trim();
+            const vmRaw = String(this._byId('urtVolumeMultiple')?.value || '').trim();
+            const msRaw = String(this._byId('urtMinScore')?.value || '').trim();
             if (vmRaw !== '') {
                 const vm = parseFloat(vmRaw);
                 if (!isNaN(vm) && vm > 0) params.set('volume_multiple', String(vm));
@@ -5052,7 +5042,7 @@ const ScreeningPage = {
                 if (!isNaN(ms) && ms >= 0) params.set('min_score', String(ms));
             }
         }
-        const sqmEl = byId('urtSignalQualityMode');
+        const sqmEl = this._byId('urtSignalQualityMode');
         const sqm = sqmEl && sqmEl.value ? String(sqmEl.value).trim().toLowerCase() : '';
         if (sqm === 'premium' || sqm === 'standard') {
             params.set('signal_quality_mode', sqm);
@@ -5060,7 +5050,7 @@ const ScreeningPage = {
 
         // 全部 A/H：勾选「优先读预计算」→ prefer_cache + trace_only；取消 → force_realtime
         if (scope === 'cn' || scope === 'hk') {
-            const preferEl = byId('urtPreferPrecompute');
+            const preferEl = this._byId('urtPreferPrecompute');
             const prefer = !preferEl || preferEl.checked;
             if (prefer) {
                 params.set('prefer_cache', 'true');
@@ -5076,8 +5066,8 @@ const ScreeningPage = {
     },
 
     _updateUrtConfigAlignHint(defaultId) {
-        const hintEl = byId('urtConfigAlignHint');
-        const selectEl = byId('urt-config_id');
+        const hintEl = this._byId('urtConfigAlignHint');
+        const selectEl = this._byId('urt-config_id');
         if (!hintEl || !selectEl) return;
         const cid = selectEl.value ? parseInt(selectEl.value, 10) : NaN;
         if (!isNaN(cid) && defaultId != null && cid !== Number(defaultId)) {
@@ -5090,7 +5080,7 @@ const ScreeningPage = {
     },
 
     _updateUrtTraceStaleHint(result) {
-        const hintEl = byId('urtTraceStaleHint');
+        const hintEl = this._byId('urtTraceStaleHint');
         if (!hintEl) return;
         if (result && (result.stale || result.need_recompute) && result.data_source === 'urt_signal_trace') {
             hintEl.style.display = 'block';
@@ -5112,7 +5102,7 @@ const ScreeningPage = {
     },
 
     _canslimLetterEnabled(elId, defaultOn) {
-        const el = byId(elId);
+        const el = this._byId(elId);
         if (!el) return defaultOn !== false;
         if (el.tagName === 'SELECT') {
             return String(el.value || 'true').toLowerCase() !== 'false';
@@ -5122,7 +5112,7 @@ const ScreeningPage = {
     },
 
     _canslimOptionalNumber(elId) {
-        const el = byId(elId);
+        const el = this._byId(elId);
         if (!el || el.value === '' || el.value == null) return null;
         const n = Number(el.value);
         return Number.isFinite(n) ? n : null;
@@ -5149,13 +5139,13 @@ const ScreeningPage = {
         if (nearHigh != null) params.set('near_high_min_pct', String(nearHigh));
         const circ = this._canslimOptionalNumber('canslimCircMax');
         if (circ != null && circ > 0) params.set('circ_shares_max_yi', String(circ));
-        const dEl = byId('canslimDate');
+        const dEl = this._byId('canslimDate');
         if (dEl && dEl.value) params.set('asof', dEl.value);
         return params;
     },
 
     _updateCanslimMarketHint(market) {
-        const hint = byId('canslimMarketHint');
+        const hint = this._byId('canslimMarketHint');
         if (!hint) return;
         const m = market || {};
         hint.textContent = m.reason || '';
@@ -5171,20 +5161,20 @@ const ScreeningPage = {
     },
 
     _resetUrtOverrideInputs() {
-        const vmEl = byId('urtVolumeMultiple');
-        const msEl = byId('urtMinScore');
-        const sqmEl = byId('urtSignalQualityMode');
+        const vmEl = this._byId('urtVolumeMultiple');
+        const msEl = this._byId('urtMinScore');
+        const sqmEl = this._byId('urtSignalQualityMode');
         if (vmEl) vmEl.value = '';
         if (msEl) msEl.value = '';
         if (sqmEl) sqmEl.value = '';
-        const preferEl = byId('urtPreferPrecompute');
+        const preferEl = this._byId('urtPreferPrecompute');
         if (preferEl) preferEl.checked = true;
     },
 
     _fillUrtParamPlaceholders(item) {
-        const vmEl = byId('urtVolumeMultiple');
-        const msEl = byId('urtMinScore');
-        const sqmEl = byId('urtSignalQualityMode');
+        const vmEl = this._byId('urtVolumeMultiple');
+        const msEl = this._byId('urtMinScore');
+        const sqmEl = this._byId('urtSignalQualityMode');
         if (vmEl && item && item.volume_multiple != null) {
             vmEl.placeholder = `版本 ${item.volume_multiple}`;
         }
@@ -5202,7 +5192,7 @@ const ScreeningPage = {
 
     /** 加载 URT 策略参数版本列表（默认锁定生效版本；切换后不自动刷新，须点「刷新筛选」） */
     async initUrtStrategyConfig() {
-        const selectEl = byId('urt-config_id');
+        const selectEl = this._byId('urt-config_id');
         if (!selectEl) return;
         selectEl.innerHTML = '<option value="">加载中…</option>';
         try {
@@ -5255,9 +5245,9 @@ const ScreeningPage = {
 
     /** GMS：按代码/名称精准定位（全量拉取后匹配） */
     async locateGmsStock() {
-        const inputEl = byId('gmsLocateInput');
-        const clearBtn = byId('gmsLocateClearBtn');
-        const hintEl = byId('gmsLocateHint');
+        const inputEl = this._byId('gmsLocateInput');
+        const clearBtn = this._byId('gmsLocateClearBtn');
+        const hintEl = this._byId('gmsLocateHint');
         const keywordRaw = inputEl ? String(inputEl.value || '').trim() : '';
         if (!keywordRaw) {
             if (window.CommonUtils) CommonUtils.showToast('请输入股票代码或名称', 'warning');
@@ -5309,7 +5299,7 @@ const ScreeningPage = {
                 hintEl.textContent = `定位结果：${hitCode} ${hitName}`;
                 hintEl.style.display = 'inline-block';
             }
-            const searchDate = byId('searchDate-gms');
+            const searchDate = this._byId('searchDate-gms');
             if (searchDate && result.search_date) searchDate.textContent = `筛选时间: ${result.search_date}`;
         } catch (e) {
             const msg = e && e.message ? e.message : String(e);
@@ -5340,10 +5330,10 @@ const ScreeningPage = {
     },
 
     updateGmsPaginationUi(paging) {
-        const bar = byId('gmsPaginationBar');
-        const label = byId('gmsPaginationLabel');
-        const prev = byId('gmsPaginationPrev');
-        const next = byId('gmsPaginationNext');
+        const bar = this._byId('gmsPaginationBar');
+        const label = this._byId('gmsPaginationLabel');
+        const prev = this._byId('gmsPaginationPrev');
+        const next = this._byId('gmsPaginationNext');
         if (!bar || !label) return;
         if (!paging || !paging.enabled) {
             bar.style.display = 'none';
