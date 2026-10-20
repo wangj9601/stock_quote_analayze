@@ -270,7 +270,7 @@
         <el-form-item>
           <span class="hint">
             回测在服务端后台线程执行：关闭本页或浏览器不会取消任务；请保持 API 服务进程运行。服务重启后会从检查点自动续跑。
-            单日预计算只写选定交易日。改参数或要与实时扫对齐时：先「清空 trace」或「强制刷新区间」（与回测同引擎），再开「优先读缓存」创建任务。
+            单日预计算只写选定交易日。「强制刷新区间」只删并重写所选日期内的 trace；要清空该版本全部预计算用「清空该版本 trace」。
             <template v-if="traceStatsLabel">当前 trace：{{ traceStatsLabel }}</template>
           </span>
         </el-form-item>
@@ -310,7 +310,7 @@
         show-icon
         :closable="false"
         class="mb-3"
-        title="将先删除所选参数版本的全部 csb_signal_trace，再按区间全市场一次扫描写入（与关缓存实时扫同源）。任务在后台执行，耗时可与全市场回测补预计算相当。"
+        title="将先删除所选参数版本在开始～结束日期内的 csb_signal_trace，再按该区间全市场扫描写入（与关缓存实时扫同源）。区间外的预计算保留。任务在后台执行，耗时可与全市场回测补预计算相当。"
       />
       <el-form label-width="100px">
         <el-form-item label="参数版本" required>
@@ -1128,7 +1128,7 @@ async function runTraceRefresh() {
   }
   try {
     await ElMessageBox.confirm(
-      `将删除参数版本 ID ${cid} 的全部 trace，并重新扫描 ${traceRefreshStart.value}～${traceRefreshEnd.value} 全市场买点。耗时较长，在后台执行。`,
+      `将删除参数版本 ID ${cid} 在 ${traceRefreshStart.value}～${traceRefreshEnd.value} 的 trace，并重新扫描该区间全市场买点。区间外数据保留。耗时较长，在后台执行。`,
       '确认强制刷新',
       { type: 'warning', confirmButtonText: '启动', cancelButtonText: '取消' },
     )

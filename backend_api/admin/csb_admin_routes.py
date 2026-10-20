@@ -136,7 +136,10 @@ class TraceRefreshRangeBody(BaseModel):
     config_id: int = Field(..., ge=1, description="参数版本 ID")
     start_date: str = Field(..., description="开始日期 YYYY-MM-DD")
     end_date: str = Field(..., description="结束日期 YYYY-MM-DD")
-    purge_first: bool = Field(True, description="刷新前先清空该版本全部 trace")
+    purge_first: bool = Field(
+        True,
+        description="刷新前先删除该版本在 start_date～end_date 内的 trace（非整版）",
+    )
 
 
 def write_csb_audit(

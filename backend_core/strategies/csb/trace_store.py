@@ -133,6 +133,35 @@ def delete_trace_for_config(db: Session, *, config_id: int) -> int:
     return int(n or 0)
 
 
+def delete_trace_for_config_in_range(
+    db: Session,
+    *,
+    config_id: int,
+    start_date: str,
+    end_date: str,
+) -> int:
+    """只删除指定参数版本在 [start_date, end_date] 内的 trace（含 SCANNED 占位）。"""
+    from backend_api.models import CSBSignalTrace
+
+    start_s = str(start_date or "").strip()[:10]
+    end_s = str(end_date or "").strip()[:10]
+    if not start_s or not end_s:
+        raise ValueError("删除区间需同时提供 start_date 与 end_date")
+    if start_s > end_s:
+        raise ValueError("start_date 不能晚于 end_date")
+    n = (
+        db.query(CSBSignalTrace)
+        .filter(
+            CSBSignalTrace.config_id == int(config_id),
+            CSBSignalTrace.trade_date >= start_s,
+            CSBSignalTrace.trade_date <= end_s,
+        )
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    return int(n or 0)
+
+
 def mark_date_scanned(
     db: Session,
     *,
