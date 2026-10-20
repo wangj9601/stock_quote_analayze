@@ -1,76 +1,89 @@
 <template>
   <div class="login-shell">
-    <div class="login-card">
-      <div>
-        <h2 class="login-brand">
-          冰枫堂
-        </h2>
-        <p class="login-sub">
-          管理端
-        </p>
-      </div>
-      <form class="mt-8 space-y-6" @submit.prevent="handleLogin">
-        <div class="login-fields">
-          <div>
-            <label for="username" class="sr-only">用户名</label>
-            <input
-              id="username"
-              v-model="form.username"
-              name="username"
-              type="text"
-              required
-              class="login-field login-field-top"
-              placeholder="用户名"
-            />
-          </div>
-          <div>
-            <label for="password" class="sr-only">密码</label>
-            <input
-              id="password"
-              v-model="form.password"
-              name="password"
-            type="password"
-              required
-              class="login-field login-field-bottom"
-              placeholder="密码"
-            />
-          </div>
-        </div>
+    <main class="login-stage">
+      <div class="login-card">
+        <header class="login-mast">
+          <h1 class="login-brand">冰枫堂</h1>
+          <p class="login-sub">管理端</p>
+        </header>
 
-        <div>
+        <form class="login-form" novalidate @submit.prevent="handleLogin">
+          <div class="login-fields" :class="{ 'is-invalid': !!error }">
+            <div>
+              <label for="username" class="sr-only">用户名</label>
+              <input
+                id="username"
+                v-model="form.username"
+                name="username"
+                type="text"
+                required
+                autocomplete="username"
+                spellcheck="false"
+                class="login-field"
+                placeholder="用户名"
+                :aria-invalid="error ? 'true' : undefined"
+                :aria-describedby="error ? 'login-error' : undefined"
+              />
+            </div>
+            <div>
+              <label for="password" class="sr-only">密码</label>
+              <input
+                id="password"
+                v-model="form.password"
+                name="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                class="login-field"
+                placeholder="密码"
+                :aria-invalid="error ? 'true' : undefined"
+                :aria-describedby="error ? 'login-error' : undefined"
+              />
+            </div>
+          </div>
+
+          <p
+            v-if="error"
+            id="login-error"
+            role="alert"
+            data-testid="login-error"
+            class="login-error"
+          >
+            {{ error }}
+          </p>
+
           <button
             type="submit"
-            :disabled="loading"
             class="login-submit"
+            :disabled="loading"
+            :aria-busy="loading"
           >
-            <span v-if="loading" class="absolute left-0 inset-y-0 flex items-center pl-3">
-              <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-            </span>
-            {{ loading ? '登录中...' : '登录' }}
+            <svg
+              v-if="loading"
+              class="login-spinner"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" opacity="0.35" />
+              <path
+                d="M12 3a9 9 0 0 1 9 9"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="square"
+              />
+            </svg>
+            {{ loading ? '登录中…' : '登录' }}
           </button>
-        </div>
-
-        <div
-          v-if="error"
-          role="alert"
-          data-testid="login-error"
-          class="text-red-600 text-center text-sm"
-        >
-          {{ error }}
-        </div>
-      </form>
-    </div>
-    
-    <!-- ICP备案信息 -->
-    <footer class="icp-footer">
-      <div class="icp-container">
-        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
-          京ICP备18061239号-1
-        </a>
+        </form>
       </div>
+    </main>
+
+    <footer class="icp-footer">
+      <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">
+        京ICP备18061239号-1
+      </a>
     </footer>
   </div>
 </template>
@@ -105,8 +118,7 @@ const handleLogin = async () => {
       username: form.username,
       password: form.password
     })
-    
-    // 登录成功，跳转到dashboard
+
     router.push('/dashboard')
   } catch (err) {
     error.value = err instanceof Error ? err.message : '登录失败'
@@ -119,57 +131,141 @@ const handleLogin = async () => {
 <style scoped>
 .login-shell {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
   background: #f3f1ec;
   color: #1a2332;
-  padding: 3rem 1rem 0;
+  font-size: 14px;
+  caret-color: #234e70;
+  color-scheme: light;
+  scrollbar-color: #234e70 #f3f1ec;
+}
+
+.login-shell ::selection {
+  background: #d7b56d;
+  color: #1a2332;
+}
+
+.login-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.login-card {
+  width: min(100%, 28rem);
+  background: #fff;
+  padding: 32px 28px;
+  border: 1px solid #c9c3b8;
+  border-radius: 2px;
+}
+
+.login-mast {
+  text-align: center;
 }
 
 .login-brand {
   margin: 0;
-  text-align: center;
-  font-size: 1.75rem;
+  font-size: 28px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  line-height: 1.2;
+  letter-spacing: 0.12em;
   color: #234e70;
 }
 
 .login-sub {
   margin: 8px 0 0;
-  text-align: center;
   font-size: 13px;
+  line-height: 1.4;
   color: #3e4c59;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 28px;
+}
+
+.login-fields {
+  border: 1px solid #c9c3b8;
+  border-radius: 2px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.login-fields.is-invalid {
+  border-color: #c23b3b;
+}
+
+.login-fields:focus-within {
+  border-color: #234e70;
+  outline: 2px solid #234e70;
+  outline-offset: 1px;
 }
 
 .login-field {
   display: block;
   width: 100%;
   box-sizing: border-box;
-  padding: 10px 12px;
-  border: 1px solid #c9c3b8;
+  min-height: 44px;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: 0;
   background: #fff;
   color: #1a2332;
   font: inherit;
   font-size: 14px;
+  line-height: 1.4;
 }
 
-.login-field-top {
-  border-bottom: none;
+.login-fields > div + div .login-field {
+  border-top: 1px solid #e4dfd6;
+}
+
+.login-field::placeholder {
+  color: #5c6770;
+  opacity: 1;
 }
 
 .login-field:focus {
-  outline: 2px solid #234e70;
-  outline-offset: 1px;
-  position: relative;
-  z-index: 1;
+  outline: none;
+  background: #f6edd6;
+}
+
+.login-field:-webkit-autofill,
+.login-field:-webkit-autofill:hover {
+  -webkit-text-fill-color: #1a2332;
+  caret-color: #234e70;
+  box-shadow: 0 0 0 1000px #fff inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+.login-field:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1a2332;
+  caret-color: #234e70;
+  box-shadow: 0 0 0 1000px #f6edd6 inset;
+}
+
+.login-error {
+  margin: 0;
+  color: #c23b3b;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .login-submit {
-  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   width: 100%;
+  min-height: 44px;
   padding: 10px 16px;
   border: 1px solid #234e70;
   border-radius: 2px;
@@ -182,109 +278,79 @@ const handleLogin = async () => {
   cursor: pointer;
 }
 
-.login-submit:hover {
+.login-submit:hover:not(:disabled) {
   background: #1b3d58;
+  border-color: #1b3d58;
+}
+
+.login-submit:active:not(:disabled) {
+  background: #163044;
+  border-color: #163044;
 }
 
 .login-submit:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+  cursor: wait;
 }
 
 .login-submit:focus-visible {
-  outline: 2px solid #d7b56d;
+  outline: 2px solid #234e70;
   outline-offset: 2px;
 }
 
-.login-container {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: rgb(249 250 251);
-  padding: 3rem 1rem;
+.login-spinner {
+  width: 16px;
+  height: 16px;
+  animation: login-spin 0.7s linear infinite;
 }
 
-@media (min-width: 640px) {
-  .login-container {
-    padding: 3rem 1.5rem;
+@keyframes login-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-@media (min-width: 1024px) {
-  .login-container {
-    padding: 3rem 2rem;
+@media (prefers-reduced-motion: reduce) {
+  .login-spinner {
+    animation: none;
   }
 }
 
-.login-card {
-  max-width: 28rem;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  background: #fff;
-  padding: 2rem;
-  border: 1px solid #c9c3b8;
-  border-radius: 2px;
-  box-shadow: 0 10px 24px rgba(26, 35, 50, 0.08);
-}
-
-.login-header {
-  text-align: center;
-}
-
-.login-form {
-  margin-top: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.login-info {
-  margin-top: 1.5rem;
-  text-align: center;
-}
-
-/* ICP备案信息样式 */
 .icp-footer {
-  background: transparent;
-  border-top: 1px solid #c9c3b8;
-  padding: 15px 0;
+  padding: 16px 16px 20px;
   text-align: center;
-  margin-top: auto;
-  width: 100%;
-}
-
-.icp-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 20px;
 }
 
 .icp-footer a {
   color: #3e4c59;
-  text-decoration: none;
   font-size: 12px;
-  transition: color 0.3s ease;
+  line-height: 1.4;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  text-decoration-color: #c9c3b8;
 }
 
 .icp-footer a:hover {
   color: #234e70;
+  text-decoration-color: #234e70;
 }
 
-/* 响应式ICP备案 */
-@media (max-width: 768px) {
-  .icp-footer {
-    padding: 10px 0;
+.icp-footer a:focus-visible {
+  outline: 2px solid #234e70;
+  outline-offset: 2px;
+}
+
+@media (max-width: 480px) {
+  .login-stage {
+    padding: 24px 16px;
   }
-  
-  .icp-container {
-    padding: 0 15px;
+
+  .login-card {
+    padding: 28px 20px;
   }
-  
-  .icp-footer a {
-    font-size: 11px;
+
+  .login-brand {
+    font-size: 26px;
   }
 }
-</style> 
+</style>
