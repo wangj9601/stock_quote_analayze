@@ -114,7 +114,7 @@ def run_csb_trace_refresh_range(
     from backend_core.strategies.csb.config import CSBConfigManager
     from backend_core.strategies.csb.data_loader import CSBDataLoader
     from backend_core.strategies.csb.strategy_engine import CSBStrategyEngine
-    from backend_core.strategies.csb.trace_store import delete_trace_for_config
+    from backend_core.strategies.csb.trace_store import delete_trace_for_config_in_range
 
     started = datetime.now()
     db = SessionLocal()
@@ -122,7 +122,17 @@ def run_csb_trace_refresh_range(
         cm = CSBConfigManager()
         cm.ensure_default_row(db)
         cfg = cm.get_config(int(config_id), db=db)
-        purged = delete_trace_for_config(db, config_id=int(config_id)) if purge_first else 0
+        # 仅删区间内数据；整版清空请用「清空该版本 trace」
+        purged = (
+            delete_trace_for_config_in_range(
+                db,
+                config_id=int(config_id),
+                start_date=str(start_date)[:10],
+                end_date=str(end_date)[:10],
+            )
+            if purge_first
+            else 0
+        )
         dates = _trading_dates(db, start_date, end_date)
         if not dates:
             return {"success": False, "error": "区间内无交易日", "purged_rows": purged}
