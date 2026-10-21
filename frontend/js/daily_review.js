@@ -261,6 +261,13 @@ const DailyReviewPage = {
             const el = document.getElementById(id);
             if (el) el.innerHTML = '';
         });
+        this._notifyScrollFab();
+    },
+
+    _notifyScrollFab() {
+        if (window.AnalysisPage && typeof window.AnalysisPage.syncReviewScrollFabSoon === 'function') {
+            window.AnalysisPage.syncReviewScrollFabSoon(80);
+        }
     },
 
     fmt(v, digits) {
@@ -762,6 +769,7 @@ const DailyReviewPage = {
         if (vp) vp.value = data.viewpoint_md || '';
         const ad = document.getElementById('drAdvice');
         if (ad) ad.value = data.advice_md || '';
+        this._notifyScrollFab();
     },
 };
 

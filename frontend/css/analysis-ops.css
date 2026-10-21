@@ -822,6 +822,26 @@ body.ops-map[data-channel="analyze"] .dr-section .dr-table a.dr-stock-link:focus
     text-underline-offset: 3px;
 }
 
+/* 顶底滚动 FAB：与个股/选股双圆钮一致，作战板金边激活 */
+body.ops-map[data-channel="analyze"] .ssa-scroll-fab__btn {
+    background: var(--ops-ground-elevated) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+}
+
+body.ops-map[data-channel="analyze"] .ssa-scroll-fab__btn.is-active,
+body.ops-map[data-channel="analyze"] .ssa-scroll-fab__btn:hover:not(:disabled) {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
+}
+
+body.ops-map[data-channel="analyze"] .ssa-scroll-fab__btn:focus-visible {
+    outline: none;
+    box-shadow: var(--ops-focus) !important;
+}
+
 @media (max-width: 767px) {
     body.ops-map[data-channel="analyze"] .rsa-table td.rsa-col-ops,
     body.ops-map[data-channel="analyze"] .rsa-table thead th.rsa-col-ops {

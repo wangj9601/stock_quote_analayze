@@ -1036,6 +1036,7 @@ body.ops-map .gms-score-detail-inner .strength-high {
 
 body.ops-map .trace-table.urt-trace-table .strength-mid,
 body.ops-map .trace-table .strength-mid,
+body.ops-map .gms-score-detail-meta .strength-mid,
 body.ops-map .gms-score-detail-inner .strength-mid {
     background: rgba(201, 162, 39, 0.14) !important;
     color: var(--ops-gold) !important;
@@ -1045,12 +1046,52 @@ body.ops-map .gms-score-detail-inner .strength-mid {
     font-weight: 600 !important;
 }
 
+/* 未通过：禁止浅粉底+浅字；与 ssa-badge--no 同族哑光芯片 */
+body.ops-map .trace-table.urt-trace-table .strength-low,
+body.ops-map .trace-table .strength-low,
+body.ops-map .gms-score-detail-meta .strength-low,
+body.ops-map .gms-score-detail-inner .strength-low {
+    background: rgba(0, 0, 0, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    border-radius: 1px !important;
+    padding: 1px 7px !important;
+    font-weight: 600 !important;
+}
+
+/* 明细说明：压过 screening/stock 浅色页的深灰字，避免作战板上「看不见」 */
+body.ops-map .gms-score-detail-section strong {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-score-detail-inner .urt-buy-logic-formula,
+body.ops-map .gms-score-detail-inner .urt-buy-logic-conclusion,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-formula,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-conclusion {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-score-detail-inner .urt-buy-logic-detail,
+body.ops-map .gms-score-detail-inner .urt-buy-logic-sub,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-detail,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-sub,
+body.ops-map .urt-buy-logic-detail,
+body.ops-map .urt-buy-logic-sub {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-score-detail-inner .gms-version-meta-line,
+body.ops-map .gms-score-detail-cell .gms-version-meta-line {
+    color: var(--ops-ink-muted) !important;
+}
+
 body.ops-map .gms-score-detail-row {
     background: transparent !important;
 }
 
 body.ops-map .gms-score-detail-cell {
     background: var(--ops-ground-elevated) !important;
+    color: var(--ops-ink) !important;
 }
 
 body.ops-map .gms-score-detail-meta {
@@ -1060,8 +1101,9 @@ body.ops-map .gms-score-detail-meta {
     color: var(--ops-ink) !important;
 }
 
+/* 勿用 span 通配盖掉 strength-* 芯片字色 */
 body.ops-map .gms-score-detail-meta .gms-version-name,
-body.ops-map .gms-score-detail-meta span {
+body.ops-map .gms-score-detail-meta > .gms-version-meta-line > span:not([class*="strength-"]):not(.buy-yes) {
     color: var(--ops-ink) !important;
 }
 

@@ -295,6 +295,7 @@ body.ops-map .gms-score-detail-inner .strength-high {
 
 body.ops-map .trace-table.urt-trace-table .strength-mid,
 body.ops-map .trace-table .strength-mid,
+body.ops-map .gms-score-detail-meta .strength-mid,
 body.ops-map .gms-score-detail-inner .strength-mid {
     background: rgba(201, 162, 39, 0.14) !important;
     color: var(--ops-gold) !important;
@@ -302,6 +303,43 @@ body.ops-map .gms-score-detail-inner .strength-mid {
     border-radius: 1px !important;
     padding: 1px 7px !important;
     font-weight: 600 !important;
+}
+
+body.ops-map .trace-table.urt-trace-table .strength-low,
+body.ops-map .trace-table .strength-low,
+body.ops-map .gms-score-detail-meta .strength-low,
+body.ops-map .gms-score-detail-inner .strength-low {
+    background: rgba(0, 0, 0, 0.35) !important;
+    color: var(--ops-ink) !important;
+    border: 1px solid rgba(217, 226, 236, 0.28) !important;
+    border-radius: 1px !important;
+    padding: 1px 7px !important;
+    font-weight: 600 !important;
+}
+
+body.ops-map .gms-score-detail-section strong {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-score-detail-inner .urt-buy-logic-formula,
+body.ops-map .gms-score-detail-inner .urt-buy-logic-conclusion,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-formula,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-conclusion {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-score-detail-inner .urt-buy-logic-detail,
+body.ops-map .gms-score-detail-inner .urt-buy-logic-sub,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-detail,
+body.ops-map .gms-score-detail-cell .urt-buy-logic-sub,
+body.ops-map .urt-buy-logic-detail,
+body.ops-map .urt-buy-logic-sub {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-score-detail-inner .gms-version-meta-line,
+body.ops-map .gms-score-detail-cell .gms-version-meta-line {
+    color: var(--ops-ink-muted) !important;
 }
 
 body.ops-map .gms-score-detail-row {
@@ -322,7 +360,7 @@ body.ops-map .gms-score-detail-meta {
 }
 
 body.ops-map .gms-score-detail-meta .gms-version-name,
-body.ops-map .gms-score-detail-meta span {
+body.ops-map .gms-score-detail-meta > .gms-version-meta-line > span:not([class*="strength-"]):not(.buy-yes) {
     color: var(--ops-ink) !important;
 }
 

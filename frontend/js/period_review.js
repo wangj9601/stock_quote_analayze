@@ -203,6 +203,9 @@ function createPeriodReview(kind, prefix) {
             if (!data) {
                 this._loadedAnchor = null;
                 root.innerHTML = '<section class="dr-section"><p class="dr-empty">暂无该区间快照。可点击「重算」汇总区间内已有的日复盘。</p></section>';
+                if (window.AnalysisPage && typeof window.AnalysisPage.syncReviewScrollFabSoon === 'function') {
+                    window.AnalysisPage.syncReviewScrollFabSoon(80);
+                }
                 return;
             }
             const picks = data.picks || {};
@@ -261,6 +264,9 @@ function createPeriodReview(kind, prefix) {
                         <textarea id="${this.prefix}Advice" rows="5">${esc(data.advice_md || '')}</textarea>
                     </div>
                 </section>`;
+            if (window.AnalysisPage && typeof window.AnalysisPage.syncReviewScrollFabSoon === 'function') {
+                window.AnalysisPage.syncReviewScrollFabSoon(80);
+            }
         },
     };
 }

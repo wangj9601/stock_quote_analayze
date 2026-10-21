@@ -47,6 +47,7 @@ const AnalysisPage = {
             'js/market_analysis.js?v=20260925a',
         ],
         'market-review': [
+            'js/page_scroll_fab.js',
             'js/daily_review.js?v=20261009-sector-fold',
             'js/period_review.js?v=20260930-rv',
         ],
@@ -142,6 +143,37 @@ const AnalysisPage = {
                 if (window.MarketAnalysis) MarketAnalysis.init();
             });
         }
+        if (tabId === 'market-review') {
+            once('review-scroll-fab', () => this.bindReviewScrollFab());
+        }
+    },
+
+    bindReviewScrollFab() {
+        if (!window.PageScrollFab || typeof window.PageScrollFab.bindDual !== 'function') return;
+        window.PageScrollFab.bindDual({
+            fabId: 'drScrollFab',
+            topBtnId: 'drScrollTopBtn',
+            bottomBtnId: 'drScrollBottomBtn',
+            showTopAfterPx: 240,
+            nearBottomPx: 120,
+            onlyWhenScrollable: true,
+        });
+        if (typeof window.PageScrollFab.setVisible === 'function') {
+            window.PageScrollFab.setVisible('drScrollFab', true);
+        }
+    },
+
+    syncReviewScrollFab() {
+        const fab = document.getElementById('drScrollFab');
+        const opts = fab && fab._scrollFabDualOpts;
+        if (opts && window.PageScrollFab && typeof window.PageScrollFab.syncDual === 'function') {
+            window.PageScrollFab.syncDual(opts);
+        }
+    },
+
+    syncReviewScrollFabSoon(delayMs) {
+        const ms = typeof delayMs === 'number' ? delayMs : 80;
+        window.setTimeout(() => this.syncReviewScrollFab(), ms);
     },
 
     redirectIndexDeepLink() {
@@ -357,6 +389,7 @@ const AnalysisPage = {
         if (panelId === 'daily-review' && window.DailyReviewPage) DailyReviewPage.init();
         if (panelId === 'weekly-review' && window.PeriodReviewWeek) PeriodReviewWeek.init();
         if (panelId === 'monthly-review' && window.PeriodReviewMonth) PeriodReviewMonth.init();
+        this.syncReviewScrollFabSoon(120);
     },
 
     // 加载标签数据
@@ -450,7 +483,9 @@ const AnalysisPage = {
                 else this.loadMarketAnalysis();
                 break;
             case 'market-review':
+                this.bindReviewScrollFab();
                 this.showReviewSub(this._reviewSub || 'daily-review');
+                this.syncReviewScrollFabSoon(160);
                 break;
             case 'technical-tools':
                 this.loadTechnicalTools();
