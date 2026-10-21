@@ -1100,6 +1100,19 @@ else:
     print("KGT admin 路由未注册")
 
 try:
+    from backend_api.admin.bvf_admin_routes import router as bvf_admin_router
+    print("bvf_admin_router 导入成功")
+except Exception as e:
+    print(f"bvf_admin_router 导入失败: {e}")
+    bvf_admin_router = None
+
+if bvf_admin_router is not None:
+    app.include_router(bvf_admin_router)
+    print("BVF admin 路由注册成功 (/api/admin/bvf)")
+else:
+    print("BVF admin 路由未注册")
+
+try:
     from backend_api.admin.cupb_admin_routes import router as cupb_admin_router
     print("cupb_admin_router 导入成功")
 except Exception as e:

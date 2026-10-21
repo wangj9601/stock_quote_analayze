@@ -309,7 +309,7 @@
           <td>${escapeHtml(r.date || '--')}</td>
           <td>${yn(r.size_ok)}</td>
           <td>${yn(r.bottom_matched)}</td>
-          <td>${yn(r.entry_signal, 'buy-yes')}</td>
+          <td>${yn(r.entry_signal, 'strength-high')}</td>
           <td>${escapeHtml(r.bottom_mode || '--')}</td>
           <td>${fmt(r.close)}</td>
           <td>${fmt(r.ma20)}</td>

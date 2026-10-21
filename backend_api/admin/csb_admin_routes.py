@@ -925,16 +925,52 @@ async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends
         raise HTTPException(status_code=400, detail="start_date 不能晚于 end_date")
 
     cid = _resolve_strategy_config_id(db, body.config_id)
+    purge_first = bool(body.purge_first)
 
     def _job():
+        from backend_api.database import SessionLocal
         from backend_core.strategies.csb.scheduled_precompute import run_csb_trace_refresh_range
 
-        run_csb_trace_refresh_range(
+        result = run_csb_trace_refresh_range(
             cid,
             start_date=start_s,
             end_date=end_s,
-            purge_first=bool(body.purge_first),
+            purge_first=purge_first,
         )
+        audit_db = SessionLocal()
+        try:
+            purged = int(result.get("purged_rows") or 0)
+            written = int(result.get("precompute_hits") or 0)
+            days = int(result.get("precomputed_days") or 0)
+            payload = {
+                "phase": "completed" if result.get("success") else "failed",
+                "config_id": cid,
+                "start_date": start_s,
+                "end_date": end_s,
+                "purge_first": purge_first,
+                "purged_rows": purged,
+                "precomputed_days": days,
+                "precompute_hits": written,
+                "range_days": result.get("range_days"),
+                "elapsed_sec": result.get("elapsed_sec"),
+            }
+            if result.get("error"):
+                payload["error"] = str(result.get("error"))
+            write_csb_audit(
+                audit_db,
+                "csb_trace_refresh_range_done",
+                payload,
+                affected_count=purged + written,
+                log_status="success" if result.get("success") else "failed",
+                error_info=str(result.get("error") or "") or None,
+            )
+        except Exception as e:
+            logger.warning("CSB 区间刷新完成审计写入失败: %s", e)
+        finally:
+            try:
+                audit_db.close()
+            except Exception:
+                pass
 
     threading.Thread(
         target=_job,
@@ -945,11 +981,13 @@ async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends
         db,
         "csb_trace_refresh_range",
         {
+            "phase": "started",
             "config_id": cid,
             "start_date": start_s,
             "end_date": end_s,
-            "purge_first": bool(body.purge_first),
+            "purge_first": purge_first,
         },
+        affected_count=0,
     )
     return {
         "success": True,
