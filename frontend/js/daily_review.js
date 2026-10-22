@@ -253,7 +253,7 @@ const DailyReviewPage = {
         this.fillBody('drSidelineBody', 4, []);
         this.fillBody('drAvoidBody', 3, []);
         this.fillBody('drZhabBody', 9, []);
-        ['drEnvSummary', 'drMainSide', 'drRotation', 'drLadder', 'drCurveNote'].forEach((id) => {
+        ['drEnvSummary', 'drMainSide', 'drRotation', 'drLadder', 'drMarketLeader', 'drCurveNote'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.textContent = '';
         });
@@ -710,6 +710,41 @@ const DailyReviewPage = {
                     <span class="dr-chip">4板及以上 <b>${ladder.b4plus || 0}</b></span>
                     ${hot}`;
             }
+        }
+        const mlEl = document.getElementById('drMarketLeader');
+        if (mlEl) {
+            const ml = sector.market_leader;
+            const cf = sector.capital_focus;
+            const bits = [];
+            if (ml && ml.name) {
+                const same = ml.same_as_capital_focus ? '，兼资金焦点' : '';
+                const reason = (ml.reasons || []).join('；') || '--';
+                bits.push(
+                    `市场总龙头：${this.stockCell(ml)} ${ml.board_count == null ? '' : ml.board_count + '板'}${same}。理由：${this.escapeHtml(reason)}。`
+                );
+                const alts = ml.alternates || [];
+                if (alts.length) {
+                    bits.push(
+                        '备选：' +
+                            alts
+                                .map(
+                                    (a) =>
+                                        `${this.stockCell(a)}（${a.board_count == null ? '--' : a.board_count}板）`
+                                )
+                                .join('、') +
+                            '。'
+                    );
+                }
+            } else {
+                bits.push('市场总龙头：当日无涨停，暂不定总龙头。');
+            }
+            if (cf && cf.name && !(ml && ml.same_as_capital_focus)) {
+                const yi =
+                    cf.net_inflow_yi == null ? '--' : this.fmt(cf.net_inflow_yi);
+                const zt = cf.is_limit_up ? '（当日涨停）' : '（未涨停）';
+                bits.push(`资金焦点：${this.stockCell(cf)}，净流入 ${yi} 亿${zt}。`);
+            }
+            mlEl.innerHTML = bits.join(' ');
         }
         this.fillBody(
             'drSealBody',

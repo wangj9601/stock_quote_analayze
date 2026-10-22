@@ -12,6 +12,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend_core.board_roles.classify import is_limit_up, is_st_name, limit_up_threshold_for_code
+from backend_core.market_review.market_leader import (
+    attach_leader_flags,
+    build_capital_focus,
+    pick_market_leader,
+)
 from backend_core.market_review.picks import build_review_picks
 from backend_core.market_review.render import export_markdown_file, render_markdown
 from backend_core.market_review.rules import (
@@ -1016,8 +1021,21 @@ def build_tape_detail(
         rows = []
 
     matched = []
+    zt_for_leader: List[Dict[str, Any]] = []
+    zt_codes = set()
     for code, name, chg, seal, board_count, industry in rows:
         bc = int(board_count or 0)
+        code_s = str(code)
+        zt_codes.add(code_s)
+        zt_for_leader.append(
+            {
+                "code": code_s,
+                "name": str(name or code),
+                "board_count": bc,
+                "seal_fund": seal,
+                "industry": industry,
+            }
+        )
         if bc >= 4:
             ladder["b4plus"] += 1
         elif bc == 3:
@@ -1026,12 +1044,12 @@ def build_tape_detail(
             ladder["b2"] += 1
         if bc > max_board:
             max_board = bc
-            height_stock = {"code": str(code), "name": str(name or code), "board_count": bc}
+            height_stock = {"code": code_s, "name": str(name or code), "board_count": bc}
         if main_name and _name_matches_industry(industry, main_name):
             seal_yi = yuan_to_yi(seal)
             matched.append(
                 {
-                    "code": str(code),
+                    "code": code_s,
                     "name": str(name or code),
                     "change_percent": _safe(chg),
                     "seal_fund": _safe(seal),
@@ -1103,12 +1121,17 @@ def build_tape_detail(
             main_flow = []
 
     has_ladder = bool(rows) and (ladder["b2"] or ladder["b3"] or ladder["b4plus"] or height_stock)
+    market_leader = pick_market_leader(zt_for_leader, main_name=main_name)
+    capital_focus = build_capital_focus(flow_top, zt_codes)
+    attach_leader_flags(market_leader, capital_focus)
     return {
         "ladder": ladder if has_ladder else None,
         "height_stock": height_stock,
         "seal_leaders": seal_leaders,
         "flow_top": flow_top,
         "main_flow_top": main_flow,
+        "market_leader": market_leader,
+        "capital_focus": capital_focus,
     }
 
 
@@ -1379,6 +1402,8 @@ def build_review_snapshot(
     sector["seal_leaders"] = tape_detail.get("seal_leaders")
     sector["flow_top"] = tape_detail.get("flow_top")
     sector["main_flow_top"] = tape_detail.get("main_flow_top")
+    sector["market_leader"] = tape_detail.get("market_leader")
+    sector["capital_focus"] = tape_detail.get("capital_focus")
     mainline["sector"] = sector
 
     gates = evaluate_hard_gates(metrics, hist)

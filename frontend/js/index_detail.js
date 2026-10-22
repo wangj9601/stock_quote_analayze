@@ -70,35 +70,103 @@
                 const payload = await resp.json().catch(() => ({}));
                 const bars = (((payload || {}).data || {}).bars) || [];
                 if (!bars.length) {
-                    el.innerHTML = '<p class="muted" style="padding:1rem">暂无指数日线</p>';
+                    el.innerHTML = '<p class="isa-empty-soft">暂无指数日线</p>';
                     return;
                 }
                 const dates = bars.map((b) => b.date);
                 const ohlc = bars.map((b) => [b.open, b.close, b.low, b.high]);
+                const ink = '#d9e2ec';
+                const inkMuted = '#8b9aab';
+                const rise = '#c23b3b';
+                const fall = '#2f9e6b';
+                const fmt = (v) => {
+                    const n = Number(v);
+                    return Number.isFinite(n) ? n.toFixed(2) : '--';
+                };
                 if (!this.chart) this.chart = echarts.init(el);
                 this.chart.setOption({
                     backgroundColor: 'transparent',
-                    grid: { left: 48, right: 16, top: 24, bottom: 32 },
-                    tooltip: { trigger: 'axis' },
-                    xAxis: { type: 'category', data: dates, axisLine: { lineStyle: { color: '#555' } } },
-                    yAxis: { scale: true, splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } } },
+                    animationDuration: 280,
+                    grid: { left: 56, right: 18, top: 28, bottom: 36 },
+                    tooltip: {
+                        trigger: 'axis',
+                        axisPointer: {
+                            type: 'cross',
+                            crossStyle: { color: 'rgba(217, 226, 236, 0.35)' },
+                            lineStyle: { color: 'rgba(217, 226, 236, 0.35)', type: 'dashed' },
+                        },
+                        backgroundColor: 'rgba(22, 28, 36, 0.96)',
+                        borderWidth: 1,
+                        borderColor: 'rgba(217, 226, 236, 0.22)',
+                        textStyle: { color: ink, fontSize: 12 },
+                        confine: true,
+                        formatter: (params) => {
+                            const p = Array.isArray(params) ? params[0] : params;
+                            if (!p) return '';
+                            // axis 触发时 value 常为 [dataIndex, open, close, low, high]
+                            const raw = Array.isArray(p.value)
+                                ? p.value
+                                : (Array.isArray(p.data) ? p.data : []);
+                            let open;
+                            let close;
+                            let low;
+                            let high;
+                            if (raw.length >= 5) {
+                                open = raw[1];
+                                close = raw[2];
+                                low = raw[3];
+                                high = raw[4];
+                            } else {
+                                open = raw[0];
+                                close = raw[1];
+                                low = raw[2];
+                                high = raw[3];
+                            }
+                            const up = Number(close) >= Number(open);
+                            const tone = up ? rise : fall;
+                            return [
+                                `<div style="font-weight:600;margin-bottom:6px;color:${ink}">${p.name || ''}</div>`,
+                                `<div style="color:${inkMuted}">开 <span style="color:${ink}">${fmt(open)}</span></div>`,
+                                `<div style="color:${inkMuted}">收 <span style="color:${tone}">${fmt(close)}</span></div>`,
+                                `<div style="color:${inkMuted}">低 <span style="color:${ink}">${fmt(low)}</span></div>`,
+                                `<div style="color:${inkMuted}">高 <span style="color:${ink}">${fmt(high)}</span></div>`,
+                            ].join('');
+                        },
+                    },
+                    xAxis: {
+                        type: 'category',
+                        data: dates,
+                        axisLine: { lineStyle: { color: 'rgba(217, 226, 236, 0.28)' } },
+                        axisLabel: { color: inkMuted, fontSize: 11 },
+                        axisTick: { show: false },
+                    },
+                    yAxis: {
+                        scale: true,
+                        axisLine: { show: false },
+                        axisLabel: { color: inkMuted, fontSize: 11 },
+                        splitLine: { lineStyle: { color: 'rgba(217, 226, 236, 0.08)' } },
+                    },
                     series: [{
                         type: 'candlestick',
+                        name: '日线',
                         data: ohlc,
                         itemStyle: {
-                            color: '#e74c3c',
-                            color0: '#2ecc71',
-                            borderColor: '#e74c3c',
-                            borderColor0: '#2ecc71',
+                            color: rise,
+                            color0: fall,
+                            borderColor: rise,
+                            borderColor0: fall,
                         },
                     }],
                 });
-                global.addEventListener('resize', () => {
-                    if (this.chart) this.chart.resize();
-                });
+                if (!this._chartResizeBound) {
+                    this._chartResizeBound = true;
+                    global.addEventListener('resize', () => {
+                        if (this.chart) this.chart.resize();
+                    });
+                }
             } catch (e) {
                 console.error('[IndexDetail] chart', e);
-                el.innerHTML = '<p class="muted" style="padding:1rem">K线加载失败</p>';
+                el.innerHTML = '<p class="isa-empty-soft">K线加载失败</p>';
             }
         },
 

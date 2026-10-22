@@ -2784,6 +2784,63 @@ class KgtSignalTrace(Base):
 
 # ========== BVF 底部放量分型策略 ==========
 
+class LdsStrategyConfig(Base):
+    """龙头战法（LDS）策略参数版本。"""
+    __tablename__ = "lds_strategy_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    config_params = Column(JSON, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    is_default = Column(Boolean, nullable=False, default=False, index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class LdsSignalTrace(Base):
+    """龙头战法日终信号追溯。"""
+    __tablename__ = "lds_signal_trace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    config_id = Column(
+        Integer,
+        ForeignKey("lds_strategy_configs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name = Column(String(200), nullable=True)
+    status = Column(String(20), nullable=True, index=True)
+    role = Column(String(32), nullable=False, default="board_leader", index=True)
+    board_code = Column(String(64), nullable=False, default="", index=True)
+    board_name = Column(String(200), nullable=True)
+    identity_score = Column(Float, nullable=True)
+    drive_score = Column(Float, nullable=True)
+    watch_ready = Column(Boolean, nullable=False, default=False, index=True)
+    is_lonely = Column(Boolean, nullable=False, default=False)
+    is_primary = Column(Boolean, nullable=False, default=True)
+    same_as_height = Column(Boolean, nullable=False, default=False)
+    board_count = Column(Integer, nullable=True)
+    identity_reasons = Column(JSON, nullable=True)
+    watch_reasons = Column(JSON, nullable=True)
+    detail = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "code",
+            "trade_date",
+            "config_id",
+            "role",
+            "board_code",
+            name="uq_lds_signal_trace_code_date_cfg_role_board",
+        ),
+    )
+
+
 class BvfStrategyConfig(Base):
     """底部放量分型策略参数版本。"""
     __tablename__ = "bvf_strategy_configs"

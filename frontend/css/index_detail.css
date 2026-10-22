@@ -1,56 +1,308 @@
-/* 指数详情 / 指数分析 */
-.index-detail-main { padding-bottom: 2rem; }
-.index-detail-toolbar { margin-bottom: 0.75rem; }
+/* 指数详情 / 指数分析 — 作战标图台（行情频道内的分析抬升面） */
+
+body.ops-map.index-detail-page {
+  color: var(--ops-ink);
+}
+
+.index-detail-main {
+  padding-bottom: 2rem;
+}
+
+.index-detail-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+
 .index-detail-back {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  color: var(--ops-text-muted, #9aa4b2);
+  color: var(--ops-ink-muted);
   text-decoration: none;
   font-size: 0.9rem;
+  border-radius: 1px;
+  padding: 0.25rem 0.15rem;
 }
-.index-detail-back:hover { color: var(--ops-accent, #f5c542); }
+
+.index-detail-back:hover {
+  color: var(--ops-gold);
+}
+
+.index-detail-back:focus-visible {
+  outline: none;
+  box-shadow: var(--ops-focus);
+}
+
 .index-detail-header {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.75rem 1.25rem;
-  margin-bottom: 1rem;
-}
-.index-detail-title { margin: 0; font-size: 1.5rem; }
-.index-detail-code { color: var(--ops-text-muted, #9aa4b2); font-size: 0.95rem; }
-.index-detail-price { font-size: 1.75rem; font-weight: 700; }
-.index-detail-change { font-size: 1rem; }
-.index-detail-change.positive { color: #e74c3c; }
-.index-detail-change.negative { color: #2ecc71; }
-.index-detail-chart {
-  width: 100%;
-  height: 320px;
+  gap: 0.5rem 1.25rem;
   margin-bottom: 1.25rem;
-  background: rgba(255,255,255,0.02);
-  border-radius: 8px;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.isa-quick { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.75rem; }
-.isa-meta-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: baseline; margin-bottom: 0.75rem; }
-.isa-breadth-grid {
+.index-detail-title {
+  margin: 0;
+  font-family: var(--font-mark);
+  font-size: clamp(1.5rem, 2.6vw, 2rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--ops-ink);
+  line-height: 1.2;
+}
+
+.index-detail-title::after {
+  content: "";
+  display: block;
+  width: 2.75rem;
+  height: 2px;
+  margin-top: 0.4rem;
+  background: var(--ops-gold);
+}
+
+.index-detail-code {
+  color: var(--ops-ink-muted);
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.index-detail-price {
+  font-family: var(--font-mark);
+  font-size: clamp(1.55rem, 2.4vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ops-ink);
+}
+
+.index-detail-change {
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ops-ink-muted);
+}
+
+.index-detail-change.positive {
+  color: var(--color-rise);
+}
+
+.index-detail-change.negative {
+  color: var(--color-fall);
+}
+
+.index-detail-chart {
+  width: 100%;
+  height: min(360px, 52vw);
+  min-height: 280px;
+  margin-bottom: 1.35rem;
+  padding: 0.35rem 0.25rem 0.15rem;
+  background: var(--ops-ground-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  box-shadow: none;
+}
+
+.index-detail-chart .muted,
+.index-detail-chart .isa-empty-soft {
+  margin: 0;
+  padding: 1.25rem 1rem;
+  color: var(--ops-ink-muted);
+  font-size: 0.9rem;
+}
+
+/* —— 工具条 / 按钮：本页在 quotes 频道，需本地对齐 analyze 作战板语法 —— */
+body.ops-map.index-detail-page .ssa-toolbar {
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--ops-ground-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+}
+
+body.ops-map.index-detail-page .ssa-toolbar label {
+  color: var(--ops-ink-muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+}
+
+body.ops-map.index-detail-page .ssa-toolbar input[type="date"] {
+  background-color: rgba(0, 0, 0, 0.28);
+  color: var(--ops-ink);
+  border: 1px solid rgba(217, 226, 236, 0.28);
+  border-radius: 2px;
+  color-scheme: dark;
+}
+
+body.ops-map.index-detail-page .ssa-toolbar input[type="date"]:focus-visible {
+  outline: none;
+  box-shadow: var(--ops-focus);
+}
+
+body.ops-map.index-detail-page .ssa-action-btns .btn {
+  font-family: var(--font-mark);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  background: transparent;
+  border: 1px solid rgba(217, 226, 236, 0.28);
+  border-radius: 1px;
+  color: var(--ops-ink);
+  box-shadow: none;
+}
+
+body.ops-map.index-detail-page .ssa-action-btns .btn:hover:not(:disabled) {
+  border-color: rgba(201, 162, 39, 0.55);
+  color: var(--ops-gold);
+}
+
+body.ops-map.index-detail-page .ssa-action-btns .btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ops-focus);
+}
+
+body.ops-map.index-detail-page .ssa-action-btns .btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+body.ops-map.index-detail-page .ssa-action-btns .btn-primary {
+  background: var(--ops-overlay-film);
+  border-color: rgba(201, 162, 39, 0.45);
+  color: var(--ops-gold);
+}
+
+body.ops-map.index-detail-page .ssa-action-btns .btn-primary:hover:not(:disabled) {
+  background: rgba(201, 162, 39, 0.2);
+  border-color: rgba(201, 162, 39, 0.65);
+}
+
+body.ops-map.index-detail-page .ssa-empty {
+  color: var(--ops-ink-muted);
+  background: var(--ops-ground-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  padding: 1.1rem 1rem;
+}
+
+body.ops-map.index-detail-page .ssa-block,
+body.ops-map.index-detail-page .ssa-pa-section {
+  background: var(--ops-ground-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  box-shadow: none;
+  color: var(--ops-ink);
+}
+
+body.ops-map.index-detail-page .ssa-block-title,
+body.ops-map.index-detail-page .ssa-pa-section__title,
+body.ops-map.index-detail-page .ssa-details > summary.ssa-block-title {
+  font-family: var(--font-mark);
+  letter-spacing: 0.05em;
+  color: var(--ops-ink);
+}
+
+body.ops-map.index-detail-page .ssa-pa-section__hint,
+body.ops-map.index-detail-page .ssa-block-status,
+body.ops-map.index-detail-page .isa-mv-note,
+body.ops-map.index-detail-page .isa-disclaimer,
+body.ops-map.index-detail-page .isa-empty-soft {
+  color: var(--ops-ink-muted);
+}
+
+body.ops-map.index-detail-page .isa-market-view {
+  padding: 0.85rem 1rem;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--color-border);
+  margin-bottom: 0.5rem;
+}
+
+body.ops-map.index-detail-page .isa-bias-label {
+  font-family: var(--font-mark);
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.35rem;
+}
+
+body.ops-map.index-detail-page .isa-bias-bull .isa-bias-label {
+  color: var(--color-rise);
+}
+
+body.ops-map.index-detail-page .isa-bias-bear .isa-bias-label {
+  color: var(--color-fall);
+}
+
+body.ops-map.index-detail-page .isa-bias-neu .isa-bias-label {
+  color: var(--ops-gold);
+}
+
+body.ops-map.index-detail-page .isa-breadth-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 0.6rem;
+  gap: 0.65rem;
   margin-bottom: 1rem;
 }
-.isa-breadth-grid strong { display: block; font-size: 1.1rem; }
-.isa-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; font-size: 0.9rem; }
-.isa-table th, .isa-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.08); text-align: left; }
-.isa-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.isa-market-view { padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,255,255,0.03); margin-bottom: 0.5rem; }
-.isa-bias-label { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.35rem; }
-.isa-bias-bull .isa-bias-label { color: #e74c3c; }
-.isa-bias-bear .isa-bias-label { color: #2ecc71; }
-.isa-bias-neu .isa-bias-label { color: #f5c542; }
-.isa-mv-bullets { margin: 0.5rem 0; padding-left: 1.2rem; }
-.isa-mv-note { font-size: 0.85rem; margin-top: 0.5rem; }
-.isa-disclaimer { font-size: 0.85rem; margin: 0.5rem 0; }
-.isa-empty-soft { color: var(--ops-text-muted, #9aa4b2); }
-.positive { color: #e74c3c; }
-.negative { color: #2ecc71; }
+
+body.ops-map.index-detail-page .isa-breadth-grid strong {
+  display: block;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ops-ink);
+}
+
+body.ops-map.index-detail-page .isa-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0 1rem;
+  font-size: 0.9rem;
+}
+
+body.ops-map.index-detail-page .isa-table th,
+body.ops-map.index-detail-page .isa-table td {
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  color: var(--ops-ink);
+}
+
+body.ops-map.index-detail-page .isa-table th {
+  color: var(--ops-ink-muted);
+  font-weight: 600;
+  background: rgba(217, 226, 236, 0.06);
+}
+
+body.ops-map.index-detail-page .isa-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+body.ops-map.index-detail-page .positive {
+  color: var(--color-rise);
+}
+
+body.ops-map.index-detail-page .negative {
+  color: var(--color-fall);
+}
+
+@media (max-width: 768px) {
+  .index-detail-header {
+    gap: 0.35rem 0.85rem;
+  }
+
+  .index-detail-chart {
+    height: 280px;
+    min-height: 240px;
+  }
+
+  body.ops-map.index-detail-page .ssa-action-btns {
+    width: 100%;
+  }
+
+  body.ops-map.index-detail-page .ssa-action-btns .btn {
+    flex: 1 1 auto;
+  }
+}

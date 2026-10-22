@@ -114,6 +114,11 @@ const routes = [
         component: () => import('@/views/BvfManagementView.vue')
       },
       {
+        path: 'lds-management',
+        name: 'LdsManagement',
+        component: () => import('@/views/LdsManagementView.vue')
+      },
+      {
         path: 'cupb-management',
         name: 'CupbManagement',
         component: () => import('@/views/CupbManagementView.vue')

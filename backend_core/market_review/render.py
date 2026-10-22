@@ -287,6 +287,8 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
         or sector.get("capital_in")
         or sector.get("ladder")
         or sector.get("flow_top")
+        or sector.get("market_leader")
+        or sector.get("capital_focus")
     ):
         main = sector.get("main") or {}
         if main.get("board_name"):
@@ -365,6 +367,40 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
                 f"4 板及以上 {ladder.get('b4plus', 0)}。{height_bit}"
             )
             lines.append("")
+
+        ml = sector.get("market_leader")
+        cf = sector.get("capital_focus")
+        if ml or cf:
+            lines.append("## **市场总龙头与资金焦点**")
+            lines.append("")
+            if ml:
+                reason = "；".join(ml.get("reasons") or []) or "--"
+                same = "（兼资金焦点）" if ml.get("same_as_capital_focus") else ""
+                lines.append(
+                    f"**市场总龙头**：{_name_cell(ml)} "
+                    f"{ml.get('board_count')} 板{same}。"
+                    f"理由：{reason}。"
+                )
+                alts = ml.get("alternates") or []
+                if alts:
+                    bits = [
+                        f"{_name_cell(a)}（{a.get('board_count')}板，分{a.get('score')}）"
+                        for a in alts
+                    ]
+                    lines.append(f"**备选**：{'、'.join(bits)}。")
+            else:
+                lines.append("**市场总龙头**：当日无涨停，暂不定总龙头。")
+            if cf and not (ml and ml.get("same_as_capital_focus")):
+                yi = cf.get("net_inflow_yi")
+                yi_txt = _fmt(yi, 2) if yi is not None else "--"
+                zt_bit = "（当日涨停）" if cf.get("is_limit_up") else "（未涨停）"
+                lines.append(
+                    f"**资金焦点**：{_name_cell(cf)}，净流入 {yi_txt} 亿{zt_bit}。"
+                )
+            elif not cf:
+                lines.append("**资金焦点**：暂无净流入排名。")
+            lines.append("")
+
         seals = sector.get("seal_leaders") or []
         if seals:
             lines.append("## **主线涨停（按封单）**")

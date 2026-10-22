@@ -17,6 +17,7 @@ const byPath: Record<string, ArchiveRecord> = {
   '/cupb-management': { code: '策-CUPB', group: 'strategy' },
   '/kgt-management': { code: '策-KGT', group: 'strategy' },
   '/bvf-management': { code: '策-BVF', group: 'strategy' },
+  '/lds-management': { code: '策-LDS', group: 'strategy' },
   '/rpe-management': { code: '策-RPE', group: 'strategy' },
   '/urt-management': { code: '策-URT', group: 'strategy' },
   '/csb-management': { code: '策-CSB', group: 'strategy' },

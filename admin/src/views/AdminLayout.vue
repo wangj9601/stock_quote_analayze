@@ -200,6 +200,7 @@ const menuItems: MenuItem[] = [
       leaf('/cupb-management', '杯底 CUPB'),
       leaf('/kgt-management', '袋鼠尾 KGT'),
       leaf('/bvf-management', '底部放量分型 BVF'),
+      leaf('/lds-management', '龙头战法 LDS'),
       leaf('/rpe-management', '比价 RPE'),
       leaf('/urt-management', '上升趋势 URT'),
       leaf('/csb-management', '通道突破 CSB'),

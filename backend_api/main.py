@@ -1113,6 +1113,19 @@ else:
     print("BVF admin 路由未注册")
 
 try:
+    from backend_api.admin.lds_admin_routes import router as lds_admin_router
+    print("lds_admin_router 导入成功")
+except Exception as e:
+    print(f"lds_admin_router 导入失败: {e}")
+    lds_admin_router = None
+
+if lds_admin_router is not None:
+    app.include_router(lds_admin_router)
+    print("LDS admin 路由注册成功 (/api/admin/lds)")
+else:
+    print("LDS admin 路由未注册")
+
+try:
     from backend_api.admin.cupb_admin_routes import router as cupb_admin_router
     print("cupb_admin_router 导入成功")
 except Exception as e:

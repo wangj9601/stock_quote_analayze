@@ -517,6 +517,21 @@ def draft_viewpoint(
     else:
         parts.append("当日主线不明确")
 
+    ml = (sector or {}).get("market_leader") or {}
+    cf = (sector or {}).get("capital_focus") or {}
+    if ml.get("name"):
+        ml_bit = f"情绪标杆（市场总龙头）：{ml.get('name')}（{ml.get('code')}）"
+        if ml.get("board_count") is not None:
+            ml_bit += f" {ml.get('board_count')} 板"
+        if ml.get("same_as_capital_focus"):
+            ml_bit += "，兼资金焦点"
+        parts.append(ml_bit)
+    if cf.get("name") and not ml.get("same_as_capital_focus"):
+        cf_bit = f"资金焦点：{cf.get('name')}（{cf.get('code')}）"
+        if cf.get("net_inflow_yi") is not None:
+            cf_bit += f"，净流入 {_fmt2(cf.get('net_inflow_yi'), 2)} 亿"
+        parts.append(cf_bit)
+
     tails = {
         "放量普涨": "次日观察主线能否延续、高标溢价，以及上证距近20日高点的距离。",
         "放量普跌": "量能放大但下跌家数占优，先看广度能否修复，不预判反转。",
