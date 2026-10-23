@@ -18,6 +18,7 @@ def test_import_routes():
     assert any(p and "formal-trades" in p for p in paths)
     admin_paths = {getattr(r, "path", None) for r in admin_router.routes}
     assert any(p and "backtests" in p for p in admin_paths)
+    assert any(p and str(p).endswith("/scope-users") for p in admin_paths)
 
 
 def test_import_engine():
@@ -39,6 +40,7 @@ def test_sbbr_strategy_route_accepts_board_params():
     assert "concept_board_code" in params
     assert "scope" in params
     assert "stock_code" in params
+    assert "watchlist_user_id" in params
 
 
 def test_board_segment_filter_reuse():

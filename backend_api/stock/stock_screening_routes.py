@@ -3857,6 +3857,11 @@ async def get_sbbr_strategy(
     stock_code: Optional[str] = Query(
         None, description="scope=single 时：股票代码或名称（仅 A 股）"
     ),
+    watchlist_user_id: Optional[int] = Query(
+        None,
+        ge=1,
+        description="scope=watchlist|reserve 时可选：指定该用户的自选股或储备箱；需管理员 JWT（payload.is_admin=true）",
+    ),
     max_results: Optional[int] = Query(200, ge=1, le=2000),
     token: Optional[str] = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
@@ -3865,6 +3870,7 @@ async def get_sbbr_strategy(
 
     scope=single 时绕过做小宇宙与筑底硬筛，直接对该股现算策略明细（结果含 size_ok/bottom_matched 标注），
     对齐 URT/RPE 单股「跳过硬筛、仍展示明细」交互；仍尊重 entry_only。
+    管理员查询自选股或储备箱时传 watchlist_user_id，指定网站用户。
     """
     try:
         from backend_core.strategies.sbbr.config import SBBRConfigManager
@@ -3957,12 +3963,26 @@ async def get_sbbr_strategy(
             raise HTTPException(status_code=401, detail="该 scope 需要登录")
         try:
             payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            username = payload.get("sub")
-            user = db.query(User).filter(User.username == username).first()
-            if not user:
-                raise HTTPException(status_code=401, detail="用户不存在")
         except JWTError:
             raise HTTPException(status_code=401, detail="无效的认证凭据")
+        if watchlist_user_id is not None:
+            if not payload.get("is_admin"):
+                raise HTTPException(status_code=403, detail="仅管理员可指定 watchlist_user_id")
+            user = db.query(User).filter(User.id == int(watchlist_user_id)).first()
+            if not user:
+                raise HTTPException(status_code=404, detail="指定用户不存在")
+        else:
+            username = payload.get("sub")
+            user = db.query(User).filter(User.username == username).first() if username else None
+            if not user:
+                if payload.get("is_admin"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="管理员查询自选股或储备箱时请指定 watchlist_user_id",
+                    )
+                raise HTTPException(status_code=401, detail="用户不存在")
+        extra_meta["watchlist_user_id"] = int(user.id)
+        pool_label = "自选股" if scope_raw == "watchlist" else "储备箱"
         if scope_raw == "watchlist":
             stock_codes = [
                 str(i.stock_code).strip()
@@ -3980,7 +4000,7 @@ async def get_sbbr_strategy(
                 {
                     **_sbbr_meta(
                         "live",
-                        "列表为空" + ("（板型过滤后无匹配）" if seg_list else ""),
+                        f"{pool_label}为空" + ("（板型过滤后无匹配）" if seg_list else ""),
                     ),
                     "data": [],
                     "total": 0,

@@ -490,12 +490,12 @@
 
                 if (result.success) {
                     // 根据is_hk字段加载对应的JS文件
-                    const jsFile = result.is_hk ? 'js/stock_hk.js?v=20260925polish' : 'js/stock.js';
+                    const jsFile = result.is_hk ? 'js/stock_hk.js' : 'js/stock.js';
                     console.log(`股票类型: ${result.is_hk ? '港股' : 'A股'}，加载文件: ${jsFile}`);
 
                     // 动态加载JS文件
                     const script = document.createElement('script');
-                    script.src = jsFile + '?v=20260924-no-thirdparty';
+                    script.src = jsFile + '?v=20261023-flowtip';
                     script.onload = function () {
                         console.log(`${jsFile} 加载完成`);
                         // JS文件加载完成后，初始化StockPage
@@ -512,7 +512,7 @@
                     console.error('判断股票类型失败:', result.message);
                     // 默认加载A股JS
                     const script = document.createElement('script');
-                    script.src = 'js/stock.js?v=20260925polish';
+                    script.src = 'js/stock.js?v=20261023-flowtip';
                     script.onload = function () {
                         if (typeof StockPage !== 'undefined' && StockPage.init) {
                             StockPage.init();
@@ -524,7 +524,7 @@
                 console.error('判断股票类型异常:', error);
                 // 异常时默认加载A股JS
                 const script = document.createElement('script');
-                script.src = 'js/stock.js?v=20260925polish';
+                script.src = 'js/stock.js?v=20261023-flowtip';
                 script.onload = function () {
                     if (typeof StockPage !== 'undefined' && StockPage.init) {
                         StockPage.init();

@@ -3717,9 +3717,42 @@ const StockMultiStrategy = {
             legend: {
                 data: ['主力净流入', '大单净流入'],
                 top: 0,
-                textStyle: { fontSize: 11 },
+                textStyle: { fontSize: 11, color: '#8b9aab' },
             },
-            tooltip: { trigger: 'axis' },
+            tooltip: {
+                trigger: 'axis',
+                confine: true,
+                backgroundColor: 'rgba(22, 28, 36, 0.96)',
+                borderColor: 'rgba(217, 226, 236, 0.22)',
+                borderWidth: 1,
+                padding: [8, 10],
+                textStyle: { color: '#d9e2ec', fontSize: 12 },
+                extraCssText: 'border-radius:2px;box-shadow:0 8px 18px rgba(0,0,0,0.35);',
+                axisPointer: {
+                    type: 'line',
+                    lineStyle: { color: 'rgba(217, 226, 236, 0.35)', type: 'dashed' },
+                },
+                formatter: (params) => {
+                    const list = Array.isArray(params) ? params : [params];
+                    const head = list[0] || {};
+                    const date = this.esc(String(head.axisValueLabel || head.axisValue || ''));
+                    const rows = list.map((p) => {
+                        const raw = p && p.value;
+                        const n = raw != null && typeof raw === 'object' ? raw.value : raw;
+                        const num = n == null || n === '' || Number.isNaN(Number(n)) ? null : Number(n);
+                        const text = num == null ? '--' : `${num > 0 ? '+' : ''}${num.toFixed(2)}亿`;
+                        const color = num == null ? '#8b9aab' : (num > 0 ? '#c23b3b' : num < 0 ? '#2f9e6b' : '#d9e2ec');
+                        return `<div style="display:flex;justify-content:space-between;gap:14px;align-items:baseline;margin-top:4px;">
+                            <span>${p.marker || ''}${this.esc(p.seriesName || '')}</span>
+                            <span style="color:${color};font-variant-numeric:tabular-nums;">${text}</span>
+                        </div>`;
+                    }).join('');
+                    return `<div style="min-width:9.5rem;line-height:1.45;">
+                        <div style="color:#8b9aab;font-variant-numeric:tabular-nums;">${date}</div>
+                        ${rows}
+                    </div>`;
+                },
+            },
             xAxis: {
                 type: 'category',
                 data: dates,

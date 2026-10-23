@@ -132,6 +132,43 @@ def _build_backtest_config(db: Session, body: BacktestCreateReq) -> Dict[str, An
     return cfg
 
 
+@router.get("/scope-users")
+def admin_list_scope_users(
+    db: Session = Depends(get_db),
+    _user: Admin = Depends(_require_admin),
+):
+    """有自选股 / SBBR 储备箱的网站用户，供管理端选股范围指定。"""
+    from sqlalchemy import func
+
+    from backend_api.models import SBBRReserveBox, User, Watchlist
+
+    def _users(model, count_label: str):
+        rows = (
+            db.query(
+                model.user_id.label("user_id"),
+                func.count(model.id).label("item_count"),
+                User.username.label("username"),
+            )
+            .join(User, User.id == model.user_id)
+            .group_by(model.user_id, User.username)
+            .order_by(model.user_id.asc())
+            .all()
+        )
+        return [
+            {
+                "user_id": int(getattr(r, "user_id", 0) or 0),
+                "username": str(getattr(r, "username", "") or ""),
+                count_label: int(getattr(r, "item_count", 0) or 0),
+            }
+            for r in rows
+        ]
+
+    return {
+        "watchlist_users": _users(Watchlist, "watchlist_count"),
+        "reserve_users": _users(SBBRReserveBox, "reserve_count"),
+    }
+
+
 @router.get("/strategy-configs")
 def admin_list_configs(_user: Admin = Depends(_require_admin)):
     return {"items": SBBRConfigManager().list_configs(active_only=False)}

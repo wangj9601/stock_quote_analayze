@@ -12,7 +12,7 @@
         'js/vendor/html2canvas.min.js',
         'js/stock_analysis_png.js',
         'js/stock_trade_plan.js',
-        'js/stock_multi_strategy.js',
+        'js/stock_multi_strategy.js?v=20261023-flowtip',
     ];
 
     const PANEL_HTML = `

@@ -2,7 +2,7 @@
   <div class="sbbr-management">
     <div class="page-header">
       <h1 class="page-title">做小做底（SBBR）管理</h1>
-      <p class="page-subtitle">参数版本 · 历史回测 · 手动预计算</p>
+      <p class="page-subtitle">参数版本 · 选股信号 · 历史回测 · 手动预计算</p>
     </div>
 
     <el-tabs v-model="activeTab">
@@ -33,6 +33,10 @@
             </template>
           </el-table-column>
         </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="选股信号" name="signals" lazy>
+        <SbbrScreeningPanel />
       </el-tab-pane>
 
       <el-tab-pane label="回测任务" name="backtest">
@@ -313,6 +317,7 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirmStrategyJob } from '@/utils/confirmDanger'
 import BoardPickerDialog from '@/components/common/BoardPickerDialog.vue'
+import SbbrScreeningPanel from '@/components/sbbr/SbbrScreeningPanel.vue'
 import sbbrApi, { type SbbrBacktestCreateBody, type SbbrStockPoolMode } from '@/services/sbbrApi'
 
 const MODE_LABELS: Record<string, string> = {

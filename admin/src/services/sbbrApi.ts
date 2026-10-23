@@ -25,7 +25,20 @@ export interface SbbrBacktestCreateBody {
   stock_codes?: string[]
 }
 
+export interface SbbrScopeUser {
+  user_id: number
+  username: string
+  watchlist_count?: number
+  reserve_count?: number
+}
+
 export const sbbrApi = {
+  listScopeUsers() {
+    return apiService.get<{
+      watchlist_users: SbbrScopeUser[]
+      reserve_users: SbbrScopeUser[]
+    }>(`${PREFIX}/scope-users`)
+  },
   listConfigs() {
     return apiService.get<{ items: any[] }>(`${PREFIX}/strategy-configs`)
   },

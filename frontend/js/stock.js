@@ -1412,7 +1412,7 @@ const StockPage = {
         if (!this.stockCode) return;
         try {
             if (typeof StockAnalysisPanel === 'undefined') {
-                await this._loadScriptOnce('js/stock_analysis_panel.js');
+                await this._loadScriptOnce('js/stock_analysis_panel.js?v=20261023-flowtip');
             }
             if (!window.StockAnalysisPanel) {
                 throw new Error('StockAnalysisPanel 未加载');

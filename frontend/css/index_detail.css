@@ -280,6 +280,58 @@ body.ops-map.index-detail-page .isa-table .num {
   font-variant-numeric: tabular-nums;
 }
 
+/* 全站 [class*="-row"] 会给任意「行」铺无内边距黑底。
+   本页里那是布局行，不是名单行：工具条、波段句、价位簇回到所在面板；
+   分析摘要单独做成一条有内边距的醋酸标尺。 */
+body.ops-map.index-detail-page main.main-content.index-detail-main .ssa-toolbar .form-row.ssa-form-row,
+body.ops-map.index-detail-page main.main-content.index-detail-main .ms-trend-row,
+body.ops-map.index-detail-page main.main-content.index-detail-main .kde-levels-price-row {
+  background: transparent !important;
+  border-color: transparent !important;
+}
+
+body.ops-map.index-detail-page main.main-content.index-detail-main .ssa-meta {
+  margin-top: 0.75rem;
+}
+
+body.ops-map.index-detail-page main.main-content.index-detail-main .isa-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.9rem;
+  padding: 0.55rem 0.9rem;
+  background: rgba(217, 226, 236, 0.05) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 2px;
+  color: var(--ops-ink) !important;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45;
+}
+
+body.ops-map.index-detail-page main.main-content.index-detail-main .isa-meta-row strong {
+  font-family: var(--font-mark);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+body.ops-map.index-detail-page main.main-content.index-detail-main .isa-meta-row .isa-code,
+body.ops-map.index-detail-page main.main-content.index-detail-main .isa-meta-row .isa-ts {
+  color: var(--ops-ink-muted) !important;
+  font-size: 0.86rem;
+}
+
+body.ops-map.index-detail-page main.main-content.index-detail-main .isa-meta-row .isa-price {
+  font-family: var(--font-mark);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+body.ops-map.index-detail-page main.main-content.index-detail-main .isa-meta-row > .muted {
+  margin-left: auto;
+  font-size: 0.82rem;
+}
+
 body.ops-map.index-detail-page .positive {
   color: var(--color-rise);
 }

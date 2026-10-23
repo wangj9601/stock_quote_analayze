@@ -139,7 +139,6 @@
             stripe
             border
             v-loading="trialing"
-            max-height="480"
             style="width: 100%"
             table-layout="fixed"
           >
@@ -195,7 +194,6 @@
             stripe
             border
             v-loading="loadingSignals"
-            max-height="520"
             style="width: 100%"
             table-layout="fixed"
           >
