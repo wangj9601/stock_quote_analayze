@@ -37,6 +37,8 @@ logger = logging.getLogger(__name__)
 PERCENTILE_WINDOW = 79
 LO_POS_MAX = 0.35
 LO_SAMPLE_MIN = 30
+# 宽广度 / 阿姆士(TRIN) 近 N 日序列（含当日）
+BREADTH_SERIES_DAYS = 10
 
 
 def _prev_calendar_candidates(trade_date: str, n: int = 20) -> List[str]:
@@ -1135,13 +1137,93 @@ def build_tape_detail(
     }
 
 
+def calc_arms_trin(
+    up_count: Any,
+    down_count: Any,
+    up_amount: Any,
+    down_amount: Any,
+) -> Optional[float]:
+    """阿姆士指数 TRIN = (上涨家数/下跌家数) ÷ (上涨成交额/下跌成交额)。
+
+    用成交额作量能口径（A 股常用）；任一端为 0 或无效则返回 None。
+    """
+    try:
+        advances = float(up_count)
+        declines = float(down_count)
+        adv_amt = float(up_amount)
+        dec_amt = float(down_amount)
+    except (TypeError, ValueError):
+        return None
+    if advances <= 0 or declines <= 0 or adv_amt <= 0 or dec_amt <= 0:
+        return None
+    ad_ratio = advances / declines
+    vol_ratio = adv_amt / dec_amt
+    if vol_ratio <= 0:
+        return None
+    return round(ad_ratio / vol_ratio, 4)
+
+
+def summarize_breadth_rows(rows: Sequence[Any]) -> Dict[str, Any]:
+    """由 (code, name, change_percent, amount) 行汇总广度与 TRIN。平盘不进 TRIN。"""
+    up = down = flat = limit_down = 0
+    up_amount = 0.0
+    down_amount = 0.0
+    for row in rows:
+        if row is None:
+            continue
+        if len(row) < 3:
+            continue
+        code, name, chg = row[0], row[1], row[2]
+        amt = row[3] if len(row) > 3 else None
+        if is_st_name(name):
+            continue
+        try:
+            chg_f = float(chg)
+        except (TypeError, ValueError):
+            continue
+        amt_f = 0.0
+        if amt is not None:
+            try:
+                amt_f = float(amt)
+            except (TypeError, ValueError):
+                amt_f = 0.0
+            if amt_f < 0:
+                amt_f = 0.0
+        if chg_f > 0:
+            up += 1
+            up_amount += amt_f
+        elif chg_f < 0:
+            down += 1
+            down_amount += amt_f
+        else:
+            flat += 1
+        if chg_f <= -limit_up_threshold_for_code(code):
+            limit_down += 1
+    if up == 0 and down == 0 and flat == 0:
+        return {}
+    traded = up + down
+    up_ratio = round(up / traded, 4) if traded > 0 else None
+    trin = calc_arms_trin(up, down, up_amount, down_amount)
+    return {
+        "up_count": up,
+        "down_count": down,
+        "flat_count": flat,
+        "limit_down_count": limit_down,
+        "up_amount": round(up_amount, 2),
+        "down_amount": round(down_amount, 2),
+        "up_ratio": up_ratio,
+        "trin": trin,
+        "trin_basis": "amount",
+    }
+
+
 def _compute_breadth(db: Session, trade_date: str) -> Dict[str, Any]:
     d = trade_date[:10]
     try:
         rows = db.execute(
             text(
                 """
-                SELECT code, name, change_percent
+                SELECT code, name, change_percent, amount
                 FROM historical_quotes
                 WHERE date = :d AND change_percent IS NOT NULL
                 """
@@ -1152,30 +1234,76 @@ def _compute_breadth(db: Session, trade_date: str) -> Dict[str, Any]:
         logger.exception("涨跌家数查询失败")
         db.rollback()
         return {}
-    up = down = flat = limit_down = 0
-    for code, name, chg in rows:
-        if is_st_name(name):
-            continue
-        try:
-            chg_f = float(chg)
-        except (TypeError, ValueError):
-            continue
-        if chg_f > 0:
-            up += 1
-        elif chg_f < 0:
-            down += 1
-        else:
-            flat += 1
-        if chg_f <= -limit_up_threshold_for_code(code):
-            limit_down += 1
-    if up == 0 and down == 0 and flat == 0:
-        return {}
+    return summarize_breadth_rows(rows)
+
+
+def _breadth_series_point(trade_date: str, breadth: Dict[str, Any]) -> Dict[str, Any]:
+    if not breadth:
+        return {"trade_date": trade_date[:10]}
     return {
-        "up_count": up,
-        "down_count": down,
-        "flat_count": flat,
-        "limit_down_count": limit_down,
+        "trade_date": trade_date[:10],
+        "up_count": breadth.get("up_count"),
+        "down_count": breadth.get("down_count"),
+        "flat_count": breadth.get("flat_count"),
+        "limit_down_count": breadth.get("limit_down_count"),
+        "up_ratio": breadth.get("up_ratio"),
+        "trin": breadth.get("trin"),
+        "trin_basis": breadth.get("trin_basis") or "amount",
     }
+
+
+def _compute_breadth_series(
+    db: Session,
+    trade_date: str,
+    n: int = BREADTH_SERIES_DAYS,
+    today_breadth: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    """近 N 个交易日宽广度/TRIN 序列（升序，含当日）。"""
+    d = trade_date[:10]
+    limit = max(int(n or BREADTH_SERIES_DAYS), 1)
+    dates = _trading_dates_on_or_before(db, d, limit)
+    if not dates:
+        dates = [d]
+    # 保证当日在末尾
+    if dates[-1] != d:
+        dates = [x for x in dates if x != d] + [d]
+        if len(dates) > limit:
+            dates = dates[-limit:]
+
+    by_date: Dict[str, List[Any]] = {x: [] for x in dates}
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT date, code, name, change_percent, amount
+                FROM historical_quotes
+                WHERE date = ANY(:dates) AND change_percent IS NOT NULL
+                """
+            ),
+            {"dates": dates},
+        ).fetchall()
+        for r in rows:
+            key = str(r[0])[:10]
+            if key in by_date:
+                by_date[key].append((r[1], r[2], r[3], r[4]))
+    except Exception:
+        logger.exception("宽广度序列查询失败")
+        db.rollback()
+        # 回退：仅当日
+        b = today_breadth if today_breadth is not None else _compute_breadth(db, d)
+        return [_breadth_series_point(d, b)] if b else []
+
+    series: List[Dict[str, Any]] = []
+    for day in dates:
+        if day == d and today_breadth:
+            breadth = today_breadth
+        else:
+            breadth = summarize_breadth_rows(by_date.get(day) or [])
+        if breadth:
+            series.append(_breadth_series_point(day, breadth))
+        else:
+            series.append({"trade_date": day})
+    return series
 
 
 def compute_market_env(
@@ -1251,12 +1379,18 @@ def compute_market_env(
     delta_yi = None
     if vol is not None and yv is not None:
         delta_yi = round((vol - yv) * 10000.0, 1)
+    breadth = _compute_breadth(db, d)
+    breadth_series = _compute_breadth_series(
+        db, d, BREADTH_SERIES_DAYS, today_breadth=breadth or None
+    )
     return {
         "indexes": indexes,
         "vol_trillion": vol,
         "vol_delta_yi": delta_yi,
         "above_2t": bool(vol is not None and vol >= 2.0),
-        "breadth": _compute_breadth(db, d),
+        "breadth": breadth,
+        "breadth_series": breadth_series,
+        "breadth_series_days": BREADTH_SERIES_DAYS,
         "sh_gap_to_high20": sh_gap,
     }
 
@@ -1589,6 +1723,35 @@ def _hydrate_legacy_sector_lists(
     return data
 
 
+def _enrich_breadth_fields(db: Session, trade_date: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    """旧快照缺 TRIN/序列时按日行情补齐（只丰富读出结果，不回写库）。"""
+    d = trade_date[:10]
+    rules = data.get("rules_json")
+    if not isinstance(rules, dict):
+        rules = {}
+        data["rules_json"] = rules
+    env = rules.get("market_env")
+    if not isinstance(env, dict):
+        env = {}
+        rules["market_env"] = env
+    breadth = env.get("breadth") if isinstance(env.get("breadth"), dict) else {}
+    need_today = breadth.get("trin") is None or breadth.get("up_ratio") is None
+    need_series = not (env.get("breadth_series") or [])
+    if not need_today and not need_series:
+        env.setdefault("breadth_series_days", BREADTH_SERIES_DAYS)
+        return data
+    today_b = _compute_breadth(db, d) if need_today else breadth
+    if need_today and today_b:
+        env["breadth"] = {**breadth, **today_b}
+        breadth = env["breadth"]
+    if need_series:
+        env["breadth_series"] = _compute_breadth_series(
+            db, d, BREADTH_SERIES_DAYS, today_breadth=breadth or None
+        )
+    env["breadth_series_days"] = BREADTH_SERIES_DAYS
+    return data
+
+
 def get_review_snapshot(db: Session, trade_date: str) -> Optional[Dict[str, Any]]:
     row = db.execute(
         text("SELECT * FROM market_daily_review WHERE trade_date = :d"),
@@ -1605,6 +1768,11 @@ def get_review_snapshot(db: Session, trade_date: str) -> Optional[Dict[str, Any]
             except Exception:
                 pass
     data = _hydrate_legacy_sector_lists(db, trade_date, data)
+    try:
+        data = _enrich_breadth_fields(db, trade_date, data)
+    except Exception:
+        logger.exception("宽广度/TRIN 读时补齐失败 trade_date=%s", trade_date[:10])
+        db.rollback()
     data["markdown"] = render_markdown(data)
     return data
 

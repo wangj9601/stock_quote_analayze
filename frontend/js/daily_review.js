@@ -241,6 +241,10 @@ const DailyReviewPage = {
         const indSum = document.getElementById('drIndustryConfirmSummary');
         if (indSum) indSum.textContent = '';
         this.fillBody('drIndexBody', 6, []);
+        this.fillBody('drBreadthSeriesBody', 5, []);
+        this.renderBreadthSpark([]);
+        const breadthHint = document.getElementById('drBreadthHint');
+        if (breadthHint) breadthHint.textContent = '宽广度 / 阿姆士：暂无数据';
         this.fillCollapsibleSectorBody('drLeadersBody', [], 'up');
         this.fillCollapsibleSectorBody('drLaggardsBody', [], 'down');
         this.fillBody('drCapitalInBody', 2, []);
@@ -293,6 +297,63 @@ const DailyReviewPage = {
         const b = data && data.rules_json && data.rules_json.market_env && data.rules_json.market_env.breadth;
         if (!b || b.up_count == null) return '--';
         return `${b.up_count}/${b.down_count == null ? '--' : b.down_count}`;
+    },
+
+    pctRatio(v) {
+        if (v == null || v === '') return '--';
+        const n = Number(v);
+        if (!Number.isFinite(n)) return '--';
+        return `${this.fmt(n * 100, 1)}%`;
+    },
+
+    trinHint(trin) {
+        const n = Number(trin);
+        if (!Number.isFinite(n)) return '';
+        if (n < 1) return '偏多';
+        if (n > 1) return '偏空';
+        return '均衡';
+    },
+
+    renderBreadthSpark(series) {
+        const svg = document.getElementById('drBreadthSpark');
+        if (!svg) return;
+        const pts = (series || []).filter((p) => p && (p.trin != null || p.up_ratio != null));
+        if (pts.length < 2) {
+            svg.innerHTML = '';
+            return;
+        }
+        const w = 320;
+        const h = 56;
+        const pad = 4;
+        const trins = pts.map((p) => Number(p.trin)).filter((x) => Number.isFinite(x));
+        const ratios = pts.map((p) => Number(p.up_ratio)).filter((x) => Number.isFinite(x));
+        const tMin = trins.length ? Math.min(...trins, 0.5) : 0.5;
+        const tMax = trins.length ? Math.max(...trins, 1.5) : 1.5;
+        const rMin = 0;
+        const rMax = 1;
+        const xAt = (i) => pad + (i * (w - pad * 2)) / Math.max(pts.length - 1, 1);
+        const yTrin = (v) => {
+            const n = Number(v);
+            if (!Number.isFinite(n) || tMax === tMin) return h / 2;
+            return pad + (1 - (n - tMin) / (tMax - tMin)) * (h - pad * 2);
+        };
+        const yRatio = (v) => {
+            const n = Number(v);
+            if (!Number.isFinite(n)) return h / 2;
+            return pad + (1 - (n - rMin) / (rMax - rMin)) * (h - pad * 2);
+        };
+        const trinPath = pts
+            .map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i).toFixed(1)},${yTrin(p.trin).toFixed(1)}`)
+            .join(' ');
+        const ratioPath = pts
+            .map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i).toFixed(1)},${yRatio(p.up_ratio).toFixed(1)}`)
+            .join(' ');
+        const y1 = yTrin(1).toFixed(1);
+        svg.innerHTML = `
+            <line class="dr-spark-base" x1="${pad}" y1="${y1}" x2="${w - pad}" y2="${y1}"></line>
+            <path class="dr-spark-ratio" d="${ratioPath}"></path>
+            <path class="dr-spark-trin" d="${trinPath}"></path>
+        `;
     },
 
     curveHint(data, key) {
@@ -557,6 +618,7 @@ const DailyReviewPage = {
                 const n = Number(delta);
                 deltaTxt = `${n > 0 ? '+' : ''}${this.fmt(n, 0)}`;
             }
+            const trinHint = this.trinHint(breadth.trin);
             metrics.innerHTML = `
               <div class="dr-metric"><span>Vol(万亿)</span><strong>${this.fmt(data.vol_trillion)}</strong></div>
               <div class="dr-metric"><span>较昨日(亿)</span><strong>${deltaTxt}</strong></div>
@@ -564,6 +626,8 @@ const DailyReviewPage = {
               <div class="dr-metric"><span>跌停</span><strong>${breadth.limit_down_count == null ? '--' : breadth.limit_down_count}</strong></div>
               <div class="dr-metric"><span>平盘</span><strong>${breadth.flat_count == null ? '--' : breadth.flat_count}</strong></div>
               <div class="dr-metric"><span>上涨/下跌</span><strong>${this.breadthText(data)}</strong></div>
+              <div class="dr-metric"><span>上涨占比</span><strong>${this.pctRatio(breadth.up_ratio)}</strong></div>
+              <div class="dr-metric"><span>阿姆士TRIN</span><strong>${this.fmt(breadth.trin)}</strong>${trinHint ? `<em>${this.escapeHtml(trinHint)}</em>` : ''}</div>
               <div class="dr-metric"><span>CB连板</span><strong>${this.fmt(data.cb_count, 0)}</strong></div>
               <div class="dr-metric"><span>高度H</span><strong>${this.fmt(data.height, 0)}</strong></div>
               <div class="dr-metric"><span>昨连板收益%</span><strong>${this.fmt(data.prev_cb_return)}</strong></div>
@@ -586,8 +650,36 @@ const DailyReviewPage = {
             }
             if (env.above_2t) line += '，站上 2 万亿';
             line += `。上涨 ${breadth.up_count == null ? '--' : breadth.up_count} 家，下跌 ${breadth.down_count == null ? '--' : breadth.down_count} 家，平盘 ${breadth.flat_count == null ? '--' : breadth.flat_count} 家；涨停 ${data.limit_up_count == null ? '--' : data.limit_up_count}，跌停 ${breadth.limit_down_count == null ? '--' : breadth.limit_down_count}。`;
+            if (breadth.up_ratio != null || breadth.trin != null) {
+                line += ` 宽广度上涨占比 ${this.pctRatio(breadth.up_ratio)}，阿姆士TRIN ${this.fmt(breadth.trin)}`;
+                const th = this.trinHint(breadth.trin);
+                if (th) line += `（${th}）`;
+                line += '。';
+            }
             envSum.textContent = line;
         }
+        const series = env.breadth_series || [];
+        const seriesN = env.breadth_series_days || series.length || 10;
+        const hint = document.getElementById('drBreadthHint');
+        if (hint) {
+            hint.textContent = series.length
+                ? `近 ${seriesN} 日宽广度 / 阿姆士（实线 TRIN，虚线上涨占比；TRIN 基准线=1，成交额口径）`
+                : '宽广度 / 阿姆士：暂无近 N 日序列（可「重算」生成）';
+        }
+        this.renderBreadthSpark(series);
+        this.fillBody(
+            'drBreadthSeriesBody',
+            5,
+            series.map(
+                (pt) => `<tr>
+                    <td>${this.escapeHtml(pt.trade_date || '--')}</td>
+                    <td class="num">${pt.up_count == null ? '--' : this.escapeHtml(pt.up_count)}</td>
+                    <td class="num">${pt.down_count == null ? '--' : this.escapeHtml(pt.down_count)}</td>
+                    <td class="num">${this.pctRatio(pt.up_ratio)}</td>
+                    <td class="num">${this.fmt(pt.trin)}</td>
+                </tr>`
+            )
+        );
         const indexes = env.indexes || [];
         this.fillBody(
             'drIndexBody',

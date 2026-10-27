@@ -209,6 +209,41 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
                 f"平盘 {breadth.get('flat_count', '--')} 家；涨停 {zt if zt is not None else '--'}，"
                 f"跌停 {breadth.get('limit_down_count', '--')}。"
             )
+            up_ratio = breadth.get("up_ratio")
+            trin = breadth.get("trin")
+            ratio_txt = (
+                f"{round(float(up_ratio) * 100, 1)}%"
+                if up_ratio is not None
+                else "--"
+            )
+            trin_txt = _fmt(trin)
+            lines.append(
+                f"市场宽广度：上涨占比 {ratio_txt}；阿姆士(TRIN，成交额口径) {trin_txt}"
+                f"（小于1偏多，大于1偏空，等于1大致均衡）。"
+            )
+            lines.append("")
+        series = env.get("breadth_series") or []
+        series_n = env.get("breadth_series_days") or len(series)
+        if series:
+            lines.append(f"### **近 {series_n} 日宽广度 / 阿姆士**")
+            lines.append("")
+            lines.extend(
+                [
+                    "| 日期 | 上涨 | 下跌 | 上涨占比 | TRIN |",
+                    "| :--- | :--- | :--- | :--- | :--- |",
+                ]
+            )
+            for pt in series:
+                ur = pt.get("up_ratio")
+                ur_txt = (
+                    f"{round(float(ur) * 100, 1)}%"
+                    if ur is not None
+                    else "--"
+                )
+                lines.append(
+                    f"| {pt.get('trade_date') or '--'} | {pt.get('up_count', '--')} | "
+                    f"{pt.get('down_count', '--')} | {ur_txt} | {_fmt(pt.get('trin'))} |"
+                )
             lines.append("")
         if indexes:
             lines.extend(

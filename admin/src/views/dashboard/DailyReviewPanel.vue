@@ -29,7 +29,24 @@
     <el-card v-if="data" class="dr-block" shadow="never">
       <template #header>大盘环境</template>
       <p>{{ envSummary }}</p>
-      <el-table :data="indexRows" size="small" stripe border empty-text="暂无">
+      <h4>近 {{ breadthSeriesDays }} 日宽广度 / 阿姆士</h4>
+      <p class="muted">TRIN 用成交额口径；小于1偏多，大于1偏空</p>
+      <el-table :data="breadthSeriesRows" size="small" stripe border empty-text="暂无序列（可重算）">
+        <el-table-column prop="trade_date" label="日期" width="120" />
+        <el-table-column label="上涨" width="90">
+          <template #default="{ row }">{{ row.up_count ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="下跌" width="90">
+          <template #default="{ row }">{{ row.down_count ?? '—' }}</template>
+        </el-table-column>
+        <el-table-column label="上涨占比" width="100">
+          <template #default="{ row }">{{ pctRatio(row.up_ratio) }}</template>
+        </el-table-column>
+        <el-table-column label="TRIN" width="90">
+          <template #default="{ row }">{{ fmt(row.trin) }}</template>
+        </el-table-column>
+      </el-table>
+      <el-table :data="indexRows" size="small" stripe border empty-text="暂无" class="dr-index-table">
         <el-table-column prop="name" label="指数" min-width="100" />
         <el-table-column label="收盘" width="100">
           <template #default="{ row }">{{ fmt(row.close) }}</template>
@@ -411,6 +428,10 @@ const zhabRows = computed(() => {
   return [].concat(z.breakout || [], z.setup || [])
 })
 const indexRows = computed(() => data.value?.rules_json?.market_env?.indexes || [])
+const breadthSeriesRows = computed(() => data.value?.rules_json?.market_env?.breadth_series || [])
+const breadthSeriesDays = computed(
+  () => data.value?.rules_json?.market_env?.breadth_series_days || breadthSeriesRows.value.length || 10
+)
 
 const envSummary = computed(() => {
   const d = data.value || {}
@@ -424,6 +445,12 @@ const envSummary = computed(() => {
   }
   if (env.above_2t) line += '，站上 2 万亿'
   line += `。上涨 ${b.up_count ?? '—'}，下跌 ${b.down_count ?? '—'}，平盘 ${b.flat_count ?? '—'}；涨停 ${d.limit_up_count ?? '—'}，跌停 ${b.limit_down_count ?? '—'}。`
+  if (b.up_ratio != null || b.trin != null) {
+    line += ` 上涨占比 ${pctRatio(b.up_ratio)}，阿姆士TRIN ${fmt(b.trin)}`
+    const th = trinHint(b.trin)
+    if (th) line += `（${th}）`
+    line += '。'
+  }
   return line
 })
 
@@ -480,6 +507,8 @@ const metricCards = computed(() => {
     { label: '跌停', value: limitDownText(d) },
     { label: '平盘', value: flatText(d) },
     { label: '上涨/下跌', value: breadthText(d) },
+    { label: '上涨占比', value: pctRatio(d?.rules_json?.market_env?.breadth?.up_ratio) },
+    { label: '阿姆士TRIN', value: trinCard(d) },
     { label: 'CB', value: fmt(d.cb_count, 0) },
     { label: '高度', value: fmt(d.height, 0) },
     { label: '昨连板%', value: fmt(d.prev_cb_return) },
@@ -494,6 +523,28 @@ function breadthText(d: any): string {
   const b = d?.rules_json?.market_env?.breadth
   if (!b || b.up_count == null) return '—'
   return `${b.up_count}/${b.down_count ?? '—'}`
+}
+
+function pctRatio(v: any): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '—'
+  return `${(n * 100).toFixed(1)}%`
+}
+
+function trinHint(trin: any): string {
+  const n = Number(trin)
+  if (!Number.isFinite(n)) return ''
+  if (n < 1) return '偏多'
+  if (n > 1) return '偏空'
+  return '均衡'
+}
+
+function trinCard(d: any): string {
+  const b = d?.rules_json?.market_env?.breadth
+  const t = fmt(b?.trin)
+  const h = trinHint(b?.trin)
+  return h ? `${t}（${h}）` : t
 }
 
 function limitDownText(d: any): string {
@@ -746,6 +797,7 @@ onMounted(() => {
 .dr-down { color: #16a34a; font-weight: 600; }
 .dr-code { margin-left: 6px; color: #94a3b8; font-size: 12px; }
 .dr-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.dr-index-table { margin-top: 12px; }
 @media (max-width: 900px) {
   .dr-pair { grid-template-columns: 1fr; }
 }

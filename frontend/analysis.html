@@ -901,6 +901,18 @@
                         <section class="dr-section" id="drEnvSection">
                             <h3>大盘环境</h3>
                             <p class="dr-summary" id="drEnvSummary"></p>
+                            <div class="dr-breadth-panel">
+                                <p class="dr-summary" id="drBreadthHint">宽广度 / 阿姆士：加载后显示近 N 日序列</p>
+                                <div class="dr-sparkline-wrap" aria-hidden="true">
+                                    <svg id="drBreadthSpark" class="dr-sparkline" viewBox="0 0 320 56" preserveAspectRatio="none"></svg>
+                                </div>
+                                <div class="dr-table-wrap">
+                                    <table class="dr-table">
+                                        <thead><tr><th>日期</th><th class="num">上涨</th><th class="num">下跌</th><th class="num">上涨占比</th><th class="num">TRIN</th></tr></thead>
+                                        <tbody id="drBreadthSeriesBody"><tr><td colspan="5">加载中…</td></tr></tbody>
+                                    </table>
+                                </div>
+                            </div>
                             <div class="dr-table-wrap">
                                 <table class="dr-table">
                                     <thead><tr><th>指数</th><th class="num">收盘</th><th class="num">涨跌幅%</th><th class="num">成交额(亿)</th><th class="num">距20日高点</th><th>备注</th></tr></thead>

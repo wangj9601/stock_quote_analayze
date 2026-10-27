@@ -263,6 +263,30 @@ def build_daily_review_html(snapshot: Dict[str, Any]) -> str:
             f"上涨 {breadth.get('up_count', '—')} / 下跌 {breadth.get('down_count', '—')} / "
             f"跌停 {breadth.get('limit_down_count', '—')}"
         )
+        if breadth.get("up_ratio") is not None:
+            try:
+                env_bits.append(f"上涨占比 {round(float(breadth['up_ratio']) * 100, 1)}%")
+            except (TypeError, ValueError):
+                pass
+        if breadth.get("trin") is not None:
+            env_bits.append(f"阿姆士TRIN {_fmt(breadth.get('trin'))}")
+    series = env.get("breadth_series") or []
+    series_rows = []
+    for pt in series:
+        ur = pt.get("up_ratio")
+        try:
+            ur_txt = f"{round(float(ur) * 100, 1)}%" if ur is not None else "—"
+        except (TypeError, ValueError):
+            ur_txt = "—"
+        series_rows.append(
+            [
+                pt.get("trade_date") or "—",
+                pt.get("up_count", "—"),
+                pt.get("down_count", "—"),
+                ur_txt,
+                _fmt(pt.get("trin")),
+            ]
+        )
     idx_body = []
     for idx in env.get("indexes") or []:
         idx_body.append(
@@ -275,15 +299,24 @@ def build_daily_review_html(snapshot: Dict[str, Any]) -> str:
             ]
         )
     env_html = ""
-    if env_bits or idx_body:
+    if env_bits or idx_body or series_rows:
         env_html = "<h2>大盘环境</h2>"
         if env_bits:
             env_html += "<p>" + _esc("；".join(env_bits)) + "</p>"
-        env_html += _table(
-            ["指数", "收盘", "涨跌幅%", "距20日高点", "备注"],
-            idx_body,
-            ["22%", "16%", "14%", "18%", "30%"],
-        )
+        if series_rows:
+            n = env.get("breadth_series_days") or len(series_rows)
+            env_html += f"<h3>近{n}日宽广度 / 阿姆士</h3>"
+            env_html += _table(
+                ["日期", "上涨", "下跌", "上涨占比", "TRIN"],
+                series_rows,
+                ["22%", "16%", "16%", "20%", "26%"],
+            )
+        if idx_body:
+            env_html += _table(
+                ["指数", "收盘", "涨跌幅%", "距20日高点", "备注"],
+                idx_body,
+                ["22%", "16%", "14%", "18%", "30%"],
+            )
 
     sector = mainline.get("sector") or {}
     sector_html = ""
