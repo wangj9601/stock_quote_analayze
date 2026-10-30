@@ -42,6 +42,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_ths_fund_flow_daily,
     exec_em_stock_fund_flow_daily,
     exec_tushare_moneyflow_daily,
+    exec_tushare_margin_daily,
     exec_board_fund_flow_daily,
     exec_zt_pool_em_daily,
     exec_market_daily_review,
@@ -263,6 +264,17 @@ NODE_DEFS: List[CollectionNodeDef] = [
         description=(
             "日终主力主源：pro.moneyflow(trade_date) 全市场单日写入 stock_fund_flow_em_daily；"
             "特大+大单≈主力；金额万元→元；同日覆盖东财；需 TUSHARE_TOKEN（约 2000 积分）"
+        ),
+    ),
+    _n(
+        "tushare_margin_daily",
+        "两融个股日明细（Tushare主源）",
+        "cn",
+        exec_tushare_margin_daily,
+        param_schema=_TRADE_DATE_SCHEMA,
+        description=(
+            "pro.margin_detail → stock_margin_daily；失败/稀疏时 AkShare 沪深明细补洞；"
+            "周一额外补采上周五（深市滞后）；需 TUSHARE_TOKEN（约 2000 积分）；旁证非实锤"
         ),
     ),
     _n(

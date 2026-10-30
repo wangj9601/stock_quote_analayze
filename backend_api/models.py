@@ -560,6 +560,26 @@ class StockFundFlowEmDaily(Base):
     updated_at = Column(DateTime)
 
 
+class StockMarginDaily(Base):
+    """个股融资融券日明细（单位：元；日终以 Tushare margin_detail 为主，AkShare 沪深明细补洞）。"""
+
+    __tablename__ = "stock_margin_daily"
+    code = Column(StockCodeTextPK(), primary_key=True)
+    trade_date = Column(String(10), primary_key=True)
+    name = Column(String(64))
+    rzye = Column(Float)  # 融资余额
+    rzmre = Column(Float)  # 融资买入额
+    rzche = Column(Float)  # 融资偿还额
+    rqye = Column(Float)  # 融券余额
+    rqyl = Column(Float)  # 融券余量（股）
+    rqmcl = Column(Float)  # 融券卖出量
+    rqchl = Column(Float)  # 融券偿还量
+    rzrqye = Column(Float)  # 融资融券余额
+    source = Column(String(32), default="tushare")
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+
 class BoardFundFlowDaily(Base):
     """行业/概念板块资金流日快照（单位：元；同花顺优先）。"""
 

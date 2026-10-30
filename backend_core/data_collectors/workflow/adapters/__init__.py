@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 from backend_core.config.config import DATA_COLLECTORS
 from backend_core.data_collectors.workflow.context import NodeResult, WorkflowContext
@@ -788,6 +788,59 @@ def exec_tushare_moneyflow_daily(ctx: WorkflowContext) -> NodeResult:
     except Exception as e:
         logger.exception("Tushare 个股资金流向日采异常")
         return NodeResult.fail(str(e), message="Tushare 个股资金流向日采失败")
+
+
+def _prev_friday_date(as_of: Optional[datetime] = None) -> str:
+    """相对 as_of（默认今天）回溯到最近一个周五，YYYY-MM-DD。"""
+    from datetime import timedelta
+
+    d = (as_of or datetime.now()).date()
+    while d.weekday() != 4:  # Friday
+        d = d - timedelta(days=1)
+    return d.isoformat()
+
+
+def exec_tushare_margin_daily(ctx: WorkflowContext) -> NodeResult:
+    """两融日明细：Tushare 主源 + AkShare 补洞；周一额外补采上周五（深市滞后）。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过两融日明细")
+    try:
+        from backend_core.data_collectors.tushare.margin import collect_margin_for_date
+
+        trade_date = _resolve_node_trade_date(ctx)
+        if not trade_date:
+            trade_date = datetime.now().strftime("%Y-%m-%d")
+        result = collect_margin_for_date(trade_date, source="auto")
+        payload: Dict[str, Any] = {
+            "result": _safe(result),
+            "trade_date": trade_date,
+        }
+        # 周一补采上周五（深/北周五数据常延至周一）
+        if datetime.now().weekday() == 0 and not _has_explicit_trade_date(ctx):
+            fri = _prev_friday_date()
+            if fri != trade_date:
+                retry = collect_margin_for_date(fri, source="auto")
+                payload["szse_lag_retry"] = {
+                    "trade_date": fri,
+                    "result": _safe(retry),
+                }
+                logger.info(
+                    "两融深市滞后补采 szse_lag_retry date=%s upserted=%s",
+                    fri,
+                    (retry or {}).get("upserted"),
+                )
+        if isinstance(result, dict) and result.get("success") is False:
+            # on_failure=continue 不阻断流水线；retry 信息仍写入 data
+            failed = NodeResult.fail(
+                result.get("error") or "两融日明细采集失败",
+                message="两融日明细日采失败",
+            )
+            failed.data = payload
+            return failed
+        return NodeResult.ok("两融日明细日采完成", data=payload)
+    except Exception as e:
+        logger.exception("两融日明细日采异常")
+        return NodeResult.fail(str(e), message="两融日明细日采失败")
 
 
 def exec_board_fund_flow_daily(ctx: WorkflowContext) -> NodeResult:
