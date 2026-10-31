@@ -18,7 +18,9 @@ const StockMultiStrategy = {
     lastGann: null,
     lastTradePlan: null,
     lastEmFundFlow: null,
+    lastMargin: null,
     mainFlowChart: null,
+    marginChart: null,
     lastUseRealtime: false,
     lastRealtime: null,
     embeddedMode: false,
@@ -1686,6 +1688,7 @@ const StockMultiStrategy = {
             lastRs: this.lastRs,
             lastFundFlow: this.lastFundFlow,
             lastEmFundFlow: this.lastEmFundFlow,
+            lastMargin: this.lastMargin,
             lastAuction: this.lastAuction,
             lastPattern: this.lastPattern,
             lastSwing: this.lastSwing,
@@ -1704,6 +1707,7 @@ const StockMultiStrategy = {
         this.lastRs = state.lastRs;
         this.lastFundFlow = state.lastFundFlow;
         this.lastEmFundFlow = state.lastEmFundFlow;
+        this.lastMargin = state.lastMargin || null;
         this.lastAuction = state.lastAuction;
         this.lastPattern = state.lastPattern;
         this.lastSwing = state.lastSwing;
@@ -1819,6 +1823,7 @@ const StockMultiStrategy = {
         this.bindMainForceTools();
         this.bindMainFundFlowTools();
         this._rehydrateMainFundFlowChart();
+        this._rehydrateMarginBlock();
         this.updateExportBtn();
         this.updateTradeObserveBtn();
         this.updateGannTradeObserveBtn();
@@ -1879,7 +1884,9 @@ const StockMultiStrategy = {
         this.lastRs = null;
         this.lastFundFlow = null;
         this.lastEmFundFlow = null;
+        this.lastMargin = null;
         this.disposeMainFlowChart();
+        this.disposeMarginChart();
         this.lastAuction = null;
         this.lastPattern = null;
         this.lastSwing = null;
@@ -3547,44 +3554,131 @@ const StockMultiStrategy = {
         }
     },
 
+    _beginMarginLoad(ownerKey) {
+        if (!this._marginToken) this._marginToken = {};
+        if (!this._marginPending) this._marginPending = {};
+        const token = (this._marginToken[ownerKey] || 0) + 1;
+        this._marginToken[ownerKey] = token;
+        this._marginPending[ownerKey] = true;
+        return token;
+    },
+
+    _marginLoadCurrent(ownerKey, token) {
+        return !!(this._marginToken && this._marginToken[ownerKey] === token);
+    },
+
+    /** 两融请求回来时写回对应股票，避免切 Tab 后画到当前页上。 */
+    _commitMargin(ownerKey, token, pack) {
+        if (!this._marginLoadCurrent(ownerKey, token)) return;
+        if (this._marginPending) delete this._marginPending[ownerKey];
+        const session = ownerKey && this.stockSessions && this.stockSessions[ownerKey];
+        if (session) {
+            if (!session.state) session.state = {};
+            session.state.lastMargin = pack;
+        }
+        if (ownerKey && this.activeSessionKey && this.activeSessionKey !== ownerKey) return;
+        this.lastMargin = pack;
+        this._paintMarginPack(pack);
+        this.updateExportBtn();
+    },
+
+    _paintMarginPack(pack) {
+        const host = document.getElementById('ssaMarginHost');
+        const block = document.getElementById('ssaMarginBlock');
+        if (!host || !block) return;
+        block.hidden = false;
+        if (pack && pack.error && !pack.ok) {
+            this.disposeMarginChart();
+            host.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc(pack.error)}</p>`;
+            this.setBlockError('ssaMarginStatus', pack.error);
+            return;
+        }
+        this.renderMarginBlock(host, (pack && pack.series) || [], (pack && pack.signal) || null);
+        this.setBlockOk('ssaMarginStatus', '');
+        const st = document.getElementById('ssaMarginStatus');
+        if (st) st.hidden = true;
+    },
+
+    _rehydrateMarginBlock() {
+        const host = document.getElementById('ssaMarginHost');
+        const block = document.getElementById('ssaMarginBlock');
+        if (!host || !block) return;
+        const session = this.activeSessionKey && this.stockSessions
+            ? this.stockSessions[this.activeSessionKey]
+            : null;
+        const code = (session && session.code) || (this.lastStock && this.lastStock.code) || '';
+        const want = this._sessionKey(code);
+        const pendingKey = want && this._marginToken ? want : '';
+        if (want && this._marginPending && this._marginPending[want]) {
+            this.disposeMarginChart();
+            block.hidden = false;
+            host.innerHTML = '<p class="ssa-fund-flow-hint">两融加载中…</p>';
+            return;
+        }
+        const pack = this.lastMargin;
+        const packCode = pack && this._sessionKey(pack.code);
+        if (pack && packCode && want && packCode === want) {
+            this._paintMarginPack(pack);
+            return;
+        }
+        if (want) {
+            void this.loadMarginBlock(code);
+            return;
+        }
+        this.disposeMarginChart();
+        host.innerHTML = '';
+        block.hidden = true;
+    },
+
     async loadMarginBlock(code) {
         const block = document.getElementById('ssaMarginBlock');
         const host = document.getElementById('ssaMarginHost');
-        if (!block || !host || !code) return;
-        block.hidden = false;
-        this.disposeMarginChart();
-        host.innerHTML = '<p class="ssa-fund-flow-hint">两融加载中…</p>';
+        const codeNorm = String(code || '').trim();
+        if (!block || !host || !codeNorm) return;
+        const ownerKey = this.activeSessionKey || this._sessionKey(codeNorm);
+        const token = this._beginMarginLoad(ownerKey);
+        const showHere = !this.activeSessionKey || this.activeSessionKey === ownerKey;
+        if (showHere) {
+            block.hidden = false;
+            this.disposeMarginChart();
+            host.innerHTML = '<p class="ssa-fund-flow-hint">两融加载中…</p>';
+        }
         if (typeof MarginUI === 'undefined') {
-            host.innerHTML = '<p class="ssa-fund-flow-empty">两融组件未加载</p>';
-            this.setBlockError('ssaMarginStatus', '两融组件未加载');
+            this._commitMargin(ownerKey, token, {
+                ok: false,
+                code: codeNorm,
+                series: [],
+                signal: null,
+                error: '两融组件未加载',
+            });
             return;
         }
         try {
             const [seriesRes, signalRes] = await Promise.all([
-                MarginUI.loadSeries(this.API_BASE_URL, code, 60),
-                MarginUI.loadSignal(this.API_BASE_URL, code),
+                MarginUI.loadSeries(this.API_BASE_URL, codeNorm, 60),
+                MarginUI.loadSignal(this.API_BASE_URL, codeNorm),
             ]);
             const seriesPayload = seriesRes.payload || {};
             const signalPayload = signalRes.payload || {};
             const rows = seriesPayload.success ? seriesPayload.data || [] : [];
             const signal = signalPayload.success ? signalPayload.data : null;
-            this.lastMargin = {
+            this._commitMargin(ownerKey, token, {
                 ok: !!(rows.length || (signal && signal.available)),
+                code: codeNorm,
                 series: rows,
                 signal,
-                error: rows.length ? null : (seriesPayload.message || '无两融数据'),
-            };
-            this.renderMarginBlock(host, rows, signal);
-            this.setBlockOk('ssaMarginStatus', '');
-            const st = document.getElementById('ssaMarginStatus');
-            if (st) st.hidden = true;
+                error: rows.length || (signal && signal.available) ? null : (seriesPayload.message || '无两融数据'),
+            });
         } catch (e) {
             console.warn('个股分析·两融失败', e);
-            this.lastMargin = { ok: false, series: [], signal: null, error: e.message || '两融加载失败' };
-            host.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc(e.message || '两融加载失败')}</p>`;
-            this.setBlockError('ssaMarginStatus', e.message || '两融暂无数据');
+            this._commitMargin(ownerKey, token, {
+                ok: false,
+                code: codeNorm,
+                series: [],
+                signal: null,
+                error: e.message || '两融加载失败',
+            });
         }
-        this.updateExportBtn();
     },
 
     renderMarginBlock(host, series, signal) {
@@ -3605,6 +3699,11 @@ const StockMultiStrategy = {
         }
         this.marginChart = echarts.init(chartDom);
         this.marginChart.setOption(M.chartOption(series));
+        setTimeout(() => {
+            if (this.marginChart) {
+                try { this.marginChart.resize(); } catch (e) { /* ignore */ }
+            }
+        }, 50);
     },
 
     disposeMainFlowChart() {
