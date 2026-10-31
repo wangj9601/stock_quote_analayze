@@ -12,18 +12,30 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 from backend_core.analysis.sepa.bars import rs_rank
 from backend_core.analysis.sepa.config import DISCLAIMER, TIER_LABELS, SEPAConfig
 from backend_core.analysis.sepa.margin import assess_margin
-from backend_core.analysis.sepa.trend import compute_trend_template, momentum_of
+from backend_core.analysis.sepa.trend import CONDITION_LABELS, compute_trend_template, momentum_of
 from backend_core.analysis.sepa.vcp import detect_vcp
 
-_STATUS_RANK = {"breakout": 3, "ready": 2, "forming": 1, "none": 0}
+def _rank_map(prefer_ready: bool) -> Dict[str, int]:
+    """排序权重。prefer_ready 时就位优先，其次未放量越过，再次放量突破。"""
+    if prefer_ready:
+        return {"ready": 5, "quiet": 4, "breakout": 3, "extended": 2, "forming": 1, "none": 0}
+    return {"breakout": 5, "quiet": 4, "ready": 3, "extended": 2, "forming": 1, "none": 0}
 
 
-def _tier(vcp_status: str, margin_score: float) -> str:
-    if vcp_status == "breakout":
-        return "A" if margin_score >= 55 else "B"
-    if vcp_status == "ready":
-        return "B" if margin_score >= 55 else "C"
-    return "C"
+_ACTIONABLE = ("breakout", "ready", "quiet")
+_DEFAULT_STATUSES = ("ready", "quiet", "breakout")
+
+
+def _tier(vcp_status: str, margin: Mapping[str, Any]) -> str:
+    """可执行形态里，只有两融拥挤降到观察。没有两融数据保持可执行。"""
+    if vcp_status not in _ACTIONABLE:
+        return "C"
+    if margin.get("status") == "crowded":
+        return "B"
+    if margin.get("status") == "no_data":
+        return "A"
+    score = float(margin.get("score") or 0.0)
+    return "A" if score >= 55 else "B"
 
 
 def evaluate_stock(
@@ -74,7 +86,7 @@ def evaluate_stock(
         flags.append("两融拥挤")
     flags.extend(vcp["notes"])
 
-    tier = _tier(vcp["status"], float(margin["score"]))
+    tier = _tier(vcp["status"], margin)
     return {
         "ok": bool(vcp["ok"]),
         "code": code,
@@ -101,8 +113,17 @@ def screen_universe(
     cfg: Optional[SEPAConfig] = None,
     top: Optional[int] = None,
     include_forming: bool = False,
+    include_extended: bool = False,
+    statuses: Optional[Sequence[str]] = None,
+    tiers: Optional[Sequence[str]] = None,
+    stats: Optional[Dict[str, int]] = None,
 ) -> List[Dict[str, Any]]:
-    """批量筛选。先横截面算相对强度，再逐票评估，最后按可执行度+得分排序。"""
+    """批量筛选。先横截面算相对强度，再逐票评估，最后按可执行度+得分排序。
+
+    stats 传入 dict 时会原地写入漏斗计数，供接口层展示每层淘汰了多少。
+    statuses 给定时只保留这些形态；缺省为就位 / 未放量越过 / 放量突破，
+    include_forming / include_extended 再把对应形态加进来。分级过滤在截断 top 之前做。
+    """
     c = cfg or SEPAConfig()
     margin_by_code = margin_by_code or {}
     circ_mv_by_code = circ_mv_by_code or {}
@@ -116,6 +137,26 @@ def screen_universe(
     ranks = dict(zip(codes, rs_rank([momentum[k] for k in codes])))
 
     out: List[Dict[str, Any]] = []
+    if statuses is None:
+        allowed = set(_DEFAULT_STATUSES)
+    else:
+        allowed = {str(s).strip() for s in statuses if str(s).strip()}
+    if include_forming:
+        allowed.add("forming")
+    if include_extended:
+        allowed.add("extended")
+    tier_wanted = {str(t).strip().upper() for t in (tiers or []) if str(t).strip()}
+
+    funnel: Dict[str, int] = {
+        "universe": len(codes),
+        "trend_pass": 0,
+        "vcp_any": 0,
+        "breakout": 0,
+        "quiet": 0,
+        "ready": 0,
+        "extended": 0,
+        "forming": 0,
+    }
     for code in codes:
         res = evaluate_stock(
             bars_by_code[code],
@@ -128,14 +169,35 @@ def screen_universe(
         )
         if not res["trend"]["ok"]:
             continue
+        funnel["trend_pass"] += 1
         if res["vcp"] is None or res["vcp"]["status"] == "none":
             continue
-        if not include_forming and res["vcp"]["status"] == "forming":
+        funnel["vcp_any"] += 1
+        status = res["vcp"]["status"]
+        if status in funnel:
+            funnel[status] += 1
+        if status not in allowed:
             continue
         out.append(res)
 
-    out.sort(key=lambda r: (_STATUS_RANK.get(r["vcp"]["status"], 0), r["score"]), reverse=True)
+    if stats is not None:
+        stats.update(funnel)
+
+    rank = _rank_map(c.prefer_ready)
+    out.sort(key=lambda r: (rank.get(r["vcp"]["status"], 0), r["score"]), reverse=True)
+    if tier_wanted:
+        out = [r for r in out if (r.get("tier") or "").upper() in tier_wanted]
     return out[: int(top or c.top)]
+
+
+def screen_report(
+    bars_by_code: Mapping[str, Sequence[Dict[str, Any]]],
+    **kwargs: Any,
+) -> Dict[str, Any]:
+    """screen_universe 的带统计版本：返回 {rows, stats}，供接口层展示漏斗。"""
+    stats: Dict[str, int] = {}
+    rows = screen_universe(bars_by_code, stats=stats, **kwargs)
+    return {"rows": rows, "stats": stats}
 
 
 def to_table_rows(results: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -145,6 +207,7 @@ def to_table_rows(results: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
         vcp = r.get("vcp") or {}
         margin = r.get("margin") or {}
         trend = r.get("trend") or {}
+        metrics = trend.get("metrics") or {}
         rows.append(
             {
                 "code": r["code"],
@@ -157,13 +220,31 @@ def to_table_rows(results: Sequence[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "vcp_count": vcp.get("count"),
                 "pivot": vcp.get("pivot"),
                 "dist_to_pivot_pct": vcp.get("dist_to_pivot_pct"),
+                "close": vcp.get("close"),
                 "vol_ratio": vcp.get("vol_ratio"),
+                "tight_range_pct": vcp.get("tight_range_pct"),
+                "base_tight_range_pct": vcp.get("base_tight_range_pct"),
+                "invalidation": vcp.get("invalidation"),
+                "contractions": vcp.get("contractions") or [],
+                "vcp_notes": vcp.get("notes") or [],
                 "margin_status": margin.get("status"),
                 "margin_status_label": margin.get("status_label"),
                 "margin_score": margin.get("score"),
                 "crowd_pct": margin.get("crowd_pct"),
-                "rs_rank": (trend.get("metrics") or {}).get("rs_rank"),
-                "extended_pct": (trend.get("metrics") or {}).get("extended_pct"),
+                "drawdown_pct": margin.get("drawdown_pct"),
+                "reflow_pct": margin.get("reflow_pct"),
+                "margin_notes": margin.get("notes") or [],
+                "rs_rank": metrics.get("rs_rank"),
+                "extended_pct": metrics.get("extended_pct"),
+                "off_high_pct": metrics.get("off_high_pct"),
+                "off_low_pct": metrics.get("off_low_pct"),
+                "ma50": metrics.get("ma50"),
+                "ma150": metrics.get("ma150"),
+                "ma200": metrics.get("ma200"),
+                "trend_checks": [
+                    {"id": k, "label": CONDITION_LABELS[k], "ok": bool((trend.get("conditions") or {}).get(k))}
+                    for k in range(1, 9)
+                ],
                 "flags": "、".join(r.get("flags") or []),
             }
         )

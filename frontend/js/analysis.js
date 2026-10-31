@@ -14,7 +14,7 @@ const AnalysisPage = {
         'stock-ai': [
             'js/echarts.min.js',
             'js/echarts_theme.js?v=20261030-theme',
-            'js/margin_ui.js?v=20261030-margin3',
+            'js/margin_ui.js?v=20261031-margin-read',
             'js/kde_levels_tool.js?v=20261015-idxlv',
             'js/pattern_tool.js?v=20260921d',
             'js/market_structure_tool.js?v=20260930-smcfold',
@@ -39,7 +39,7 @@ const AnalysisPage = {
             'js/rs_rating_analysis.js?v=20261007-rsa',
         ],
         'trade-observe': [
-            'js/margin_ui.js?v=20261030-margin2',
+            'js/margin_ui.js?v=20261031-margin-read',
             'js/trade_observe.js?v=20261030-margin',
         ],
         recommend: [
@@ -48,13 +48,13 @@ const AnalysisPage = {
         'market-analysis': [
             'js/echarts.min.js',
             'js/echarts_theme.js?v=20261030-theme',
-            'js/margin_ui.js?v=20261030-margin3',
+            'js/margin_ui.js?v=20261031-margin-read',
             'js/market_analysis.js?v=20261030-margin',
         ],
         'market-review': [
             'js/page_scroll_fab.js',
             'js/daily_review.js?v=20261030-margin',
-            'js/period_review.js?v=20260930-rv',
+            'js/period_review.js?v=20261031-breadth',
         ],
         'technical-tools': [
             'js/kde_levels_tool.js?v=20261015-idxlv',

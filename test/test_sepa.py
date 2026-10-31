@@ -62,8 +62,31 @@ def _bars(anchors, vol_segments, seed=7, n=300):
     return rows
 
 
+def _tighten_tail(rows, dist=0.012):
+    """把末端收成紧凑平台，最后一根收到平台前高点上方 dist。
+
+    合成 K 线的随机高低点会把突破前 10 日振幅撑过 8%，测不到可执行买点。
+    平台取突破前一段的最高价下方，避免改写更早的收缩腿。
+    """
+    prior = rows[-25:-12]
+    pivot_hint = max(r["high"] for r in prior)
+    platform = pivot_hint * 0.985
+    for r in rows[-11:-1]:
+        r["open"] = round(platform * 0.998, 2)
+        r["close"] = round(platform, 2)
+        r["high"] = round(platform * 1.006, 2)
+        r["low"] = round(platform * 0.994, 2)
+    last = rows[-1]
+    px = round(pivot_hint * (1.0 + dist), 2)
+    last["open"] = round(platform, 2)
+    last["close"] = px
+    last["high"] = round(px * 1.004, 2)
+    last["low"] = round(min(platform, px) * 0.998, 2)
+    return rows
+
+
 def _vcp_bars(seed=7):
-    return _bars(VCP_ANCHORS, VCP_VOL, seed=seed)
+    return _tighten_tail(_bars(VCP_ANCHORS, VCP_VOL, seed=seed))
 
 
 def _uptrend_bars(seed=18):
@@ -203,6 +226,90 @@ def test_forming_included_when_requested():
         {"600001.SH": _uptrend_bars()}, cfg=SEPAConfig(), include_forming=True
     )
     assert isinstance(picks, list)
+
+
+def test_screen_report_funnel_counts():
+    """漏斗计数必须与实际返回一致，否则前端面板的通过率会失真。"""
+    from backend_core.analysis.sepa.screener import screen_report
+
+    bars = {
+        "600000.SH": _vcp_bars(seed=7),
+        "600001.SH": _uptrend_bars(),
+        "600002.SH": _downtrend_bars(),
+    }
+    rep = screen_report(bars, margin_by_code={"600000.SH": _margin_rows("reflow")})
+    stats, rows = rep["stats"], rep["rows"]
+    assert stats["universe"] == 3
+    assert stats["trend_pass"] <= 3
+    assert (
+        stats["breakout"] + stats["quiet"] + stats["ready"]
+        + stats["extended"] + stats["forming"]
+    ) == stats["vcp_any"]
+    assert all(r["vcp"]["status"] != "forming" for r in rows)   # 默认不含收缩中
+    assert len(rows) <= stats["breakout"] + stats["ready"]
+
+
+def test_enforce_last_depth_downgrades_breakout():
+    """末次收缩过深时不能给出可执行状态——这是校准后新增的硬门槛。"""
+    bars = _vcp_bars(seed=13)
+    loose = detect_vcp(bars, cfg=VCPConfig(max_last_depth=0.99, enforce_last_depth=True))
+    tight = detect_vcp(bars, cfg=VCPConfig(max_last_depth=0.001, enforce_last_depth=True))
+    off = detect_vcp(bars, cfg=VCPConfig(max_last_depth=0.001, enforce_last_depth=False))
+    assert loose["status"] in ("breakout", "ready")
+    assert tight["status"] not in ("breakout", "ready")      # 门槛生效
+    assert tight["ok"] is False
+    assert "last_contraction_too_deep" in tight["notes"]
+    assert off["status"] == loose["status"]                  # 关掉开关即恢复原判定
+
+
+def test_excluded_name_covers_st_and_delist():
+    from backend_core.analysis.sepa.loaders import is_excluded_name
+
+    assert is_excluded_name("*ST海润")
+    assert is_excluded_name("ST国华")
+    assert is_excluded_name("S*ST前锋")
+    assert is_excluded_name("退市海润")
+    assert is_excluded_name("贵州茅台") is False
+    assert is_excluded_name("") is False
+
+
+def test_single_leg_is_not_breakout():
+    res = detect_vcp(_uptrend_bars(), cfg=VCPConfig())
+    assert res["status"] not in ("breakout", "quiet", "ready")
+    assert res["ok"] is False
+
+
+def test_quiet_when_price_clears_pivot_without_volume():
+    bars = _vcp_bars()
+    bars[-1]["volume"] = 1
+    res = detect_vcp(bars, cfg=VCPConfig())
+    assert res["count"] >= 2, res["count"]
+    assert res["status"] == "quiet", (res["status"], res["dist_to_pivot_pct"], res["notes"], res["base_tight_range_pct"])
+    assert res["ok"] is True
+    assert res["invalidation"] is not None
+
+
+def test_extended_above_chase_is_not_actionable():
+    """同一根末端，把可执行距离收到实际距离之下，应标成远离枢轴。"""
+    res = detect_vcp(_vcp_bars(), cfg=VCPConfig(chase_distance=0.005))
+    assert res["dist_to_pivot_pct"] is not None and res["dist_to_pivot_pct"] > 0.5
+    assert res["status"] == "extended", (res["status"], res["dist_to_pivot_pct"], res["notes"])
+    assert res["ok"] is False
+    assert "chase_risk" in res["notes"]
+
+
+def test_no_data_margin_stays_actionable_tier():
+    res = evaluate_stock(_vcp_bars(), code="600000", rs_rank=90.0, margin_rows=[], cfg=SEPAConfig())
+    if res["vcp"] and res["vcp"]["status"] in ("breakout", "ready", "quiet"):
+        assert res["tier"] == "A", (res["tier"], res["vcp"]["status"])
+        assert res["margin"]["status"] == "no_data"
+
+
+def test_prefer_ready_ranking_is_switchable():
+    from backend_core.analysis.sepa.screener import _rank_map
+
+    assert _rank_map(True)["ready"] > _rank_map(True)["breakout"]
+    assert _rank_map(False)["breakout"] > _rank_map(False)["ready"]
 
 
 def main() -> int:

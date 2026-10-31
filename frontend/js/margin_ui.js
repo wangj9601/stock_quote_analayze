@@ -43,17 +43,79 @@
   }
 
   /**
-   * 降幅口径：值为正表示余额下降。展示为「↓x.x% / ↑x.x%」，
-   * 避免「+3.2%」配绿色的歧义。
+   * 近 5 日余额变化。正值是余额下降，负值是余额上升。
+   * 用「上升 / 下降」写出来，避免「降幅」配上升箭头。
    */
   function fmtDropPct(v, digits) {
     if (v == null || Number.isNaN(Number(v))) return '--';
     const n = Number(v) * 100;
     const d = digits == null ? 1 : digits;
     const abs = Math.abs(n).toFixed(d);
-    if (n > 0) return `↓${abs}%`;
-    if (n < 0) return `↑${abs}%`;
-    return `${abs}%`;
+    if (n > 0) return `下降 ${abs}%`;
+    if (n < 0) return `上升 ${abs}%`;
+    return '基本持平';
+  }
+
+  const NOTE_FALLBACK = {
+    rzye: '还没还清的融资借款。这是存量，不是当天成交。',
+    rz_net: '当天新借减去偿还。负数是在还钱，正数是在加杠杆。',
+    crowding: '融资余额占流通市值的比例。8% 及以上记为高拥挤。',
+    drop_5d: '和 5 个交易日前比。上升是杠杆在加，下降是在撤。下降达到 8% 记为骤降。',
+  };
+
+  function noteOf(signal, key) {
+    const notes = signal && signal.notes;
+    const text = notes && notes[key];
+    return text || NOTE_FALLBACK[key] || '';
+  }
+
+  /** 接口还没带 reading 时，用同一套阈值在页面上补一句判断。 */
+  function readingOf(signal) {
+    if (!signal || !signal.available) return '';
+    if (signal.reading) return String(signal.reading);
+    const crowding = signal.crowding == null ? null : Number(signal.crowding);
+    const rzNet = signal.rz_net == null ? null : Number(signal.rz_net);
+    const drop5 = signal.rzye_drop_5d == null ? null : Number(signal.rzye_drop_5d);
+    const flags = signal.flags || {};
+    const risk = String(signal.squeeze_risk || 'none');
+    const streak = Number(signal.neg_net_streak || 0);
+    const parts = ['这些数看的是借钱买这只股票还剩多少，以及当天是在加杠杆还是在还钱。'];
+    if (Number.isFinite(crowding)) {
+      const pct = `${(crowding * 100).toFixed(2)}%`;
+      parts.push(
+        crowding >= 0.08
+          ? `融资余额约占流通市值 ${pct}，已经过了 8% 的高拥挤线。`
+          : `融资余额约占流通市值 ${pct}，还没到 8% 的高拥挤线。`
+      );
+    } else {
+      parts.push('缺少流通市值，算不出杠杆占流通盘的比例。');
+    }
+    if (Number.isFinite(rzNet)) {
+      const yi = Math.abs(rzNet) / 1e8;
+      if (rzNet < 0) parts.push(`当天净偿还 ${yi.toFixed(2)} 亿。`);
+      else if (rzNet > 0) parts.push(`当天净借入 ${yi.toFixed(2)} 亿。`);
+      else parts.push('当天借贷和偿还基本抵消。');
+    }
+    if (Number.isFinite(drop5)) {
+      if (drop5 > 0) parts.push(`近 5 日余额下降了 ${(drop5 * 100).toFixed(1)}%。`);
+      else if (drop5 < 0) parts.push(`近 5 日余额上升了 ${(Math.abs(drop5) * 100).toFixed(1)}%。`);
+      else parts.push('近 5 日余额基本没变。');
+    }
+    const fired = [];
+    if (flags.high_crowding) fired.push('拥挤度过高');
+    if (flags.balance_collapse) fired.push('近5日余额骤降');
+    if (flags.neg_net_streak_ge_3) fired.push(`已连续 ${streak} 日净偿还`);
+    if (flags.accel_repay) fired.push('当天偿还明显快于近几日');
+    parts.push(
+      fired.length
+        ? `需要留意的是：${fired.join('、')}。`
+        : '高拥挤、余额骤降、连续多日净偿还、偿还突然加快，这四项都没出现。'
+    );
+    if (risk === 'high') parts.push('这几项叠在一起，融资盘撤退的迹象偏重。这不能证明机构被强平。');
+    else if (risk === 'mid') parts.push('这几项叠在一起，融资盘在减杠杆，先放慢。这不能证明机构被强平。');
+    else if (risk === 'low') parts.push('有一项偏谨慎，还谈不上集中撤退。');
+    else parts.push('所以目前看不出融资盘在集中撤退。');
+    return parts.join('');
   }
 
   function clsYi(v) {
@@ -109,37 +171,36 @@
     if (!signal || !signal.available) {
       return `<p class="margin-empty">${esc((signal && signal.error) || '暂无两融数据（需日终采集，T+1 披露）')}</p>`;
     }
-    const flags = signal.flags || {};
-    const flagBits = [
-      flags.high_crowding ? '高拥挤' : null,
-      flags.accel_repay ? '偿还加速' : null,
-      flags.balance_collapse ? '余额骤降' : null,
-      flags.neg_net_streak_ge_3 ? '连续净偿还≥3日' : null,
-    ].filter(Boolean);
     const lhb = signal.dragon_tiger;
     let lhbHtml = '';
     if (lhb && lhb.org_net_value != null) {
-      lhbHtml = `<div class="margin-metric"><span>龙虎榜机构净额</span><strong class="${clsYi(lhb.org_net_value)}">${fmtYi(lhb.org_net_value)}</strong></div>`;
+      const orgNote =
+        Number(lhb.org_net_value) < 0
+          ? '同一天龙虎榜上，机构席位净卖出。只说明席位方向，不能证明被强平。'
+          : '同一天龙虎榜上，机构席位净买入。只说明席位方向。';
+      lhbHtml = `<div class="margin-metric"><span>龙虎榜机构净额</span><strong class="${clsYi(lhb.org_net_value)}">${fmtYi(lhb.org_net_value)}</strong><em>${esc(orgNote)}</em></div>`;
     }
     const hint = signal.composite_hint
       ? `<p class="margin-composite-hint">${esc(signal.composite_hint)}</p>`
       : '';
+    const chartNote = signal.chart_note || '蓝线是还没还的融资借款。红柱是当天新借多于偿还，绿柱是偿还多于新借。';
     return `
       <div class="margin-signal-summary">
         <div class="margin-signal-head">
           ${badgeHtml(signal)}
-          <span class="margin-signal-date">披露日 ${esc(signal.trade_date || '--')}</span>
+          <span class="margin-signal-date">披露日 ${esc(signal.trade_date || '--')}，交易所次日才公布</span>
         </div>
+        <p class="margin-reading">${esc(readingOf(signal))}</p>
         <div class="margin-metrics">
-          <div class="margin-metric"><span>融资余额</span><strong>${fmtYiAbs(signal.rzye)}</strong></div>
-          <div class="margin-metric"><span>融资净买入</span><strong class="${clsYi(signal.rz_net)}">${fmtYi(signal.rz_net)}</strong></div>
-          <div class="margin-metric"><span>拥挤度</span><strong>${signal.crowding == null ? '--' : (Number(signal.crowding) * 100).toFixed(2) + '%'}</strong></div>
-          <div class="margin-metric"><span>5日余额降幅</span><strong class="${clsDrop(signal.rzye_drop_5d)}">${fmtDropPct(signal.rzye_drop_5d)}</strong></div>
+          <div class="margin-metric"><span>融资余额</span><strong>${fmtYiAbs(signal.rzye)}</strong><em>${esc(noteOf(signal, 'rzye'))}</em></div>
+          <div class="margin-metric"><span>融资净买入</span><strong class="${clsYi(signal.rz_net)}">${fmtYi(signal.rz_net)}</strong><em>${esc(noteOf(signal, 'rz_net'))}</em></div>
+          <div class="margin-metric"><span>拥挤度</span><strong>${signal.crowding == null ? '--' : (Number(signal.crowding) * 100).toFixed(2) + '%'}</strong><em>${esc(noteOf(signal, 'crowding'))}</em></div>
+          <div class="margin-metric"><span>近5日余额</span><strong class="${clsDrop(signal.rzye_drop_5d)}">${fmtDropPct(signal.rzye_drop_5d)}</strong><em>${esc(noteOf(signal, 'drop_5d'))}</em></div>
           ${lhbHtml}
         </div>
-        ${flagBits.length ? `<p class="margin-flags">旁证标记：${esc(flagBits.join(' · '))}</p>` : ''}
         ${hint}
-        <p class="margin-disclaimer">${esc(signal.disclaimer || '')}</p>
+        <p class="margin-chart-note">${esc(chartNote)}</p>
+        <p class="margin-disclaimer">${esc(signal.disclaimer || '这些是公开余额和净偿还推出来的旁证，不能证明某家机构被券商强平。')}</p>
       </div>`;
   }
 

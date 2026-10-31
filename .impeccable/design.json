@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-18T15:30:00Z",
+  "generatedAt": "2026-10-31T07:40:00Z",
   "title": "Design System: 股票分析 · 冰枫堂",
   "extensions": {
     "colorMeta": {
@@ -336,12 +336,20 @@
       "css": ".ds-field{display:flex;flex-direction:column;gap:8px;font-family:Noto Sans SC,sans-serif;color:#d9e2ec}.ds-field-label{font-family:Barlow Condensed,Noto Sans SC,sans-serif;font-size:.8125rem;font-weight:600;letter-spacing:.08em;color:#8b9aab}.ds-date,.ds-select{color-scheme:dark;background-color:rgba(0,0,0,.28);color:#d9e2ec;border:1px solid rgba(217,226,236,.14);border-radius:2px;padding:6px 10px;font-size:14px}.ds-date{background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Crect x='1.5' y='3' width='13' height='11.5' rx='1.5' stroke='%23d9e2ec' stroke-width='1.6'/%3E%3Cpath d='M1.5 6.5h13' stroke='%23d9e2ec' stroke-width='1.6'/%3E%3Cpath d='M5 1.5v3M11 1.5v3' stroke='%23d9e2ec' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 8px center;background-size:16px 16px;padding-right:32px}.ds-date:hover{background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Crect x='1.5' y='3' width='13' height='11.5' rx='1.5' stroke='%23c9a227' stroke-width='1.6'/%3E%3Cpath d='M1.5 6.5h13' stroke='%23c9a227' stroke-width='1.6'/%3E%3Cpath d='M5 1.5v3M11 1.5v3' stroke='%23c9a227' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E\")}.ds-select{appearance:none;background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23d9e2ec' d='M0 1h12L6 8z'/%3E%3C/svg%3E\");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}.ds-select:hover,.ds-select:focus{background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23c9a227' d='M0 1h12L6 8z'/%3E%3C/svg%3E\")}.ds-date:focus,.ds-select:focus{outline:none;border-color:#c9a227;box-shadow:0 0 0 2px #0f1419,0 0 0 4px #c9a227}"
     },
     {
-      "name": "Admin Duty Nav",
+      "name": "Table Row Action",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "选股表内的明细、历史等操作，与幽灵按钮同一套，不用蓝色或绿色文字链接。",
+      "html": "<button type=\"button\" class=\"ds-op-btn\">明细</button> <a class=\"ds-op-btn\" href=\"#\">历史</a> <button type=\"button\" class=\"ds-op-btn is-active\">明细</button>",
+      "css": ".ds-op-btn{display:inline-block;font-family:\"Noto Sans SC\",sans-serif;font-size:13px;line-height:1.4;background:transparent;color:#d9e2ec;border:1px solid rgba(217,226,236,.28);border-radius:1px;padding:4px 8px;text-decoration:none;cursor:pointer;transition:background 150ms cubic-bezier(.4,0,.2,1),color 150ms,border-color 150ms}.ds-op-btn:hover,.ds-op-btn.is-active{color:#c9a227;border-color:#c9a227;background:rgba(201,162,39,.12)}.ds-op-btn:focus-visible{outline:none;box-shadow:0 0 0 2px #0f1419,0 0 0 4px #c9a227}"
+    },
+    {
+      "name": "Archive Index Nav",
       "kind": "nav",
       "refersTo": null,
-      "description": "管理端浅色值班台：枫金墨署名，暖纸标出当前子项，分组只加粗。",
-      "html": "<aside class=\"ds-admin-nav\"><div class=\"ds-admin-brand\">冰枫堂</div><button class=\"ds-admin-group\" type=\"button\">策略</button><a class=\"ds-admin-child\" href=\"#\">做小做底 SBBR</a><a class=\"ds-admin-child is-current\" href=\"#\" aria-current=\"page\">通道突破 CSB</a></aside>",
-      "css": ".ds-admin-nav{display:flex;flex-direction:column;gap:4px;width:220px;padding:16px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1),0 4px 6px -4px rgb(0 0 0 / 0.1);font-family:system-ui,sans-serif}.ds-admin-brand{margin:0 0 8px;font-size:22px;font-weight:700;letter-spacing:.08em;color:#6b5420}.ds-admin-group{border:0;background:transparent;text-align:left;font-size:14px;font-weight:600;color:#6b5420;padding:8px 12px;border-radius:8px;cursor:pointer}.ds-admin-group:hover{background:#f3f4f6}.ds-admin-group:focus-visible,.ds-admin-child:focus-visible{outline:2px solid #6b5420;outline-offset:2px}.ds-admin-child{display:block;margin-left:12px;padding:8px 12px;border-radius:8px;color:#374151;text-decoration:none;font-size:13px}.ds-admin-child:hover{background:#f3f4f6}.ds-admin-child.is-current{background:#f4efe3;color:#6b5420;font-weight:600}"
+      "description": "管理端档案分类号：索引蓝侧栏，马尼拉只铺当前子项，分组标题只加粗。",
+      "html": "<aside class=\"ds-archive\"><div class=\"ds-archive-brand\">冰枫堂</div><div class=\"ds-archive-group\">策略</div><a class=\"ds-archive-item\" href=\"#\"><span>做小做底</span><span class=\"ds-archive-no\">策-SBBR</span></a><a class=\"ds-archive-item is-current\" href=\"#\" aria-current=\"page\"><span>通道突破</span><span class=\"ds-archive-no\">策-CSB</span></a></aside>",
+      "css": ".ds-archive{display:flex;flex-direction:column;gap:4px;width:248px;padding:16px 12px;background:#234e70;color:#f3f1ec;font-family:\"Noto Sans SC\",\"PingFang SC\",sans-serif;box-shadow:4px 0 12px rgba(26,35,50,.12)}.ds-archive-brand{margin:0 0 12px;font-size:22px;font-weight:700;letter-spacing:.12em}.ds-archive-group{padding:8px 10px;font-size:14px;font-weight:700}.ds-archive-item{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px 10px;border-radius:2px;color:#f3f1ec;text-decoration:none;font-size:13px}.ds-archive-item:hover{background:rgba(243,241,236,.08)}.ds-archive-item.is-current{background:#d7b56d;color:#1a2332;font-weight:600}.ds-archive-no{font-variant-numeric:tabular-nums;letter-spacing:.04em}.ds-archive-item:focus-visible,.ds-archive-group:focus-visible{outline:2px solid #d7b56d;outline-offset:2px}"
     }
   ],
   "narrative": {
@@ -352,7 +360,7 @@
       "策略以芯片/Tab 叠层开关出现，不做成游戏 HUD",
       "不透明抬升面板盖住底图；白卡贴深底是反模式",
       "A 股涨红跌绿语义固定；龙头/中军用对向力关系呈现",
-      "上文只约束用户站 MPA `body.ops-map`。管理端浅色壳层见文末「管理端：浅色值班台」，不进入本文件色板与组件令牌"
+      "上文只约束用户站 MPA `body.ops-map`。管理端见文末「管理端：档案分类号」，不进入本文件色板与组件令牌"
     ],
     "rules": [
       {
@@ -396,18 +404,8 @@
         "section": "shapes"
       },
       {
-        "name": "The Duty Desk Rule",
-        "body": "管理端保持浅色操作密度。品牌只署名和标出当前位置，不把页面涂成作战标图台。",
-        "section": "admin"
-      },
-      {
-        "name": "The Maple Ink Rule",
-        "body": "浅底上的品牌字用枫金墨，当前项用暖纸。用户站叠层金不作为管理端正文色。",
-        "section": "admin"
-      },
-      {
-        "name": "The Shell Shadow Rule",
-        "body": "内容区保持平面。轻阴影只给侧栏、抽屉遮罩和展开条。",
+        "name": "The Index Rule",
+        "body": "档号出现在侧栏子项、页标题和三扇门上。马尼拉只铺当前子项、当前门和版本账本的当前行，不用紫色或靛色。",
         "section": "admin"
       }
     ],
@@ -415,7 +413,10 @@
       "Do 新页面挂 `body.ops-map`，并按序加载 `design-tokens` → `ops-shell` → `ops-data` → 业务 CSS → `*-ops` → `ops-surfaces`（最后覆盖层）。",
       "Do 用 `--ops-ink` / `--ops-ink-muted` 写字；涨跌只用 `--color-rise` / `--color-fall`。",
       "Do 面板用 `--ops-ground-elevated` 实色；标签/芯片在深底上用暗半透明底，不用浅灰底浅字。",
-      "Do 保留「冰枫堂」署名与策略短码可发现性。"
+      "Do 保留「冰枫堂」署名与策略短码可发现性。",
+      "Do 新页面写入 `archive/catalog.ts`，并让侧栏和标题带上档号。",
+      "Do 主操作只保留一个索引蓝按钮，其余用细线按钮。",
+      "Do 涨跌使用 `--admin-rise` / `--admin-fall`。"
     ],
     "donts": [
       "Don't 复活满屏方格底纹或白卡贴深底。",
@@ -423,7 +424,10 @@
       "Don't 把管理端 Element 默认主题当成用户站规范，也不要把用户站深色作战板涂到管理端。",
       "Don't 在管理端用紫、靛装饰色标状态或当前项。",
       "Don't 为装饰引入大圆角卡片网格仪表盘作为默认布局。",
-      "Don't 用 PowerShell 默认编码改含中文的 HTML（易乱码）；改前端文案用 UTF-8 工具链。"
+      "Don't 用 PowerShell 默认编码改含中文的 HTML（易乱码）；改前端文案用 UTF-8 工具链。",
+      "Don't 在 `body.ops-map` 的表格操作列使用蓝色或绿色文字链接充当按钮。",
+      "Don't 把退出登录做成危险按钮。",
+      "Don't 在管理端用超过 `2px` 的圆角，或用绿色实心按钮当主操作。"
     ]
   }
 }

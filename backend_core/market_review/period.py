@@ -11,7 +11,12 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from backend_core.market_review.compute import concept_matches_focus
+from backend_core.market_review.compute import (
+    calc_arms_trin,
+    concept_matches_focus,
+    summarize_breadth_rows,
+)
+from backend_core.market_review.rules import BREADTH_RATIO
 from backend_core.market_review.period_picks import (
     apply_period_triggers,
     assemble_period_picks,
@@ -147,6 +152,233 @@ def _avg(values: Sequence[Any]) -> Optional[float]:
     return sum(nums) / len(nums)
 
 
+_BREADTH_LABEL = {"broad_up": "普涨", "broad_down": "普跌", "mixed": "分歧"}
+
+
+def _breadth_of_row(row: Dict[str, Any]) -> Dict[str, Any]:
+    env = _as_dict(_as_dict(row.get("rules_json")).get("market_env"))
+    breadth = env.get("breadth")
+    return breadth if isinstance(breadth, dict) else {}
+
+
+def _breadth_tag(up: Any, down: Any) -> str:
+    """与日复盘同一门槛：上涨家数不少于下跌的 1.5 倍为普涨，反之为普跌。"""
+    try:
+        u = None if up is None else int(up)
+        d = None if down is None else int(down)
+    except (TypeError, ValueError):
+        return "unknown"
+    if u is None or d is None:
+        return "unknown"
+    if u > d and u >= d * BREADTH_RATIO:
+        return "broad_up"
+    if d > u and d >= u * BREADTH_RATIO:
+        return "broad_down"
+    return "mixed"
+
+
+def _trin_bias(trin: Any) -> str:
+    n = _f(trin)
+    if n is None:
+        return ""
+    if n < 1:
+        return "偏多"
+    if n > 1:
+        return "偏空"
+    return "均衡"
+
+
+def _pct_text(ratio: Any) -> str:
+    n = _f(ratio)
+    if n is None:
+        return "—"
+    return f"{round(n * 100, 1)}%"
+
+
+def breadth_blurb(breadth: Dict[str, Any]) -> str:
+    """周/月观点里的一句宽广度与阿姆士结论。"""
+    if not breadth or not int(breadth.get("covered_days") or 0):
+        return ""
+    trin = breadth.get("avg_trin")
+    hint = _trin_bias(trin)
+    trin_txt = "—" if trin is None else f"{float(trin):.2f}"
+    parts = [
+        (
+            f"宽广度日均上涨占比 {_pct_text(breadth.get('avg_up_ratio'))}，"
+            f"普涨 {int(breadth.get('broad_up_days') or 0)} 天、"
+            f"分歧 {int(breadth.get('mixed_days') or 0)} 天、"
+            f"普跌 {int(breadth.get('broad_down_days') or 0)} 天。"
+        ),
+        (
+            f"阿姆士日均 TRIN {trin_txt}"
+            f"{('（' + hint + '）') if hint else ''}，"
+            f"小于1共 {int(breadth.get('trin_lt1_days') or 0)} 天，"
+            f"大于1共 {int(breadth.get('trin_gt1_days') or 0)} 天。"
+        ),
+    ]
+    if breadth.get("period_trin") is not None:
+        period_hint = _trin_bias(breadth.get("period_trin"))
+        parts.append(
+            f"区间合成 TRIN {float(breadth['period_trin']):.2f}"
+            f"{('（' + period_hint + '）') if period_hint else ''}。"
+        )
+    return "".join(parts)
+
+
+def summarize_period_breadth(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """汇总区间内每日宽广度与阿姆士。只读日快照里的 breadth，不访问行情库。"""
+    series: List[Dict[str, Any]] = []
+    for row in rows:
+        breadth = _breadth_of_row(row)
+        day = _d(row.get("trade_date"))
+        if not day:
+            continue
+        if (
+            breadth.get("up_count") is None
+            and breadth.get("up_ratio") is None
+            and breadth.get("trin") is None
+        ):
+            continue
+        tag = _breadth_tag(breadth.get("up_count"), breadth.get("down_count"))
+        series.append(
+            {
+                "trade_date": day,
+                "up_count": breadth.get("up_count"),
+                "down_count": breadth.get("down_count"),
+                "flat_count": breadth.get("flat_count"),
+                "limit_down_count": breadth.get("limit_down_count"),
+                "up_amount": breadth.get("up_amount"),
+                "down_amount": breadth.get("down_amount"),
+                "up_ratio": breadth.get("up_ratio"),
+                "trin": breadth.get("trin"),
+                "trin_basis": breadth.get("trin_basis") or "amount",
+                "breadth_tag": tag,
+                "breadth_label": _BREADTH_LABEL.get(tag, "—"),
+            }
+        )
+
+    ratios = [p.get("up_ratio") for p in series]
+    trins = [p.get("trin") for p in series if _f(p.get("trin")) is not None]
+    limit_downs = [p.get("limit_down_count") for p in series]
+    sum_up = sum_down = 0
+    sum_up_amt = sum_down_amt = 0.0
+    amount_days = 0
+    for point in series:
+        up_n = _f(point.get("up_count"))
+        down_n = _f(point.get("down_count"))
+        up_amt = _f(point.get("up_amount"))
+        down_amt = _f(point.get("down_amount"))
+        if up_n is None or down_n is None or up_amt is None or down_amt is None:
+            continue
+        if up_n <= 0 or down_n <= 0 or up_amt <= 0 or down_amt <= 0:
+            continue
+        sum_up += int(up_n)
+        sum_down += int(down_n)
+        sum_up_amt += up_amt
+        sum_down_amt += down_amt
+        amount_days += 1
+    period_trin = calc_arms_trin(sum_up, sum_down, sum_up_amt, sum_down_amt) if amount_days else None
+    avg_ratio = _avg(ratios)
+    avg_trin = _avg(trins)
+    avg_ld = _avg(limit_downs)
+    trin_nums = [float(t) for t in trins]
+
+    def _side(pred) -> int:
+        return sum(1 for t in trin_nums if pred(t))
+
+    def _tags(tag: str) -> int:
+        return sum(1 for p in series if p.get("breadth_tag") == tag)
+
+    for point in series:
+        point.pop("up_amount", None)
+        point.pop("down_amount", None)
+    first = series[0] if series else {}
+    last = series[-1] if series else {}
+    covered = len(series)
+    reviewed = len([r for r in rows if _d(r.get("trade_date"))])
+    gap_note = ""
+    if reviewed and covered < reviewed:
+        gap_note = f"已有日复盘 {reviewed} 天，其中 {covered} 天有宽广度 / 阿姆士。"
+    return {
+        "series": series,
+        "covered_days": covered,
+        "avg_up_ratio": None if avg_ratio is None else round(avg_ratio, 4),
+        "avg_trin": None if avg_trin is None else round(avg_trin, 4),
+        "avg_limit_down": None if avg_ld is None else round(avg_ld, 1),
+        "period_trin": period_trin,
+        "period_trin_days": amount_days,
+        "trin_lt1_days": _side(lambda t: t < 1),
+        "trin_gt1_days": _side(lambda t: t > 1),
+        "trin_eq1_days": _side(lambda t: t == 1),
+        "broad_up_days": _tags("broad_up"),
+        "broad_down_days": _tags("broad_down"),
+        "mixed_days": _tags("mixed"),
+        "start": {
+            "trade_date": first.get("trade_date"),
+            "up_ratio": first.get("up_ratio"),
+            "trin": first.get("trin"),
+        }
+        if first
+        else {},
+        "end": {
+            "trade_date": last.get("trade_date"),
+            "up_ratio": last.get("up_ratio"),
+            "trin": last.get("trin"),
+        }
+        if last
+        else {},
+        "trin_basis": "amount",
+        "gap_note": gap_note,
+    }
+
+
+def fill_missing_breadth(db: Session, rows: List[Dict[str, Any]]) -> None:
+    """日快照缺 TRIN 或上涨占比时，按当日行情在内存里补齐，不回写日复盘。"""
+    missing: List[str] = []
+    for row in rows:
+        breadth = _breadth_of_row(row)
+        day = _d(row.get("trade_date"))
+        if not day:
+            continue
+        if breadth.get("trin") is None or breadth.get("up_ratio") is None:
+            missing.append(day)
+    if not missing:
+        return
+    by_date: Dict[str, List[Any]] = {day: [] for day in missing}
+    try:
+        fetched = db.execute(
+            text(
+                """
+                SELECT date, code, name, change_percent, amount
+                FROM historical_quotes
+                WHERE date = ANY(:dates) AND change_percent IS NOT NULL
+                """
+            ),
+            {"dates": missing},
+        ).fetchall()
+        for item in fetched:
+            key = str(item[0])[:10]
+            if key in by_date:
+                by_date[key].append((item[1], item[2], item[3], item[4]))
+    except Exception:
+        logger.exception("周期宽广度补齐失败")
+        db.rollback()
+        return
+    for row in rows:
+        day = _d(row.get("trade_date"))
+        if day not in by_date:
+            continue
+        computed = summarize_breadth_rows(by_date.get(day) or [])
+        if not computed:
+            continue
+        rules = _as_dict(row.get("rules_json"))
+        env = _as_dict(rules.get("market_env"))
+        old = env.get("breadth") if isinstance(env.get("breadth"), dict) else {}
+        env["breadth"] = {**old, **computed}
+        rules["market_env"] = env
+        row["rules_json"] = rules
+
+
 def aggregate_daily_rows(
     rows: Sequence[Dict[str, Any]],
     *,
@@ -219,6 +451,7 @@ def aggregate_daily_rows(
         note = "该区间没有每日复盘，请先完成日复盘。"
     elif gaps:
         note = "以下周一至周五没有日复盘（含可能休市）：" + "、".join(gaps)
+    breadth = summarize_period_breadth(ordered)
 
     return {
         "period_type": "month" if kind == "month" else "week",
@@ -245,6 +478,7 @@ def aggregate_daily_rows(
         "end_tape": (last_rules.get("tape") or {}),
         "end_gates": _as_dict(last.get("hard_gates")),
         "end_sector": (last_main.get("sector") or {}),
+        "breadth": breadth,
     }
 
 
@@ -369,6 +603,9 @@ def draft_period_text(snap: Dict[str, Any]) -> Tuple[str, str]:
         parts.append(
             f"情绪路径 {' → '.join(snap.get('seasons') or [])}，切换 {snap.get('season_switches') or 0} 次，期末 {snap.get('end_season') or '—'}。"
         )
+    blurb = breadth_blurb(snap.get("breadth") or {})
+    if blurb:
+        parts.append(blurb)
     names = [str(b.get("board_name")) for b in (snap.get("persistent_mainlines") or [])[:3] if b.get("board_name")]
     if names:
         parts.append("持续主线：" + "、".join(names) + "。")
@@ -752,6 +989,7 @@ def build_period_snapshot(
     start, end, key = period_bounds(horizon, day)
     prev_start, prev_end, _prev_key = previous_bounds(horizon, start)
     rows = _load_rows(db, start, end)
+    fill_missing_breadth(db, rows)
     prev_rows = _load_rows(db, prev_start, prev_end)
     summary = aggregate_daily_rows(
         rows,
@@ -866,8 +1104,31 @@ def get_period_snapshot(db: Session, kind: str, anchor: str) -> Optional[Dict[st
     data["advice_override"] = bool(row.get("advice_override"))
     data["period_type"] = data.get("period_type") or horizon
     data["period_key"] = data.get("period_key") or key
+    _attach_period_breadth(db, data)
     data["markdown"] = render_period_markdown(data)
     return data
+
+
+def _attach_period_breadth(db: Session, data: Dict[str, Any]) -> None:
+    """旧周/月快照没有宽广度时，按区间日复盘补到本次读出结果，不回写库。"""
+    breadth = data.get("breadth")
+    if isinstance(breadth, dict) and breadth.get("series"):
+        return
+    start = str(data.get("start_date") or "")[:10]
+    end = str(data.get("end_date") or "")[:10]
+    if not start or not end:
+        data["breadth"] = summarize_period_breadth([])
+        return
+    try:
+        rows = _load_rows(db, date.fromisoformat(start), date.fromisoformat(end))
+        fill_missing_breadth(db, rows)
+        data["breadth"] = summarize_period_breadth(rows)
+    except Exception:
+        logger.exception("周期宽广度读时补齐失败 %s %s", start, end)
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def update_period_text(

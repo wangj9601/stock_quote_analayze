@@ -757,6 +757,15 @@ body.ops-map .margin-risk-high {
     border-color: rgba(194, 59, 59, 0.45) !important;
     color: var(--color-rise) !important;
 }
+body.ops-map .main-content .margin-reading {
+    color: var(--ops-ink) !important;
+}
+body.ops-map .main-content .margin-metric em,
+body.ops-map .main-content .margin-chart-note,
+body.ops-map .main-content .margin-disclaimer,
+body.ops-map .main-content .margin-flags {
+    color: var(--ops-ink-muted) !important;
+}
 
 body.ops-map .ssa-plan-conflicts {
     background: rgba(201, 162, 39, 0.1) !important;

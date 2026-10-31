@@ -8,7 +8,9 @@
 2. 把 ZigZag 链上相邻的"高->低"配对成回调腿，计算幅度与均量。
 3. 从最后一腿往回吞并，只要"幅度递减 + 低点抬高 + 量能递减"都成立就继续，
    得到最长有效收缩序列（VCP 的嵌套定义）。
-4. 枢轴点 = 最后一腿的高点；收盘放量越过即为突破买点。
+4. 枢轴点 = 最后一腿的高点。可执行买点必须至少两段收缩：
+   就位（枢轴下方紧凑）、未放量越过、放量突破（距枢轴不超过 chase_distance）。
+   突破日会撑开振幅，紧凑度看突破前的 N 根，不把当日算进去。
 
 注意：不做"预测"，只描述当前形态位置；形态失败（跌破最后收缩低点）会自然退出 gate。
 """
@@ -95,8 +97,8 @@ def _score(seq: List[Dict[str, Any]], tight_range: float, vol_ratio: float,
     else:
         tight_score = 0.0
     total = count_score + depth_score + vol_score + tight_score
-    if status == "breakout" and np.isfinite(vol_ratio):
-        total += min(5.0, max(0.0, (vol_ratio - cfg.breakout_vol_multiple) * 5.0))
+    # 量比 1.0~1.5 的前瞻收益几乎无差别，3 倍量偏负，不再给放量额外加分。
+    del vol_ratio, status
     return round(min(total, 100.0), 1)
 
 
@@ -121,6 +123,8 @@ def detect_vcp(
             "dist_to_pivot_pct": None,
             "vol_ratio": None,
             "tight_range_pct": None,
+            "base_tight_range_pct": None,
+            "invalidation": None,
             "score": 0.0,
             "notes": ["k_bars_insufficient"],
         }
@@ -153,27 +157,44 @@ def detect_vcp(
     vol_ratio = float(vol[-1] / vol_ma) if np.isfinite(vol_ma) and vol_ma > 0 else float("nan")
 
     tight_win = min(int(c.tight_days), len(low))
-    t_low = float(np.min(low[-tight_win:]))
-    t_high = float(np.max(high[-tight_win:]))
+    t_low = float(np.min(low[-tight_win:])) if tight_win else float("nan")
+    t_high = float(np.max(high[-tight_win:])) if tight_win else float("nan")
     tight_range = (t_high - t_low) / t_low if t_low > 0 else float("nan")
+    # 突破日当天会把振幅撑开。放量突破 / 未放量越过的紧凑度看突破前 N 根。
+    if tight_win > 0 and len(low) > tight_win:
+        b_low = float(np.min(low[-(tight_win + 1):-1]))
+        b_high = float(np.max(high[-(tight_win + 1):-1]))
+        base_tight = (b_high - b_low) / b_low if b_low > 0 else float("nan")
+    else:
+        base_tight = tight_range
 
-    breakout = bool(
-        np.isfinite(dist) and dist >= c.breakout_buffer
-        and np.isfinite(vol_ratio) and vol_ratio >= c.breakout_vol_multiple
-    )
-    ready = bool(
-        not breakout
-        and np.isfinite(dist) and -c.ready_distance <= dist < c.breakout_buffer
-        and np.isfinite(tight_range) and tight_range <= c.max_tight_range
-    )
+    count_ok = count >= c.min_contractions
+    tight_now = bool(np.isfinite(tight_range) and tight_range <= c.max_tight_range)
+    tight_base = bool(np.isfinite(base_tight) and base_tight <= c.max_tight_range)
+    vol_ok = bool(np.isfinite(vol_ratio) and vol_ratio >= c.breakout_vol_multiple)
+    depth_ok = (not seq) or float(seq[-1]["depth"]) <= c.max_last_depth or not c.enforce_last_depth
+    entry_hi = min(float(c.chase_distance), float(c.max_breakout_distance))
+    ready_band = bool(np.isfinite(dist) and -c.ready_distance <= dist < c.breakout_buffer)
+    entry_band = bool(np.isfinite(dist) and c.breakout_buffer <= dist <= entry_hi)
+    extended_band = bool(np.isfinite(dist) and entry_hi < dist <= c.max_breakout_distance)
+    beyond = bool(np.isfinite(dist) and dist > c.max_breakout_distance)
 
-    if breakout:
-        status = "breakout"
-    elif ready and count >= c.min_contractions:
+    if beyond:
+        # 突破早已发生、股价远离枢轴：既不是入场点，也不该算"收缩中"
+        status = "none"
+        notes.append("extended_from_pivot")
+    elif count_ok and depth_ok and tight_now and ready_band:
         status = "ready"
+    elif count_ok and depth_ok and tight_base and entry_band and vol_ok:
+        status = "breakout"
+    elif count_ok and depth_ok and tight_base and entry_band:
+        status = "quiet"
+    elif count_ok and extended_band:
+        status = "extended"
+        notes.append("chase_risk")
     elif count >= c.min_contractions:
         status = "forming"
-    elif np.isfinite(tight_range) and tight_range <= c.max_tight_range:
+    elif tight_now:
         status = "forming"
         notes.append("tight_without_full_sequence")
     else:
@@ -181,11 +202,13 @@ def detect_vcp(
 
     if seq and seq[-1]["depth"] > c.max_last_depth:
         notes.append("last_contraction_too_deep")
-    if np.isfinite(dist) and dist > c.chase_distance:
-        notes.append("chase_risk")
+        # 末次收缩过深说明浮筹没吸收干净。深度不够时上面的 depth_ok 已挡住可执行状态；
+        # 这里再收一次，避免 enforce 开关与分支顺序不一致时漏网。
+        if c.enforce_last_depth and status in ("breakout", "ready", "quiet"):
+            status = "forming"
 
     return {
-        "ok": status in ("breakout", "ready"),
+        "ok": status in ("breakout", "ready", "quiet"),
         "status": status,
         "status_label": VCP_STATUS_LABELS.get(status, status),
         "count": count,
@@ -205,6 +228,8 @@ def detect_vcp(
         "dist_to_pivot_pct": round(dist * 100, 2) if np.isfinite(dist) else None,
         "vol_ratio": round(vol_ratio, 2) if np.isfinite(vol_ratio) else None,
         "tight_range_pct": round(tight_range * 100, 2) if np.isfinite(tight_range) else None,
+        "base_tight_range_pct": round(base_tight * 100, 2) if np.isfinite(base_tight) else None,
+        "invalidation": round(float(seq[-1]["lo"]), 2) if seq else None,
         "score": _score(seq, tight_range, vol_ratio, status, c),
         "notes": notes,
     }

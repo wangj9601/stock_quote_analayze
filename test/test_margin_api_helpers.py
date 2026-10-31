@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """两融 API 辅助逻辑：信号文案与 rz_net。"""
 
-from backend_api.stock.margin import DISCLAIMER, _compute_signal, _rz_net
+from backend_api.stock.margin import DISCLAIMER, _compute_signal, _rz_net, build_margin_reading
 
 
 def test_rz_net():
@@ -38,6 +38,23 @@ def test_compute_signal_none_risk():
     assert sig["squeeze_risk"] in ("none", "low", "mid", "high")
     assert "squeeze_label" in sig
     assert DISCLAIMER in sig["disclaimer"]
+    assert "还没到 8%" in sig["reading"]
+    assert "集中撤退" in sig["reading"]
+    calm = build_margin_reading(
+        {
+            "rzye": 2.305e9,
+            "rz_net": -0.30e8,
+            "crowding": 0.0457,
+            "rzye_drop_5d": -0.033,
+            "flags": {},
+            "squeeze_risk": "none",
+            "neg_net_streak": 0,
+        }
+    )
+    assert "4.57%" in calm["reading"]
+    assert "净偿还 0.30 亿" in calm["reading"]
+    assert "上升了 3.3%" in calm["reading"]
+    assert "看不出融资盘在集中撤退" in calm["reading"]
 
 
 def test_compute_signal_high_when_collapse():
@@ -70,3 +87,6 @@ def test_compute_signal_high_when_collapse():
     assert sig["available"] is True
     assert sig["flags"]["high_crowding"] is True
     assert sig["squeeze_risk"] in ("mid", "high")
+    assert "高拥挤线" in sig["reading"]
+    assert "需要留意的是" in sig["reading"]
+    assert "不能证明机构被强平" in sig["reading"]

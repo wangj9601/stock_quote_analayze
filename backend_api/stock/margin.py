@@ -353,7 +353,7 @@ def _compute_signal(
         "mid": "踩踏风险中等（去杠杆旁证）",
         "high": "踩踏风险偏高（去杠杆加速旁证，非爆仓实锤）",
     }
-    return {
+    signal = {
         "trade_date": trade_date,
         "available": True,
         "code": cur.get("code"),
@@ -372,6 +372,80 @@ def _compute_signal(
         "squeeze_label": label_map.get(squeeze_risk, squeeze_risk),
         "disclaimer": DISCLAIMER,
         "source": cur.get("source"),
+    }
+    signal.update(build_margin_reading(signal))
+    return signal
+
+
+def build_margin_reading(signal: Dict[str, Any]) -> Dict[str, Any]:
+    """把两融旁证翻成可直接读的判断。阈值与 _compute_signal 相同。"""
+    rzye = safe_float(signal.get("rzye"))
+    rz_net = safe_float(signal.get("rz_net"))
+    crowding = safe_float(signal.get("crowding"))
+    drop_5 = safe_float(signal.get("rzye_drop_5d"))
+    flags = signal.get("flags") if isinstance(signal.get("flags"), dict) else {}
+    risk = str(signal.get("squeeze_risk") or "none")
+    try:
+        streak = int(signal.get("neg_net_streak") or 0)
+    except (TypeError, ValueError):
+        streak = 0
+
+    notes = {
+        "rzye": "还没还清的融资借款。这是存量，不是当天成交。",
+        "rz_net": "当天新借减去偿还。负数是在还钱，正数是在加杠杆。",
+        "crowding": "融资余额占流通市值的比例。8% 及以上记为高拥挤。",
+        "drop_5d": "和 5 个交易日前比。上升是杠杆在加，下降是在撤。下降达到 8% 记为骤降。",
+    }
+    parts = ["这些数看的是借钱买这只股票还剩多少，以及当天是在加杠杆还是在还钱。"]
+    if crowding is not None:
+        pct = f"{crowding * 100:.2f}%"
+        if crowding >= CROWDING_HIGH:
+            parts.append(f"融资余额约占流通市值 {pct}，已经过了 8% 的高拥挤线。")
+        else:
+            parts.append(f"融资余额约占流通市值 {pct}，还没到 8% 的高拥挤线。")
+    else:
+        parts.append("缺少流通市值，算不出杠杆占流通盘的比例。")
+    if rz_net is not None:
+        yi = abs(rz_net) / 1e8
+        if rz_net < 0:
+            parts.append(f"当天净偿还 {yi:.2f} 亿。")
+        elif rz_net > 0:
+            parts.append(f"当天净借入 {yi:.2f} 亿。")
+        else:
+            parts.append("当天借贷和偿还基本抵消。")
+    if drop_5 is not None:
+        if drop_5 > 0:
+            parts.append(f"近 5 日余额下降了 {drop_5 * 100:.1f}%。")
+        elif drop_5 < 0:
+            parts.append(f"近 5 日余额上升了 {abs(drop_5) * 100:.1f}%。")
+        else:
+            parts.append("近 5 日余额基本没变。")
+
+    fired: List[str] = []
+    if flags.get("high_crowding"):
+        fired.append("拥挤度过高")
+    if flags.get("balance_collapse"):
+        fired.append("近5日余额骤降")
+    if flags.get("neg_net_streak_ge_3"):
+        fired.append(f"已连续 {streak} 日净偿还")
+    if flags.get("accel_repay"):
+        fired.append("当天偿还明显快于近几日")
+    if fired:
+        parts.append("需要留意的是：" + "、".join(fired) + "。")
+    else:
+        parts.append("高拥挤、余额骤降、连续多日净偿还、偿还突然加快，这四项都没出现。")
+    if risk == "high":
+        parts.append("这几项叠在一起，融资盘撤退的迹象偏重。这不能证明机构被强平。")
+    elif risk == "mid":
+        parts.append("这几项叠在一起，融资盘在减杠杆，先放慢。这不能证明机构被强平。")
+    elif risk == "low":
+        parts.append("有一项偏谨慎，还谈不上集中撤退。")
+    else:
+        parts.append("所以目前看不出融资盘在集中撤退。")
+    return {
+        "reading": "".join(parts),
+        "notes": notes,
+        "chart_note": "蓝线是还没还的融资借款。红柱是当天新借多于偿还，绿柱是偿还多于新借。",
     }
 
 

@@ -93,6 +93,7 @@ const ScreeningPage = {
         rpe: ['js/rpe_score_detail.js', 'js/rpe_screening.js?v=20260917a', 'js/board_roles_panel.js'],
         sbbr: ['js/sbbr_score_detail.js', 'js/sbbr_screening.js?v=20260918a', 'js/board_roles_panel.js'],
         csb: ['js/csb_score_detail.js?v=20261007-csb', 'js/csb_screening.js?v=20261017-lazy-panels', 'js/board_roles_panel.js'],
+        sepa: ['js/sepa_screening.js?v=20261031-sepa'],
     },
 
     // 初始化
@@ -125,7 +126,7 @@ const ScreeningPage = {
             return 'volume-shrink-breakout';
         }
         const allowed = new Set([
-            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim',
+            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim', 'sepa',
             'volume-shrink-breakout', 'one-yang-three-lines',
             'cyb-midline', 'high-tight-flag'
         ]);
@@ -219,6 +220,9 @@ const ScreeningPage = {
         if (strategy === 'volume-shrink-breakout' && !this._vsbWidgetsReady) {
             this._vsbWidgetsReady = true;
             this.initVsbIntegratedTabs();
+        }
+        if (strategy === 'sepa' && window.SepaScreening && typeof window.SepaScreening.init === 'function') {
+            window.SepaScreening.init();
         }
         if (strategy === 'one-yang-three-lines' && !this._oneYangWidgetsReady) {
             this._oneYangWidgetsReady = true;
@@ -386,7 +390,7 @@ const ScreeningPage = {
             return;
         }
         const allowed = new Set([
-            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim',
+            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim', 'sepa',
             'volume-shrink-breakout', 'one-yang-three-lines',
             'cyb-midline', 'high-tight-flag'
         ]);
@@ -4499,7 +4503,7 @@ const ScreeningPage = {
         };
         // 绑定所有刷新按钮（仅带 data-strategy 的真正「刷新筛选」）
         // rpe / sbbr / csb 由独立脚本自行处理，勿走通用 loadScreeningResults
-        const externalRefreshStrategies = new Set(['rpe', 'sbbr', 'csb']);
+        const externalRefreshStrategies = new Set(['rpe', 'sbbr', 'csb', 'sepa']);
         scope.querySelectorAll('.refresh-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const strategy = btn.dataset.strategy;
@@ -5413,7 +5417,7 @@ const ScreeningPage = {
             strategy = this.currentStrategy;
         }
         // 比价效应 / 做小做底 / CSB 由独立模块刷新，避免落入「未知的策略类型」
-        if (strategy === 'rpe' || strategy === 'sbbr' || strategy === 'csb') {
+        if (strategy === 'rpe' || strategy === 'sbbr' || strategy === 'csb' || strategy === 'sepa') {
             return;
         }
         if (strategy === 'gms' && resetGmsPage) {

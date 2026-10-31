@@ -15,6 +15,17 @@
 .margin-risk-mid { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
 .margin-risk-low { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
 .margin-risk-none { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+.margin-reading {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.6;
+}
+.margin-chart-note,
+.margin-metric em {
+    font-style: normal;
+    font-size: 12px;
+    line-height: 1.45;
+}
 .kpi-margin-note {
     margin: 8px 0 0;
     font-size: 11px;

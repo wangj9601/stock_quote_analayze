@@ -191,6 +191,14 @@ except ImportError as e:
     print(f"stock_router 导入失败: {e}")
     stock_router = None
 
+# 尝试导入sepa选股路由（须在 stock 路由之前注册，避免被 /{code} 通配路径抢占）
+try:
+    from .stock.sepa_screen import router as sepa_router
+    print("sepa_router 导入成功")
+except ImportError as e:
+    print(f"sepa_router 导入失败: {e}")
+    sepa_router = None
+
 try:
     from .stock.stock_fund_flow import router as stock_fund_flow_router
     print("stock_fund_flow_router 导入成功")
@@ -746,6 +754,7 @@ else:
 
 _include_router(app, watchlist_router, "watchlist")
 _include_router(app, market_router, "market")
+_include_router(app, sepa_router, "sepa")
 _include_router(app, stock_router, "stock")
 _include_router(app, stock_fund_flow_router, "stock_fund_flow")
 _include_router(app, market_review_router, "market_review")

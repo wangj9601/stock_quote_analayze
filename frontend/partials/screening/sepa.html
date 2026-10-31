@@ -1,0 +1,95 @@
+<div id="sepa-content" class="strategy-content" data-perm="channel.screening.tab.sepa">
+    <div class="strategy-info-card">
+        <h2>SEPA 买点</h2>
+        <ul class="strategy-conditions">
+            <li><strong>股票池：</strong>全市场 6 位代码。排除 ST / 退市，近 20 日均成交额不低于 5000 万，按成交额从高到低，最多 4000 只。相对强度在这只池子里计算。</li>
+            <li class="condition-item">趋势模板八条全部满足，相对强度不低于 70。不过趋势的股票不会进入名单。</li>
+            <li class="condition-item">就位待突破：至少两段收缩，末次深度不超过 10%，距枢轴在 −3% 到 +0.2%，近 10 日振幅不超过 8%。默认排在最前。</li>
+            <li class="condition-item">未放量越过：价格已经在枢轴上方 0.2%～6%，量能没有放大。单独列出，不并进收缩中。</li>
+            <li class="condition-item">放量突破：同样要求两段收缩，突破前 10 日振幅不超过 8%，距枢轴不超过 6%。</li>
+            <li class="condition-item">距枢轴超过 6% 标为远离枢轴，默认不进名单。失效价是最后一段收缩的低点。</li>
+            <li class="condition-item">两融只作旁证：拥挤度超过 5% 降为观察；没有两融数据不降级。</li>
+        </ul>
+    </div>
+
+    <div class="strategy-params-card">
+        <h3>筛选范围</h3>
+        <div class="sepa-params">
+            <div class="parameter-group">
+                <label for="sepaDate">基准日</label>
+                <input type="date" id="sepaDate" class="param-input" title="留空则用库内最新交易日">
+            </div>
+            <div class="parameter-group">
+                <label for="sepaStatus">形态</label>
+                <select id="sepaStatus" class="param-input">
+                    <option value="">可执行</option>
+                    <option value="ready">仅就位待突破</option>
+                    <option value="quiet">仅未放量越过</option>
+                    <option value="breakout">仅放量突破</option>
+                </select>
+            </div>
+            <div class="parameter-group">
+                <label for="sepaTop">列出</label>
+                <input type="number" id="sepaTop" class="param-input" value="30" min="1" max="200" step="1">
+            </div>
+            <div class="parameter-group">
+                <label for="sepaLimit">池子上限</label>
+                <input type="number" id="sepaLimit" class="param-input" value="0" min="0" max="4000" step="100" title="0 表示按成交额取到 4000 只；填较小的数可以加快扫描">
+            </div>
+            <label class="sepa-check" for="sepaForming">
+                <input type="checkbox" id="sepaForming">
+                包含收缩中
+            </label>
+            <label class="sepa-check" for="sepaExtended">
+                <input type="checkbox" id="sepaExtended">
+                包含远离枢轴
+            </label>
+        </div>
+        <p class="param-hint" id="sepaPoolHint">池子上限填 0 时，按成交额从高到低取到 4000 只。填小一些可以加快扫描。刷新后这里会显示实际口径。</p>
+    </div>
+
+    <div class="screening-actions">
+        <button type="button" id="refreshBtn-sepa" class="refresh-btn" data-strategy="sepa"
+            data-perm="channel.screening.tab.sepa.btn.refresh">刷新筛选</button>
+        <button type="button" id="sepaExportBtn" class="export-btn" style="display:none;">导出CSV</button>
+        <span id="sepaTradeDate" class="search-date"></span>
+    </div>
+
+    <div id="sepaLoading" class="loading-indicator" style="display:none;">
+        <div class="spinner"></div>
+        <span>正在扫描全市场，流动性池较大时会多等一会儿。</span>
+    </div>
+    <div id="sepaError" class="error-message" style="display:none;" role="alert"></div>
+
+    <div class="results-container">
+        <div class="results-header">
+            <span id="sepaCount" class="results-count">尚未筛选</span>
+            <span id="sepaFunnel" class="gms-meta-text"></span>
+        </div>
+        <div class="results-table-wrapper">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>分级</th>
+                        <th>代码</th>
+                        <th>名称</th>
+                        <th>形态</th>
+                        <th>距枢轴</th>
+                        <th>枢轴</th>
+                        <th>失效价</th>
+                        <th>收缩</th>
+                        <th>RS</th>
+                        <th>两融</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="sepaTableBody">
+                    <tr>
+                        <td colspan="11" class="empty-state">点击「刷新筛选」开始扫描</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <p class="param-hint" id="sepaDisclaimer"></p>
+    </div>
+</div>

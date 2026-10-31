@@ -2937,9 +2937,7 @@ const StockPage = {
                 }
             }
             if (hintEl) {
-                hintEl.textContent =
-                    (signalPayload.data && signalPayload.data.disclaimer) ||
-                    MarginUI.DISCLAIMER;
+                hintEl.textContent = '交易所次日披露。先看判断，再看数字。';
             }
         } catch (e) {
             console.error(e);

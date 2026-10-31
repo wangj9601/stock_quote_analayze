@@ -91,6 +91,7 @@ def render_period_markdown(snap: Dict[str, Any]) -> str:
     if not snap.get("indexes"):
         lines.append("| — | — | — | — |")
     lines.append("")
+    lines.extend(_breadth_md(snap))
     lines.append("## 趋势路径")
     lines.append("")
     delta = snap.get("delta") or {}
@@ -159,6 +160,127 @@ def render_period_markdown(snap: Dict[str, Any]) -> str:
     lines.append(f"规则合成参考，非投资建议。报告区间：{snap.get('start_date') or '—'} 至 {snap.get('end_date') or '—'}。")
     lines.append("")
     return "\n".join(lines)
+
+
+def _pct_ratio(v: Any) -> str:
+    if v is None or v == "":
+        return "—"
+    try:
+        return f"{round(float(v) * 100, 1)}%"
+    except (TypeError, ValueError):
+        return "—"
+
+
+def _trin_bias(v: Any) -> str:
+    try:
+        n = float(v)
+    except (TypeError, ValueError):
+        return ""
+    if n < 1:
+        return "偏多"
+    if n > 1:
+        return "偏空"
+    return "均衡"
+
+
+def _breadth_md(snap: Dict[str, Any]) -> List[str]:
+    breadth = snap.get("breadth") if isinstance(snap.get("breadth"), dict) else {}
+    lines = ["## 宽广度 / 阿姆士", ""]
+    series = breadth.get("series") or []
+    if not series:
+        lines.append("区间内暂无宽广度 / 阿姆士数据。")
+        lines.append("")
+        return lines
+    if breadth.get("gap_note"):
+        lines.append(str(breadth.get("gap_note")))
+        lines.append("")
+    avg_trin = breadth.get("avg_trin")
+    avg_hint = _trin_bias(avg_trin)
+    period_trin = breadth.get("period_trin")
+    period_hint = _trin_bias(period_trin)
+    lines.append(
+        f"日均上涨占比 {_pct_ratio(breadth.get('avg_up_ratio'))}，"
+        f"普涨 {int(breadth.get('broad_up_days') or 0)} 天、"
+        f"分歧 {int(breadth.get('mixed_days') or 0)} 天、"
+        f"普跌 {int(breadth.get('broad_down_days') or 0)} 天。"
+        f"日均跌停 {_num(breadth.get('avg_limit_down'), 1)} 家。"
+    )
+    lines.append(
+        f"阿姆士(TRIN，成交额口径) 日均 {_fmt(avg_trin)}"
+        f"{('（' + avg_hint + '）') if avg_hint else ''}，"
+        f"小于1共 {int(breadth.get('trin_lt1_days') or 0)} 天，"
+        f"大于1共 {int(breadth.get('trin_gt1_days') or 0)} 天，"
+        f"等于1共 {int(breadth.get('trin_eq1_days') or 0)} 天。"
+        f"区间合成 TRIN {_fmt(period_trin)}"
+        f"{('（' + period_hint + '）') if period_hint else ''}。"
+    )
+    start = breadth.get("start") or {}
+    end = breadth.get("end") or {}
+    if start.get("trade_date") or end.get("trade_date"):
+        lines.append(
+            f"期初 {start.get('trade_date') or '—'} 上涨占比 {_pct_ratio(start.get('up_ratio'))}、"
+            f"TRIN {_fmt(start.get('trin'))} → "
+            f"期末 {end.get('trade_date') or '—'} 上涨占比 {_pct_ratio(end.get('up_ratio'))}、"
+            f"TRIN {_fmt(end.get('trin'))}。"
+        )
+    lines.append("")
+    lines.append("小于1偏多，大于1偏空，等于1大致均衡。区间合成按各日涨跌家数与成交额加总。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。")
+    lines.append("")
+    lines.append("| 日期 | 上涨 | 下跌 | 上涨占比 | TRIN | 结构 |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | --- |")
+    for row in series:
+        lines.append(
+            f"| {row.get('trade_date') or '—'} | {_num(row.get('up_count'), 0)} | "
+            f"{_num(row.get('down_count'), 0)} | {_pct_ratio(row.get('up_ratio'))} | "
+            f"{_fmt(row.get('trin'))} | {row.get('breadth_label') or '—'} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _breadth_html(snap: Dict[str, Any]) -> str:
+    breadth = snap.get("breadth") if isinstance(snap.get("breadth"), dict) else {}
+    series = breadth.get("series") or []
+    if not series:
+        return "<h2>宽广度 / 阿姆士</h2><p>区间内暂无宽广度 / 阿姆士数据。</p>"
+    body = [
+        [
+            row.get("trade_date"),
+            _num(row.get("up_count"), 0),
+            _num(row.get("down_count"), 0),
+            _pct_ratio(row.get("up_ratio")),
+            _fmt(row.get("trin")),
+            row.get("breadth_label") or "—",
+        ]
+        for row in series
+    ]
+    avg_hint = _trin_bias(breadth.get("avg_trin"))
+    period_hint = _trin_bias(breadth.get("period_trin"))
+    start = breadth.get("start") or {}
+    end = breadth.get("end") or {}
+    summary = (
+        f"日均上涨占比 {_esc(_pct_ratio(breadth.get('avg_up_ratio')))}，"
+        f"普涨 {int(breadth.get('broad_up_days') or 0)} 天、"
+        f"分歧 {int(breadth.get('mixed_days') or 0)} 天、"
+        f"普跌 {int(breadth.get('broad_down_days') or 0)} 天。"
+        f"阿姆士日均 TRIN {_esc(_fmt(breadth.get('avg_trin')))}"
+        f"{_esc(('（' + avg_hint + '）') if avg_hint else '')}，"
+        f"区间合成 TRIN {_esc(_fmt(breadth.get('period_trin')))}"
+        f"{_esc(('（' + period_hint + '）') if period_hint else '')}。"
+        f"期初 {_esc(start.get('trade_date') or '—')} {_esc(_pct_ratio(start.get('up_ratio')))} / "
+        f"TRIN {_esc(_fmt(start.get('trin')))} → "
+        f"期末 {_esc(end.get('trade_date') or '—')} {_esc(_pct_ratio(end.get('up_ratio')))} / "
+        f"TRIN {_esc(_fmt(end.get('trin')))}。"
+    )
+    note = f"<p class='muted'>{_esc(breadth.get('gap_note'))}</p>" if breadth.get("gap_note") else ""
+    return (
+        "<h2>宽广度 / 阿姆士</h2>"
+        f"<p>{summary}</p>"
+        f"{note}"
+        "<p class='muted'>小于1偏多，大于1偏空，等于1大致均衡。成交额口径；区间合成按各日涨跌家数与成交额加总。"
+        "上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>"
+        + _table(["日期", "上涨", "下跌", "上涨占比", "TRIN", "结构"], body, ["18%", "14%", "14%", "18%", "16%", "20%"])
+    )
 
 
 def _picks_md(picks: Dict[str, Any], nxt: str) -> List[str]:
@@ -271,6 +393,7 @@ def build_period_review_html(snap: Dict[str, Any]) -> str:
     delta = snap.get("delta") or {}
     curve = snap.get("curve") or {}
     picks_html = _picks_html(picks, nxt)
+    breadth_html = _breadth_html(snap)
     css = f"""
     @page {{ size: A4; margin: 12mm 11mm 14mm 11mm; }}
     body {{ font-family: {font}; font-size: 9.5pt; color: #1f2937; line-height: 1.45; }}
@@ -303,6 +426,7 @@ def build_period_review_html(snap: Dict[str, Any]) -> str:
 <h2>大盘</h2>
 <p>日均成交 {_esc(_num(snap.get('vol_avg')))} 万亿，上一期日均 {_esc(_num(snap.get('prev_vol_avg')))} 万亿。</p>
 {_table(["指数", "期初收盘", "期末收盘", "区间涨跌%"], idx_body, ["28%", "24%", "24%", "24%"])}
+{breadth_html}
 <h2>趋势路径</h2>
 <p>高度 {_esc(_delta_line(delta.get('height') or {}, '板', 0))}；连板 {_esc(_delta_line(delta.get('cb_count') or {}, '家', 0))}。</p>
 {_table(["日期", "高度", "连板", "季节", "成交(万亿)", "盘面"], path_body, ["18%", "12%", "12%", "14%", "22%", "22%"])}

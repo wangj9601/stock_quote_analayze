@@ -23,6 +23,38 @@
         </el-table>
       </el-card>
       <el-card shadow="never" class="dr-block">
+        <template #header>宽广度 / 阿姆士</template>
+        <template v-if="breadthSeries.length">
+          <p v-if="data.breadth?.gap_note">{{ data.breadth.gap_note }}</p>
+          <p>
+            日均上涨占比 {{ pctRatio(data.breadth?.avg_up_ratio) }}，普涨 {{ data.breadth?.broad_up_days || 0 }} 天、分歧
+            {{ data.breadth?.mixed_days || 0 }} 天、普跌 {{ data.breadth?.broad_down_days || 0 }} 天。日均跌停
+            {{ fmt(data.breadth?.avg_limit_down) }} 家。
+          </p>
+          <p>
+            阿姆士(TRIN，成交额口径) 日均 {{ fmt(data.breadth?.avg_trin) }}{{ trinHint(data.breadth?.avg_trin) }}，小于1共
+            {{ data.breadth?.trin_lt1_days || 0 }} 天，大于1共 {{ data.breadth?.trin_gt1_days || 0 }} 天，等于1共
+            {{ data.breadth?.trin_eq1_days || 0 }} 天。区间合成 TRIN {{ fmt(data.breadth?.period_trin)
+            }}{{ trinHint(data.breadth?.period_trin) }}。
+          </p>
+          <p>
+            期初 {{ data.breadth?.start?.trade_date || '—' }} 上涨占比 {{ pctRatio(data.breadth?.start?.up_ratio) }}、TRIN
+            {{ fmt(data.breadth?.start?.trin) }} → 期末 {{ data.breadth?.end?.trade_date || '—' }} 上涨占比
+            {{ pctRatio(data.breadth?.end?.up_ratio) }}、TRIN {{ fmt(data.breadth?.end?.trin) }}。
+          </p>
+          <p class="dr-desc">小于1偏多，大于1偏空，等于1大致均衡。成交额口径；区间合成按各日涨跌家数与成交额加总。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>
+          <el-table :data="breadthSeries" size="small" border empty-text="暂无">
+            <el-table-column prop="trade_date" label="日期" />
+            <el-table-column label="上涨"><template #default="{ row }">{{ intText(row.up_count) }}</template></el-table-column>
+            <el-table-column label="下跌"><template #default="{ row }">{{ intText(row.down_count) }}</template></el-table-column>
+            <el-table-column label="上涨占比"><template #default="{ row }">{{ pctRatio(row.up_ratio) }}</template></el-table-column>
+            <el-table-column label="TRIN"><template #default="{ row }">{{ fmt(row.trin) }}</template></el-table-column>
+            <el-table-column prop="breadth_label" label="结构" />
+          </el-table>
+        </template>
+        <p v-else>区间内暂无宽广度 / 阿姆士数据。请先完成日复盘，再重算本区间。</p>
+      </el-card>
+      <el-card shadow="never" class="dr-block">
         <template #header>趋势路径</template>
         <p>高度 {{ deltaText(data.delta?.height, '板', 0) }}；连板 {{ deltaText(data.delta?.cb_count, '家', 0) }}</p>
         <el-table :data="data.path || []" size="small" border empty-text="暂无">
@@ -117,6 +149,7 @@ const anchor = ref(yesterday())
 const loading = ref(false)
 const status = ref('')
 const data = ref<any>(null)
+const breadthSeries = computed(() => data.value?.breadth?.series || [])
 const viewpoint = ref('')
 const advice = ref('')
 
@@ -132,6 +165,20 @@ function industryText(v: any) {
   const s = String(v ?? '').trim()
   if (!s || ['nan', 'none', 'null', '-', '--', 'nat'].includes(s.toLowerCase())) return '—'
   return s
+}
+
+function pctRatio(v: any) {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : String(v)
+}
+
+function trinHint(v: any) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return ''
+  if (n < 1) return '（偏多）'
+  if (n > 1) return '（偏空）'
+  return '（均衡）'
 }
 
 function fmt(v: any) {

@@ -3,12 +3,16 @@
 
 from datetime import date
 
+from backend_core.market_review.compute import calc_arms_trin
 from backend_core.market_review.period import (
     aggregate_daily_rows,
+    breadth_blurb,
+    draft_period_text,
     period_bounds,
     previous_bounds,
     reconstruct_period_pct,
     select_persistent,
+    summarize_period_breadth,
     weekday_gaps,
 )
 from backend_core.market_review.period_picks import (
@@ -182,6 +186,75 @@ def test_apply_period_triggers_replaces_next_day_text():
     assert "次日" not in picks["track"][0]["trigger"]
 
 
+def _breadth(up, down, up_amount, down_amount, up_ratio, limit_down=10):
+    return {
+        "up_count": up,
+        "down_count": down,
+        "flat_count": 50,
+        "limit_down_count": limit_down,
+        "up_amount": up_amount,
+        "down_amount": down_amount,
+        "up_ratio": up_ratio,
+        "trin": calc_arms_trin(up, down, up_amount, down_amount),
+        "trin_basis": "amount",
+    }
+
+
+def test_period_breadth_aggregates_trin_and_structure():
+    rows = [
+        {
+            "trade_date": "2026-09-14",
+            "rules_json": {
+                "market_env": {
+                    "breadth": _breadth(2000, 1000, 12e8, 4e8, 0.6667),
+                }
+            },
+        },
+        {
+            "trade_date": "2026-09-15",
+            "rules_json": {"market_env": {}},
+        },
+        {
+            "trade_date": "2026-09-16",
+            "rules_json": {
+                "market_env": {
+                    "breadth": _breadth(800, 2000, 3e8, 9e8, 0.2857, limit_down=30),
+                }
+            },
+        },
+    ]
+    out = summarize_period_breadth(rows)
+    assert out["covered_days"] == 2
+    assert out["gap_note"].startswith("已有日复盘 3 天")
+    assert out["broad_up_days"] == 1
+    assert out["broad_down_days"] == 1
+    assert out["mixed_days"] == 0
+    assert out["trin_lt1_days"] == 1
+    assert out["trin_gt1_days"] == 1
+    assert out["series"][0]["breadth_label"] == "普涨"
+    assert out["series"][1]["breadth_label"] == "普跌"
+    assert out["period_trin"] == calc_arms_trin(2800, 3000, 15e8, 13e8)
+    assert out["avg_up_ratio"] == round((0.6667 + 0.2857) / 2, 4)
+    assert "阿姆士" in breadth_blurb(out)
+    assert breadth_blurb({}) == ""
+
+    snap = aggregate_daily_rows(
+        rows,
+        kind="week",
+        start=date(2026, 9, 14),
+        end=date(2026, 9, 20),
+        period_key="2026-W38",
+    )
+    assert snap["breadth"]["covered_days"] == 2
+    viewpoint, _advice = draft_period_text(snap)
+    assert "宽广度" in viewpoint
+    md = render_period_markdown(snap)
+    assert "## 宽广度 / 阿姆士" in md
+    assert "区间合成 TRIN" in md
+    assert "| 2026-09-14 |" in md
+    assert "普跌" in md
+
+
 def test_markdown_height_integer_and_pdf_smoke():
     rows = [
         {
@@ -191,7 +264,13 @@ def test_markdown_height_integer_and_pdf_smoke():
             "vol_trillion": 2.1,
             "season": "秋",
             "hard_gates": {"items": [{"id": 2, "name": "连板家数", "standard": "≥ 13家", "passed": False}]},
-            "rules_json": {"market_env": {"indexes": [{"name": "上证指数", "close": 3800, "pct_chg": 1.0}]}, "tape": {"label": "平量观察"}},
+            "rules_json": {
+                "market_env": {
+                    "indexes": [{"name": "上证指数", "close": 3800, "pct_chg": 1.0}],
+                    "breadth": _breadth(1800, 1200, 9e8, 6e8, 0.6),
+                },
+                "tape": {"label": "平量观察"},
+            },
             "mainline_json": {"rows": [{"board_code": "C1", "board_name": "通信设备", "today_hit": True, "tier_label": "主线", "echelon": "持续"}]},
         },
         {
@@ -201,7 +280,13 @@ def test_markdown_height_integer_and_pdf_smoke():
             "vol_trillion": 2.4,
             "season": "秋",
             "hard_gates": {"items": [{"id": 2, "name": "连板家数", "standard": "≥ 13家", "passed": True}]},
-            "rules_json": {"market_env": {"indexes": [{"name": "上证指数", "close": 3900, "pct_chg": 0.5}]}, "tape": {"label": "放量普涨"}},
+            "rules_json": {
+                "market_env": {
+                    "indexes": [{"name": "上证指数", "close": 3900, "pct_chg": 0.5}],
+                    "breadth": _breadth(900, 2100, 4e8, 8e8, 0.3, limit_down=40),
+                },
+                "tape": {"label": "放量普涨"},
+            },
             "mainline_json": {"rows": [{"board_code": "C1", "board_name": "通信设备", "today_hit": True, "tier_label": "主线", "echelon": "持续"}]},
         },
     ]
@@ -232,6 +317,8 @@ def test_markdown_height_integer_and_pdf_smoke():
     assert "5.00" not in md
     assert "头肩底" in md
     assert "次日" not in md
+    assert "宽广度 / 阿姆士" in md
+    assert "普跌" in md
     pdf = build_period_review_pdf_bytes(snap)
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 500

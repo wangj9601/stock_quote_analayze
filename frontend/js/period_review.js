@@ -217,6 +217,9 @@ function createPeriodReview(kind, prefix) {
                         esc(r.name), fmt(r.start_close), fmt(r.end_close), tone(r.period_pct, fmt(r.period_pct))
                     ]))}
                 </section>
+                <section class="dr-section"><h3>宽广度 / 阿姆士</h3>
+                    ${breadthSection(data.breadth)}
+                </section>
                 <section class="dr-section"><h3>趋势路径</h3>
                     <p class="dr-summary">高度 ${esc(deltaText(data.delta && data.delta.height, '板', 0))}；连板 ${esc(deltaText(data.delta && data.delta.cb_count, '家', 0))}</p>
                     ${table(['日期', '高度', '连板', '季节', '成交(万亿)', '盘面'], (data.path || []).map(r => [
@@ -269,6 +272,44 @@ function createPeriodReview(kind, prefix) {
             }
         },
     };
+}
+
+function breadthSection(breadth) {
+    const b = breadth || {};
+    const series = b.series || [];
+    if (!series.length) {
+        return '<p class="dr-summary">区间内暂无宽广度 / 阿姆士数据。请先完成日复盘，再重算本区间。</p>';
+    }
+    const hint = trinHint(b.avg_trin);
+    const periodHint = trinHint(b.period_trin);
+    const start = b.start || {};
+    const end = b.end || {};
+    const gap = b.gap_note ? `<p class="dr-summary">${esc(b.gap_note)}</p>` : '';
+    return `
+        ${gap}
+        <p class="dr-summary">日均上涨占比 ${pctRatio(b.avg_up_ratio)}，普涨 ${b.broad_up_days || 0} 天、分歧 ${b.mixed_days || 0} 天、普跌 ${b.broad_down_days || 0} 天。日均跌停 ${fmt(b.avg_limit_down)} 家。</p>
+        <p class="dr-summary">阿姆士(TRIN，成交额口径) 日均 ${fmt(b.avg_trin)}${hint ? '（' + esc(hint) + '）' : ''}，小于1共 ${b.trin_lt1_days || 0} 天，大于1共 ${b.trin_gt1_days || 0} 天，等于1共 ${b.trin_eq1_days || 0} 天。区间合成 TRIN ${fmt(b.period_trin)}${periodHint ? '（' + esc(periodHint) + '）' : ''}。</p>
+        <p class="dr-summary">期初 ${esc(start.trade_date || '—')} 上涨占比 ${pctRatio(start.up_ratio)}、TRIN ${fmt(start.trin)} → 期末 ${esc(end.trade_date || '—')} 上涨占比 ${pctRatio(end.up_ratio)}、TRIN ${fmt(end.trin)}。</p>
+        <p class="dr-summary">小于1偏多，大于1偏空，等于1大致均衡。区间合成按各日涨跌家数与成交额加总。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>
+        ${table(['日期', '上涨', '下跌', '上涨占比', 'TRIN', '结构'], series.map(r => [
+            esc(r.trade_date), intText(r.up_count), intText(r.down_count), pctRatio(r.up_ratio), fmt(r.trin), esc(r.breadth_label || '—')
+        ]))}
+    `;
+}
+
+function pctRatio(v) {
+    if (v == null || v === '') return '—';
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '—';
+    return `${(n * 100).toFixed(1)}%`;
+}
+
+function trinHint(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n)) return '';
+    if (n < 1) return '偏多';
+    if (n > 1) return '偏空';
+    return '均衡';
 }
 
 function industryText(v) {
@@ -336,7 +377,7 @@ function stock(row) {
     return `<span class="dr-stock"><a class="dr-stock-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(name)}</a><span class="dr-code">${esc(code)}</span></span>`;
 }
 
-const NUM_HEADERS = ['期初收盘', '期末收盘', '区间涨跌%', '高度', '连板', '成交(万亿)', '达标天数', '上榜天数', '封单(亿)'];
+const NUM_HEADERS = ['期初收盘', '期末收盘', '区间涨跌%', '高度', '连板', '成交(万亿)', '达标天数', '上榜天数', '封单(亿)', '上涨', '下跌', '上涨占比', 'TRIN'];
 
 function table(headers, rows) {
     const numAt = headers.map((h) => NUM_HEADERS.indexOf(h) >= 0);

@@ -1113,6 +1113,183 @@ body.ops-map .csb-detail-panel .csb-detail-hero-meta {
     color: var(--ops-ink-muted);
 }
 
+/* —— SEPA 买点 —— */
+body.ops-map #sepa-content .sepa-params {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    align-items: flex-end;
+}
+
+body.ops-map #sepa-content .sepa-params .param-input {
+    width: 148px;
+}
+
+body.ops-map #sepa-content .sepa-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    color: var(--ops-ink);
+    cursor: pointer;
+}
+
+body.ops-map #sepa-content .sepa-num {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+}
+
+body.ops-map #sepa-content .sepa-tag {
+    display: inline-block;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border: 1px solid rgba(217, 226, 236, 0.28);
+    border-radius: 1px;
+    color: var(--ops-ink-muted);
+    background: transparent;
+    white-space: nowrap;
+}
+
+body.ops-map #sepa-content .sepa-tag--a,
+body.ops-map #sepa-content .sepa-tag--ready {
+    color: var(--ops-gold);
+    border-color: rgba(201, 162, 39, 0.45);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map #sepa-content .sepa-tag--quiet {
+    color: var(--ops-route);
+    border-color: rgba(47, 111, 237, 0.45);
+    background: rgba(47, 111, 237, 0.1);
+}
+
+body.ops-map #sepa-content td.is-up {
+    color: var(--color-rise) !important;
+}
+
+body.ops-map #sepa-content .sepa-tag--breakout {
+    color: var(--color-rise);
+    border-color: rgba(194, 59, 59, 0.45);
+    background: rgba(194, 59, 59, 0.12);
+}
+
+body.ops-map #sepa-content td.is-down {
+    color: var(--color-fall) !important;
+}
+
+body.ops-map #sepa-content .sepa-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+body.ops-map #sepa-content .sepa-detail-btn.active {
+    color: var(--ops-gold);
+    border-color: var(--ops-gold);
+    background: var(--ops-overlay-film);
+}
+
+body.ops-map #sepa-content .sepa-detail-row td {
+    padding: 0 !important;
+    background: var(--ops-ground-elevated) !important;
+}
+
+body.ops-map #sepa-content .sepa-detail-panel {
+    padding: 14px 16px 16px;
+    border-top: 1px solid rgba(201, 162, 39, 0.35);
+    color: var(--ops-ink);
+}
+
+body.ops-map #sepa-content .sepa-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    margin-bottom: 12px;
+    color: var(--ops-ink-muted);
+}
+
+body.ops-map #sepa-content .sepa-metrics b {
+    color: var(--ops-ink);
+    font-weight: 600;
+}
+
+body.ops-map #sepa-content .sepa-flags {
+    margin: 0 0 12px;
+    color: var(--ops-gold);
+}
+
+body.ops-map #sepa-content .sepa-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(220px, 0.8fr) minmax(280px, 1.2fr);
+    gap: 16px 24px;
+}
+
+body.ops-map #sepa-content .sepa-detail-grid h4 {
+    margin: 0 0 8px;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    color: var(--ops-gold);
+}
+
+body.ops-map #sepa-content .sepa-checks {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+body.ops-map #sepa-content .sepa-checks li {
+    display: flex;
+    gap: 8px;
+    padding: 3px 0;
+    color: var(--ops-ink);
+}
+
+body.ops-map #sepa-content .sepa-checks li span {
+    flex: 0 0 2.5em;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+}
+
+body.ops-map #sepa-content .sepa-checks li.is-ok span {
+    color: var(--ops-gold);
+}
+
+body.ops-map #sepa-content .sepa-checks li.is-fail span {
+    color: var(--color-rise);
+}
+
+body.ops-map #sepa-content .sepa-legs {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+body.ops-map #sepa-content .sepa-legs th,
+body.ops-map #sepa-content .sepa-legs td {
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--color-border);
+    text-align: right;
+    color: var(--ops-ink);
+}
+
+body.ops-map #sepa-content .sepa-legs th:first-child,
+body.ops-map #sepa-content .sepa-legs td:first-child,
+body.ops-map #sepa-content .sepa-legs th:nth-child(6),
+body.ops-map #sepa-content .sepa-legs td:nth-child(6),
+body.ops-map #sepa-content .sepa-legs th:nth-child(7),
+body.ops-map #sepa-content .sepa-legs td:nth-child(7) {
+    text-align: left;
+}
+
+body.ops-map #sepa-content .sepa-detail-grid section:last-child {
+    grid-column: 1 / -1;
+}
+
 /* —— 手机：策略条与操作条 —— */
 @media (max-width: 768px) {
     body.ops-map .screening-container {
@@ -1130,6 +1307,10 @@ body.ops-map .csb-detail-panel .csb-detail-hero-meta {
 
     body.ops-map .screening-header h1 {
         font-size: 1.65rem !important;
+    }
+
+    body.ops-map #sepa-content .sepa-detail-grid {
+        grid-template-columns: 1fr;
     }
 
     body.ops-map .strategy-tabs {

@@ -11,8 +11,8 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/stock.css">
-    <link rel="stylesheet" href="css/margin_ui.css?v=20261030-margin">
+    <link rel="stylesheet" href="css/stock.css?v=20261031-margin-read">
+    <link rel="stylesheet" href="css/margin_ui.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/analysis.css?v=20260919a">
     <link rel="stylesheet" href="css/stock-ops.css?v=20260925polish">
     <script>
@@ -27,7 +27,7 @@
     <!-- ECharts库 - 优先使用本地文件，失败时使用CDN -->
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261030-echarts-tip">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261031-margin-read">
 </head>
 
 <body class="ops-map" data-channel="quotes">
@@ -360,8 +360,8 @@
                             </div>
                         </div>
                         <div class="flow-em-section" id="flowMarginSection">
-                            <h4 class="flow-em-title">两融 · 融资踩踏旁证</h4>
-                            <p class="flow-em-hint" id="flowMarginHint">交易所 T+1 披露；旁证不能证明机构账户被强平。</p>
+                            <h4 class="flow-em-title">两融</h4>
+                            <p class="flow-em-hint" id="flowMarginHint">交易所次日披露。先看判断，再看数字。</p>
                             <div id="flowMarginSignal" class="flow-em-mfe" style="display:none;"></div>
                             <div class="flow-chart">
                                 <div id="flowMarginChart" style="height: 360px;"></div>
@@ -419,7 +419,7 @@
     <script src="js/common.js"></script>
     <script src="js/permission.js"></script>
     <script src="js/echarts_theme.js?v=20261030-theme"></script>
-    <script src="js/margin_ui.js?v=20261030-margin3"></script>
+    <script src="js/margin_ui.js?v=20261031-margin-read"></script>
     <script src="js/stock_trade_link.js"></script>
     <script src="components/header.js"></script>
     <script>
@@ -523,7 +523,7 @@
                     console.error('判断股票类型失败:', result.message);
                     // 默认加载A股JS
                     const script = document.createElement('script');
-                    script.src = 'js/stock.js?v=20261023-flowtip';
+                    script.src = 'js/stock.js?v=20261031-margin-read';
                     script.onload = function () {
                         if (typeof StockPage !== 'undefined' && StockPage.init) {
                             StockPage.init();
@@ -535,7 +535,7 @@
                 console.error('判断股票类型异常:', error);
                 // 异常时默认加载A股JS
                 const script = document.createElement('script');
-                script.src = 'js/stock.js?v=20261023-flowtip';
+                script.src = 'js/stock.js?v=20261031-margin-read';
                 script.onload = function () {
                     if (typeof StockPage !== 'undefined' && StockPage.init) {
                         StockPage.init();
