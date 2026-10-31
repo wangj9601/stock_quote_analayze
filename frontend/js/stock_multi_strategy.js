@@ -2432,13 +2432,14 @@ const StockMultiStrategy = {
     },
 
     hideResultBlocks() {
-        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaFundFlowBlock', 'ssaMainForceBlock', 'ssaPaSection', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
+        ['ssaTradePlanBlock', 'ssaStrategyBlock', 'ssaRsBlock', 'ssaFundFlowBlock', 'ssaMarginBlock', 'ssaMainForceBlock', 'ssaPaSection', 'ssaLevelsBlock', 'ssaPatternBlock', 'ssaSwingBlock', 'ssaGannBlock'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.hidden = true;
         });
         const planHost = document.getElementById('ssaTradePlanHost');
         const rsHost = document.getElementById('ssaRsHost');
         const fundFlowHost = document.getElementById('ssaFundFlowHost');
+        const marginHost = document.getElementById('ssaMarginHost');
         const mainForceHost = document.getElementById('ssaMainForceHost');
         const levelsHost = document.getElementById('ssaLevelsHost');
         const patternHost = document.getElementById('ssaPatternHost');
@@ -2447,7 +2448,9 @@ const StockMultiStrategy = {
         if (planHost) planHost.innerHTML = '';
         if (rsHost) rsHost.innerHTML = '';
         this.disposeMainFlowChart();
+        this.disposeMarginChart();
         if (fundFlowHost) fundFlowHost.innerHTML = '';
+        if (marginHost) marginHost.innerHTML = '';
         if (mainForceHost) mainForceHost.innerHTML = '';
         if (levelsHost) levelsHost.innerHTML = '';
         if (patternHost) patternHost.innerHTML = '';
@@ -2455,13 +2458,14 @@ const StockMultiStrategy = {
         if (gannHost) gannHost.innerHTML = '';
         const rsStatus = document.getElementById('ssaRsStatus');
         const fundFlowStatus = document.getElementById('ssaFundFlowStatus');
+        const marginStatus = document.getElementById('ssaMarginStatus');
         const mainForceStatus = document.getElementById('ssaMainForceStatus');
         const levelsStatus = document.getElementById('ssaLevelsStatus');
         const patternStatus = document.getElementById('ssaPatternStatus');
         const swingStatus = document.getElementById('ssaSwingStatus');
         const gannStatus = document.getElementById('ssaGannStatus');
         const planStatus = document.getElementById('ssaTradePlanStatus');
-        [rsStatus, fundFlowStatus, mainForceStatus, levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
+        [rsStatus, fundFlowStatus, marginStatus, mainForceStatus, levelsStatus, patternStatus, swingStatus, gannStatus, planStatus].forEach((status) => {
             if (status) {
                 status.textContent = '';
                 status.hidden = false;
@@ -2924,6 +2928,14 @@ const StockMultiStrategy = {
             }
             const ffCode = (bundle.stock && bundle.stock.code) || this._currentAnalysisCode();
             void this.loadMainFundFlow(ffCode);
+        }
+
+        // 两融踩踏旁证
+        const marginBlock = document.getElementById('ssaMarginBlock');
+        if (marginBlock) {
+            marginBlock.hidden = false;
+            const mCode = (bundle.stock && bundle.stock.code) || this._currentAnalysisCode();
+            void this.loadMarginBlock(mCode);
         }
 
         // 主力入场
@@ -3524,7 +3536,75 @@ const StockMultiStrategy = {
             this.setBlockError('ssaFundFlowStatus', e.message || '资金流向暂无数据（需日终采集入库）');
         }
         await this.loadMainFundFlow(code);
+        await this.loadMarginBlock(code);
         this.updateExportBtn();
+    },
+
+    disposeMarginChart() {
+        if (this.marginChart) {
+            try { this.marginChart.dispose(); } catch (e) { /* ignore */ }
+            this.marginChart = null;
+        }
+    },
+
+    async loadMarginBlock(code) {
+        const block = document.getElementById('ssaMarginBlock');
+        const host = document.getElementById('ssaMarginHost');
+        if (!block || !host || !code) return;
+        block.hidden = false;
+        this.disposeMarginChart();
+        host.innerHTML = '<p class="ssa-fund-flow-hint">两融加载中…</p>';
+        if (typeof MarginUI === 'undefined') {
+            host.innerHTML = '<p class="ssa-fund-flow-empty">两融组件未加载</p>';
+            this.setBlockError('ssaMarginStatus', '两融组件未加载');
+            return;
+        }
+        try {
+            const [seriesRes, signalRes] = await Promise.all([
+                MarginUI.loadSeries(this.API_BASE_URL, code, 60),
+                MarginUI.loadSignal(this.API_BASE_URL, code),
+            ]);
+            const seriesPayload = seriesRes.payload || {};
+            const signalPayload = signalRes.payload || {};
+            const rows = seriesPayload.success ? seriesPayload.data || [] : [];
+            const signal = signalPayload.success ? signalPayload.data : null;
+            this.lastMargin = {
+                ok: !!(rows.length || (signal && signal.available)),
+                series: rows,
+                signal,
+                error: rows.length ? null : (seriesPayload.message || '无两融数据'),
+            };
+            this.renderMarginBlock(host, rows, signal);
+            this.setBlockOk('ssaMarginStatus', '');
+            const st = document.getElementById('ssaMarginStatus');
+            if (st) st.hidden = true;
+        } catch (e) {
+            console.warn('个股分析·两融失败', e);
+            this.lastMargin = { ok: false, series: [], signal: null, error: e.message || '两融加载失败' };
+            host.innerHTML = `<p class="ssa-fund-flow-empty">${this.esc(e.message || '两融加载失败')}</p>`;
+            this.setBlockError('ssaMarginStatus', e.message || '两融暂无数据');
+        }
+        this.updateExportBtn();
+    },
+
+    renderMarginBlock(host, series, signal) {
+        if (!host) return;
+        this.disposeMarginChart();
+        const M = window.MarginUI;
+        const cards = M ? M.signalCardsHtml(signal) : '';
+        host.innerHTML = `
+          <div class="ssa-margin-card">
+            ${cards}
+            <div class="ssa-margin-chart" id="ssaMarginChart"></div>
+          </div>`;
+        const chartDom = document.getElementById('ssaMarginChart');
+        if (!chartDom || typeof echarts === 'undefined' || !M) return;
+        if (!Array.isArray(series) || !series.length) {
+            chartDom.innerHTML = '<p class="ssa-fund-flow-empty">暂无两融序列</p>';
+            return;
+        }
+        this.marginChart = echarts.init(chartDom);
+        this.marginChart.setOption(M.chartOption(series));
     },
 
     disposeMainFlowChart() {
@@ -3719,40 +3799,27 @@ const StockMultiStrategy = {
                 top: 0,
                 textStyle: { fontSize: 11, color: '#8b9aab' },
             },
-            tooltip: {
-                trigger: 'axis',
-                confine: true,
-                backgroundColor: 'rgba(22, 28, 36, 0.96)',
-                borderColor: 'rgba(217, 226, 236, 0.22)',
-                borderWidth: 1,
-                padding: [8, 10],
-                textStyle: { color: '#d9e2ec', fontSize: 12 },
-                extraCssText: 'border-radius:2px;box-shadow:0 8px 18px rgba(0,0,0,0.35);',
-                axisPointer: {
-                    type: 'line',
-                    lineStyle: { color: 'rgba(217, 226, 236, 0.35)', type: 'dashed' },
-                },
-                formatter: (params) => {
-                    const list = Array.isArray(params) ? params : [params];
-                    const head = list[0] || {};
-                    const date = this.esc(String(head.axisValueLabel || head.axisValue || ''));
-                    const rows = list.map((p) => {
-                        const raw = p && p.value;
-                        const n = raw != null && typeof raw === 'object' ? raw.value : raw;
-                        const num = n == null || n === '' || Number.isNaN(Number(n)) ? null : Number(n);
-                        const text = num == null ? '--' : `${num > 0 ? '+' : ''}${num.toFixed(2)}亿`;
-                        const color = num == null ? '#8b9aab' : (num > 0 ? '#c23b3b' : num < 0 ? '#2f9e6b' : '#d9e2ec');
-                        return `<div style="display:flex;justify-content:space-between;gap:14px;align-items:baseline;margin-top:4px;">
-                            <span>${p.marker || ''}${this.esc(p.seriesName || '')}</span>
-                            <span style="color:${color};font-variant-numeric:tabular-nums;">${text}</span>
-                        </div>`;
-                    }).join('');
-                    return `<div style="min-width:9.5rem;line-height:1.45;">
-                        <div style="color:#8b9aab;font-variant-numeric:tabular-nums;">${date}</div>
-                        ${rows}
-                    </div>`;
-                },
-            },
+            tooltip: (window.EchartsTheme
+                ? window.EchartsTheme.opsTooltip({
+                    formatter: window.EchartsTheme.opsAxisFormatter({
+                        colorBySign: true,
+                        formatValue: (n) => {
+                            if (n == null || n === '' || Number.isNaN(Number(n))) return '--';
+                            const num = Number(n);
+                            return `${num > 0 ? '+' : ''}${num.toFixed(2)}亿`;
+                        },
+                    }),
+                })
+                : {
+                    trigger: 'axis',
+                    confine: true,
+                    backgroundColor: 'rgba(22, 28, 36, 0.96)',
+                    borderColor: 'rgba(217, 226, 236, 0.22)',
+                    borderWidth: 1,
+                    padding: [8, 10],
+                    textStyle: { color: '#d9e2ec', fontSize: 12 },
+                    extraCssText: 'border-radius:2px;box-shadow:0 8px 18px rgba(0,0,0,0.35);',
+                }),
             xAxis: {
                 type: 'category',
                 data: dates,

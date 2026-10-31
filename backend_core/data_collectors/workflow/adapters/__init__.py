@@ -800,23 +800,58 @@ def _prev_friday_date(as_of: Optional[datetime] = None) -> str:
     return d.isoformat()
 
 
+def _prev_cn_trade_date(as_of: Optional[datetime] = None) -> str:
+    """上一 A 股交易日（YYYY-MM-DD）。
+
+    两融明细为交易所 T+1 披露（约次日 08:30），收盘后流程不得默认采「今天」。
+    """
+    from datetime import timedelta
+
+    d = (as_of or datetime.now()).date()
+    start = (d - timedelta(days=20)).isoformat()
+    end = d.isoformat()
+    try:
+        from backend_core.data_collectors.tushare.moneyflow_daily import (
+            list_open_trade_dates,
+            resolve_tushare_pro,
+        )
+
+        pro = resolve_tushare_pro()
+        if pro is not None:
+            dates = list_open_trade_dates(pro, start_date=start, end_date=end)
+            before = [x for x in dates if x < d.isoformat()]
+            if before:
+                return before[-1]
+    except Exception as e:
+        logger.warning("两融上一交易日解析失败，改用工作日近似: %s", e)
+
+    cur = d - timedelta(days=1)
+    while cur.weekday() >= 5:
+        cur -= timedelta(days=1)
+    return cur.isoformat()
+
+
 def exec_tushare_margin_daily(ctx: WorkflowContext) -> NodeResult:
-    """两融日明细：Tushare 主源 + AkShare 补洞；周一额外补采上周五（深市滞后）。"""
+    """两融日明细：Tushare 主源 + AkShare 补洞；默认上一交易日；周一额外补采上周五（深市滞后）。"""
     if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
         return NodeResult.skip("A股休市，跳过两融日明细")
     try:
         from backend_core.data_collectors.tushare.margin import collect_margin_for_date
 
-        trade_date = _resolve_node_trade_date(ctx)
-        if not trade_date:
-            trade_date = datetime.now().strftime("%Y-%m-%d")
+        # T+1：未在节点/流程参数显式指定时，忽略 ctx 默认「今天」，改采上一交易日
+        explicit = _has_explicit_trade_date(ctx)
+        if explicit:
+            trade_date = _resolve_node_trade_date(ctx) or _prev_cn_trade_date()
+        else:
+            trade_date = _prev_cn_trade_date()
         result = collect_margin_for_date(trade_date, source="auto")
         payload: Dict[str, Any] = {
             "result": _safe(result),
             "trade_date": trade_date,
+            "date_policy": "explicit" if explicit else "prev_trade_day",
         }
-        # 周一补采上周五（深/北周五数据常延至周一）
-        if datetime.now().weekday() == 0 and not _has_explicit_trade_date(ctx):
+        # 周一补采上周五（深/北周五数据常延至周一）；默认日已是周五时不再重复
+        if datetime.now().weekday() == 0 and not explicit:
             fri = _prev_friday_date()
             if fri != trade_date:
                 retry = collect_margin_for_date(fri, source="auto")
@@ -830,11 +865,17 @@ def exec_tushare_margin_daily(ctx: WorkflowContext) -> NodeResult:
                     (retry or {}).get("upserted"),
                 )
         if isinstance(result, dict) and result.get("success") is False:
-            # on_failure=continue 不阻断流水线；retry 信息仍写入 data
-            failed = NodeResult.fail(
-                result.get("error") or "两融日明细采集失败",
-                message="两融日明细日采失败",
-            )
+            err = result.get("error") or "两融日明细采集失败"
+            # 未指定日期且仍空：多为披露未就绪，降级为 skip，避免误报失败
+            if not explicit and (
+                "empty" in str(err).lower() or str(err).strip() in ("no data", "sparse")
+            ):
+                skipped = NodeResult.skip(
+                    f"两融 {trade_date} 暂无披露（T+1），稍后再采：{err}"
+                )
+                skipped.data = payload
+                return skipped
+            failed = NodeResult.fail(err, message="两融日明细日采失败")
             failed.data = payload
             return failed
         return NodeResult.ok("两融日明细日采完成", data=payload)

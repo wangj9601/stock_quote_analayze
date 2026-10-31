@@ -1383,6 +1383,24 @@ def compute_market_env(
     breadth_series = _compute_breadth_series(
         db, d, BREADTH_SERIES_DAYS, today_breadth=breadth or None
     )
+    margin = None
+    try:
+        from backend_core.market_review.margin_summary import (
+            compute_margin_market_summary,
+        )
+
+        margin = compute_margin_market_summary(db, d, top_n=5)
+    except Exception:
+        logger.exception("复盘两融汇总失败 %s", d)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        margin = {
+            "available": False,
+            "trade_date": d,
+            "error": "两融汇总失败",
+        }
     return {
         "indexes": indexes,
         "vol_trillion": vol,
@@ -1392,6 +1410,7 @@ def compute_market_env(
         "breadth_series": breadth_series,
         "breadth_series_days": BREADTH_SERIES_DAYS,
         "sh_gap_to_high20": sh_gap,
+        "margin": margin,
     }
 
 

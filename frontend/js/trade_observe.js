@@ -333,7 +333,7 @@ const UnifiedTradeObserve = {
         const tbody = document.getElementById('utoObserveTableBody');
         const countEl = document.getElementById('utoCount');
         this.setLoading(true);
-        this._rowMessage(tbody, 8, '加载中…');
+        this._rowMessage(tbody, 9, '加载中…');
         try {
             if (!window.CommonUtils || !CommonUtils.checkLoginAndHandleExpiry()) {
                 throw new Error('请先登录后查看交易观察列表');
@@ -346,13 +346,34 @@ const UnifiedTradeObserve = {
             if (seq !== this._seq) return;
             const items = (data && data.items) || [];
             if (countEl) countEl.textContent = `共 ${data.total != null ? data.total : items.length} 只观察股`;
+            await this.enrichMarginSignals(items);
+            if (seq !== this._seq) return;
             this.renderObserve(items);
         } catch (e) {
             if (seq !== this._seq) return;
-            this._rowMessage(tbody, 8, e.message || '观察列表加载失败', true);
+            this._rowMessage(tbody, 9, e.message || '观察列表加载失败', true);
             if (countEl) countEl.textContent = '';
         } finally {
             if (seq === this._seq) this.setLoading(false);
+        }
+    },
+
+    async enrichMarginSignals(items) {
+        if (!Array.isArray(items) || !items.length || typeof MarginUI === 'undefined') return;
+        try {
+            const codes = items
+                .filter((it) => String(it.market || 'A').toUpperCase() !== 'HK')
+                .map((it) => it.code)
+                .filter(Boolean);
+            if (!codes.length) return;
+            const res = await MarginUI.loadSignalsBatch(this.apiBase(), codes);
+            const map = (res.payload && res.payload.data) || {};
+            items.forEach((it) => {
+                const key = String(it.code || '').padStart(6, '0');
+                it.margin_signal = map[it.code] || map[key] || null;
+            });
+        } catch (e) {
+            console.warn('交易观察两融旁证加载失败', e);
         }
     },
 
@@ -364,7 +385,7 @@ const UnifiedTradeObserve = {
             const filtered = !!this.sourceQuery();
             this._rowMessage(
                 tbody,
-                8,
+                9,
                 filtered
                     ? '该来源下暂无观察股票，可切换「来源」为全部'
                     : '暂无交易观察股票。可在选股结果或个股分析中点「交易观察」加入'
@@ -379,6 +400,10 @@ const UnifiedTradeObserve = {
                 const name = it.name || '';
                 const label = this.esc(name || it.code);
                 const signalPrice = this.signalPriceFromItem(it);
+                const badge =
+                    typeof MarginUI !== 'undefined'
+                        ? MarginUI.badgeHtml(it.margin_signal, { hideEmpty: false })
+                        : '—';
                 const nameTitle = [
                     name,
                     this.marketLabel(it.market),
@@ -392,6 +417,7 @@ const UnifiedTradeObserve = {
                     <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(nameTitle)}">${this.esc(name)}</span></td>
                     <td class="uto-col-market">${this.esc(this.marketLabel(it.market))}</td>
                     <td class="uto-col-source"><span class="uto-src">${this.esc(this.sourceLabel(src))}</span></td>
+                    <td class="uto-col-risk">${badge}</td>
                     <td class="uto-col-num">${this.esc(this.fmtPrice(signalPrice))}</td>
                     <td class="uto-col-date">${this.esc(it.signal_date || '—')}</td>
                     <td class="uto-col-datetime">${this.esc(this.fmtDt(it.created_at))}</td>

@@ -192,7 +192,13 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
         env = {}
     indexes = env.get("indexes") or []
     breadth = env.get("breadth") or {}
-    if indexes or breadth or env.get("vol_delta_yi") is not None:
+    margin_env = env.get("margin") if isinstance(env.get("margin"), dict) else {}
+    if (
+        indexes
+        or breadth
+        or env.get("vol_delta_yi") is not None
+        or (margin_env and margin_env.get("available"))
+    ):
         lines.extend(["# **一、大盘环境**", ""])
         if env.get("vol_trillion") is not None or env.get("vol_delta_yi") is not None:
             vol_line = f"成交额 {_fmt(env.get('vol_trillion') if env.get('vol_trillion') is not None else snapshot.get('vol_trillion'))} 万亿"
@@ -258,6 +264,51 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
                     f"{_fmt(idx.get('pct_chg'))} | {_fmt(idx.get('amount_yi'), 0)} | "
                     f"{_fmt(idx.get('gap_to_high20'), 0)} | {idx.get('note') or '--'} |"
                 )
+            lines.append("")
+        margin = env.get("margin") or {}
+        if isinstance(margin, dict) and margin.get("available"):
+            lines.append("### **两融杠杆水位（T+1 披露旁证）**")
+            lines.append("")
+            rzye_yi = None
+            if margin.get("rzye_sum") is not None:
+                try:
+                    rzye_yi = float(margin["rzye_sum"]) / 1e8
+                except (TypeError, ValueError):
+                    rzye_yi = None
+            delta_yi = None
+            if margin.get("rzye_delta") is not None:
+                try:
+                    delta_yi = float(margin["rzye_delta"]) / 1e8
+                except (TypeError, ValueError):
+                    delta_yi = None
+            net_yi = None
+            if margin.get("rz_net_sum") is not None:
+                try:
+                    net_yi = float(margin["rz_net_sum"]) / 1e8
+                except (TypeError, ValueError):
+                    net_yi = None
+            line = (
+                f"披露日 {margin.get('trade_date') or '--'}，"
+                f"融资余额 {_fmt(rzye_yi, 0)} 亿"
+            )
+            if delta_yi is not None:
+                line += f"，较上日 {_fmt(delta_yi, 0)} 亿"
+            if net_yi is not None:
+                line += f"；融资净买入合计 {_fmt(net_yi, 0)} 亿"
+            line += f"（覆盖 {margin.get('stock_count') or '--'} 只标的）。"
+            lines.append(line)
+            lines.append("")
+            top_repay = margin.get("top_repay") or []
+            if top_repay:
+                names = []
+                for r in top_repay[:5]:
+                    nm = r.get("name") or r.get("code") or "--"
+                    names.append(str(nm))
+                lines.append(f"融资净偿还靠前：{'、'.join(names)}。")
+                lines.append("")
+            lines.append(
+                f"> {margin.get('disclaimer') or '两融为公开披露旁证，不能证明机构爆仓。'}"
+            )
             lines.append("")
 
     lines.extend(

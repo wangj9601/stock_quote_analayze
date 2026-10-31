@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
     <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/stock.css">
+    <link rel="stylesheet" href="css/margin_ui.css?v=20261030-margin">
     <link rel="stylesheet" href="css/analysis.css?v=20260919a">
     <link rel="stylesheet" href="css/stock-ops.css?v=20260925polish">
     <script>
@@ -26,7 +27,7 @@
     <!-- ECharts库 - 优先使用本地文件，失败时使用CDN -->
     <script src="js/echarts.min.js"
         onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261030-echarts-tip">
 </head>
 
 <body class="ops-map" data-channel="quotes">
@@ -358,6 +359,14 @@
                                 <div id="flowEmChart" style="height: 360px;"></div>
                             </div>
                         </div>
+                        <div class="flow-em-section" id="flowMarginSection">
+                            <h4 class="flow-em-title">两融 · 融资踩踏旁证</h4>
+                            <p class="flow-em-hint" id="flowMarginHint">交易所 T+1 披露；旁证不能证明机构账户被强平。</p>
+                            <div id="flowMarginSignal" class="flow-em-mfe" style="display:none;"></div>
+                            <div class="flow-chart">
+                                <div id="flowMarginChart" style="height: 360px;"></div>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- 集合竞价（同花顺 Fuyao） -->
@@ -409,6 +418,8 @@
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script src="js/permission.js"></script>
+    <script src="js/echarts_theme.js?v=20261030-theme"></script>
+    <script src="js/margin_ui.js?v=20261030-margin3"></script>
     <script src="js/stock_trade_link.js"></script>
     <script src="components/header.js"></script>
     <script>

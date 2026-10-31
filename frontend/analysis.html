@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="css/ops-data.css?v=20261007b">
     <link rel="stylesheet" href="css/ops-responsive.css?v=20260930-rv">
     <link rel="stylesheet" href="css/analysis.css?v=20261021-dr-fab">
+    <link rel="stylesheet" href="css/margin_ui.css?v=20261030-margin">
     <link rel="stylesheet" href="css/recommend.css?v=20260930-rv">
     <script>
         (function () {
@@ -24,7 +25,7 @@
     </script>
     <link rel="stylesheet" href="css/analysis-ops.css?v=20261021-dr-fab">
     <link rel="stylesheet" href="css/index_detail.css?v=20261015-idx">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261030-echarts-tip">
 </head>
 
 <body data-channel="analyze" class="ops-map">
@@ -250,6 +251,12 @@
                                 <h4 class="ssa-block-title">资金流向</h4>
                                 <div class="ssa-block-status" id="ssaFundFlowStatus"></div>
                                 <div class="ssa-fund-flow-host" id="ssaFundFlowHost"></div>
+                            </section>
+
+                            <section class="ssa-block" id="ssaMarginBlock" hidden>
+                                <h4 class="ssa-block-title">两融 · 融资踩踏旁证</h4>
+                                <div class="ssa-block-status" id="ssaMarginStatus"></div>
+                                <div class="ssa-margin-host" id="ssaMarginHost"></div>
                             </section>
 
                             <section class="ssa-block" id="ssaMainForceBlock" hidden>
@@ -558,6 +565,7 @@
                                         <col class="uto-cg-name" />
                                         <col class="uto-cg-market" />
                                         <col class="uto-cg-source" />
+                                        <col class="uto-cg-risk" />
                                         <col class="uto-cg-price" />
                                         <col class="uto-cg-date" />
                                         <col class="uto-cg-datetime" />
@@ -569,6 +577,7 @@
                                             <th class="uto-col-name">名称</th>
                                             <th class="uto-col-market">市场</th>
                                             <th class="uto-col-source">来源</th>
+                                            <th class="uto-col-risk" title="两融踩踏旁证，非爆仓实锤">踩踏旁证</th>
                                             <th class="uto-col-num">信号价</th>
                                             <th class="uto-col-date">信号日</th>
                                             <th class="uto-col-datetime">加入时间</th>
@@ -576,7 +585,7 @@
                                         </tr>
                                     </thead>
                                     <tbody id="utoObserveTableBody">
-                                        <tr><td colspan="8" class="empty-state">点击「刷新」加载观察列表</td></tr>
+                                        <tr><td colspan="9" class="empty-state">点击「刷新」加载观察列表</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -722,7 +731,7 @@
                 <!-- 市场分析：个股/板块资金流向 + 板块斜率趋势 -->
                 <div class="tab-panel" id="market-analysis">
                     <div class="ma-workbench" data-perm="channel.analyze.tab.market">
-                        <p class="ma-desc">汇总个股与板块资金净流入排名、板块多窗口斜率趋势；支持图形 / 列表切换，并可导出当前区块数据为 Excel。</p>
+                        <p class="ma-desc">汇总个股与板块资金净流入排名、两融排行、板块多窗口斜率趋势；支持图形 / 列表切换，并可导出当前区块数据为 Excel。两融为 T+1 披露旁证，不能证明机构爆仓。</p>
 
                         <!-- 个股资金流向 -->
                         <section class="ma-section" id="maStockFlowSection" data-ma-block="stock">
@@ -766,6 +775,52 @@
                                     </table>
                                 </div>
                                 <div class="ma-status" id="maStockFlowStatus"></div>
+                            </div>
+                        </section>
+
+                        <!-- 两融排行 -->
+                        <section class="ma-section" id="maMarginSection" data-ma-block="margin">
+                            <div class="ma-section-header">
+                                <div class="ma-section-title-row">
+                                    <h3>两融排行</h3>
+                                    <span class="ma-meta" id="maMarginMeta"></span>
+                                </div>
+                                <div class="ma-toolbar">
+                                    <div class="ma-period" role="group" aria-label="排行指标">
+                                        <label><input type="radio" name="maMarginMetric" value="rz_net" checked> 融资净买入</label>
+                                        <label><input type="radio" name="maMarginMetric" value="rzmre"> 融资买入额</label>
+                                        <label><input type="radio" name="maMarginMetric" value="rzye_drop_5d"> 5日余额降幅</label>
+                                        <label><input type="radio" name="maMarginMetric" value="crowding"> 拥挤度</label>
+                                    </div>
+                                    <div class="ma-view" role="group" aria-label="展示方式">
+                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="chart" data-ma-block="margin">图形</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="list" data-ma-block="margin">列表</button>
+                                    </div>
+                                    <button type="button" class="btn btn-secondary" id="maMarginRefreshBtn" title="重新加载">刷新</button>
+                                    <button type="button" class="btn btn-secondary" id="maMarginExportBtn" title="导出当前列表为 Excel">导出 Excel</button>
+                                </div>
+                            </div>
+                            <div class="ma-body">
+                                <p class="ma-hint" id="maMarginHint">交易所两融 T+1 披露；拥挤度/降幅为旁证，不能证明机构爆仓。</p>
+                                <div class="ma-chart" id="maMarginChart"></div>
+                                <div class="ma-table-wrap" id="maMarginTableWrap" hidden>
+                                    <table class="ma-table" id="maMarginTable">
+                                        <thead>
+                                            <tr>
+                                                <th>排名</th>
+                                                <th>代码</th>
+                                                <th>名称</th>
+                                                <th>指标值</th>
+                                                <th>融资余额(亿)</th>
+                                                <th>融资净买入(亿)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="maMarginTbody">
+                                            <tr><td colspan="6" class="ma-empty">加载中…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="ma-status" id="maMarginStatus"></div>
                             </div>
                         </section>
 
@@ -901,6 +956,7 @@
                         <section class="dr-section" id="drEnvSection">
                             <h3>大盘环境</h3>
                             <p class="dr-summary" id="drEnvSummary"></p>
+                            <p class="dr-summary" id="drMarginSummary"></p>
                             <div class="dr-breadth-panel">
                                 <p class="dr-summary" id="drBreadthHint">宽广度 / 阿姆士：加载后显示近 N 日序列</p>
                                 <div class="dr-sparkline-wrap" aria-hidden="true">

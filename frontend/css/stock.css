@@ -1002,6 +1002,50 @@ body {
     border-radius: 6px;
 }
 
+.margin-risk-badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    color: #475569;
+    white-space: nowrap;
+}
+.margin-risk-high { background: #fef2f2; color: #b91c1c; border-color: #fecaca; }
+.margin-risk-mid { background: #fff7ed; color: #c2410c; border-color: #fed7aa; }
+.margin-risk-low { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+.margin-risk-none { background: #f8fafc; color: #64748b; border-color: #e2e8f0; }
+.margin-signal-summary { display: flex; flex-direction: column; gap: 8px; }
+.margin-signal-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.margin-signal-date { font-size: 12px; color: #64748b; }
+.margin-metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+}
+.margin-metric {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.margin-metric span { font-size: 11px; color: #64748b; }
+.margin-metric strong { font-size: 14px; color: #0f172a; }
+.margin-metric strong.is-up { color: #dc2626; }
+.margin-metric strong.is-down { color: #16a34a; }
+.margin-flags, .margin-disclaimer, .margin-composite-hint, .margin-empty {
+    margin: 0;
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.45;
+}
+.margin-composite-hint { color: #9a3412; }
+
 /* 搜索弹窗样式 */
 .search-modal {
     position: fixed;

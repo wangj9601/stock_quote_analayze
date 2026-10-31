@@ -78,7 +78,7 @@ const WatchlistPage = {
                     }
                 });
                 console.log('stocksData:', this.stocksData);
-
+                await this.enrichMarginSignals();
             } else {
                 this.stocksData = [];
             }
@@ -92,6 +92,27 @@ const WatchlistPage = {
             this.updateStockCount();
             this.renderStocks();
         }
+    },
+
+    async enrichMarginSignals() {
+        if (!Array.isArray(this.stocksData) || !this.stocksData.length) return;
+        if (typeof MarginUI === 'undefined') return;
+        try {
+            const codes = this.stocksData.map((s) => s.code).filter(Boolean);
+            const res = await MarginUI.loadSignalsBatch(API_BASE_URL, codes);
+            const map = (res.payload && res.payload.data) || {};
+            this.stocksData.forEach((s) => {
+                const key = String(s.code || '').padStart(6, '0');
+                s.margin_signal = map[s.code] || map[key] || null;
+            });
+        } catch (e) {
+            console.warn('自选股两融旁证加载失败', e);
+        }
+    },
+
+    marginBadgeHtml(stock) {
+        if (typeof MarginUI === 'undefined') return '';
+        return MarginUI.badgeHtml(stock && stock.margin_signal, { hideEmpty: true });
     },
 
     // 修改初始化方法
@@ -327,7 +348,7 @@ const WatchlistPage = {
             <div class="stock-card" data-code="${stock.code}" data-group="${stock.group}">
                 <div class="stock-header">
                     <div class="stock-basic">
-                        <h3 class="stock-name">${stock.name}</h3>
+                        <h3 class="stock-name">${stock.name} ${this.marginBadgeHtml(stock)}</h3>
                         <span class="stock-code">${stock.code}</span>
                     </div>
                     <button class="remove-btn">×</button>
@@ -382,7 +403,7 @@ const WatchlistPage = {
             <tr data-code="${stock.code}">
                 <td>
                     <div class="stock-info-cell">
-                        <span class="stock-name">${stock.name}</span>
+                        <span class="stock-name">${stock.name} ${this.marginBadgeHtml(stock)}</span>
                         <span class="stock-code">${stock.code}</span>
                     </div>
                 </td>

@@ -429,6 +429,7 @@ const StockPage = {
         if (tabId === 'flow' && this.flowChart) {
             this.flowChart.resize();
             if (this.flowEmChart) this.flowEmChart.resize();
+            if (this.flowMarginChart) this.flowMarginChart.resize();
         }
         // 根据标签加载相应数据
         this.loadTabData(tabId);
@@ -1054,6 +1055,7 @@ const StockPage = {
 
         this.flowChart.setOption(option);
         this.initFlowEmChart();
+        this.initFlowMarginChart();
     },
 
     initFlowEmChart() {
@@ -1074,6 +1076,30 @@ const StockPage = {
         });
     },
 
+    initFlowMarginChart() {
+        const chartDom = document.getElementById('flowMarginChart');
+        if (!chartDom || typeof echarts === 'undefined') return;
+        this.flowMarginChart = echarts.init(chartDom);
+        const base =
+            window.MarginUI && typeof MarginUI.chartOption === 'function'
+                ? MarginUI.chartOption([])
+                : {
+                      tooltip: { trigger: 'axis' },
+                      legend: { data: ['融资余额(亿)', '融资净买入(亿)'] },
+                      xAxis: { type: 'category', data: [] },
+                      yAxis: [{ type: 'value' }, { type: 'value' }],
+                      series: [
+                          { name: '融资余额(亿)', type: 'line', data: [] },
+                          { name: '融资净买入(亿)', type: 'bar', yAxisIndex: 1, data: [] },
+                      ],
+                  };
+        this.flowMarginChart.setOption({
+            ...base,
+            backgroundColor: '#161c24',
+            grid: { left: '10%', right: '10%', top: '14%', bottom: '15%' },
+        });
+    },
+
     // 调整图表大小
     resizeChart(chartType) {
         setTimeout(() => {
@@ -1084,6 +1110,7 @@ const StockPage = {
             } else if (chartType === 'flow' && this.flowChart) {
                 this.flowChart.resize();
                 if (this.flowEmChart) this.flowEmChart.resize();
+                if (this.flowMarginChart) this.flowMarginChart.resize();
             }
         }, 100);
     },
@@ -2853,9 +2880,70 @@ const StockPage = {
                 ],
             });
             await this.loadEmFlowData();
+            await this.loadMarginFlowData();
         } catch (e) {
             console.error(e);
             CommonUtils.showToast('资金流向请求异常', 'error');
+        }
+    },
+
+    async loadMarginFlowData() {
+        const section = document.getElementById('flowMarginSection');
+        const signalEl = document.getElementById('flowMarginSignal');
+        const hintEl = document.getElementById('flowMarginHint');
+        if (!this.flowMarginChart && document.getElementById('flowMarginChart')) {
+            this.initFlowMarginChart();
+        }
+        if (!this.flowMarginChart || !this.stockCode) return;
+        if (typeof MarginUI === 'undefined') {
+            if (hintEl) hintEl.textContent = '两融组件未加载';
+            return;
+        }
+        try {
+            const [seriesRes, signalRes] = await Promise.all([
+                MarginUI.loadSeries(API_BASE_URL, this.stockCode, 60),
+                MarginUI.loadSignal(API_BASE_URL, this.stockCode),
+            ]);
+            const seriesPayload = seriesRes.payload || {};
+            const signalPayload = signalRes.payload || {};
+            const rows = seriesPayload.success ? seriesPayload.data || [] : [];
+            if (!rows.length) {
+                if (section) section.style.opacity = '0.7';
+                if (hintEl) {
+                    hintEl.textContent =
+                        (seriesPayload && seriesPayload.message) ||
+                        '暂无两融数据（需日终采集，交易所 T+1 披露）';
+                }
+                this.flowMarginChart.setOption(MarginUI.chartOption([]));
+                if (signalEl) signalEl.style.display = 'none';
+                return;
+            }
+            if (section) section.style.opacity = '1';
+            this.flowMarginChart.setOption({
+                backgroundColor: '#161c24',
+                ...MarginUI.chartOption(rows),
+                grid: { left: '10%', right: '10%', top: '14%', bottom: '15%' },
+            });
+            if (signalEl) {
+                const sig = signalPayload.success ? signalPayload.data : null;
+                if (sig && sig.available) {
+                    signalEl.style.display = 'block';
+                    signalEl.innerHTML = MarginUI.signalCardsHtml(sig);
+                } else {
+                    signalEl.style.display = 'block';
+                    signalEl.innerHTML = MarginUI.signalCardsHtml(
+                        sig || { available: false, error: signalPayload.message || '无踩踏旁证' }
+                    );
+                }
+            }
+            if (hintEl) {
+                hintEl.textContent =
+                    (signalPayload.data && signalPayload.data.disclaimer) ||
+                    MarginUI.DISCLAIMER;
+            }
+        } catch (e) {
+            console.error(e);
+            if (hintEl) hintEl.textContent = '两融数据加载失败';
         }
     },
 

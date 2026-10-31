@@ -12,7 +12,8 @@
     <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/markets.css?v=20260930-bd">
     <link rel="stylesheet" href="css/markets-ops.css?v=20260930-bd">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c">
+    <link rel="stylesheet" href="css/margin_ui.css?v=20261030-margin">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261030-echarts-tip">
 </head>
 <body class="ops-map" data-channel="quotes">
 <script src="components/header.js"></script>
@@ -104,6 +105,21 @@
                         <div class="index-chart">
                             <canvas id="csi000300Chart" width="200" height="60"></canvas>
                         </div>
+                    </div>
+
+                    <div class="index-card index-card--kpi" id="kpiMarginCard" title="交易所两融 T+1 披露，非盘中实时">
+                        <div class="index-header">
+                            <h3>两市融资余额</h3>
+                            <span class="index-code" id="kpiMarginDate">T+1</span>
+                        </div>
+                        <div class="index-data">
+                            <span class="index-value" id="kpiMarginBalance">加载中...</span>
+                            <div class="index-change">
+                                <span class="change-value" id="kpiMarginDelta">--</span>
+                                <span class="change-percent" id="kpiMarginNet">净买入 --</span>
+                            </div>
+                        </div>
+                        <p class="kpi-margin-note" id="kpiMarginNote">旁证口径，非机构爆仓实锤</p>
                     </div>
                 </div>
             </div>
@@ -497,6 +513,14 @@
                                         <span class="stat-label">北向资金净流入</span>
                                         <span class="stat-value positive">+45.67亿</span>
                                     </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">两市融资余额</span>
+                                        <span class="stat-value" id="statsMarginBalance">--</span>
+                                    </div>
+                                    <div class="stat-row">
+                                        <span class="stat-label">融资净买入合计</span>
+                                        <span class="stat-value" id="statsMarginNet">--</span>
+                                    </div>
                                 </div>
                             </div>
 
@@ -736,8 +760,9 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
+    <script src="js/margin_ui.js?v=20261030-margin2"></script>
     <script src="js/stock_trade_link.js"></script>
-    <script src="js/markets.js?v=20260930-bd"></script>
+    <script src="js/markets.js?v=20261030-margin"></script>
     <script src="js/hk_markets.js"></script>
     <script>
         // 市场标签页切换逻辑

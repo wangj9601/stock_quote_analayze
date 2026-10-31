@@ -15,13 +15,14 @@ const MarketAnalysis = {
     unknown: '#94a3b8',
   },
 
-  views: { stock: 'chart', board: 'chart', slope: 'chart' },
+  views: { stock: 'chart', board: 'chart', slope: 'chart', margin: 'chart' },
   cache: {
     stock: { items: [], meta: {} },
     board: { items: [], meta: {} },
     slope: { items: [], meta: {}, raw: [] },
+    margin: { items: [], meta: {} },
   },
-  charts: { stock: null, board: null, slope: null, boardConstituents: null },
+  charts: { stock: null, board: null, slope: null, margin: null, boardConstituents: null },
   loadedOnce: false,
   _resizeBound: null,
   _boardClickBound: false,
@@ -47,6 +48,9 @@ const MarketAnalysis = {
     document.querySelectorAll('input[name="maSlopeKind"]').forEach((el) => {
       el.addEventListener('change', () => this.loadSlope());
     });
+    document.querySelectorAll('input[name="maMarginMetric"]').forEach((el) => {
+      el.addEventListener('change', () => this.loadMarginRank());
+    });
     const winSel = document.getElementById('maSlopeWindow');
     if (winSel) winSel.addEventListener('change', () => this.applySlopeWindowAndRender());
 
@@ -63,9 +67,11 @@ const MarketAnalysis = {
       ['maStockRefreshBtn', () => this.loadStockFlow()],
       ['maBoardRefreshBtn', () => this.loadBoardFlow()],
       ['maSlopeRefreshBtn', () => this.loadSlope()],
+      ['maMarginRefreshBtn', () => this.loadMarginRank()],
       ['maStockExportBtn', () => this.exportBlock('stock')],
       ['maBoardExportBtn', () => this.exportBlock('board')],
       ['maSlopeExportBtn', () => this.exportBlock('slope')],
+      ['maMarginExportBtn', () => this.exportBlock('margin')],
     ];
     map.forEach(([id, fn]) => {
       const el = document.getElementById(id);
@@ -130,6 +136,7 @@ const MarketAnalysis = {
     this.loadStockFlow();
     this.loadBoardFlow();
     this.loadSlope();
+    this.loadMarginRank();
     requestAnimationFrame(() => this.resizeCharts());
   },
 
@@ -147,6 +154,7 @@ const MarketAnalysis = {
       stock: { chart: 'maStockFlowChart', table: 'maStockFlowTableWrap' },
       board: { chart: 'maBoardFlowChart', table: 'maBoardFlowTableWrap' },
       slope: { chart: 'maSlopeChart', table: 'maSlopeTableWrap' },
+      margin: { chart: 'maMarginChart', table: 'maMarginTableWrap' },
     };
     const pair = ids[block];
     if (!pair) return;
@@ -346,16 +354,171 @@ const MarketAnalysis = {
   renderChart(block) {
     if (this.views[block] !== 'chart') return;
     if (typeof echarts === 'undefined') {
+      const statusMap = {
+        stock: 'maStockFlowStatus',
+        board: 'maBoardFlowStatus',
+        slope: 'maSlopeStatus',
+        margin: 'maMarginStatus',
+      };
       this.setStatus(
-        block === 'stock' ? 'maStockFlowStatus' : block === 'board' ? 'maBoardFlowStatus' : 'maSlopeStatus',
+        statusMap[block] || 'maStockFlowStatus',
         '图表库未加载，请刷新页面或切换到列表查看',
         true
       );
       return;
     }
     if (block === 'stock') this.renderStockChart();
+    else if (block === 'margin') this.renderMarginChart();
     else if (block === 'board') this.renderBoardChart();
     else if (block === 'slope') this.renderSlopeChart();
+  },
+
+  /* ---------- 两融排行 ---------- */
+
+  marginMetricLabel(metric) {
+    const map = {
+      rz_net: '融资净买入',
+      rzmre: '融资买入额',
+      rzye: '融资余额',
+      rzye_drop_5d: '5日余额降幅',
+      crowding: '拥挤度',
+    };
+    return map[metric] || metric;
+  },
+
+  fmtMarginValue(metric, value) {
+    if (value == null || Number.isNaN(Number(value))) return '--';
+    if (metric === 'rzye_drop_5d' || metric === 'crowding') {
+      return `${(Number(value) * 100).toFixed(2)}%`;
+    }
+    return this.fmtYi(value);
+  },
+
+  async loadMarginRank() {
+    const metric = this.radioValue('maMarginMetric', 'rz_net');
+    const statusId = 'maMarginStatus';
+    this.setStatus(statusId, '加载中…', false);
+    try {
+      if (typeof MarginUI === 'undefined') {
+        throw new Error('两融组件未加载');
+      }
+      const side = metric === 'rzye_drop_5d' ? 'top' : 'top';
+      const res = await MarginUI.loadRank(this.API_BASE_URL, metric, {
+        limit: 40,
+        side,
+      });
+      const body = res.payload || {};
+      if (!res.ok || !body.success) throw new Error(body.message || '加载失败');
+      const data = body.data || {};
+      let items = Array.isArray(data.items) ? data.items : [];
+      // 净买入类：图上弱→强；降幅/拥挤：大→小已由后端 top 给出
+      if (metric === 'rz_net' || metric === 'rzmre' || metric === 'rzye') {
+        items = [...items].sort((a, b) => Number(a.value || 0) - Number(b.value || 0));
+      }
+      this.cache.margin = {
+        items,
+        meta: {
+          metric,
+          metric_label: this.marginMetricLabel(metric),
+          trade_date: data.trade_date || null,
+          disclaimer: data.disclaimer || '',
+        },
+      };
+      const parts = [
+        this.marginMetricLabel(metric),
+        data.trade_date ? `披露日 ${data.trade_date}` : null,
+        items.length ? `${items.length} 只` : null,
+      ].filter(Boolean);
+      this.setMeta('maMarginMeta', parts.join(' · '));
+      const hint = document.getElementById('maMarginHint');
+      if (hint) {
+        hint.textContent =
+          data.disclaimer ||
+          '交易所两融 T+1 披露；拥挤度/降幅为旁证，不能证明机构爆仓。';
+      }
+      this.renderMarginTable();
+      this.renderChart('margin');
+      this.setStatus(statusId, items.length ? '' : '暂无两融排行（请先日采）', false);
+    } catch (e) {
+      this.cache.margin = { items: [], meta: {} };
+      this.renderMarginTable();
+      this.setStatus(statusId, e.message || '加载失败', true);
+      if (window.CommonUtils) CommonUtils.showToast(e.message || '两融排行加载失败', 'error');
+    }
+  },
+
+  renderMarginChart() {
+    const el = document.getElementById('maMarginChart');
+    const chart = this.ensureChart('margin', el);
+    if (!chart) return;
+    const items = this.cache.margin.items || [];
+    const metric = (this.cache.margin.meta && this.cache.margin.meta.metric) || 'rz_net';
+    const label = (this.cache.margin.meta && this.cache.margin.meta.metric_label) || '两融';
+    if (!items.length) {
+      chart.clear();
+      return;
+    }
+    const names = items.map((r) => String(r.name || r.code || '--'));
+    const values = items.map((r) => {
+      const v = Number(r.value);
+      if (!Number.isFinite(v)) return 0;
+      if (metric === 'rzye_drop_5d' || metric === 'crowding') return Number((v * 100).toFixed(4));
+      return this.toYi(v) || 0;
+    });
+    const unit =
+      metric === 'rzye_drop_5d' || metric === 'crowding' ? `${label}(%)` : `${label}(亿)`;
+    const option = this.buildBarOption(names, values, unit, (params) => {
+      const list = Array.isArray(params) ? params : [params];
+      const p = list[0] || {};
+      const idx = Number(p.dataIndex);
+      const row = Number.isFinite(idx) ? items[idx] : undefined;
+      const v = Number(p.value);
+      const sign = v > 0 ? '+' : '';
+      const valTxt =
+        metric === 'rzye_drop_5d' || metric === 'crowding'
+          ? `${sign}${v.toFixed(2)}%`
+          : `${sign}${v.toFixed(2)} 亿`;
+      return [
+        `${p.name || ''}${row?.code ? `（${row.code}）` : ''}`,
+        `${label}：${valTxt}`,
+        `融资余额：${this.fmtYi(row?.rzye)} 亿`,
+        row?.rz_net != null ? `融资净买入：${this.fmtYi(row.rz_net)} 亿` : '',
+      ]
+        .filter(Boolean)
+        .join('<br/>');
+    });
+    chart.setOption(option, true);
+    chart.resize();
+  },
+
+  renderMarginTable() {
+    const tbody = document.getElementById('maMarginTbody');
+    if (!tbody) return;
+    const items = this.cache.margin.items || [];
+    const metric = (this.cache.margin.meta && this.cache.margin.meta.metric) || 'rz_net';
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="6" class="ma-empty">暂无数据</td></tr>';
+      return;
+    }
+    const rows = [...items].sort((a, b) => {
+      if (metric === 'rzye_drop_5d' || metric === 'crowding') {
+        return Number(b.value || 0) - Number(a.value || 0);
+      }
+      return Number(b.value || 0) - Number(a.value || 0);
+    });
+    tbody.innerHTML = rows
+      .map((r, i) => {
+        const val = Number(r.value);
+        return `<tr>
+          <td>${i + 1}</td>
+          <td><a class="ma-code-link" href="stock.html?code=${encodeURIComponent(r.code || '')}" target="_blank" rel="noopener">${this.escapeHtml(r.code || '--')}</a></td>
+          <td>${this.escapeHtml(r.name || '--')}</td>
+          <td class="ma-num ${this.colorClass(val)}">${this.escapeHtml(this.fmtMarginValue(metric, r.value))}</td>
+          <td class="ma-num">${this.fmtYi(r.rzye)}</td>
+          <td class="ma-num ${this.colorClass(r.rz_net)}">${this.fmtYi(r.rz_net)}</td>
+        </tr>`;
+      })
+      .join('');
   },
 
   /* ---------- 个股资金流向 ---------- */
@@ -1288,7 +1451,9 @@ const MarketAnalysis = {
         ? 'maStockExportBtn'
         : block === 'board'
           ? 'maBoardExportBtn'
-          : 'maSlopeExportBtn';
+          : block === 'margin'
+            ? 'maMarginExportBtn'
+            : 'maSlopeExportBtn';
     const btn = document.getElementById(btnId);
     const prev = btn ? btn.textContent : '';
     if (btn) {
@@ -1306,7 +1471,34 @@ const MarketAnalysis = {
       let sheetName;
       let filename;
       const stamp = this.stamp();
-      if (block === 'stock') {
+      if (block === 'margin') {
+        const metric = (this.cache.margin.meta && this.cache.margin.meta.metric) || 'rz_net';
+        const items = [...(this.cache.margin.items || [])].sort(
+          (a, b) => Number(b.value || 0) - Number(a.value || 0)
+        );
+        if (!items.length) throw new Error('暂无两融排行数据可导出');
+        const m = this.cache.margin.meta || {};
+        aoa = [
+          ['两融排行'],
+          ['指标', m.metric_label || metric, '披露日', m.trade_date || ''],
+          [],
+          ['排名', '代码', '名称', '指标值', '融资余额(亿)', '融资净买入(亿)'],
+          ...items.map((r, i) => [
+            i + 1,
+            r.code || '',
+            r.name || '',
+            metric === 'rzye_drop_5d' || metric === 'crowding'
+              ? r.value != null
+                ? Number(r.value) * 100
+                : ''
+              : this.toYi(r.value),
+            this.toYi(r.rzye),
+            this.toYi(r.rz_net),
+          ]),
+        ];
+        sheetName = '两融排行';
+        filename = `两融排行_${m.metric_label || metric}_${stamp}.xlsx`;
+      } else if (block === 'stock') {
         const items = [...(this.cache.stock.items || [])].sort(
           (a, b) => Number(b.net_amount || 0) - Number(a.net_amount || 0)
         );

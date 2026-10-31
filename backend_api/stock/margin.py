@@ -18,6 +18,10 @@ from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
     normalize_code,
     safe_float,
 )
+from backend_core.market_review.margin_summary import (
+    compute_margin_market_summary,
+    resolve_margin_trade_date,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +31,14 @@ _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 DISCLAIMER = (
     "旁证基于公开两融余额/净偿还与流通市值推断，不能证明某家机构账户被券商强平。"
+)
+
+RANK_METRICS = (
+    "rzmre",
+    "rz_net",
+    "rzye",
+    "rzye_drop_5d",
+    "crowding",
 )
 
 # 信号阈值（可后续调环境变量）
@@ -335,6 +347,12 @@ def _compute_signal(
     if score == 0:
         squeeze_risk = "none"
 
+    label_map = {
+        "none": "未见明显踩踏旁证",
+        "low": "踩踏风险偏低",
+        "mid": "踩踏风险中等（去杠杆旁证）",
+        "high": "踩踏风险偏高（去杠杆加速旁证，非爆仓实锤）",
+    }
     return {
         "trade_date": trade_date,
         "available": True,
@@ -351,9 +369,409 @@ def _compute_signal(
         "neg_net_streak": neg_streak,
         "flags": flags,
         "squeeze_risk": squeeze_risk,
+        "squeeze_label": label_map.get(squeeze_risk, squeeze_risk),
         "disclaimer": DISCLAIMER,
         "source": cur.get("source"),
     }
+
+
+def _fetch_dragon_tiger_org(
+    db: Session, code: str, trade_date: str
+) -> Optional[Dict[str, Any]]:
+    """同日龙虎榜机构净额旁证（库内快照；东方财富源常为 NULL）。"""
+    code_n = normalize_code(code)
+    td = (trade_date or "")[:10]
+    if not code_n or not td:
+        return None
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT code, name, trade_date, board_type, org_net_value,
+                       net_value, source
+                FROM dragon_tiger_stock
+                WHERE code = :code AND trade_date = :td
+                  AND org_net_value IS NOT NULL
+                ORDER BY CASE board_type
+                    WHEN 'org' THEN 0
+                    WHEN 'all' THEN 1
+                    ELSE 2 END
+                LIMIT 1
+                """
+            ),
+            {"code": code_n, "td": td},
+        ).mappings().first()
+        if not row:
+            return None
+        org_net = safe_float(row.get("org_net_value"))
+        return {
+            "trade_date": str(row.get("trade_date") or "")[:10],
+            "board_type": row.get("board_type"),
+            "org_net_value": org_net,
+            "net_value": safe_float(row.get("net_value")),
+            "source": row.get("source"),
+            "note": (
+                "龙虎榜机构净额为同日席位披露旁证，与两融去杠杆叠加仍不能证明强平。"
+                if org_net is not None and org_net < 0
+                else "龙虎榜机构净额旁证。"
+            ),
+        }
+    except Exception as e:
+        logger.debug("dragon_tiger org lookup fail %s %s: %s", code_n, td, e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None
+
+
+def _attach_extras(
+    db: Session, signal: Dict[str, Any], *, with_lhb: bool = True
+) -> Dict[str, Any]:
+    if not signal or not signal.get("available"):
+        return signal
+    if with_lhb:
+        lhb = _fetch_dragon_tiger_org(
+            db, str(signal.get("code") or ""), str(signal.get("trade_date") or "")
+        )
+        signal["dragon_tiger"] = lhb
+        if (
+            lhb
+            and lhb.get("org_net_value") is not None
+            and float(lhb["org_net_value"]) < 0
+            and signal.get("squeeze_risk") in ("mid", "high")
+        ):
+            signal["composite_hint"] = (
+                "两融去杠杆旁证 + 龙虎榜机构净卖出，风险提示加重（仍非爆仓实锤）"
+            )
+        else:
+            signal["composite_hint"] = None
+    return signal
+
+
+@router.get("/margin/market/summary")
+async def get_margin_market_summary(
+    trade_date: Optional[str] = Query(None, description="披露日 YYYY-MM-DD"),
+    top_n: int = Query(5, ge=1, le=30),
+    db: Session = Depends(get_db),
+):
+    if trade_date and not _DATE_RE.match(trade_date):
+        return JSONResponse(
+            {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+            status_code=400,
+        )
+    try:
+        data = compute_margin_market_summary(db, trade_date, top_n=top_n)
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        logger.exception("get_margin_market_summary")
+        return JSONResponse(
+            {"success": False, "message": f"汇总失败: {e}"}, status_code=500
+        )
+
+
+@router.get("/margin/rank")
+async def get_margin_rank(
+    metric: str = Query(
+        "rz_net",
+        description="rzmre|rz_net|rzye|rzye_drop_5d|crowding",
+    ),
+    trade_date: Optional[str] = Query(None),
+    limit: int = Query(40, ge=5, le=100),
+    side: str = Query("top", description="top|bottom"),
+    db: Session = Depends(get_db),
+):
+    metric_n = (metric or "rz_net").strip().lower()
+    if metric_n not in RANK_METRICS:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": f"metric 须为 {', '.join(RANK_METRICS)}",
+            },
+            status_code=400,
+        )
+    if trade_date and not _DATE_RE.match(trade_date):
+        return JSONResponse(
+            {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+            status_code=400,
+        )
+    d = resolve_margin_trade_date(db, trade_date)
+    if not d:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "无两融数据，请先日采/回填",
+                "disclaimer": DISCLAIMER,
+            },
+            status_code=404,
+        )
+    ascending = (side or "top").lower() == "bottom"
+    try:
+        if metric_n in ("rzmre", "rzye"):
+            col = metric_n
+            order = "ASC" if ascending else "DESC"
+            rows = db.execute(
+                text(
+                    f"""
+                    SELECT code, name, rzye, rzmre, rzche, rqye,
+                           (COALESCE(rzmre,0) - COALESCE(rzche,0)) AS rz_net
+                    FROM stock_margin_daily
+                    WHERE trade_date = :d AND {col} IS NOT NULL
+                    ORDER BY {col} {order} NULLS LAST
+                    LIMIT :n
+                    """
+                ),
+                {"d": d, "n": int(limit)},
+            ).mappings().all()
+            items = []
+            for i, r in enumerate(rows, 1):
+                val = safe_float(r.get(col))
+                items.append(
+                    {
+                        "rank": i,
+                        "code": r["code"],
+                        "name": r["name"],
+                        "metric": metric_n,
+                        "value": val,
+                        "rzye": safe_float(r.get("rzye")),
+                        "rzmre": safe_float(r.get("rzmre")),
+                        "rz_net": safe_float(r.get("rz_net")),
+                    }
+                )
+        elif metric_n == "rz_net":
+            order = "ASC" if ascending else "DESC"
+            rows = db.execute(
+                text(
+                    f"""
+                    SELECT code, name, rzye, rzmre, rzche,
+                           (COALESCE(rzmre,0) - COALESCE(rzche,0)) AS rz_net
+                    FROM stock_margin_daily
+                    WHERE trade_date = :d
+                    ORDER BY (COALESCE(rzmre,0) - COALESCE(rzche,0)) {order}
+                    LIMIT :n
+                    """
+                ),
+                {"d": d, "n": int(limit)},
+            ).mappings().all()
+            items = []
+            for i, r in enumerate(rows, 1):
+                val = safe_float(r.get("rz_net"))
+                items.append(
+                    {
+                        "rank": i,
+                        "code": r["code"],
+                        "name": r["name"],
+                        "metric": metric_n,
+                        "value": val,
+                        "rzye": safe_float(r.get("rzye")),
+                        "rzmre": safe_float(r.get("rzmre")),
+                        "rz_net": val,
+                    }
+                )
+        elif metric_n == "rzye_drop_5d":
+            # 当前余额相对 5 个交易日前：降幅 = (prev - cur) / prev
+            rows = db.execute(
+                text(
+                    """
+                    WITH cur AS (
+                        SELECT code, name, rzye, rzmre, rzche,
+                               (COALESCE(rzmre,0) - COALESCE(rzche,0)) AS rz_net
+                        FROM stock_margin_daily
+                        WHERE trade_date = :d AND rzye IS NOT NULL AND rzye > 0
+                    ),
+                    hist AS (
+                        SELECT DISTINCT trade_date
+                        FROM stock_margin_daily
+                        WHERE trade_date <= :d
+                        ORDER BY trade_date DESC
+                        LIMIT 6
+                    ),
+                    prev_d AS (
+                        SELECT MIN(trade_date) AS td FROM hist
+                    )
+                    SELECT c.code, c.name, c.rzye, c.rzmre, c.rz_net,
+                           p.rzye AS rzye_prev,
+                           CASE
+                             WHEN p.rzye IS NOT NULL AND p.rzye > 0
+                             THEN (p.rzye - c.rzye) / p.rzye
+                             ELSE NULL
+                           END AS drop_5d
+                    FROM cur c
+                    CROSS JOIN prev_d pd
+                    LEFT JOIN stock_margin_daily p
+                      ON p.code = c.code AND p.trade_date = pd.td
+                    WHERE p.rzye IS NOT NULL AND p.rzye > 0
+                    """
+                ),
+                {"d": d},
+            ).mappings().all()
+            scored = []
+            for r in rows:
+                drop = safe_float(r.get("drop_5d"))
+                if drop is None:
+                    continue
+                scored.append((drop, r))
+            scored.sort(key=lambda x: x[0], reverse=not ascending)
+            items = []
+            for i, (drop, r) in enumerate(scored[: int(limit)], 1):
+                items.append(
+                    {
+                        "rank": i,
+                        "code": r["code"],
+                        "name": r["name"],
+                        "metric": metric_n,
+                        "value": drop,
+                        "rzye": safe_float(r.get("rzye")),
+                        "rzye_prev": safe_float(r.get("rzye_prev")),
+                        "rz_net": safe_float(r.get("rz_net")),
+                    }
+                )
+        else:  # crowding
+            rows = db.execute(
+                text(
+                    """
+                    SELECT m.code, m.name, m.rzye, m.rzmre, m.rzche,
+                           (COALESCE(m.rzmre,0) - COALESCE(m.rzche,0)) AS rz_net,
+                           COALESCE(
+                             NULLIF(rt.circulating_market_value, 0),
+                             CASE
+                               WHEN b.free_float_shares IS NOT NULL
+                                    AND b.free_float_shares > 0
+                                    AND hq.close IS NOT NULL AND hq.close > 0
+                               THEN CASE
+                                 WHEN b.free_float_shares < 1000000
+                                 THEN b.free_float_shares * 10000 * hq.close
+                                 ELSE b.free_float_shares * hq.close
+                               END
+                               ELSE NULL
+                             END
+                           ) AS float_mv
+                    FROM stock_margin_daily m
+                    LEFT JOIN LATERAL (
+                        SELECT circulating_market_value
+                        FROM stock_realtime_quote
+                        WHERE code = m.code
+                        ORDER BY trade_date DESC
+                        LIMIT 1
+                    ) rt ON TRUE
+                    LEFT JOIN stock_basic_info b ON b.code = m.code
+                    LEFT JOIN LATERAL (
+                        SELECT close FROM historical_quotes
+                        WHERE code = m.code AND CAST(date AS text) <= :d
+                        ORDER BY date DESC LIMIT 1
+                    ) hq ON TRUE
+                    WHERE m.trade_date = :d AND m.rzye IS NOT NULL AND m.rzye > 0
+                    """
+                ),
+                {"d": d},
+            ).mappings().all()
+            scored = []
+            for r in rows:
+                mv = safe_float(r.get("float_mv"))
+                rzye = safe_float(r.get("rzye"))
+                if not mv or mv <= 0 or rzye is None:
+                    continue
+                crowding = rzye / mv
+                scored.append((crowding, r, mv))
+            scored.sort(key=lambda x: x[0], reverse=not ascending)
+            items = []
+            for i, (crowding, r, mv) in enumerate(scored[: int(limit)], 1):
+                items.append(
+                    {
+                        "rank": i,
+                        "code": r["code"],
+                        "name": r["name"],
+                        "metric": metric_n,
+                        "value": crowding,
+                        "rzye": safe_float(r.get("rzye")),
+                        "float_mv": mv,
+                        "rz_net": safe_float(r.get("rz_net")),
+                    }
+                )
+
+        return JSONResponse(
+            {
+                "success": True,
+                "data": {
+                    "trade_date": d,
+                    "metric": metric_n,
+                    "side": "bottom" if ascending else "top",
+                    "count": len(items),
+                    "items": items,
+                    "disclaimer": DISCLAIMER,
+                    "note": "两融明细 T+1 披露；拥挤度/降幅为查询时计算。",
+                },
+            }
+        )
+    except Exception as e:
+        logger.exception("get_margin_rank metric=%s", metric_n)
+        return JSONResponse(
+            {"success": False, "message": f"排行失败: {e}"}, status_code=500
+        )
+
+
+@router.get("/margin/signals")
+async def get_margin_signals_batch(
+    codes: str = Query(..., description="逗号分隔股票代码，最多 80 只"),
+    trade_date: Optional[str] = Query(None),
+    with_lhb: bool = Query(True),
+    db: Session = Depends(get_db),
+):
+    raw = [c.strip() for c in (codes or "").split(",") if c.strip()]
+    uniq: List[str] = []
+    seen = set()
+    for c in raw:
+        n = normalize_code(c)
+        if n and n not in seen:
+            seen.add(n)
+            uniq.append(n)
+        if len(uniq) >= 80:
+            break
+    if not uniq:
+        return JSONResponse(
+            {"success": False, "message": "无有效股票代码"}, status_code=400
+        )
+    if trade_date and not _DATE_RE.match(trade_date):
+        return JSONResponse(
+            {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+            status_code=400,
+        )
+    end = trade_date or datetime.now().strftime("%Y-%m-%d")
+    start_dt = datetime.strptime(end[:10], "%Y-%m-%d") - timedelta(days=60)
+    start = start_dt.strftime("%Y-%m-%d")
+    out: Dict[str, Any] = {}
+    try:
+        for code_n in uniq:
+            rows = _fetch_margin_rows(
+                db, code_n, start=start, end=end, limit=80
+            )
+            if not rows:
+                out[code_n] = {
+                    "available": False,
+                    "code": code_n,
+                    "error": "无两融数据",
+                    "disclaimer": DISCLAIMER,
+                }
+                continue
+            td = trade_date or str(rows[-1]["trade_date"])[:10]
+            float_mv, mv_src = _resolve_float_mv(db, code_n, td)
+            signal = _compute_signal(
+                rows, trade_date=td, float_mv=float_mv, float_mv_source=mv_src
+            )
+            out[code_n] = _attach_extras(db, signal, with_lhb=with_lhb)
+        return JSONResponse(
+            {
+                "success": True,
+                "count": len(out),
+                "data": out,
+                "disclaimer": DISCLAIMER,
+            }
+        )
+    except Exception as e:
+        logger.exception("get_margin_signals_batch")
+        return JSONResponse(
+            {"success": False, "message": f"批量信号失败: {e}"}, status_code=500
+        )
 
 
 @router.get("/{code}/margin")
@@ -393,6 +811,7 @@ async def get_stock_margin_signal(
     trade_date: Optional[str] = Query(
         None, description="信号日 YYYY-MM-DD，默认最近有数据的交易日"
     ),
+    with_lhb: bool = Query(True, description="是否附带同日龙虎榜机构净额旁证"),
     db: Session = Depends(get_db),
 ):
     code_n = normalize_code(code)
@@ -426,6 +845,7 @@ async def get_stock_margin_signal(
         signal = _compute_signal(
             rows, trade_date=td, float_mv=float_mv, float_mv_source=mv_src
         )
+        signal = _attach_extras(db, signal, with_lhb=with_lhb)
         return JSONResponse({"success": True, "code": code_n, "data": signal})
     except Exception as e:
         logger.exception("get_stock_margin_signal %s", code_n)

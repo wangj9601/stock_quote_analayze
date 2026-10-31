@@ -658,6 +658,41 @@ const DailyReviewPage = {
             }
             envSum.textContent = line;
         }
+        const marginSum = document.getElementById('drMarginSummary');
+        if (marginSum) {
+            const m = env.margin || {};
+            if (m.available) {
+                const yi = (v) => {
+                    if (v == null || Number.isNaN(Number(v))) return '--';
+                    return (Number(v) / 1e8).toFixed(0);
+                };
+                let ml = `两融（披露日 ${m.trade_date || '--'}）：融资余额 ${yi(m.rzye_sum)} 亿`;
+                if (m.rzye_delta != null) {
+                    const dlt = Number(m.rzye_delta) / 1e8;
+                    ml += `，较上日 ${dlt > 0 ? '+' : ''}${dlt.toFixed(0)} 亿`;
+                }
+                if (m.rz_net_sum != null) {
+                    const net = Number(m.rz_net_sum) / 1e8;
+                    ml += `；融资净买入合计 ${net > 0 ? '+' : ''}${net.toFixed(0)} 亿`;
+                }
+                ml += `（${m.stock_count || '--'} 只）。`;
+                const repay = (m.top_repay || [])
+                    .slice(0, 5)
+                    .map((r) => r.name || r.code)
+                    .filter(Boolean);
+                if (repay.length) ml += ` 净偿还靠前：${repay.join('、')}。`;
+                ml += m.disclaimer
+                    ? ` ${m.disclaimer}`
+                    : ' 旁证不能证明机构爆仓。';
+                marginSum.textContent = ml;
+                marginSum.hidden = false;
+            } else {
+                marginSum.textContent = m.error
+                    ? `两融：${m.error}`
+                    : '两融：暂无披露数据（T+1，可重算后刷新）。';
+                marginSum.hidden = false;
+            }
+        }
         const series = env.breadth_series || [];
         const seriesN = env.breadth_series_days || series.length || 10;
         const hint = document.getElementById('drBreadthHint');

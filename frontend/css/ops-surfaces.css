@@ -178,6 +178,7 @@ body.ops-map .ssa-fund-flow-metric,
 body.ops-map .ssa-auction-metric,
 body.ops-map .ssa-rs-roc,
 body.ops-map .ssa-plan-badge,
+body.ops-map .margin-risk-badge,
 body.ops-map .filter-chip,
 body.ops-map .kde-conf-hero-item,
 body.ops-map .sector-detail-item,
@@ -704,6 +705,57 @@ body.ops-map .ssa-plan-badge--rr {
     background: rgba(47, 111, 237, 0.14) !important;
     border-color: rgba(47, 111, 237, 0.4) !important;
     color: var(--ops-route) !important;
+}
+
+/*
+ * ECharts tooltip 统一深色可读：
+ * 默认白底会被 .main-content span { color: ops-ink } 盖成浅字。
+ * 全局兜底，具体图表仍应优先用 EchartsTheme.opsTooltip。
+ */
+body.ops-map .echarts-tooltip,
+body.ops-map div[class*="echarts-tooltip"] {
+    background: rgba(22, 28, 36, 0.96) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    color: #d9e2ec !important;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.35) !important;
+}
+body.ops-map .echarts-tooltip span,
+body.ops-map .echarts-tooltip div,
+body.ops-map div[class*="echarts-tooltip"] span,
+body.ops-map div[class*="echarts-tooltip"] div {
+    color: inherit;
+}
+
+/* 两融踩踏旁证徽标：压过 .main-content span 浅色字 + 浅底冲突 */
+body.ops-map .main-content .margin-risk-badge,
+body.ops-map .margin-risk-badge {
+    background: rgba(217, 226, 236, 0.1) !important;
+    border-color: rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+body.ops-map .main-content .margin-risk-none,
+body.ops-map .margin-risk-none {
+    background: rgba(217, 226, 236, 0.1) !important;
+    border-color: rgba(217, 226, 236, 0.28) !important;
+    color: var(--ops-ink) !important;
+}
+body.ops-map .main-content .margin-risk-low,
+body.ops-map .margin-risk-low {
+    background: rgba(47, 111, 237, 0.16) !important;
+    border-color: rgba(47, 111, 237, 0.42) !important;
+    color: #93c5fd !important;
+}
+body.ops-map .main-content .margin-risk-mid,
+body.ops-map .margin-risk-mid {
+    background: rgba(201, 162, 39, 0.16) !important;
+    border-color: rgba(201, 162, 39, 0.42) !important;
+    color: #fbbf24 !important;
+}
+body.ops-map .main-content .margin-risk-high,
+body.ops-map .margin-risk-high {
+    background: rgba(194, 59, 59, 0.18) !important;
+    border-color: rgba(194, 59, 59, 0.45) !important;
+    color: var(--color-rise) !important;
 }
 
 body.ops-map .ssa-plan-conflicts {

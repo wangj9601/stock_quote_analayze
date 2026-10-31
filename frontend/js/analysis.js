@@ -13,6 +13,8 @@ const AnalysisPage = {
         ],
         'stock-ai': [
             'js/echarts.min.js',
+            'js/echarts_theme.js?v=20261030-theme',
+            'js/margin_ui.js?v=20261030-margin3',
             'js/kde_levels_tool.js?v=20261015-idxlv',
             'js/pattern_tool.js?v=20260921d',
             'js/market_structure_tool.js?v=20260930-smcfold',
@@ -21,7 +23,7 @@ const AnalysisPage = {
             'js/page_scroll_fab.js',
             'js/stock_analysis_pdf.js?v=20260929-rr',
             'js/stock_analysis_png.js',
-            'js/stock_multi_strategy.js?v=20261023-flowtip',
+            'js/stock_multi_strategy.js?v=20261030-margin3',
         ],
         'index-ai': [
             'js/kde_levels_tool.js?v=20261015-idxlv',
@@ -37,18 +39,21 @@ const AnalysisPage = {
             'js/rs_rating_analysis.js?v=20261007-rsa',
         ],
         'trade-observe': [
-            'js/trade_observe.js?v=20261007-csb',
+            'js/margin_ui.js?v=20261030-margin2',
+            'js/trade_observe.js?v=20261030-margin',
         ],
         recommend: [
             'js/recommend.js?v=20260930-rv',
         ],
         'market-analysis': [
             'js/echarts.min.js',
-            'js/market_analysis.js?v=20260925a',
+            'js/echarts_theme.js?v=20261030-theme',
+            'js/margin_ui.js?v=20261030-margin3',
+            'js/market_analysis.js?v=20261030-margin',
         ],
         'market-review': [
             'js/page_scroll_fab.js',
-            'js/daily_review.js?v=20261009-sector-fold',
+            'js/daily_review.js?v=20261030-margin',
             'js/period_review.js?v=20260930-rv',
         ],
         'technical-tools': [

@@ -274,6 +274,7 @@ NODE_DEFS: List[CollectionNodeDef] = [
         param_schema=_TRADE_DATE_SCHEMA,
         description=(
             "pro.margin_detail → stock_margin_daily；失败/稀疏时 AkShare 沪深明细补洞；"
+            "未指定 trade_date 时默认上一交易日（两融 T+1 披露）；"
             "周一额外补采上周五（深市滞后）；需 TUSHARE_TOKEN（约 2000 积分）；旁证非实锤"
         ),
     ),

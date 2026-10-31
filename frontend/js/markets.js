@@ -63,6 +63,7 @@ const MarketsPage = {
         this.loadMarketIndices(); // 加载真实指数数据
         this.loadIndexCharts();
         this.loadRankingData();
+        this.loadMarginKpi();
 
         // 确保自选股管理器已初始化 (管理器内部已有单例保护)
         await watchlistManager.init();
@@ -369,6 +370,66 @@ const MarketsPage = {
     },
 
     // 更新指数显示
+    async loadMarginKpi() {
+        const balEl = document.getElementById('kpiMarginBalance');
+        const deltaEl = document.getElementById('kpiMarginDelta');
+        const netEl = document.getElementById('kpiMarginNet');
+        const dateEl = document.getElementById('kpiMarginDate');
+        const statsBal = document.getElementById('statsMarginBalance');
+        const statsNet = document.getElementById('statsMarginNet');
+        if (!balEl && !statsBal) return;
+        try {
+            if (typeof MarginUI === 'undefined') {
+                if (balEl) balEl.textContent = '组件未加载';
+                return;
+            }
+            const res = await MarginUI.loadMarketSummary(API_BASE_URL);
+            const data = (res.payload && res.payload.data) || {};
+            if (!res.ok || !res.payload.success || !data.available) {
+                if (balEl) balEl.textContent = '暂无数据';
+                if (deltaEl) deltaEl.textContent = '--';
+                if (netEl) netEl.textContent = '净买入 --';
+                return;
+            }
+            const yi = (v) => {
+                if (v == null || Number.isNaN(Number(v))) return '--';
+                return `${(Number(v) / 1e8).toFixed(0)}亿`;
+            };
+            const signedYi = (v) => {
+                if (v == null || Number.isNaN(Number(v))) return '--';
+                const n = Number(v) / 1e8;
+                return `${n > 0 ? '+' : ''}${n.toFixed(0)}亿`;
+            };
+            if (dateEl) dateEl.textContent = data.trade_date || 'T+1';
+            if (balEl) balEl.textContent = yi(data.rzye_sum);
+            if (deltaEl) {
+                deltaEl.textContent = `较上日 ${signedYi(data.rzye_delta)}`;
+                deltaEl.className =
+                    'change-value ' +
+                    (data.rzye_delta == null
+                        ? ''
+                        : Number(data.rzye_delta) >= 0
+                          ? 'positive'
+                          : 'negative');
+            }
+            if (netEl) netEl.textContent = `净买入 ${signedYi(data.rz_net_sum)}`;
+            if (statsBal) statsBal.textContent = yi(data.rzye_sum);
+            if (statsNet) {
+                statsNet.textContent = signedYi(data.rz_net_sum);
+                statsNet.className =
+                    'stat-value ' +
+                    (data.rz_net_sum == null
+                        ? ''
+                        : Number(data.rz_net_sum) >= 0
+                          ? 'positive'
+                          : 'negative');
+            }
+        } catch (e) {
+            console.warn('两融 KPI 加载失败', e);
+            if (balEl) balEl.textContent = '加载失败';
+        }
+    },
+
     updateIndexDisplay(indicesData) {
         indicesData.forEach(function (index) {
             const card = document.querySelector('[data-index-code="' + index.code + '"]');
