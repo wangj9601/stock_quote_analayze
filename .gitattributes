@@ -1,2 +1,9 @@
 *.db filter=lfs diff=lfs merge=lfs -text
 *.zip filter=lfs diff=lfs merge=lfs -text
+
+# Linux 部署脚本必须 LF；CRLF 会导致 bash「set: pipefail: invalid option name」
+scripts/deploy/linux/**/*.sh text eol=lf
+scripts/deploy/linux/**/*.conf text eol=lf
+scripts/deploy/linux/**/*.service text eol=lf
+scripts/deploy/linux/**/.env*.example text eol=lf
+*.sh text eol=lf

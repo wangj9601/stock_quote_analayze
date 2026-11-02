@@ -11,10 +11,12 @@ try:
 except ImportError:
     load_dotenv = None  # 生产环境可无 python-dotenv
 
-# 加载项目根目录 .env（有 python-dotenv 时）；生产环境无则使用系统环境变量
+# 加载项目根目录 .env（有 python-dotenv 时）；生产环境无则使用系统环境变量。
+# override=False：不覆盖已有环境变量（systemd EnvironmentFile / shared/.env 优先），
+# 避免 release 内误带的开发机 .env（如端口 5446）冲掉生产配置。
 _project_root = Path(__file__).resolve().parent.parent
 if load_dotenv is not None:
-    load_dotenv(_project_root / ".env", override=True)
+    load_dotenv(_project_root / ".env", override=False)
 
 
 def _env(key: str, default: str = "") -> str:

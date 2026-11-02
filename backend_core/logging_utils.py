@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 日志工具：是否写文件的开关由 .env 的 LOG_TO_FILE 控制；
-所有业务日志文件统一写入项目根目录 logs/。
+默认写项目根 logs/；生产可设 LOGS_DIR=/opt/stock_quote/shared/logs（跨 release 保留）。
 """
 from __future__ import annotations
 
@@ -22,9 +22,19 @@ def should_log_to_file() -> bool:
 
 
 def get_logs_dir() -> Path:
-    """返回项目根目录下的 logs/，不存在则创建。"""
-    LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    return LOGS_DIR
+    """返回日志目录（LOGS_DIR 环境变量优先），不存在则创建。"""
+    override = (os.getenv("LOGS_DIR") or "").strip()
+    target = Path(override).expanduser() if override else LOGS_DIR
+    try:
+        target.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        # release 目录偶发属主不对时，退回 shared/logs（若在标准部署树下）
+        shared = PROJECT_ROOT.parent / "shared" / "logs"
+        if shared != target:
+            shared.mkdir(parents=True, exist_ok=True)
+            return shared
+        raise
+    return target
 
 
 def resolve_log_file(filename: str) -> Path:

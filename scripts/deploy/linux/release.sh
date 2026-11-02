@@ -41,7 +41,19 @@ fi
 
 echo "[release] 解压 → $RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
+# Windows Compress-Archive 打的 zip 常带反斜杠路径；Info-ZIP 会告警并以 exit 1 结束。
+# set -e 下必须忽略「仅警告」的 1，否则解压成功也不会切 current。
+set +e
 unzip -q "$PACKAGE_PATH" -d "$RELEASE_DIR"
+unzip_rc=$?
+set -e
+if [[ "$unzip_rc" -gt 1 ]]; then
+  echo "[release] unzip 失败 exit=$unzip_rc" >&2
+  exit "$unzip_rc"
+fi
+if [[ "$unzip_rc" -eq 1 ]]; then
+  echo "[release] unzip 有警告（多为 Windows 反斜杠路径），已解压，继续"
+fi
 
 # 若 zip 顶层只有一个目录，则使用该目录作为真正 release root
 shopt -s nullglob
@@ -60,6 +72,8 @@ fi
 
 chown -R "$APP_USER:$APP_USER" "$(dirname "$RELEASE_DIR")" "$RELEASE_DIR" 2>/dev/null || \
   chown -R "$APP_USER:$APP_USER" "$DEPLOY_ROOT/releases"
+mkdir -p "$DEPLOY_ROOT/shared/logs" "$RELEASE_DIR/logs"
+chown -R "$APP_USER:$APP_USER" "$DEPLOY_ROOT/shared/logs" "$RELEASE_DIR/logs"
 
 REQ="$RELEASE_DIR/requirements-prod.txt"
 if [[ -f "$REQ" ]]; then

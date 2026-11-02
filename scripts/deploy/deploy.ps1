@@ -60,6 +60,7 @@ function Test-IsDeployExcludedArchiveFile([string]$FileName) {
 }
 
 $script:DeployZipExcludeFilePatterns = @(
+    '.env',
     '*.log',
     '*.xls', '*.xlsx', '*.xlsm', '*.xlsb', '*.xltx', '*.xltm',
     '*.ppt', '*.pptx', '*.pptm', '*.potx', '*.potm', '*.pps', '*.ppsx', '*.ppsm'
@@ -138,7 +139,9 @@ $zipExcludePart2 = 'docs', 'env', 'image', 'logs', 'manual_scripts', 'node_modul
 $zipExcludeTopLevel = $zipExcludePart1 + $zipExcludePart2
 $rootPath = $projectRoot.Path
 $zipEntries = [array](Get-ChildItem -LiteralPath $rootPath -Force | Where-Object {
-    ($zipExcludeTopLevel -notcontains $_.Name) -and (-not (Test-IsDeployExcludedArchiveFile $_.Name))
+    ($zipExcludeTopLevel -notcontains $_.Name) -and
+    ($_.Name -ne '.env') -and
+    (-not (Test-IsDeployExcludedArchiveFile $_.Name))
 })
 if ($zipEntries.Count -eq 0) {
     throw "Nothing to archive (all top-level entries excluded?)."
@@ -174,7 +177,27 @@ try {
     if ($itemsToZip.Count -eq 0) {
         throw "Staging folder is empty."
     }
-    Compress-Archive -Path ($itemsToZip.FullName) -DestinationPath $localPackage -Force
+    # 不用 Compress-Archive：其条目多为反斜杠，Linux unzip 会 exit 1，release.sh 在 set -e 下会中断。
+    # 用 ZipFile + 正斜杠 entry，便于 Ubuntu/CentOS 直接 unzip。
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    if (Test-Path -LiteralPath $localPackage) {
+        Remove-Item -LiteralPath $localPackage -Force
+    }
+    $zip = [System.IO.Compression.ZipFile]::Open($localPackage, [System.IO.Compression.ZipArchiveMode]::Create)
+    try {
+        $stagingFull = (Resolve-Path -LiteralPath $stagingRoot).Path
+        Get-ChildItem -LiteralPath $stagingRoot -Recurse -File -Force | ForEach-Object {
+            $full = $_.FullName
+            $rel = $full.Substring($stagingFull.Length).TrimStart('\', '/')
+            $entryName = ($rel -replace '\\', '/')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip, $full, $entryName, [System.IO.Compression.CompressionLevel]::Optimal)
+        }
+    }
+    finally {
+        $zip.Dispose()
+    }
 }
 finally {
     if (Test-Path -LiteralPath $stagingRoot) {

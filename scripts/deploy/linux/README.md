@@ -11,7 +11,8 @@
 | `bootstrap_ubuntu.sh` | apt 包、Python 3.12、用户、目录、venv、阿里云 pip 镜像 |
 | `init_postgres_ubuntu.sh` | 本机库、密码、`pg_hba` 只允许 127.0.0.1 |
 | `install_units_ubuntu.sh` | 五个 systemd 服务，API / 用户站只听 127.0.0.1 |
-| `nginx.ubuntu.conf` | 站点配置，证书目录 `/etc/nginx/ssl/` |
+| `nginx.ubuntu.conf` | 站点配置；默认 Let's Encrypt 路径 `/etc/letsencrypt/live/www.xworld-wangxw.top/` |
+| `setup_letsencrypt_ubuntu.sh` | certbot webroot 申请 + `certbot.timer` 自动续期 + reload hook |
 | `.env.ubuntu.example` | 生产环境变量模板 |
 
 `release.sh`、`backup_postgres.sh`、`rehearsal_check.sh` 与 CentOS 共用。

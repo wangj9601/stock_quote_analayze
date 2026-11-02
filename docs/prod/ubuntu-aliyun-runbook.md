@@ -27,7 +27,7 @@
 | 80 | 0.0.0.0/0 | HTTP 与证书校验 |
 | 443 | 0.0.0.0/0 | HTTPS |
 
-不要对公网开放 5000、8000、8001、5432。出方向保持默认，以便访问 PyPI 镜像、行情源、企业微信和 SMTP。
+不要对公网开放 5000、8000、8002（本系统 admin）、5432。出方向保持默认，以便访问 PyPI 镜像、行情源、企业微信和 SMTP。同机 DeepTutor 若必须对公网提供 8001，由其自己的安全组/反代策略管理，与本系统隔离。
 
 4. SSH 使用密钥登录。不要在安全组里对 `0.0.0.0/0` 开放 22。
 
@@ -36,10 +36,12 @@
 ```
 浏览器 → Nginx :80/:443
   /        → 127.0.0.1:8000  (frontend)
-  /admin/  → 127.0.0.1:8001  (admin/dist)
+  /admin/  → 127.0.0.1:8002  (admin/dist；Ubuntu 默认，避开同机 DeepTutor 的 8001)
   /api/    → 127.0.0.1:5000  (backend_api)
   backend_core / start_scheduler → PostgreSQL（只听 localhost）
 ```
+
+同机已部署 **DeepTutor**（`0.0.0.0:8001`）时：不要抢 8001。本系统管理端用 **`ADMIN_PORT=8002`**，与 `nginx.ubuntu.conf` 中 `admin_server` 一致。DeepTutor 继续原端口；本系统只经 Nginx 的 `/admin/` 对外。
 
 ```
 /opt/stock_quote/
@@ -115,21 +117,104 @@ sudo DB_PASSWORD='换成强密码' bash /tmp/stock_quote_boot/scripts/deploy/lin
 
 脚本会：给 `postgres` 设密码、创建 `stock_analysis`（已存在则跳过）、确认 `pg_hba.conf` 允许 `127.0.0.1/32` 密码登录、检查 `listen_addresses` 仍是 localhost。
 
-从旧机迁库时，在停写后：
+### 4.1 推荐：轻量迁库（新机可重采行情）
+
+本地/旧库往往大部分体积在日 K、资金流、指标与策略轨迹上。**新机可以重新采集行情时，不要做全量 dump。**  
+`--exclude-table-data` 仍会创建这些表的结构，只是不带行数据；用户、策略、观察、权限、自选等业务表照常迁出。
+
+**保留（会进 dump）：** `users` / `admins`、角色权限、策略配置、交易观察与正式交易、自选股、股票/板块基本信息与成分、推送与邮件配置、交易日历等。
+
+**排除数据（新机重采或重算）：** 个股/指数/板块/基金历史行情与实时快照、个股与板块资金流、复权因子、财务与技术指标、策略 `*_signal_trace` / RS / 复盘简报、公告新闻、系统监控类大表等。
+
+**Windows 本机（开发库常见端口 5446）**可直接跑仓库根目录脚本（密码用环境变量，勿写入 bat）：
+
+```bat
+set PGPASSWORD=你的密码
+pg_dump_light.bat
+rem 或: scripts\deploy\pg_dump_light.bat -Port 5446 -OutDir dist\db_dumps
+```
+
+产物默认：`dist\db_dumps\stock_analysis_light_YYYYMMDD_HHMMSS.dump`。
+
+**Linux / 旧机 bash**（按实际改主机与端口；先 `export PGPASSWORD=...`）：
+
+```bash
+# 仅排除「表已存在」的 --exclude-table-data，避免旧库缺表时报错
+EXCLUDE_TABLES=(
+  # 行情 / 实时
+  historical_quotes historical_quotes_hk
+  index_historical_quotes industry_board_historical_quotes concept_board_historical_quotes
+  hk_index_historical_quotes fund_historical_quotes quote_data
+  stock_realtime_quote stock_realtime_quote_hk
+  index_realtime_quotes industry_board_realtime_quotes hk_index_realtime_quotes fund_realtime_quote
+  # 资金流 / 两融
+  stock_fund_flow_daily stock_fund_flow_daily_hk stock_fund_flow_em_daily
+  board_fund_flow_daily stock_margin_daily
+  # 复权 / 财务 / 指标
+  stock_adj_factor stock_fina_indicator
+  macd_indicators kdj_indicators rsi_indicators ma_indicators boll_indicators
+  mavol_indicators icost_indicators mean_frequency_resonance_indicators
+  industry_board_daily_metrics concept_board_daily_metrics
+  # 预计算 / 轨迹 / 复盘
+  rs_ratings rs_ratings_hk
+  gms_signal_trace urt_signal_trace csb_signal_trace sbbr_signal_trace rpe_signal_trace
+  stock_zt_pool_daily market_daily_review market_daily_mainline_hits stock_recommend_brief
+  one_yang_three_lines_signals volume_shrink_breakout_signals
+  # 公告新闻 / 监控（可重建）
+  stock_notice_report stock_news stock_research_reports
+  system_monitor_metrics system_alerts system_performance_reports push_records email_send_logs
+)
+
+DUMP_ARGS=(-h 127.0.0.1 -p 5432 -U postgres -Fc -f stock_analysis_light_YYYYMMDD.dump)
+for t in "${EXCLUDE_TABLES[@]}"; do
+  if psql -h 127.0.0.1 -p 5432 -U postgres -d stock_analysis -Atc \
+    "SELECT 1 FROM pg_tables WHERE schemaname='public' AND tablename='${t}'" | grep -q 1; then
+    DUMP_ARGS+=(--exclude-table-data="$t")
+  fi
+done
+pg_dump "${DUMP_ARGS[@]}" stock_analysis
+```
+
+上传到 ECS 的 `/opt/stock_quote/shared/backups/` 后。`sudo -u postgres` 必须以 **postgres 可读** 的路径打开文件；`shared/backups` 默认属主是 `stockquote`，root 上传的文件常导致 `Permission denied`。恢复前先改权限（或拷到 `/tmp`）：
+
+```bash
+# 须先有空库（未跑过 init 时先执行本节开头的 init_postgres_ubuntu.sh，或：）
+sudo -u postgres psql -c "SELECT 1 FROM pg_database WHERE datname='stock_analysis';" | grep -q 1 \
+  || sudo -u postgres createdb -O postgres stock_analysis
+
+DUMP=/opt/stock_quote/shared/backups/stock_analysis_light_YYYYMMDD.dump
+sudo chmod a+rX /opt/stock_quote/shared /opt/stock_quote/shared/backups
+sudo chmod a+r "$DUMP"
+# 若仍被拒：sudo cp "$DUMP" /tmp/ && DUMP=/tmp/$(basename "$DUMP") && sudo chmod a+r "$DUMP"
+
+sudo -u postgres pg_restore -d stock_analysis --no-owner --role=postgres "$DUMP"
+sudo -u postgres psql -d stock_analysis -c "SELECT COUNT(*) FROM users;"
+sudo -u postgres psql -d stock_analysis -c "SELECT COUNT(*) FROM historical_quotes;"   # 期望 0
+```
+
+轻量 dump 已含最终 schema 时，不要把 `migrations/*.py` 全部重跑。恢复后填好 `.env`（尤其 `TUSHARE_TOKEN`），启动五个服务，由 `backend_core` 按调度或管理端手工回补行情；**不必等全市场全历史齐了再做 DNS 切换**，先确认登录、策略配置、观察股与当日采集正常即可。
+
+备选：空库 + 管理端「环境数据同步」只 Push **策略 + 观察 + 权限**（可选基本信息/板块），**不要**勾行情/资金流/预计算。目标端须先有对应用户（同步会跳过目标不存在的用户）。
+
+### 4.2 备选：全量 dump（必须带齐历史、新机不重采）
+
+旧机停写后：
 
 ```bash
 pg_dump -h <旧机> -p <端口> -U postgres -Fc -f stock_analysis_YYYYMMDD.dump stock_analysis
 ```
 
-上传到 `/opt/stock_quote/shared/backups/` 后：
+上传到 `/opt/stock_quote/shared/backups/` 后（同样先保证 postgres 可读，见 §4.1）：
 
 ```bash
-sudo -u postgres pg_restore -d stock_analysis --no-owner --role=postgres \
-  /opt/stock_quote/shared/backups/stock_analysis_YYYYMMDD.dump
+DUMP=/opt/stock_quote/shared/backups/stock_analysis_YYYYMMDD.dump
+sudo chmod a+rX /opt/stock_quote/shared /opt/stock_quote/shared/backups
+sudo chmod a+r "$DUMP"
+sudo -u postgres pg_restore -d stock_analysis --no-owner --role=postgres "$DUMP"
 sudo -u postgres psql -d stock_analysis -c "SELECT COUNT(*) FROM users;"
 ```
 
-全量 dump 已含最终 schema 时，不要把 `migrations/*.py` 全部重跑。
+全量 dump 已含最终 schema 时，同样不要把 `migrations/*.py` 全部重跑。库很大时优先用并行目录格式（`-Fd -j N`）或 SSH 管道直灌，见运维讨论；日常手册默认仍用 `-Fc` 单文件。
 
 ## 5. 填写 `.env`
 
@@ -137,10 +222,19 @@ sudo -u postgres psql -d stock_analysis -c "SELECT COUNT(*) FROM users;"
 
 至少改这几项：
 
-- `DATABASE_URL` 里的密码与 `init_postgres_ubuntu.sh` 的 `DB_PASSWORD` 一致
+- `DATABASE_URL` 里的密码与 `init_postgres_ubuntu.sh` 的 `DB_PASSWORD` 一致；主机端口用 **`127.0.0.1:5432`**（不要用开发机 `5446`）
 - `JWT_SECRET_KEY`
 - `BIND_HOST=127.0.0.1`
+- `ADMIN_PORT=8002`（同机 DeepTutor 占 8001 时）
 - `TUSHARE_TOKEN`、邮件、企业微信（键名是 `WECHAT_CORP_ID` / `WECHAT_CORP_SECRET` / `WECHAT_AGENT_ID`）
+
+生产只认 **`/opt/stock_quote/shared/.env`**。若 `current/.env` 仍存在（旧包误打进开发机配置），会干扰排障；应删除：
+
+```bash
+sudo rm -f /opt/stock_quote/current/.env
+# 并确认无 5446：
+grep -R 5446 /opt/stock_quote/shared/.env /opt/stock_quote/current/.env 2>/dev/null || true
+```
 
 ```bash
 sudo chown stockquote:stockquote /opt/stock_quote/shared/.env
@@ -167,7 +261,32 @@ sudo bash /opt/stock_quote/current/scripts/deploy/linux/release.sh \
 
 健康检查失败时，`release.sh` 会把 `current` 指回上一版并重启。`SKIP_HEALTH=1` 不做这项检查，只用于第一次。
 
+若解压出现 `appears to use backslashes as path separators` 后脚本直接退出、且没有 `current`：旧版 `release.sh` 把 unzip 的警告码 1 当成失败。用仓库新版 `release.sh`，或对已解压目录手工切链：
+
+```bash
+RELEASE=$(ls -1dt /opt/stock_quote/releases/*/ | head -1)
+ls "$RELEASE/start_backend_api.py" "$RELEASE/requirements-prod.txt"
+sudo ln -sfn "$RELEASE" /opt/stock_quote/current
+sudo chown -h stockquote:stockquote /opt/stock_quote/current
+sudo -u stockquote /opt/stock_quote/.venv/bin/pip install -r /opt/stock_quote/current/requirements-prod.txt
+```
+
 ## 7. systemd
+
+须先完成 §6 首次发布，使 `/opt/stock_quote/current` 指向含 `scripts/deploy/linux/` 的 release。若提示 `No such file`：
+
+```bash
+ls -la /opt/stock_quote/current
+ls /opt/stock_quote/current/scripts/deploy/linux/install_units_ubuntu.sh
+```
+
+- `current` 不存在或目录里没有该脚本：先按 §6 用 `/tmp/stock_quote_boot/.../release.sh` + 发布 zip 装一版；或直接用引导包里的脚本安装单元（单元仍指向 `/opt/stock_quote/current`）：
+
+```bash
+sudo bash /tmp/stock_quote_boot/scripts/deploy/linux/install_units_ubuntu.sh
+```
+
+`current` 已就绪时：
 
 ```bash
 sudo bash /opt/stock_quote/current/scripts/deploy/linux/install_units_ubuntu.sh
@@ -182,46 +301,118 @@ sudo systemctl enable --now \
 | `stock-quote-core` | 采集常驻 |
 | `stock-quote-notify` | 推送调度 |
 | `stock-quote-frontend` | 127.0.0.1:8000 |
-| `stock-quote-admin` | 127.0.0.1:8001，`admin/dist` |
+| `stock-quote-admin` | 127.0.0.1:**8002**（`ADMIN_PORT`），`admin/dist` |
 
-确认没有对公网监听：
+确认本系统端口只听本机（DeepTutor 的 `0.0.0.0:8001` 可单独存在）：
 
 ```bash
-sudo ss -lptn | grep -E ':5000|:8000|:8001|:5432'
+sudo ss -lptn | grep -E ':5000|:8000|:8002|:5432'
 ```
 
-这四个端口的地址应是 `127.0.0.1`，不能是 `0.0.0.0`。
+`5000` / `8000` / `8002` / `5432` 应为 `127.0.0.1`，不能是 `0.0.0.0`。
 
-## 8. 证书与 Nginx
+## 8. 证书与 Nginx（Let's Encrypt + 自动续期）
 
-按实际域名修改 `nginx.ubuntu.conf` 里的 `server_name` 和证书文件名。下面沿用当前生产域名。
+当前 Ubuntu 生产域名：**`www.xworld-wangxw.top`** / **`xworld-wangxw.top`**。  
+推荐 **certbot webroot**（不改写整站反代）。证书路径（与 `nginx.ubuntu.conf` 一致）：
+
+- `/etc/letsencrypt/live/www.xworld-wangxw.top/fullchain.pem`
+- `/etc/letsencrypt/live/www.xworld-wangxw.top/privkey.pem`
+
+### 8.1 前置
+
+1. DNS：`www.xworld-wangxw.top` 与 `xworld-wangxw.top` 的 A 记录指向本机公网 IP（或先用 hosts 灰测，但 **签发时 Let's Encrypt 必须能从公网访问你的 80**）。
+2. 安全组放行 **入站 80**（HTTP-01）；443 也一并放行。
+3. 大陆地域需已完成该域名 **ICP 备案**，否则 80/443 可能被拦，申请失败。
+4. **不要**用 `certbot --nginx` 自动改配置（会弄乱与 DeepTutor 共存的站点）。用 `--webroot`。
+
+### 8.2 先只开 80（证书尚未存在时）
+
+完整 conf 含 443 且证书文件不存在时，`nginx -t` 会失败。先装「仅 HTTP + ACME」或临时注释 443 段：
 
 ```bash
-sudo install -d -m 755 /etc/nginx/ssl
-sudo install -m 644 /path/to/www.icemaplecity.com-chain.pem /etc/nginx/ssl/www.icemaplecity.com-chain.pem
-sudo install -m 600 /path/to/www.icemaplecity.com-key.pem /etc/nginx/ssl/www.icemaplecity.com-key.pem
+# 写入最小 80 站点（与正式 conf 的 ACME 路径一致）
+sudo tee /etc/nginx/conf.d/stock_quote.conf >/dev/null <<'EOF'
+server {
+    listen 80;
+    server_name www.xworld-wangxw.top xworld-wangxw.top;
+    location /.well-known/acme-challenge/ {
+        root /usr/share/nginx/html;
+        try_files $uri =404;
+    }
+    location / { return 200 'stock_quote acme ok\n'; add_header Content-Type text/plain; }
+}
+EOF
+sudo mkdir -p /usr/share/nginx/html/.well-known/acme-challenge
+sudo nginx -t && sudo systemctl reload nginx
 
+# 本机自测（应 200）：
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1/ -H 'Host: www.xworld-wangxw.top'
+```
+
+### 8.3 申请证书
+
+一键脚本（在仓库 / 已发布到 `current` 或 boot 包内）：
+
+```bash
+sudo EMAIL='你的邮箱@example.com' bash /opt/stock_quote/current/scripts/deploy/linux/setup_letsencrypt_ubuntu.sh
+# 若 current 尚无该脚本：
+# sudo EMAIL='你的邮箱@example.com' bash /tmp/stock_quote_boot/scripts/deploy/linux/setup_letsencrypt_ubuntu.sh
+```
+
+或手工等价命令：
+
+```bash
+sudo apt-get update -y && sudo apt-get install -y certbot
+sudo certbot certonly --webroot -w /usr/share/nginx/html \
+  --cert-name www.xworld-wangxw.top \
+  --agree-tos -m 你的邮箱@example.com --non-interactive \
+  -d www.xworld-wangxw.top -d xworld-wangxw.top
+```
+
+成功后应有：
+
+```bash
+sudo ls -l /etc/letsencrypt/live/www.xworld-wangxw.top/
+```
+
+### 8.4 启用完整 HTTPS 站点
+
+```bash
 sudo cp /opt/stock_quote/current/scripts/deploy/linux/nginx.ubuntu.conf \
   /etc/nginx/conf.d/stock_quote.conf
+# 若 current 仍是旧域名/旧证书路径，把本机已改好的 nginx.ubuntu.conf 上传后再 cp
 sudo nginx -t && sudo systemctl reload nginx
+curl -sSI https://www.xworld-wangxw.top/ | head
 ```
 
-证书放在 `/etc/nginx/ssl/`。Ubuntu 的 Nginx AppArmor 配置允许读 `/etc/nginx/**`。放到 `/opt/stock_quote/shared/ssl/` 时，`nginx -t` 可能通过，握手阶段在 `/var/log/nginx/error.log` 里出现 Permission denied。
+### 8.5 自动续期
 
-若 `error.log` 仍有 AppArmor 拒绝：
+`setup_letsencrypt_ubuntu.sh` 会：
+
+- 启用 **`certbot.timer`**（systemd 定时检查，到期前自动 `renew`）
+- 安装 deploy hook：`/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh`（续期成功后 `nginx -t && reload`）
+
+手工确认：
 
 ```bash
-sudo journalctl -k | grep -i apparmor | tail
+systemctl status certbot.timer --no-pager
+systemctl list-timers certbot.timer --no-pager
+sudo certbot renew --dry-run
 ```
 
-阿里云证书服务下载的 pem 按上面的文件名安装即可。使用 certbot 时用 webroot `/usr/share/nginx/html`，不要让它重写整站反代。
+`--dry-run` 通过即表示续期链路正常。无需 cron 再写一份（避免与 timer 重复）。
+
+### 8.6 备选：阿里云下载的 pem
+
+若不用 Let's Encrypt，可把全链/私钥装到 `/etc/nginx/ssl/`，并改 conf 里 `ssl_certificate*` 指向该路径。不要把私钥放在 `/opt/stock_quote/shared/ssl/`（AppArmor 可能拒绝 Nginx 读取）。
 
 ## 9. 灰测
 
 DNS 切到新 IP 之前，在运维电脑的 hosts 里把域名指到 ECS 公网 IP：
 
 ```
-<公网IP>  www.icemaplecity.com icemaplecity.com
+<公网IP>  www.xworld-wangxw.top xworld-wangxw.top
 ```
 
 在 ECS 上：
@@ -234,16 +425,18 @@ sudo bash /opt/stock_quote/current/scripts/deploy/linux/rehearsal_check.sh
 
 ## 10. 从旧生产切换
 
+默认按 **§4.1 轻量迁库**（新机重采行情）。仅当必须带全历史时改用 §4.2。
+
 | 步骤 | 动作 |
 |------|------|
-| T-1 | 第 9 节灰测通过 |
-| T0 | 旧机停写 → 最终 `pg_dump -Fc` → 新机 `pg_restore` → 核对行数 |
-| T1 | 五个服务与 nginx 已启动，再跑 `rehearsal_check.sh` |
+| T-1 | 第 9 节灰测通过；确认新机采集链路（Token、出网、core 日志）可用 |
+| T0 | 旧机停写 → 按 §4.1 打轻量 dump（或 §4.2 全量）→ 新机 `pg_restore` → 核对 `users` 等业务表行数；轻量模式下行情表可为 0 |
+| T1 | 五个服务与 nginx 已启动，再跑 `rehearsal_check.sh`；触发或等待一轮行情回补 |
 | T2 | DNS A/AAAA 指到新公网 IP |
 | T3 | 观察 30–60 分钟：`journalctl`、`/var/log/nginx/error.log`、下一采集窗口 |
 | T4 | 旧机只读观察 24–48 小时后下线。切换窗口内不要两台同时写库 |
 
-回滚：DNS 指回旧机；应用把 `current` 指回上一 `releases/*` 后 `systemctl restart` 五个服务。库回滚必须用切日前的 dump。
+回滚：DNS 指回旧机；应用把 `current` 指回上一 `releases/*` 后 `systemctl restart` 五个服务。库回滚必须用切日前的 dump（轻量或全量与切换时一致）。
 
 ## 11. 日常
 
@@ -262,3 +455,21 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 备份脚本读 `shared/.env` 的 `DATABASE_URL`，保留 14 天，可用 `RETAIN_DAYS=14` 覆盖。
+
+## 12. 排障：`set: pipefail: invalid option name`
+
+脚本若从 Windows 拷到 Linux 且带 CRLF，bash 会报类似：
+
+```text
+set: pipefail
+: invalid option name
+```
+
+在服务器上先去掉 `\r` 再执行（或改用仓库里已统一为 LF 的脚本重新上传）：
+
+```bash
+sed -i 's/\r$//' /tmp/stock_quote_boot/scripts/deploy/linux/*.sh
+sed -i 's/\r$//' /tmp/stock_quote_boot/scripts/deploy/linux/systemd/*.service
+sed -i 's/\r$//' /tmp/stock_quote_boot/scripts/deploy/linux/systemd/ubuntu/*.conf
+sed -i 's/\r$//' /tmp/stock_quote_boot/scripts/deploy/linux/*.conf /tmp/stock_quote_boot/scripts/deploy/linux/.env*.example
+```

@@ -1,5 +1,5 @@
 [Unit]
-Description=Stock Quote Admin static HTTP (port 8001)
+Description=Stock Quote Admin static HTTP (ADMIN_PORT, default 8001)
 After=network.target
 Wants=network-online.target
 
@@ -11,7 +11,9 @@ WorkingDirectory=/opt/stock_quote/current/admin/dist
 EnvironmentFile=-/opt/stock_quote/shared/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONNOUSERSITE=1
-ExecStart=/opt/stock_quote/.venv/bin/python -m http.server 8001 --bind 127.0.0.1
+Environment=ADMIN_PORT=8001
+# EnvironmentFile 中的 ADMIN_PORT 会覆盖上面的默认值（Ubuntu 与 DeepTutor 共存时用 8002）
+ExecStart=/bin/bash -c 'exec /opt/stock_quote/.venv/bin/python -m http.server "${ADMIN_PORT:-8001}" --bind 127.0.0.1'
 Restart=always
 RestartSec=5
 StandardOutput=journal

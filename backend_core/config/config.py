@@ -11,7 +11,9 @@ except ImportError:
 # 项目根目录
 ROOT_DIR = Path(__file__).parent.parent.parent
 if load_dotenv is not None:
-    load_dotenv(ROOT_DIR / ".env", override=True)
+    # 不覆盖已有环境变量：生产由 systemd EnvironmentFile(shared/.env) 注入，
+    # 若 release 里误带开发机 .env（如端口 5446），override=True 会把生产配置冲掉。
+    load_dotenv(ROOT_DIR / ".env", override=False)
 
 def _env(key: str, default: str = "") -> str:
     return (os.getenv(key) or default).strip()

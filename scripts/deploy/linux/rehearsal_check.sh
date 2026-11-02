@@ -19,8 +19,16 @@ check() {
   fi
 }
 
+ADMIN_PORT="${ADMIN_PORT:-8001}"
+if [[ -f /opt/stock_quote/shared/.env ]]; then
+  # shellcheck disable=SC1091
+  _ap="$(grep -E '^[[:space:]]*ADMIN_PORT=' /opt/stock_quote/shared/.env | tail -n1 | cut -d= -f2- | tr -d '\r' | tr -d \"\'\" )"
+  [[ -n "${_ap}" ]] && ADMIN_PORT="${_ap}"
+fi
+
 echo "=== stock_quote rehearsal ==="
 echo "时间: $(date -Is 2>/dev/null || date)"
+echo "ADMIN_PORT=${ADMIN_PORT}"
 
 check "systemd stock-quote-api active" systemctl is-active --quiet stock-quote-api
 check "systemd stock-quote-core active" systemctl is-active --quiet stock-quote-core
@@ -31,13 +39,13 @@ check "systemd nginx active" systemctl is-active --quiet nginx
 
 check "TCP 5000 (api)" bash -c 'echo >/dev/tcp/127.0.0.1/5000'
 check "TCP 8000 (frontend)" bash -c 'echo >/dev/tcp/127.0.0.1/8000'
-check "TCP 8001 (admin)" bash -c 'echo >/dev/tcp/127.0.0.1/8001'
+check "TCP ${ADMIN_PORT} (admin)" bash -c "echo >/dev/tcp/127.0.0.1/${ADMIN_PORT}"
 check "TCP 5432 (postgres，若本机库)" bash -c 'echo >/dev/tcp/127.0.0.1/5432' || true
 
 if command -v curl >/dev/null 2>&1; then
   check "HTTP /health via nginx :80" curl -fsS --max-time 5 http://127.0.0.1/health
   check "HTTP frontend :8000/" curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8000/
-  check "HTTP admin :8001/" curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:8001/
+  check "HTTP admin :${ADMIN_PORT}/" curl -fsS --max-time 5 -o /dev/null "http://127.0.0.1:${ADMIN_PORT}/"
 fi
 
 if [[ -f /opt/stock_quote/shared/.env ]]; then
@@ -64,9 +72,9 @@ fi
 
 echo
 echo "=== 人工灰测清单（hosts 指新机后）==="
-echo " [ ] https://www.icemaplecity.com/ 登录"
+echo " [ ] https://www.xworld-wangxw.top/ 登录"
 echo " [ ] 选股 / GMS 长请求无 502"
-echo " [ ] https://www.icemaplecity.com/admin/ 登录"
+echo " [ ] https://www.xworld-wangxw.top/admin/ 登录"
 echo " [ ] journalctl -u stock-quote-core -n 50"
 echo " [ ] 最终 pg_restore 后关键表行数核对"
 echo
