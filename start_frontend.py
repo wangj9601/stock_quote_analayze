@@ -147,14 +147,21 @@ class FrontendThreadingHTTPServer(_QuietClientDisconnectServer, ThreadingHTTPSer
     pass
 
 
-def check_port(port):
+def _listen_host() -> str:
+    """未设置 BIND_HOST 时仍听 0.0.0.0，避免改变现有 Windows / CentOS 行为。"""
+    host = (os.getenv("BIND_HOST") or "").strip()
+    return host or "0.0.0.0"
+
+
+def check_port(port, host=None):
     """检查端口是否可用（Windows兼容版本）"""
+    host = host or _listen_host()
     try:
         # 创建一个socket并尝试绑定端口
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            # 尝试绑定到端口
-            sock.bind(("0.0.0.0", port))
+            # 尝试绑定到即将监听的地址
+            sock.bind((host, port))
             # 如果绑定成功，说明端口可用
             return True
     except OSError:
@@ -165,26 +172,29 @@ def check_port(port):
         return False
 
 
-def find_available_port(start_port=8000, max_attempts=100):
+def find_available_port(start_port=8000, max_attempts=100, host=None):
     """查找可用端口"""
+    host = host or _listen_host()
     port = start_port
     attempts = 0
     while attempts < max_attempts:
-        if check_port(port):
+        if check_port(port, host):
             return port
         port += 1
         attempts += 1
     return None
 
 
-def start_server(port):
+def start_server(port, host=None):
     _reconfigure_stdio_utf8()
+    host = host or _listen_host()
     try:
         # 始终使用多线程：analysis 等页会并发拉取大量 JS/CSS；
         # 单线程 HTTPServer 在 Windows 上 listen backlog 满时会出现 net::ERR_CONNECTION_REFUSED。
         server_cls = FrontendThreadingHTTPServer
-        with server_cls(("0.0.0.0", port), CustomHTTPRequestHandler) as httpd:
+        with server_cls((host, port), CustomHTTPRequestHandler) as httpd:
             _print_safe("[OK] frontend HTTP server started")
+            _print_safe(f"[OK] listen: http://{host}:{port}")
             _print_safe(f"[OK] URL: http://localhost:{port}")
             _print_safe(f"[OK] login: http://localhost:{port}/login.html")
             _print_safe(f"[OK] index: http://localhost:{port}/index.html")
@@ -246,7 +256,7 @@ def _resolve_listen_port() -> int:
         _print_safe("[ERROR] free 8000, or set FRONTEND_PORT / ALLOW_FRONTEND_PORT_FALLBACK=1")
         sys.exit(1)
 
-    port = find_available_port(8001)
+    port = find_available_port(8001, host=_listen_host())
     if not port:
         _print_safe("[ERROR] no free port found from 8001")
         sys.exit(1)
@@ -264,8 +274,10 @@ def main():
     load_dotenv_file(str(project_root / ".env"))
     # 生产常见：DeployRoot\shared\.env（current 的上一级）
     load_dotenv_file(str(project_root.parent / "shared" / ".env"))
+    host = _listen_host()
+    _print_safe(f"[OK] listen host: {host}")
     port = _resolve_listen_port()
-    start_server(port)
+    start_server(port, host)
 
 if __name__ == "__main__":
     main() 

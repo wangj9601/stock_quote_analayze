@@ -41,6 +41,12 @@ def _is_production_env(env: dict) -> bool:
     return v in ("prod", "production", "release")
 
 
+def _listen_host(env: dict) -> str:
+    """未设置 BIND_HOST 时仍听 0.0.0.0，避免改变现有 Windows / CentOS 行为。"""
+    host = (env.get("BIND_HOST") or "").strip()
+    return host or "0.0.0.0"
+
+
 # Ensure PYTHONPATH includes root and backend_api
 env = os.environ.copy()
 _load_dotenv_into_env(env, os.path.join(root_dir, ".env"))
@@ -62,8 +68,9 @@ if __name__ == "__main__":
     workers = int(env.get("UVICORN_WORKERS") or env.get("BACKEND_WORKERS") or (os.cpu_count() or 2))
     if workers < 1:
         workers = 1
+    listen_host = _listen_host(env)
     print(f"[ENV] 运行环境: {'production(多worker)' if is_prod else 'development(--reload)'}")
-    print(f"[ENV] 端口: {port}")
+    print(f"[ENV] 监听: {listen_host}:{port}")
 
     # Use -m uvicorn to avoid import issues and let uvicorn handle reloading properly
     if sys.platform == "win32":
@@ -93,7 +100,7 @@ if __name__ == "__main__":
             import uvicorn
             uvicorn.run(
                 "backend_api.main:app",
-                host="0.0.0.0",
+                host=listen_host,
                 port=int(port),
                 reload=True,
                 reload_dirs=_reload_dirs,
@@ -106,7 +113,7 @@ if __name__ == "__main__":
             print(f"[ERROR] Failed to start service: {e}")
     else:
         cmd = [sys.executable, "-m", "uvicorn", "backend_api.main:app",
-               "--host", "0.0.0.0", "--port", port]
+               "--host", listen_host, "--port", port]
         if log_config:
             cmd += ["--log-config", log_config]
         # 生产环境用多 worker 提升并发；注意 workers>1 为多进程（uvicorn 机制）

@@ -1,7 +1,8 @@
 # CentOS 生产环境迁移手册
 
 > 目标：从现有 **Windows** 生产迁到 **CentOS**（含 Rocky/Alma）。  
-> Windows 侧 NSSM / `scripts/deploy/*.ps1` **仅作旧生产与开发机构建包**；新机主路径为本文 + `scripts/deploy/linux/`。
+> Windows 侧 NSSM / `scripts/deploy/*.ps1` **仅作旧生产与开发机构建包**；新机主路径为本文 + `scripts/deploy/linux/`。  
+> **Ubuntu 26.04 公网阿里云不要执行本文的 `dnf` / `firewalld` 步骤**，改用 [ubuntu-aliyun-runbook.md](ubuntu-aliyun-runbook.md)。
 
 相关文件：
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# CentOS：发布 zip 到 /opt/stock_quote，切换 current，重启服务，健康检查失败则回滚 symlink。
+# CentOS 与 Ubuntu 共用：发布 zip 到 /opt/stock_quote，切换 current，重启服务，健康检查失败则回滚 symlink。
 # 用法：sudo bash release.sh /path/to/stock_quote_release_xxx.zip [DEPLOY_ROOT]
+# 首次发布、服务尚未启动时：sudo SKIP_HEALTH=1 bash release.sh <zip>
 set -euo pipefail
 
 PACKAGE_PATH="${1:-}"
@@ -23,7 +24,7 @@ if [[ -z "$PACKAGE_PATH" || ! -f "$PACKAGE_PATH" ]]; then
 fi
 
 if [[ ! -x "$VENV_PY" ]]; then
-  echo "缺少 venv：$VENV_PY ，请先运行 bootstrap_centos.sh" >&2
+  echo "缺少 venv：$VENV_PY ，请先运行 bootstrap_centos.sh 或 bootstrap_ubuntu.sh" >&2
   exit 1
 fi
 
@@ -89,9 +90,11 @@ if command -v nginx >/dev/null 2>&1; then
   fi
 fi
 
-sleep 3
 ok=1
-if command -v curl >/dev/null 2>&1; then
+if [[ "${SKIP_HEALTH:-}" == "1" ]]; then
+  echo "[release] SKIP_HEALTH=1，跳过健康检查"
+elif command -v curl >/dev/null 2>&1; then
+  sleep 3
   if curl -fsS --max-time 10 "$HEALTH_URL" >/dev/null 2>&1; then
     echo "[release] OK health: $HEALTH_URL"
   else

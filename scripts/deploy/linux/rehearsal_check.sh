@@ -19,7 +19,7 @@ check() {
   fi
 }
 
-echo "=== stock_quote CentOS rehearsal ==="
+echo "=== stock_quote rehearsal ==="
 echo "时间: $(date -Is 2>/dev/null || date)"
 
 check "systemd stock-quote-api active" systemctl is-active --quiet stock-quote-api
