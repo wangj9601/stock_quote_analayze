@@ -473,7 +473,9 @@ sudo bash /opt/stock_quote/current/scripts/deploy/linux/rehearsal_check.sh
 
 ```bash
 # 发布
-sudo bash /opt/stock_quote/current/scripts/deploy/linux/release.sh /path/to/pkg.zip
+# 可显式指定 zip；也可省略参数，自动取 /tmp 下最新 stock_quote_release_*.zip
+sudo bash /opt/stock_quote/current/scripts/deploy/linux/release.sh
+# 或：sudo bash .../release.sh /tmp/stock_quote_release_xxx.zip
 
 # 备份（可放进 cron，每天 02:30）
 sudo -u stockquote bash /opt/stock_quote/current/scripts/deploy/linux/backup_postgres.sh
