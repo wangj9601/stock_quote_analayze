@@ -10,7 +10,8 @@
       <p class="hint">
         本地发起 Pull（从生产拉取并写入本地）或 Push（导出本地写入生产）。生产端维护 Sync Key 并校验；
         管理端只调本地包装接口，Key 不由浏览器直连生产。行情、资金流与预计算/复盘数据量大，勾选后必须指定日期范围；
-        同步策略信号前建议先同步对应策略配置。
+        同步策略信号前建议先同步对应策略配置。大体量请用「异步 Pull / 异步 Push」（落盘分片，避免 Nginx 502）；
+        原同步按钮仍保留给小数据。
       </p>
     </el-card>
 
@@ -151,6 +152,29 @@
         <el-form-item>
           <el-button type="success" :loading="pulling" @click="confirmPull">从生产 Pull</el-button>
           <el-button type="danger" :loading="pushing" @click="confirmPush">Push 到生产</el-button>
+          <el-button type="success" plain :loading="asyncPulling" @click="confirmAsyncPull">
+            异步 Pull
+          </el-button>
+          <el-button type="danger" plain :loading="asyncPushing" @click="confirmAsyncPush">
+            异步 Push
+          </el-button>
+        </el-form-item>
+        <el-form-item v-if="jobProgressText">
+          <el-alert
+            :type="jobAlertType"
+            :closable="false"
+            show-icon
+            :title="jobProgressTitle"
+            :description="jobProgressText"
+          />
+          <el-button
+            v-if="activeJobId && jobRunning"
+            class="mt-2"
+            size="small"
+            @click="cancelActiveJob"
+          >
+            取消任务
+          </el-button>
         </el-form-item>
       </el-form>
       <el-alert
@@ -167,7 +191,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { envSyncApi } from '@/services/envSyncApi'
 
@@ -194,6 +218,81 @@ const rotating = ref(false)
 const testing = ref(false)
 const pulling = ref(false)
 const pushing = ref(false)
+const asyncPulling = ref(false)
+const asyncPushing = ref(false)
+const activeJobId = ref('')
+const jobProgressTitle = ref('')
+const jobProgressText = ref('')
+const jobAlertType = ref<'info' | 'success' | 'warning' | 'error'>('info')
+const jobRunning = ref(false)
+let jobPollTimer: ReturnType<typeof setInterval> | null = null
+
+function stopJobPoll() {
+  if (jobPollTimer) {
+    clearInterval(jobPollTimer)
+    jobPollTimer = null
+  }
+  jobRunning.value = false
+  asyncPulling.value = false
+  asyncPushing.value = false
+}
+
+async function pollJobOnce(jobId: string) {
+  const j = await envSyncApi.getJob(jobId)
+  const pct = typeof j.progress === 'number' ? j.progress : 0
+  jobProgressTitle.value = `任务 ${j.job_id.slice(0, 8)}… ${j.status} ${pct}%`
+  jobProgressText.value = [
+    `方向: ${j.direction}`,
+    j.stage ? `阶段: ${j.stage}` : '',
+    j.message || '',
+    j.error_message ? `错误: ${j.error_message}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+  if (j.status === 'succeeded') {
+    jobAlertType.value = 'success'
+    stopJobPoll()
+    lastOk.value = true
+    lastResultText.value = jobProgressText.value
+    ElMessage.success('异步任务完成')
+  } else if (j.status === 'failed') {
+    jobAlertType.value = 'error'
+    stopJobPoll()
+    lastOk.value = false
+    lastResultText.value = j.error_message || jobProgressText.value
+    ElMessage.error(j.error_message || '异步任务失败')
+  } else {
+    jobAlertType.value = 'info'
+    jobRunning.value = true
+  }
+}
+
+function startJobPoll(jobId: string) {
+  stopJobPoll()
+  activeJobId.value = jobId
+  jobRunning.value = true
+  jobAlertType.value = 'info'
+  jobProgressTitle.value = `任务已创建 ${jobId.slice(0, 8)}…`
+  jobProgressText.value = '等待进度…'
+  void pollJobOnce(jobId)
+  jobPollTimer = setInterval(() => {
+    void pollJobOnce(jobId).catch((e: any) => {
+      jobAlertType.value = 'error'
+      jobProgressText.value = e.message || '轮询失败'
+      stopJobPoll()
+    })
+  }, 2000)
+}
+
+async function cancelActiveJob() {
+  if (!activeJobId.value) return
+  try {
+    await envSyncApi.cancelJob(activeJobId.value)
+    ElMessage.success('已请求取消')
+  } catch (e: any) {
+    ElMessage.error(e.message || '取消失败')
+  }
+}
 const rotatedKey = ref('')
 const lastOk = ref(true)
 const lastResultText = ref('')
@@ -512,7 +611,66 @@ async function confirmPush() {
   }
 }
 
+async function confirmAsyncPull() {
+  if (!selectedModules.value.length) {
+    ElMessage.warning('请至少选择一个模块')
+    return
+  }
+  if (!assertDateRange()) return
+  try {
+    await ElMessageBox.confirm(
+      '将创建异步 Pull：生产端落盘分片后本机下载导入。大体量行情请优先用此方式。是否继续？',
+      '异步 Pull',
+      { type: 'warning', confirmButtonText: '开始', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  asyncPulling.value = true
+  try {
+    const res = await envSyncApi.createAsyncPull(selectedModules.value, datePayload())
+    startJobPoll(res.job_id)
+    ElMessage.success('异步 Pull 已启动')
+  } catch (e: any) {
+    asyncPulling.value = false
+    ElMessage.error(e.message || '创建异步 Pull 失败')
+  }
+}
+
+async function confirmAsyncPush() {
+  if (!selectedModules.value.length) {
+    ElMessage.warning('请至少选择一个模块')
+    return
+  }
+  if (!assertDateRange()) return
+  try {
+    await ElMessageBox.prompt(
+      '将创建异步 Push：本机落盘分片后逐片上传生产。输入 PUSH 继续。',
+      '异步 Push',
+      {
+        confirmButtonText: '开始',
+        cancelButtonText: '取消',
+        inputPattern: /^PUSH$/,
+        inputErrorMessage: '请输入大写 PUSH',
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+  } catch {
+    return
+  }
+  asyncPushing.value = true
+  try {
+    const res = await envSyncApi.createAsyncPush(selectedModules.value, datePayload())
+    startJobPoll(res.job_id)
+    ElMessage.success('异步 Push 已启动')
+  } catch (e: any) {
+    asyncPushing.value = false
+    ElMessage.error(e.message || '创建异步 Push 失败')
+  }
+}
+
 onMounted(loadAll)
+onUnmounted(stopJobPoll)
 </script>
 
 <style scoped>

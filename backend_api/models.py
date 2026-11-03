@@ -2701,6 +2701,30 @@ class EnvSyncAuditLog(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.now)
 
 
+class EnvSyncJob(Base):
+    """环境同步异步任务（落盘分片 Push/Pull）。"""
+
+    __tablename__ = "env_sync_jobs"
+
+    id = Column(String(36), primary_key=True)
+    direction = Column(String(32), nullable=False)  # async_push / async_pull / async_export / async_import
+    status = Column(String(32), nullable=False, default="pending")
+    modules = Column(JSON, nullable=True)
+    start_date = Column(String(16), nullable=True)
+    end_date = Column(String(16), nullable=True)
+    progress = Column(Integer, nullable=False, default=0)
+    stage = Column(String(64), nullable=True)
+    message = Column(Text, nullable=True)
+    artifact_dir = Column(String(1000), nullable=True)
+    remote_job_id = Column(String(36), nullable=True)
+    summary = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+    cancel_requested = Column(Boolean, nullable=False, default=False)
+    created_by = Column(String(100), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.now)
+    updated_at = Column(DateTime, nullable=False, default=datetime.now, onupdate=datetime.now)
+
+
 # ========== DBLB 双底策略 ==========
 
 class DblbStrategyConfig(Base):

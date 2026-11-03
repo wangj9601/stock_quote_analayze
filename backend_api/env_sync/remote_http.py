@@ -19,6 +19,7 @@ from urllib.parse import urlparse
 class RemoteResponse:
     status_code: int
     text: str
+    content: bytes = b""
 
     def json(self) -> Any:
         return json.loads(self.text or "null")
@@ -31,6 +32,7 @@ def _request(
     headers: Optional[Mapping[str, str]] = None,
     json_body: Any = None,
     timeout: float = 30.0,
+    binary: bool = False,
 ) -> RemoteResponse:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
@@ -62,11 +64,13 @@ def _request(
         conn.request(method.upper(), path, body=body, headers=hdrs)
         resp = conn.getresponse()
         raw = resp.read()
+        if binary:
+            return RemoteResponse(status_code=resp.status, text="", content=raw)
         try:
             text = raw.decode("utf-8")
         except UnicodeDecodeError:
             text = raw.decode("utf-8", errors="replace")
-        return RemoteResponse(status_code=resp.status, text=text)
+        return RemoteResponse(status_code=resp.status, text=text, content=raw)
     finally:
         conn.close()
 
@@ -78,6 +82,15 @@ def get(
     timeout: float = 30.0,
 ) -> RemoteResponse:
     return _request("GET", url, headers=headers, timeout=timeout)
+
+
+def get_bytes(
+    url: str,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    timeout: float = 30.0,
+) -> RemoteResponse:
+    return _request("GET", url, headers=headers, timeout=timeout, binary=True)
 
 
 def post(

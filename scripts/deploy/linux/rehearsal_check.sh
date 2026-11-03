@@ -75,6 +75,7 @@ echo "=== 人工灰测清单（hosts 指新机后）==="
 echo " [ ] https://www.xworld-wangxw.top/ 登录"
 echo " [ ] 选股 / GMS 长请求无 502"
 echo " [ ] https://www.xworld-wangxw.top/admin/ 登录"
+echo " [ ] https://admin.xworld-wangxw.top/admin/ 登录"
 echo " [ ] journalctl -u stock-quote-core -n 50"
 echo " [ ] 最终 pg_restore 后关键表行数核对"
 echo

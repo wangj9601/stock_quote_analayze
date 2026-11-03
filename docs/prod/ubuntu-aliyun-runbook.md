@@ -35,13 +35,18 @@
 
 ```
 浏览器 → Nginx :80/:443
-  /        → 127.0.0.1:8000  (frontend)
-  /admin/  → 127.0.0.1:8002  (admin/dist；Ubuntu 默认，避开同机 DeepTutor 的 8001)
-  /api/    → 127.0.0.1:5000  (backend_api)
+  www / apex
+    /        → 127.0.0.1:8000  (frontend)
+    /admin/  → 127.0.0.1:8002  (admin/dist；Ubuntu 默认，避开同机 DeepTutor 的 8001)
+    /api/    → 127.0.0.1:5000  (backend_api)
+  admin.xworld-wangxw.top
+    /        → 302 /admin/
+    /admin/  → 127.0.0.1:8002
+    /api/    → 127.0.0.1:5000
   backend_core / start_scheduler → PostgreSQL（只听 localhost）
 ```
 
-同机已部署 **DeepTutor**（`0.0.0.0:8001`）时：不要抢 8001。本系统管理端用 **`ADMIN_PORT=8002`**，与 `nginx.ubuntu.conf` 中 `admin_server` 一致。DeepTutor 继续原端口；本系统只经 Nginx 的 `/admin/` 对外。
+同机已部署 **DeepTutor**（`0.0.0.0:8001`）时：不要抢 8001。本系统管理端用 **`ADMIN_PORT=8002`**，与 `nginx.ubuntu.conf` 中 `admin_server` 一致。DeepTutor 继续原端口。用户站仍走 `/admin/`；管理端域名 `admin.xworld-wangxw.top` 同样反代到 **127.0.0.1:8002**，不要把 8002 对公网开放。管理端前端生产构建的 base 是 `/admin/`，所以入口是 `https://admin.xworld-wangxw.top/admin/`。
 
 ```
 /opt/stock_quote/
@@ -313,7 +318,7 @@ sudo ss -lptn | grep -E ':5000|:8000|:8002|:5432'
 
 ## 8. 证书与 Nginx（Let's Encrypt + 自动续期）
 
-当前 Ubuntu 生产域名：**`www.xworld-wangxw.top`** / **`xworld-wangxw.top`**。  
+当前 Ubuntu 生产域名：**`www.xworld-wangxw.top`** / **`xworld-wangxw.top`**，管理端：**`admin.xworld-wangxw.top`**。  
 推荐 **certbot webroot**（不改写整站反代）。证书路径（与 `nginx.ubuntu.conf` 一致）：
 
 - `/etc/letsencrypt/live/www.xworld-wangxw.top/fullchain.pem`
@@ -321,7 +326,7 @@ sudo ss -lptn | grep -E ':5000|:8000|:8002|:5432'
 
 ### 8.1 前置
 
-1. DNS：`www.xworld-wangxw.top` 与 `xworld-wangxw.top` 的 A 记录指向本机公网 IP（或先用 hosts 灰测，但 **签发时 Let's Encrypt 必须能从公网访问你的 80**）。
+1. DNS：`www.xworld-wangxw.top`、`xworld-wangxw.top` 与 `admin.xworld-wangxw.top` 的 A 记录指向本机公网 IP（或先用 hosts 灰测，但 **签发时 Let's Encrypt 必须能从公网访问你的 80**）。
 2. 安全组放行 **入站 80**（HTTP-01）；443 也一并放行。
 3. 大陆地域需已完成该域名 **ICP 备案**，否则 80/443 可能被拦，申请失败。
 4. **不要**用 `certbot --nginx` 自动改配置（会弄乱与 DeepTutor 共存的站点）。用 `--webroot`。
@@ -366,8 +371,9 @@ sudo EMAIL='你的邮箱@example.com' bash /opt/stock_quote/current/scripts/depl
 sudo apt-get update -y && sudo apt-get install -y certbot
 sudo certbot certonly --webroot -w /usr/share/nginx/html \
   --cert-name www.xworld-wangxw.top \
+  --expand \
   --agree-tos -m 你的邮箱@example.com --non-interactive \
-  -d www.xworld-wangxw.top -d xworld-wangxw.top
+  -d www.xworld-wangxw.top -d xworld-wangxw.top -d admin.xworld-wangxw.top
 ```
 
 成功后应有：
@@ -407,12 +413,37 @@ sudo certbot renew --dry-run
 
 若不用 Let's Encrypt，可把全链/私钥装到 `/etc/nginx/ssl/`，并改 conf 里 `ssl_certificate*` 指向该路径。不要把私钥放在 `/opt/stock_quote/shared/ssl/`（AppArmor 可能拒绝 Nginx 读取）。
 
+### 8.7 已有站点追加管理端域名
+
+生产上管理端进程只听 **127.0.0.1:8002**（`ADMIN_PORT`）。`admin.xworld-wangxw.top` 由 Nginx 反代到该端口，安全组不要放行 8002。
+
+1. 阿里云云解析：主机记录 `admin`，类型 A，记录值与 `www` 相同（当前 `www.xworld-wangxw.top` 为 `47.99.185.87`）。等公网解析生效。
+2. 把更新后的 `scripts/deploy/linux/nginx.ubuntu.conf` 放到服务器并加载（80 上要有该 `server_name`，证书校验才能命中 webroot）：
+
+```bash
+sudo cp /opt/stock_quote/current/scripts/deploy/linux/nginx.ubuntu.conf \
+  /etc/nginx/conf.d/stock_quote.conf
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+若 `current` 里还是旧文件，用刚上传的那份覆盖后再执行上面的 `cp`。
+
+3. 在原证书上扩展 SAN（不要新开 cert-name，Nginx 仍读 `live/www.xworld-wangxw.top/`）：
+
+```bash
+sudo EMAIL='你的邮箱@example.com' bash /opt/stock_quote/current/scripts/deploy/linux/setup_letsencrypt_ubuntu.sh
+sudo nginx -t && sudo systemctl reload nginx
+curl -sSI https://admin.xworld-wangxw.top/admin/ | head
+```
+
+入口是 `https://admin.xworld-wangxw.top/admin/`（根路径会 302 到这里）。`www` 上的 `/admin/` 保持不变。
+
 ## 9. 灰测
 
 DNS 切到新 IP 之前，在运维电脑的 hosts 里把域名指到 ECS 公网 IP：
 
 ```
-<公网IP>  www.xworld-wangxw.top xworld-wangxw.top
+<公网IP>  www.xworld-wangxw.top xworld-wangxw.top admin.xworld-wangxw.top
 ```
 
 在 ECS 上：
@@ -455,6 +486,22 @@ sudo nginx -t && sudo systemctl reload nginx
 ```
 
 备份脚本读 `shared/.env` 的 `DATABASE_URL`，保留 14 天，可用 `RETAIN_DAYS=14` 覆盖。
+
+### 11.1 环境同步异步 Job（大体量行情）
+
+同步 Pull/Push 仍可用；大体量请用管理端「异步 Pull / 异步 Push」。产物目录默认 `/opt/stock_quote/shared/env_sync/`。
+
+首次启用需建表并确保目录可写：
+
+```bash
+cd /opt/stock_quote/current
+sudo -u stockquote /opt/stock_quote/.venv/bin/python migrations/add_env_sync_jobs_table.py
+sudo mkdir -p /opt/stock_quote/shared/env_sync
+sudo chown -R stockquote:stockquote /opt/stock_quote/shared/env_sync
+sudo systemctl restart stock-quote-api
+```
+
+旧站 → 新站迁移：在**旧站**管理端配置客户端指向新站并测通后，勾选模块（行情按短日期分批）点「异步 Push」。
 
 ## 12. 排障：`set: pipefail: invalid option name`
 

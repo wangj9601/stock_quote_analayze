@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ubuntu：为 www.xworld-wangxw.top 申请 Let's Encrypt 证书并启用自动续期。
+# Ubuntu：为 www.xworld-wangxw.top、apex 与 admin 子域申请 Let's Encrypt 证书并启用自动续期。
 # 用法：
 #   sudo bash setup_letsencrypt_ubuntu.sh
 #   sudo EMAIL=you@example.com bash setup_letsencrypt_ubuntu.sh
@@ -8,7 +8,7 @@
 set -euo pipefail
 
 EMAIL="${EMAIL:-}"
-DOMAINS=(www.xworld-wangxw.top xworld-wangxw.top)
+DOMAINS=(www.xworld-wangxw.top xworld-wangxw.top admin.xworld-wangxw.top)
 CERT_NAME="www.xworld-wangxw.top"
 WEBROOT="/usr/share/nginx/html"
 HOOK="/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh"
@@ -42,8 +42,10 @@ for d in "${DOMAINS[@]}"; do
   DOMAIN_ARGS+=(-d "$d")
 done
 
+# --expand：证书已存在时把新增域名（如 admin）并进同一张证，不另起 cert-name
 certbot certonly --webroot -w "$WEBROOT" \
   --cert-name "$CERT_NAME" \
+  --expand \
   --agree-tos --non-interactive \
   -m "$EMAIL" \
   "${DOMAIN_ARGS[@]}"

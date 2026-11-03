@@ -113,6 +113,48 @@ class EnvSyncApiService {
       }),
     })
   }
+
+  createAsyncPush(modules?: EnvSyncModuleCode[], range?: SyncDateRange) {
+    return this.request<{ job_id: string; status: string }>(`${PREFIX}/jobs/push`, {
+      method: 'POST',
+      body: JSON.stringify({
+        modules: modules || null,
+        start_date: range?.start_date || null,
+        end_date: range?.end_date || null,
+      }),
+    })
+  }
+
+  createAsyncPull(modules?: EnvSyncModuleCode[], range?: SyncDateRange) {
+    return this.request<{ job_id: string; status: string }>(`${PREFIX}/jobs/pull`, {
+      method: 'POST',
+      body: JSON.stringify({
+        modules: modules || null,
+        start_date: range?.start_date || null,
+        end_date: range?.end_date || null,
+      }),
+    })
+  }
+
+  getJob(jobId: string) {
+    return this.request<{
+      job_id: string
+      direction: string
+      status: string
+      progress: number
+      stage?: string
+      message?: string
+      summary?: any
+      error_message?: string
+    }>(`${PREFIX}/jobs/${encodeURIComponent(jobId)}`)
+  }
+
+  cancelJob(jobId: string) {
+    return this.request(`${PREFIX}/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+      body: '{}',
+    })
+  }
 }
 
 export const envSyncApi = new EnvSyncApiService()

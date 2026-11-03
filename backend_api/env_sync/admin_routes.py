@@ -32,6 +32,19 @@ from backend_api.env_sync.services.market_data import (
     iter_fina_indicator_push_chunks,
     iter_fund_flow_push_chunks,
 )
+from backend_api.env_sync.job_runner import (
+    run_admin_pull_job,
+    run_admin_push_job,
+    start_thread,
+)
+from backend_api.env_sync.job_store import (
+    create_job,
+    get_job,
+    is_direction_busy,
+    job_public,
+    list_jobs,
+    update_job,
+)
 from backend_api.models import User
 
 router = APIRouter(prefix="/api/admin/env-sync", tags=["admin-env-sync"])
@@ -637,3 +650,126 @@ def admin_list_modules(_: User = Depends(get_current_admin)):
     from backend_api.env_sync import catalog_for_api
 
     return catalog_for_api()
+
+
+@router.post("/jobs/push")
+def admin_async_push(
+    body: SyncModulesBody,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """异步 Push：本地落盘分片后逐片上传生产（同步 push 仍保留）。"""
+    try:
+        mods = normalize_modules(body.modules)
+        cred = resolve_client_credentials(db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if is_direction_busy("async_push"):
+        raise HTTPException(status_code=409, detail="已有异步 Push 在运行")
+    row = create_job(
+        db,
+        direction="async_push",
+        modules=mods,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        created_by=_operator(admin),
+    )
+    start_thread(
+        lambda jid=row.id, url=cred["prod_base_url"], key=cred["sync_key"]: run_admin_push_job(
+            jid, prod_base_url=url, sync_key=key
+        ),
+        name=f"env-sync-push-{row.id[:8]}",
+    )
+    write_audit(
+        db,
+        direction="async_push",
+        modules=mods,
+        operator=_operator(admin),
+        success=True,
+        summary={"job_id": row.id, "accepted": True},
+    )
+    return {"job_id": row.id, "status": "pending"}
+
+
+@router.post("/jobs/pull")
+def admin_async_pull(
+    body: SyncModulesBody,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """异步 Pull：请求生产异步 export，下载分片后本地导入（同步 pull 仍保留）。"""
+    try:
+        mods = normalize_modules(body.modules)
+        cred = resolve_client_credentials(db)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if is_direction_busy("async_pull"):
+        raise HTTPException(status_code=409, detail="已有异步 Pull 在运行")
+    row = create_job(
+        db,
+        direction="async_pull",
+        modules=mods,
+        start_date=body.start_date,
+        end_date=body.end_date,
+        created_by=_operator(admin),
+    )
+    start_thread(
+        lambda jid=row.id, url=cred["prod_base_url"], key=cred["sync_key"]: run_admin_pull_job(
+            jid, prod_base_url=url, sync_key=key
+        ),
+        name=f"env-sync-pull-{row.id[:8]}",
+    )
+    write_audit(
+        db,
+        direction="async_pull",
+        modules=mods,
+        operator=_operator(admin),
+        success=True,
+        summary={"job_id": row.id, "accepted": True},
+    )
+    return {"job_id": row.id, "status": "pending"}
+
+
+@router.get("/jobs")
+def admin_list_jobs(
+    limit: int = 30,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    rows = list_jobs(db, limit=limit)
+    return {"items": [job_public(r) for r in rows]}
+
+
+@router.get("/jobs/{job_id}")
+def admin_get_job(
+    job_id: str,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    row = get_job(db, job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="job 不存在")
+    return job_public(row)
+
+
+@router.post("/jobs/{job_id}/cancel")
+def admin_cancel_job(
+    job_id: str,
+    admin: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    row = get_job(db, job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="job 不存在")
+    if row.status in ("succeeded", "failed"):
+        return job_public(row)
+    update_job(db, job_id, cancel_requested=True, message="取消请求已登记")
+    write_audit(
+        db,
+        direction=row.direction,
+        modules=row.modules,
+        operator=_operator(admin),
+        success=True,
+        summary={"job_id": job_id, "cancel_requested": True},
+    )
+    return job_public(get_job(db, job_id))
