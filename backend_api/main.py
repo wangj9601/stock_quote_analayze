@@ -98,7 +98,7 @@ import asyncio
 import re
 import uvicorn
 import logging
-from backend_core.logging_utils import resolve_log_file
+from backend_core.logging_utils import make_rotating_file_handler
 import os
 import sys
 from sqlalchemy.orm import Session
@@ -110,7 +110,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
     handlers=[
-        logging.FileHandler(resolve_log_file('app.log'), encoding='utf-8', mode='a'),
+        make_rotating_file_handler('app.log'),
         logging.StreamHandler()
     ]
 )
@@ -906,6 +906,14 @@ except ImportError as e:
     print(f"admin_operation_logs_router 导入失败: {e}")
     admin_operation_logs_router = None
 
+# 尝试导入应用日志（文件）查询路由
+try:
+    from .admin.app_logs import router as admin_app_logs_router
+    print("admin_app_logs_router 导入成功")
+except ImportError as e:
+    print(f"admin_app_logs_router 导入失败: {e}")
+    admin_app_logs_router = None
+
 # 尝试导入行情管理路由
 try:
     from .admin.quotes import router as admin_quotes_router
@@ -1001,6 +1009,11 @@ if admin_logs_router is not None:
 if admin_operation_logs_router is not None:
     app.include_router(admin_operation_logs_router)
     print("admin operation logs路由注册成功")
+
+# 注册应用日志（文件）查询路由
+if admin_app_logs_router is not None:
+    app.include_router(admin_app_logs_router)
+    print("admin app logs路由注册成功")
 
 # 注册行情管理路由
 if admin_quotes_router is not None:

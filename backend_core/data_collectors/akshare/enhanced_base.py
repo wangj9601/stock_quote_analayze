@@ -20,7 +20,7 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
 from backend_core.config.config import DATA_COLLECTORS
-from backend_core.logging_utils import get_logs_dir
+from backend_core.logging_utils import get_logs_dir, make_rotating_file_handler
 
 T = TypeVar('T')
 
@@ -51,7 +51,7 @@ class EnhancedAKShareCollector:
             level=logging.INFO,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(log_file, encoding='utf-8'),
+                make_rotating_file_handler(log_file),
                 logging.StreamHandler()
             ]
         )

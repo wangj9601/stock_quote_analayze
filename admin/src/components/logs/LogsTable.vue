@@ -116,6 +116,34 @@
             </template>
           </el-table-column>
         </template>
+
+        <!-- 应用日志（磁盘文件） -->
+        <template v-else-if="props.logType === 'app'">
+          <el-table-column prop="timestamp" label="时间" width="180" show-overflow-tooltip>
+            <template #default="{ row }">
+              {{ formatDateTime(row.timestamp) }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="level" label="级别" width="100">
+            <template #default="{ row }">
+              <el-tag :type="getLevelType(row.level)" size="small">
+                {{ row.level }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="source_file" label="来源文件" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="logger" label="logger" min-width="160" show-overflow-tooltip />
+          <el-table-column prop="message" label="消息" min-width="320">
+            <template #default="{ row }">
+              <div class="message-cell">
+                <span class="message-text">{{ summarizeMessage(row.message) }}</span>
+                <el-button type="text" size="small" @click="showDetails(row)">
+                  展开
+                </el-button>
+              </div>
+            </template>
+          </el-table-column>
+        </template>
         
         <!-- 默认日志字段（兼容旧版本） -->
         <template v-else>
@@ -237,6 +265,40 @@
             </div>
           </div>
         </template>
+
+        <!-- 应用日志详情 -->
+        <template v-else-if="props.logType === 'app' && selectedLog && isAppLogEntry(selectedLog)">
+          <div class="detail-item">
+            <span class="detail-label">时间:</span>
+            <span class="detail-value">{{ formatDateTime(selectedLog.timestamp) }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">级别:</span>
+            <span class="detail-value">
+              <el-tag :type="getLevelType(selectedLog.level)" size="small">
+                {{ selectedLog.level }}
+              </el-tag>
+            </span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">来源文件:</span>
+            <span class="detail-value">{{ selectedLog.source_file }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">logger:</span>
+            <span class="detail-value">{{ selectedLog.logger }}</span>
+          </div>
+          <div v-if="selectedLog.location" class="detail-item">
+            <span class="detail-label">位置:</span>
+            <span class="detail-value">{{ selectedLog.location }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-label">消息:</span>
+            <div class="detail-value details-content">
+              <pre>{{ selectedLog.message }}</pre>
+            </div>
+          </div>
+        </template>
         
         <!-- 默认日志详情 -->
         <template v-else-if="selectedLog && isLogEntry(selectedLog)">
@@ -283,12 +345,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import dayjs from 'dayjs'
-import type { AnyLogEntry, LogEntry, OperationLogEntry, HistoricalCollectLogEntry, RealtimeCollectLogEntry } from '@/types/logs.types'
+import type { AnyLogEntry, AppLogEntry, LogEntry, OperationLogEntry, HistoricalCollectLogEntry, RealtimeCollectLogEntry } from '@/types/logs.types'
 
 interface Props {
   logs: AnyLogEntry[]
   loading: boolean
-  logType?: 'historical_collect' | 'realtime_collect' | 'operation' | string
+  logType?: 'historical_collect' | 'realtime_collect' | 'operation' | 'app' | string
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -312,9 +374,20 @@ const isCollectLogEntry = (log: AnyLogEntry): log is HistoricalCollectLogEntry |
   return 'operation_type' in log && 'operation_desc' in log && 'created_at' in log
 }
 
+const isAppLogEntry = (log: AnyLogEntry): log is AppLogEntry => {
+  return 'source_file' in log && 'logger' in log && 'message' in log && 'timestamp' in log
+}
+
+const summarizeMessage = (message: string) => {
+  const first = (message || '').split('\n')[0] || ''
+  return first.length > 180 ? `${first.slice(0, 180)}…` : first
+}
+
 // 格式化日期时间
 const formatDateTime = (timestamp: string) => {
-  return dayjs(timestamp).format('YYYY-MM-DD HH:mm:ss')
+  if (!timestamp) return '-'
+  const d = dayjs(timestamp)
+  return d.isValid() ? d.format('YYYY-MM-DD HH:mm:ss') : timestamp
 }
 
 // 获取日志级别对应的标签类型（限定为 Element Plus 允许的取值）

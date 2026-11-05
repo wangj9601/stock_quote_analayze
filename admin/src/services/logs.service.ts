@@ -1,5 +1,5 @@
 import { apiService } from './api'
-import type { LogsResponse, LogFilter, LogStats, LogTable } from '@/types/logs.types'
+import type { LogsResponse, LogFilter, LogStats, LogTable, AppLogFileInfo } from '@/types/logs.types'
 
 export class LogsService {
   async getLogs(params: LogFilter & { page: number; pageSize: number }): Promise<LogsResponse> {
@@ -66,6 +66,57 @@ export class LogsService {
     queryParams.append('page_size', params.pageSize.toString())
     
     return apiService.get<LogsResponse>(`/operation-logs/query?${queryParams}`)
+  }
+
+  async getAppLogs(params: LogFilter & { page: number; pageSize: number }): Promise<LogsResponse & {
+    stats?: LogStats
+    files?: AppLogFileInfo[]
+  }> {
+    const queryParams = new URLSearchParams()
+    const levels = params.level && params.level !== 'all' ? params.level : 'all'
+    queryParams.append('levels', levels)
+    if (params.startDate) {
+      queryParams.append('start_date', params.startDate)
+    }
+    if (params.endDate) {
+      queryParams.append('end_date', params.endDate)
+    }
+    if (params.keyword) {
+      queryParams.append('keyword', params.keyword)
+    }
+    if (params.sourceFile) {
+      queryParams.append('source_file', params.sourceFile)
+    }
+    queryParams.append('page', params.page.toString())
+    queryParams.append('page_size', params.pageSize.toString())
+
+    const raw = await apiService.get<any>(`/app-logs/query?${queryParams}`)
+    const s = raw?.stats || {}
+    return {
+      data: raw?.data || [],
+      total: raw?.total || 0,
+      page: raw?.page || params.page,
+      pageSize: raw?.page_size || params.pageSize,
+      files: raw?.files || [],
+      stats: {
+        total: s.total ?? raw?.total ?? 0,
+        success: 0,
+        error: s.error ?? 0,
+        successRate: 0,
+        todayCount: 0,
+        weekCount: 0,
+        warning: s.warning ?? 0,
+        info: s.info ?? 0,
+        unknown: s.unknown ?? 0,
+        bytesRead: s.bytes_read,
+        windowBytes: s.window_bytes,
+      },
+    }
+  }
+
+  async getAppLogFiles(): Promise<AppLogFileInfo[]> {
+    const raw = await apiService.get<{ files: AppLogFileInfo[] }>('/app-logs/files')
+    return raw?.files || []
   }
 
   async getLogStats(): Promise<LogStats> {

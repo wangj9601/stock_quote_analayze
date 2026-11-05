@@ -9,26 +9,26 @@
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ stats?.total || 0 }}</div>
-              <div class="stat-label">总日志数</div>
+              <div class="stat-label">{{ mode === 'app' ? '匹配条数' : '总日志数' }}</div>
             </div>
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
         <el-card class="stat-card">
           <div class="stat-content">
-            <div class="stat-icon success">
-              <el-icon><CircleCheck /></el-icon>
+            <div class="stat-icon" :class="mode === 'app' ? 'warning' : 'success'">
+              <el-icon><component :is="mode === 'app' ? Warning : CircleCheck" /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ stats?.success || 0 }}</div>
-              <div class="stat-label">成功日志</div>
+              <div class="stat-value">{{ mode === 'app' ? (stats?.warning || 0) : (stats?.success || 0) }}</div>
+              <div class="stat-label">{{ mode === 'app' ? '警告' : '成功日志' }}</div>
             </div>
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
         <el-card class="stat-card">
           <div class="stat-content">
@@ -37,12 +37,12 @@
             </div>
             <div class="stat-info">
               <div class="stat-value">{{ stats?.error || 0 }}</div>
-              <div class="stat-label">错误日志</div>
+              <div class="stat-label">{{ mode === 'app' ? '错误' : '错误日志' }}</div>
             </div>
           </div>
         </el-card>
       </el-col>
-      
+
       <el-col :xs="12" :sm="12" :md="6" :lg="6" :xl="6">
         <el-card class="stat-card">
           <div class="stat-content">
@@ -50,8 +50,11 @@
               <el-icon><TrendCharts /></el-icon>
             </div>
             <div class="stat-info">
-              <div class="stat-value">{{ formatSuccessRate(stats?.successRate) }}%</div>
-              <div class="stat-label">成功率</div>
+              <div class="stat-value">
+                <template v-if="mode === 'app'">{{ formatBytes(stats?.bytesRead) }}</template>
+                <template v-else>{{ formatSuccessRate(stats?.successRate) }}%</template>
+              </div>
+              <div class="stat-label">{{ mode === 'app' ? '已扫描字节' : '成功率' }}</div>
             </div>
           </div>
         </el-card>
@@ -61,19 +64,28 @@
 </template>
 
 <script setup lang="ts">
-import { Document, CircleCheck, CircleClose, TrendCharts } from '@element-plus/icons-vue'
+import { Document, CircleCheck, CircleClose, TrendCharts, Warning } from '@element-plus/icons-vue'
 import type { LogStats } from '@/types/logs.types'
 
 interface Props {
   stats: LogStats | null
+  mode?: 'db' | 'app'
 }
 
-defineProps<Props>()
+withDefaults(defineProps<Props>(), {
+  mode: 'db',
+})
 
-// 格式化成功率
 const formatSuccessRate = (rate: number | undefined) => {
   if (rate === undefined || rate === null) return 0
   return Math.round(rate * 100)
+}
+
+const formatBytes = (n: number | undefined) => {
+  if (!n) return '0 B'
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 </script>
 
@@ -102,6 +114,10 @@ const formatSuccessRate = (rate: number | undefined) => {
   @apply bg-green-100 text-green-600;
 }
 
+.stat-icon.warning {
+  @apply bg-yellow-100 text-yellow-700;
+}
+
 .stat-icon.error {
   @apply bg-red-100 text-red-600;
 }
@@ -122,44 +138,25 @@ const formatSuccessRate = (rate: number | undefined) => {
   @apply text-sm text-gray-500 mt-1;
 }
 
-/* 响应式设计 */
 @media (max-width: 768px) {
   .logs-stats {
     @apply mb-4;
   }
-  
+
   .stat-card {
     @apply h-20 mb-4;
   }
-  
+
   .stat-icon {
     @apply w-10 h-10 mr-3;
   }
-  
+
   .stat-value {
     @apply text-xl;
   }
-  
-  .stat-label {
-    @apply text-xs;
-  }
-}
 
-@media (max-width: 480px) {
-  .stat-card {
-    @apply h-16;
-  }
-  
-  .stat-icon {
-    @apply w-8 h-8 mr-2;
-  }
-  
-  .stat-value {
-    @apply text-lg;
-  }
-  
   .stat-label {
     @apply text-xs;
   }
 }
-</style> 
+</style>

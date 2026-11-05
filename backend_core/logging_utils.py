@@ -5,12 +5,19 @@
 """
 from __future__ import annotations
 
+import logging
 import os
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 # 项目根目录（backend_core 的上一级）
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOGS_DIR = PROJECT_ROOT / "logs"
+
+# 管理端应用日志监测 / 白名单落盘：按大小轮转与尾部扫描窗口
+LOG_ROTATE_MAX_BYTES = 64 * 1024 * 1024  # 64MB
+LOG_ROTATE_BACKUP_COUNT = 5
+LOG_SCAN_WINDOW_BYTES = 32 * 1024 * 1024  # 32MB
 
 
 def should_log_to_file() -> bool:
@@ -45,3 +52,26 @@ def resolve_log_file(filename: str) -> Path:
     name = Path(filename).name
     path = get_logs_dir() / name
     return path
+
+
+def make_rotating_file_handler(
+    filename: str | Path,
+    *,
+    max_bytes: int = LOG_ROTATE_MAX_BYTES,
+    backup_count: int = LOG_ROTATE_BACKUP_COUNT,
+    encoding: str = "utf-8",
+) -> RotatingFileHandler:
+    """创建按大小轮转的 FileHandler；filename 可为 basename 或绝对路径。"""
+    path = Path(filename)
+    if not path.is_absolute():
+        path = resolve_log_file(path.name)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    handler = RotatingFileHandler(
+        path,
+        maxBytes=max_bytes,
+        backupCount=backup_count,
+        encoding=encoding,
+    )
+    handler.setLevel(logging.INFO)
+    return handler

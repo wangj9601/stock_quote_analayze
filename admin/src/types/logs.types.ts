@@ -45,16 +45,33 @@ export interface OperationLogEntry {
   log_time: string
 }
 
+// 应用日志（磁盘文件）条目
+export interface AppLogEntry {
+  id: string
+  timestamp: string
+  level: 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG' | 'UNKNOWN' | string
+  logger: string
+  message: string
+  source_file: string
+  location?: string
+}
+
 // 通用日志条目类型
-export type AnyLogEntry = LogEntry | HistoricalCollectLogEntry | RealtimeCollectLogEntry | OperationLogEntry
+export type AnyLogEntry =
+  | LogEntry
+  | HistoricalCollectLogEntry
+  | RealtimeCollectLogEntry
+  | OperationLogEntry
+  | AppLogEntry
 
 export interface LogFilter {
-  type: 'all' | 'historical_collect' | 'realtime_collect' | 'operation' | 'collect_source'
-  level: 'all' | 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG'
+  type: 'all' | 'historical_collect' | 'realtime_collect' | 'operation' | 'app' | 'collect_source'
+  level: 'all' | 'INFO' | 'WARNING' | 'ERROR' | 'DEBUG' | 'WARNING,ERROR' | string
   startDate: string | null
   endDate: string | null
   collect_source: string | null
   keyword: string
+  sourceFile?: string | null
 }
 
 export interface LogStats {
@@ -64,6 +81,17 @@ export interface LogStats {
   successRate: number
   todayCount: number
   weekCount: number
+  warning?: number
+  info?: number
+  unknown?: number
+  bytesRead?: number
+  windowBytes?: number
+}
+
+export interface AppLogFileInfo {
+  name: string
+  size: number
+  mtime: string
 }
 
 export interface LogTable {
