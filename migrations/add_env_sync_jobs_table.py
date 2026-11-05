@@ -1,8 +1,28 @@
 """迁移：环境同步异步任务表 env_sync_jobs。"""
 import os
 import sys
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+def _load_dotenv(path: Path) -> None:
+    """写入 os.environ（不覆盖已有变量），供 backend_core.database 读 DATABASE_URL。"""
+    if not path.is_file():
+        return
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip(), v.strip().strip('"').strip("'")
+        if k and k not in os.environ:
+            os.environ[k] = v
+
+
+# 生产优先 shared/.env；开发机可用仓库根 .env
+_load_dotenv(Path("/opt/stock_quote/shared/.env"))
+_load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from sqlalchemy import text
 from backend_core.database.db import engine
