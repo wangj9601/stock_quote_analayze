@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from backend_api.auth import get_current_admin
+from backend_api.database import get_db
 from backend_api.models import Admin
 from backend_core.strategies.rpe.backtest_runner import start_backtest_async
 from backend_core.strategies.rpe.backtest_storage import RPEBacktestStorage
@@ -21,6 +23,37 @@ router = APIRouter(prefix="/api/admin/rpe", tags=["admin-rpe"])
 def _require_admin(admin: Admin = Depends(get_current_admin)) -> Admin:
     """管理后台 JWT（is_admin）鉴权，勿用 get_current_user（查 User 表会 401）。"""
     return admin
+
+
+def _resolve_signals_config_id(db: Session, config_id: Optional[int]) -> int:
+    """信号查询：显式 config 校验存在；缺省先 default，再预计算启用版，再无则 400。"""
+    from backend_api.models import RPEStrategyConfig
+
+    if config_id is not None:
+        row = (
+            db.query(RPEStrategyConfig)
+            .filter(RPEStrategyConfig.id == int(config_id))
+            .first()
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail=f"参数版本不存在: {config_id}")
+        return int(config_id)
+    row = (
+        db.query(RPEStrategyConfig)
+        .filter(RPEStrategyConfig.is_default.is_(True))
+        .order_by(RPEStrategyConfig.id.asc())
+        .first()
+    )
+    if not row:
+        row = (
+            db.query(RPEStrategyConfig)
+            .filter(RPEStrategyConfig.precompute_enabled.is_(True))
+            .order_by(RPEStrategyConfig.id.asc())
+            .first()
+        )
+    if not row:
+        raise HTTPException(status_code=400, detail="无可用 RPE 参数版本")
+    return int(row.id)
 
 
 class ConfigCreateReq(BaseModel):
@@ -112,6 +145,38 @@ def admin_trigger_precompute(
     _user: Admin = Depends(_require_admin),
 ):
     return run_rpe_precompute(config_id=config_id, trade_date=trade_date, max_boards=max_boards)
+
+
+@router.get("/signals")
+def list_admin_signals(
+    trade_date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD，空则取行情最新日"),
+    config_id: Optional[int] = Query(None, description="参数版本；空则默认/预计算版本"),
+    code: Optional[str] = Query(None, description="可选股票代码"),
+    limit: int = Query(50, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _user: Admin = Depends(_require_admin),
+):
+    """管理端只读：按日查询预计算入场信号。仅读 rpe_signal_trace，禁止调用 engine.screen。"""
+    date_s = (trade_date or "").strip()[:10] or None
+    if not date_s:
+        from backend_core.strategies.rpe.data_loader import RPEDataLoader
+
+        date_s = RPEDataLoader(db).resolve_trade_date()
+    cid = _resolve_signals_config_id(db, config_id)
+    from backend_core.strategies.rpe.signal_storage import list_admin_entry_signals
+
+    try:
+        return list_admin_entry_signals(
+            db,
+            trade_date=date_s,
+            config_id=cid,
+            code=code,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/selection-results")

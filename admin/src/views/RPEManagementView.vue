@@ -2,7 +2,7 @@
   <div class="rpe-management">
     <div class="page-header">
       <h1 class="page-title">比价效应（RPE）管理</h1>
-      <p class="page-subtitle">参数版本 · 回测任务 · 手动预计算</p>
+      <p class="page-subtitle">参数版本 · 回测任务 · 信号结果 · 手动预计算</p>
     </div>
 
     <el-tabs v-model="activeTab">
@@ -33,6 +33,15 @@
             </template>
           </el-table-column>
         </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="信号结果" name="signals" lazy>
+        <StrategySignalResultsPanel
+          strategy-code="RPE"
+          :list-signals="listRpeSignals"
+          :list-configs="listRpeConfigs"
+          :columns="rpeSignalColumns"
+        />
       </el-tab-pane>
 
       <el-tab-pane label="回测任务" name="backtest">
@@ -117,6 +126,9 @@ import { onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { confirmStrategyJob } from '@/utils/confirmDanger'
 import rpeApi from '@/services/rpeApi'
+import StrategySignalResultsPanel, {
+  type SignalColumn,
+} from '@/components/strategy/StrategySignalResultsPanel.vue'
 
 const activeTab = ref('config')
 const configs = ref<any[]>([])
@@ -131,6 +143,40 @@ const showDetail = ref(false)
 const editId = ref<number | null>(null)
 const editJson = ref('')
 const detailText = ref('')
+
+function formatClose(row: Record<string, unknown>): string {
+  const raw = row.close ?? row.close_price
+  if (raw == null || raw === '') return '—'
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return String(raw)
+  if (Number.isInteger(n)) return String(n)
+  return String(Math.round(n * 10000) / 10000)
+}
+
+const listRpeSignals = (query: Parameters<typeof rpeApi.listSignals>[0]) => rpeApi.listSignals(query)
+const listRpeConfigs = async () => {
+  const data = await rpeApi.listConfigs()
+  return (data.items || []) as Array<{
+    id: number
+    name: string
+    is_default?: boolean
+    precompute_enabled?: boolean
+    is_active?: boolean
+  }>
+}
+
+const rpeSignalColumns: SignalColumn[] = [
+  { prop: 'code', label: '代码', width: 96 },
+  { prop: 'name', label: '名称', minWidth: 120, showOverflowTooltip: true },
+  { prop: 'signal_type', label: '信号类型', width: 110 },
+  { prop: 'z_score', label: 'Z值', width: 88, align: 'right' },
+  { prop: 'ratio', label: '比价', width: 88, align: 'right' },
+  { prop: 'sector_name', label: '板块', minWidth: 120, showOverflowTooltip: true },
+  { prop: 'close', label: '收盘', width: 88, align: 'right', formatter: (row) => formatClose(row) },
+  { prop: 'nearest_support', label: '最近支撑', width: 100, align: 'right' },
+  { prop: 'nearest_resistance', label: '最近压力', width: 100, align: 'right' },
+  { prop: 'updated_at', label: '写入时间', minWidth: 168 },
+]
 
 const createForm = reactive({ name: '', description: '', set_default: false })
 const btForm = reactive({

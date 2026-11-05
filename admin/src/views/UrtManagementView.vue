@@ -11,6 +11,15 @@
     <el-tab-pane label="策略参数" name="config">
       <UrtStrategyConfiguration @need-precompute="onNeedPrecompute" />
     </el-tab-pane>
+    <el-tab-pane label="信号结果" name="signals" lazy>
+      <StrategySignalResultsPanel
+        strategy-code="URT"
+        :list-signals="listUrtSignals"
+        :list-configs="listUrtConfigs"
+        show-market-switcher
+        :columns="urtSignalColumns"
+      />
+    </el-tab-pane>
     <el-tab-pane label="回测管理" name="backtest">
       <UrtBacktestManagement />
     </el-tab-pane>
@@ -27,6 +36,9 @@
 import { provide, ref, watch } from 'vue'
 import { urtApiService } from '@/services/urtApi'
 import StrategyOpsShell from '@/components/layout/StrategyOpsShell.vue'
+import StrategySignalResultsPanel, {
+  type SignalColumn,
+} from '@/components/strategy/StrategySignalResultsPanel.vue'
 import UrtStrategyConfiguration from '@/components/urt/StrategyConfiguration.vue'
 import UrtBacktestManagement from '@/components/urt/BacktestManagement.vue'
 import UrtReportAnalysis from '@/components/urt/ReportAnalysis.vue'
@@ -42,6 +54,22 @@ const auditRef = ref<{ refresh?: () => void } | null>(null)
 function onNeedPrecompute(configId?: number | null) {
   shellRef.value?.openPrecompute(configId)
 }
+
+const listUrtSignals = (query: Parameters<typeof urtApiService.listSignals>[0]) =>
+  urtApiService.listSignals(query)
+const listUrtConfigs = () => urtApiService.listStrategyConfigs()
+
+const urtSignalColumns: SignalColumn[] = [
+  { prop: 'code', label: '代码', width: 96 },
+  { prop: 'name', label: '名称', minWidth: 120, showOverflowTooltip: true },
+  { prop: 'score', label: '分数', width: 88, align: 'right' },
+  { prop: 'signal_strength', label: '信号强度', width: 100, align: 'right' },
+  { prop: 'close', label: '收盘', width: 88, align: 'right' },
+  { prop: 'ma20', label: 'MA20', width: 88, align: 'right' },
+  { prop: 'volume_multiple', label: '放量倍数', width: 100, align: 'right' },
+  { prop: 'yang_rule', label: '阳线规则', width: 110, showOverflowTooltip: true },
+  { prop: 'created_at', label: '写入时间', minWidth: 168 },
+]
 
 watch(activeTab, (tab) => {
   if (tab === 'reports') reportRef.value?.refresh?.()

@@ -241,6 +241,26 @@ def _resolve_strategy_config_id(db: Session, config_id: Optional[int]) -> int:
     return int(row.id)
 
 
+def _resolve_signals_config_id(db: Session, config_id: Optional[int]) -> int:
+    """信号查询：显式 config 校验存在；缺省先 default，再预计算启用版，再无则 400。"""
+    mgr = CSBConfigManager()
+    mgr.ensure_default_row(db)
+    if config_id is not None:
+        row = mgr.get_config_row(db, int(config_id))
+        if not row:
+            raise HTTPException(status_code=404, detail=f"参数版本不存在: {config_id}")
+        return int(config_id)
+    effective = _resolve_effective_config_id(db, mgr)
+    if effective is not None:
+        return int(effective)
+    from backend_core.strategies.csb.scheduled_precompute import list_precompute_config_ids
+
+    ids = list_precompute_config_ids(db) or mgr.list_precompute_config_ids(db)
+    if ids:
+        return int(ids[0])
+    raise HTTPException(status_code=400, detail="无可用 CSB 参数版本")
+
+
 def _normalize_a_code(code: str) -> str:
     s = str(code or "").strip()
     if s.isdigit() and len(s) <= 6:
@@ -869,6 +889,34 @@ async def run_precompute(
         "config_id": config_id,
         "limit": limit,
     }
+
+
+@router.get("/signals")
+async def list_admin_signals(
+    trade_date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD，空则取行情最新日"),
+    config_id: Optional[int] = Query(None, description="参数版本；空则默认/预计算版本"),
+    code: Optional[str] = Query(None, description="可选股票代码"),
+    limit: int = Query(50, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """管理端只读：按日查询预计算入场信号（与日终口径一致，不改写入）。"""
+    date_s = (trade_date or "").strip()[:10] or None
+    if not date_s:
+        from backend_core.strategies.csb.scheduled_precompute import resolve_csb_trade_date
+
+        date_s = resolve_csb_trade_date(db)
+    cid = _resolve_signals_config_id(db, config_id)
+    from backend_core.strategies.csb.trace_store import list_admin_entry_signals
+
+    return list_admin_entry_signals(
+        db,
+        trade_date=date_s,
+        config_id=cid,
+        code=code,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/trace/stats")

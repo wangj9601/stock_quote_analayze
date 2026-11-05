@@ -163,6 +163,134 @@ def load_traces(
     return out
 
 
+def _parse_dt(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s.replace(" ", "T") if "T" not in s and " " in s else s)
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    except Exception:
+        return None
+
+
+def _normalize_code(code: str) -> str:
+    s = str(code or "").strip()
+    if s.isdigit() and len(s) <= 6:
+        return s.zfill(6)
+    return s
+
+
+def _admin_item_from_trace_row(r, *, trade_date: str) -> Dict[str, Any]:
+    created = getattr(r, "created_at", None)
+    updated = getattr(r, "updated_at", None)
+    created_s = created.isoformat() if hasattr(created, "isoformat") else (str(created) if created else None)
+    updated_s = updated.isoformat() if hasattr(updated, "isoformat") else (str(updated) if updated else None)
+    date_s = r.trade_date.isoformat() if r.trade_date else trade_date
+    return {
+        "code": r.code,
+        "symbol": r.code,
+        "name": r.name,
+        "date": date_s,
+        "trade_date": date_s,
+        "market_type": r.market_type,
+        "sector_id": r.sector_id,
+        "sector_name": r.sector_name,
+        "z_score": r.z_score,
+        "ratio": r.ratio,
+        "signal_type": r.signal_type,
+        "entry_signal": bool(r.entry_signal),
+        "watch_only": r.watch_only,
+        "trend_veto": r.trend_veto,
+        "sector_slope": r.sector_slope,
+        "support_levels": r.support_levels or [],
+        "resistance_levels": r.resistance_levels or [],
+        "nearest_support": r.nearest_support,
+        "nearest_resistance": r.nearest_resistance,
+        "structure_valid": r.structure_valid,
+        "liquidity_ok": r.liquidity_ok,
+        "close": r.close_price,
+        "close_price": r.close_price,
+        "detail": r.detail or {},
+        "config_id": r.config_id,
+        "created_at": created_s,
+        "updated_at": updated_s,
+    }
+
+
+def list_admin_entry_signals(
+    db,
+    *,
+    trade_date: str,
+    config_id: int,
+    code: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """管理端只读：按日列出预计算入场信号（分页 + 元数据，不触发 screen）。"""
+    from backend_api.models import RPESignalTrace
+
+    date_s = str(trade_date or "")[:10]
+    cid = int(config_id)
+    try:
+        limit_n = int(limit if limit is not None else 50)
+    except (TypeError, ValueError):
+        limit_n = 50
+    try:
+        offset_n = int(offset if offset is not None else 0)
+    except (TypeError, ValueError):
+        offset_n = 0
+    limit_n = min(max(1, limit_n), 2000)
+    offset_n = max(0, offset_n)
+
+    try:
+        d = datetime.strptime(date_s, "%Y-%m-%d").date()
+    except ValueError as exc:
+        raise ValueError(f"trade_date 无效: {date_s}") from exc
+    code_n: Optional[str] = None
+    raw_code = str(code).strip() if code is not None else ""
+    if raw_code:
+        code_n = _normalize_code(raw_code)
+
+    q = db.query(RPESignalTrace).filter(
+        RPESignalTrace.trade_date == d,
+        RPESignalTrace.config_id == cid,
+    )
+    if code_n:
+        q = q.filter(RPESignalTrace.code == code_n)
+    rows = list(q.all())
+
+    last_written = None
+    for row in rows:
+        dt = _parse_dt(getattr(row, "updated_at", None)) or _parse_dt(getattr(row, "created_at", None))
+        if dt is not None and (last_written is None or dt > last_written):
+            last_written = dt
+
+    entries = [row for row in rows if bool(getattr(row, "entry_signal", False))]
+    entries.sort(
+        key=lambda r: (
+            float(r.z_score) if r.z_score is not None else float("inf"),
+            str(r.code or ""),
+        )
+    )
+    total = len(entries)
+    page = entries[offset_n : offset_n + limit_n]
+    return {
+        "items": [_admin_item_from_trace_row(row, trade_date=date_s) for row in page],
+        "total": total,
+        "trade_date": date_s,
+        "config_id": cid,
+        "last_written_at": last_written.isoformat() if last_written else None,
+        "has_any_trace": bool(rows),
+    }
+
+
 def _panel_as_of(
     panel: Dict[str, List[Dict[str, Any]]], trade_date: str
 ) -> Dict[str, List[Dict[str, Any]]]:

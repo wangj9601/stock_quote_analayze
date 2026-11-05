@@ -332,6 +332,110 @@ def query_buy_signals_for_date(
     return [_row_to_dict(r) for r in q.all()]
 
 
+def _parse_dt(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        if s.endswith("Z"):
+            s = s[:-1] + "+00:00"
+        dt = datetime.fromisoformat(s.replace(" ", "T") if "T" not in s and " " in s else s)
+        return dt.replace(tzinfo=None) if dt.tzinfo else dt
+    except Exception:
+        return None
+
+
+def _admin_item_from_trace_row(row: Any) -> Dict[str, Any]:
+    item = _row_to_dict(row)
+    created = getattr(row, "created_at", None)
+    updated = getattr(row, "updated_at", None)
+    created_s = None
+    if created is not None:
+        created_s = created.isoformat() if hasattr(created, "isoformat") else str(created)
+    updated_s = None
+    if updated is not None:
+        updated_s = updated.isoformat() if hasattr(updated, "isoformat") else str(updated)
+    item["created_at"] = created_s
+    item["updated_at"] = updated_s
+    return item
+
+
+def _is_csb_scan_marker(row: Any) -> bool:
+    code = str(getattr(row, "code", "") or "")
+    sig = str(getattr(row, "signal_type", "") or "")
+    return code == CSB_TRACE_SCANNED_MARKER or sig == CSB_STOCK_DAY_SCANNED
+
+
+def list_admin_entry_signals(
+    db: Session,
+    *,
+    trade_date: str,
+    config_id: int,
+    code: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """管理端只读：按日列出预计算入场信号（分页 + 元数据，无市场参数）。"""
+    from backend_api.models import CSBSignalTrace
+
+    date_s = str(trade_date or "")[:10]
+    cid = int(config_id)
+    try:
+        limit_n = int(limit if limit is not None else 50)
+    except (TypeError, ValueError):
+        limit_n = 50
+    try:
+        offset_n = int(offset if offset is not None else 0)
+    except (TypeError, ValueError):
+        offset_n = 0
+    limit_n = min(max(1, limit_n), 2000)
+    offset_n = max(0, offset_n)
+
+    code_n: Optional[str] = None
+    raw_code = str(code).strip() if code is not None else ""
+    if raw_code:
+        code_n = _normalize_code(raw_code)
+
+    q = db.query(CSBSignalTrace).filter(
+        CSBSignalTrace.trade_date == date_s,
+        CSBSignalTrace.config_id == cid,
+    )
+    if code_n:
+        q = q.filter(CSBSignalTrace.code == code_n)
+    rows = list(q.all())
+
+    last_written = None
+    for row in rows:
+        for attr in ("updated_at", "created_at"):
+            dt = _parse_dt(getattr(row, attr, None))
+            if dt is not None and (last_written is None or dt > last_written):
+                last_written = dt
+
+    entries = [
+        row
+        for row in rows
+        if bool(getattr(row, "entry_signal", False)) and not _is_csb_scan_marker(row)
+    ]
+    entries.sort(
+        key=lambda r: float(r.score) if r.score is not None else float("-inf"),
+        reverse=True,
+    )
+    total = len(entries)
+    page = entries[offset_n : offset_n + limit_n]
+    return {
+        "items": [_admin_item_from_trace_row(row) for row in page],
+        "total": total,
+        "trade_date": date_s,
+        "config_id": cid,
+        "last_written_at": last_written.isoformat() if last_written else None,
+        "has_any_trace": bool(rows),
+    }
+
+
 def query_trace_by_code(
     db: Session,
     *,

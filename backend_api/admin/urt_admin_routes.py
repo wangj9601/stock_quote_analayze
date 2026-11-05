@@ -128,6 +128,26 @@ def _resolve_strategy_config_id(db: Session, config_id: Optional[int]) -> int:
     return int(row.id)
 
 
+def _resolve_signals_config_id(db: Session, config_id: Optional[int]) -> int:
+    """信号查询：显式 config 校验存在；缺省先 effective，再预计算启用版，再无则 400。"""
+    mgr = URTConfigManager()
+    mgr.ensure_default_row(db)
+    if config_id is not None:
+        row = mgr.get_config_row(db, int(config_id))
+        if not row:
+            raise HTTPException(status_code=404, detail=f"参数版本不存在: {config_id}")
+        return int(config_id)
+    effective = mgr.resolve_effective_config_id(db)
+    if effective is not None:
+        return int(effective)
+    from backend_core.strategies.urt.scheduled_precompute import list_precompute_config_ids
+
+    ids = list_precompute_config_ids(db) or mgr.list_precompute_config_ids(db)
+    if ids:
+        return int(ids[0])
+    raise HTTPException(status_code=400, detail="无可用 URT 参数版本")
+
+
 def _normalize_a_code(code: str) -> str:
     s = str(code or "").strip()
     if s.isdigit() and len(s) <= 6:
@@ -699,6 +719,42 @@ async def run_precompute(
         "market": mkt,
         "limit": limit,
     }
+
+
+@router.get("/signals")
+async def list_admin_signals(
+    trade_date: Optional[str] = Query(None, description="交易日 YYYY-MM-DD，空则取行情最新日"),
+    config_id: Optional[int] = Query(None, description="参数版本；空则有效预计算版本"),
+    market: str = Query("CN", description="CN=A股 / HK=港股"),
+    code: Optional[str] = Query(None, description="可选股票代码"),
+    limit: int = Query(50, ge=1, le=2000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """管理端只读：按日查询预计算买点（与日终口径一致，不改写入）。"""
+    mkt = (market or "CN").strip().upper()
+    if mkt not in ("CN", "HK"):
+        raise HTTPException(status_code=400, detail="market 须为 CN 或 HK")
+    date_s = (trade_date or "").strip()[:10] or None
+    if not date_s:
+        from backend_core.strategies.urt.scheduled_precompute import resolve_urt_trade_date
+
+        date_s = resolve_urt_trade_date(db, market=mkt)
+    cid = _resolve_signals_config_id(db, config_id)
+    from backend_core.strategies.urt.trace_store import list_admin_buy_signals
+
+    try:
+        return list_admin_buy_signals(
+            db,
+            trade_date=date_s,
+            config_id=cid,
+            market=mkt,
+            code=code,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @router.get("/trace/stats")

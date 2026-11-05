@@ -273,6 +273,34 @@ class CSBApiService {
     return res.data
   }
 
+  /**
+   * 预计算入场信号。响应为顶层 JSON，不包 success/data。
+   * 省略 trade_date / config_id 时由后端解析最新交易日与默认版本。无 market 参数。
+   */
+  async listSignals(params: {
+    trade_date?: string
+    config_id?: number
+    code?: string
+    limit?: number
+    offset?: number
+  }): Promise<{
+    items: any[]
+    total: number
+    trade_date: string
+    config_id: number
+    last_written_at: string | null
+    has_any_trace: boolean
+  }> {
+    const q = new URLSearchParams()
+    if (params.trade_date) q.set('trade_date', params.trade_date)
+    if (params.config_id != null) q.set('config_id', String(params.config_id))
+    if (params.code) q.set('code', params.code)
+    q.set('limit', String(params.limit ?? 50))
+    q.set('offset', String(params.offset ?? 0))
+    const qs = q.toString()
+    return this.request(`${PREFIX}/signals?${qs}`)
+  }
+
   async getAuditLogs(params?: { limit?: number; offset?: number; log_type?: string }) {
     const q = new URLSearchParams()
     if (params?.limit) q.set('limit', String(params.limit))

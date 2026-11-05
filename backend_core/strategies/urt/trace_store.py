@@ -681,6 +681,144 @@ def query_buy_signals_for_date(
     return out
 
 
+def _admin_item_from_trace_row(row: Any) -> Dict[str, Any]:
+    created = getattr(row, "created_at", None)
+    created_s = None
+    if created is not None:
+        if hasattr(created, "isoformat"):
+            created_s = created.isoformat()
+        else:
+            created_s = str(created)
+    item = {
+        "code": row.code,
+        "name": row.name or "",
+        "signal_date": row.date,
+        "date": row.date,
+        "config_id": row.config_id,
+        "close": row.close,
+        "open": row.open,
+        "ma20": row.ma20,
+        "above_ma20": row.above_ma20,
+        "yang_count_4": row.yang_count_4,
+        "yang_count_5": row.yang_count_5,
+        "yang_rule": row.yang_rule,
+        "avg_volume_20": row.avg_volume_20,
+        "volume": row.volume,
+        "volume_multiple": row.volume_multiple,
+        "volume_ratio": row.volume_ratio,
+        "turnover_rate": row.turnover_rate,
+        "score": row.score,
+        "signal_strength": row.signal_strength,
+        "score_detail": row.score_detail,
+        "buy_signal": True,
+        "from_cache": True,
+        "created_at": created_s,
+    }
+    _enrich_trace_structure_fields(item, score_detail=row.score_detail, close=row.close)
+    return item
+
+
+def _trace_matches_market(code: str, market: str) -> bool:
+    from backend_core.strategies.urt.data_loader import is_hk_stock_code
+
+    hk = is_hk_stock_code(str(code or ""))
+    return hk if market == "HK" else not hk
+
+
+def list_admin_buy_signals(
+    db: Session,
+    *,
+    trade_date: str,
+    config_id: int,
+    market: str = "CN",
+    code: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """管理端只读：按日列出预计算买点（分页 + 市场 + 元数据）。"""
+    from backend_api.models import URTSignalTrace
+
+    date_s = str(trade_date or "")[:10]
+    cid = int(config_id)
+    mkt = str(market or "CN").strip().upper()
+    if mkt not in ("CN", "HK"):
+        raise ValueError("market 须为 CN 或 HK")
+    try:
+        limit_n = int(limit if limit is not None else 50)
+    except (TypeError, ValueError):
+        limit_n = 50
+    try:
+        offset_n = int(offset if offset is not None else 0)
+    except (TypeError, ValueError):
+        offset_n = 0
+    limit_n = min(max(1, limit_n), 2000)
+    offset_n = max(0, offset_n)
+
+    code_n: Optional[str] = None
+    raw_code = str(code).strip() if code is not None else ""
+    if raw_code:
+        if mkt == "HK":
+            from backend_core.strategies.urt.data_loader import normalize_hk_code
+
+            code_n = normalize_hk_code(raw_code) or raw_code
+        else:
+            code_n = _normalize_a_share_code(raw_code)
+
+    q = db.query(URTSignalTrace).filter(
+        URTSignalTrace.date == date_s,
+        URTSignalTrace.config_id == cid,
+    )
+    if code_n:
+        q = q.filter(URTSignalTrace.code == code_n)
+    rows = list(q.all())
+
+    market_rows: List[Any] = []
+    other_market_rows: List[Any] = []
+    marker_rows: List[Any] = []
+    for row in rows:
+        row_code = str(getattr(row, "code", "") or "")
+        if row_code == URT_TRACE_SCANNED_MARKER:
+            marker_rows.append(row)
+            continue
+        if _trace_matches_market(row_code, mkt):
+            market_rows.append(row)
+        else:
+            other_market_rows.append(row)
+
+    # 共享扫描占位不区分市场。本市场已有股票行时只统计本市场；
+    # 另一市场已有股票行而本市场没有时，不得借用占位。
+    # 仅当两侧都没有股票行时，占位才表示「已扫描但无买点」。
+    if market_rows:
+        meta_rows = market_rows
+    elif other_market_rows:
+        meta_rows = []
+    else:
+        meta_rows = marker_rows
+
+    last_written = None
+    for row in meta_rows:
+        created = getattr(row, "created_at", None)
+        dt = created if isinstance(created, datetime) else _parse_dt(created)
+        if dt is not None and (last_written is None or dt > last_written):
+            last_written = dt
+
+    buys = [row for row in market_rows if bool(getattr(row, "buy_signal", False))]
+    buys.sort(
+        key=lambda r: float(r.score) if r.score is not None else float("-inf"),
+        reverse=True,
+    )
+    total = len(buys)
+    page = buys[offset_n : offset_n + limit_n]
+    return {
+        "items": [_admin_item_from_trace_row(row) for row in page],
+        "total": total,
+        "trade_date": date_s,
+        "config_id": cid,
+        "last_written_at": last_written.isoformat() if last_written else None,
+        "has_any_trace": bool(meta_rows),
+    }
+
+
 def query_trace_by_code(
     db: Session,
     *,
