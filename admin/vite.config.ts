@@ -92,8 +92,8 @@ export default defineConfig(({ mode }) => {
         '@': resolve(__dirname, 'src'),
       },
     },
-    // 添加基础路径配置，支持生产环境部署
-    base: process.env.NODE_ENV === 'production' ? '/admin/' : '/',
+    // 管理端独立子域 admin.icemaplecity.com 部署在站点根路径；可用 VITE_BASE 覆盖
+    base: process.env.VITE_BASE || '/',
     server: {
       port: 8001,
       host: true,

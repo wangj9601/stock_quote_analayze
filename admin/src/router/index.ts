@@ -221,22 +221,9 @@ const routes = [
   }
 ]
 
-// 根据环境确定基础路径
-// 开发环境：如果访问路径包含 /admin/，则使用 /admin/ 作为基础路径
-// 否则使用 / 作为基础路径
-const getBasePath = () => {
-  if (process.env.NODE_ENV === 'production') {
-    return '/admin/'
-  }
-  // 开发环境：检查当前路径是否包含 /admin/
-  if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin/')) {
-    return '/admin/'
-  }
-  return '/'
-}
-
+// 与 Vite base 一致（生产子域根路径为 /；可由 VITE_BASE 覆盖）
 const router = createRouter({
-  history: createWebHistory(getBasePath()),
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
 

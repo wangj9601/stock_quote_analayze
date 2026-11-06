@@ -528,6 +528,8 @@ origins = [
     "https://www.icemaplecity.com",  # 生产环境 HTTPS 域名
     "http://icemaplecity.com",  # 生产环境域名（无 www）
     "https://icemaplecity.com",  # 生产环境 HTTPS 域名（无 www）
+    "http://admin.icemaplecity.com",  # 管理端子域
+    "https://admin.icemaplecity.com",  # 管理端子域 HTTPS
 ]
 
 # 用于 CORS 的 origin 校验（含正则匹配 localhost 任意端口）
