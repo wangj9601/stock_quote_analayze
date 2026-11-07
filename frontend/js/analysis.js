@@ -9,7 +9,7 @@ const AnalysisPage = {
     /** 非默认 Tab 的脚本。板块分析留在 HTML 里同步加载。 */
     TAB_SCRIPTS: {
         'leader-mid': [
-            'js/leader_mid_analysis.js',
+            'js/leader_mid_analysis.js?v=20261107-lm-polish2',
         ],
         'stock-ai': [
             'js/echarts.min.js',
@@ -40,7 +40,7 @@ const AnalysisPage = {
         ],
         'trade-observe': [
             'js/margin_ui.js?v=20261031-margin-read',
-            'js/trade_observe.js?v=20261030-margin',
+            'js/trade_observe.js?v=20261107-uto-batch',
         ],
         recommend: [
             'js/recommend.js?v=20260930-rv',

@@ -71,13 +71,16 @@ def test_expand_modules_granular():
         "stock_fund_flow_daily",
         "stock_fund_flow_daily_hk",
         "stock_fund_flow_em_daily",
+        "stock_margin_daily",
     ]
     assert expand_modules(["fund_info"]) == [
         "stock_fund_flow_daily",
         "stock_fund_flow_daily_hk",
         "stock_fund_flow_em_daily",
+        "stock_margin_daily",
     ]
     assert expand_modules(["stock_fund_flow_daily"]) == ["stock_fund_flow_daily"]
+    assert expand_modules(["stock_margin_daily"]) == ["stock_margin_daily"]
     assert "rs_ratings" in expand_modules(["computed_results"])
     assert "gms_signal_trace" in expand_modules(["computed_results"])
     assert "stock_recommend_brief" in expand_modules(["computed_info"])
@@ -103,6 +106,7 @@ def test_expand_modules_granular():
     assert needs_date_range(["stock_fund_flow_daily"]) is True
     assert needs_date_range(["stock_fund_flow_daily_hk"]) is True
     assert needs_date_range(["stock_fund_flow_em_daily"]) is True
+    assert needs_date_range(["stock_margin_daily"]) is True
     assert needs_date_range(["rs_ratings"]) is True
     assert needs_date_range(["board_fund_flow_daily"]) is True
     assert needs_date_range(["stock_adj_factor"]) is False
@@ -115,11 +119,13 @@ def test_expand_modules_granular():
     assert "stock_fund_flow_daily" in ALL_RESOURCES
     assert "stock_fund_flow_daily_hk" in ALL_RESOURCES
     assert "stock_fund_flow_em_daily" in ALL_RESOURCES
+    assert "stock_margin_daily" in ALL_RESOURCES
     assert "rs_ratings" in ALL_RESOURCES
     assert "market_daily_review" in ALL_RESOURCES
     assert "stock_adj_factor" not in expand_modules(None)
     assert "stock_fina_indicator" not in expand_modules(None)
     assert "stock_fund_flow_daily" not in expand_modules(None)
+    assert "stock_margin_daily" not in expand_modules(None)
     assert "rs_ratings" not in expand_modules(None)
     try:
         expand_modules(["no_such"])
@@ -360,17 +366,82 @@ def test_iter_fund_flow_push_chunks():
         {"code": f"{i:05d}", "trade_date": "2024-01-02", "net_amount": float(i)}
         for i in range(5)
     ]
+    margin_rows = [
+        {"code": f"{i:06d}", "trade_date": "2024-01-02", "rzye": float(i)}
+        for i in range(3)
+    ]
     bundle = {
         "module": "fund_flow",
         "items": {
             "stock_fund_flow_daily": cn_rows,
             "stock_fund_flow_daily_hk": hk_rows,
+            "stock_margin_daily": margin_rows,
         },
     }
     parts = iter_fund_flow_push_chunks(bundle, chunk_rows=4)
-    assert len(parts) == 5  # CN: 4+4+2, HK: 4+1
+    assert len(parts) == 6  # CN: 4+4+2, HK: 4+1, margin: 3
     assert sum(len((p["items"].get("stock_fund_flow_daily") or [])) for p in parts) == 10
     assert sum(len((p["items"].get("stock_fund_flow_daily_hk") or [])) for p in parts) == 5
+    assert sum(len((p["items"].get("stock_margin_daily") or [])) for p in parts) == 3
+
+
+def test_margin_daily_roundtrip(db):
+    from backend_api.env_sync.services import export_modules
+    from backend_api.env_sync.services.market_data import import_fund_flow
+    from backend_api.models import StockMarginDaily
+
+    try:
+        export_modules(db, ["stock_margin_daily"])
+        assert False
+    except ValueError as e:
+        assert "start_date" in str(e)
+
+    db.add(
+        StockMarginDaily(
+            code="600519",
+            trade_date="2024-01-02",
+            name="贵州茅台",
+            rzye=1.2e9,
+            rzmre=3.5e7,
+            rzche=2.1e7,
+            rqye=5e6,
+            rqyl=1000.0,
+            rqmcl=200.0,
+            rqchl=150.0,
+            rzrqye=1.205e9,
+            source="tushare",
+        )
+    )
+    db.add(
+        StockMarginDaily(
+            code="600519",
+            trade_date="2024-01-10",
+            name="贵州茅台",
+            rzye=1.1e9,
+            source="tushare",
+        )
+    )
+    db.commit()
+
+    out = export_modules(
+        db,
+        ["stock_margin_daily"],
+        start_date="2024-01-01",
+        end_date="2024-01-05",
+    )
+    rows = out["bundles"]["fund_flow"]["items"]["stock_margin_daily"]
+    assert len(rows) == 1
+    assert rows[0]["code"] == "600519"
+    assert rows[0]["trade_date"] == "2024-01-02"
+    assert rows[0]["rzye"] == 1.2e9
+
+    db.query(StockMarginDaily).delete()
+    db.commit()
+    result = import_fund_flow(db, out["bundles"]["fund_flow"], tables={"stock_margin_daily"})
+    assert result["created"] == 1
+    saved = db.query(StockMarginDaily).filter_by(code="600519", trade_date="2024-01-02").one()
+    assert saved.rzye == 1.2e9
+    assert saved.name == "贵州茅台"
 
 
 def test_computed_results_require_date_and_roundtrip(db):

@@ -65,11 +65,12 @@ RESOURCE_QUOTES = [
     "historical_quotes_hk",
 ]
 
-# —— 个股资金流（须日期范围）——
+# —— 个股资金流 / 两融（须日期范围）——
 RESOURCE_FUND_FLOW = [
     "stock_fund_flow_daily",
     "stock_fund_flow_daily_hk",
     "stock_fund_flow_em_daily",
+    "stock_margin_daily",
 ]
 
 # —— 预计算 / 复盘结果（须日期范围；信号表建议先同步策略配置）——
@@ -383,6 +384,12 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
                 "desc": "stock_fund_flow_em_daily（日终以 Tushare 为主，可含东财），按 trade_date 区间",
                 "requires_date_range": True,
             },
+            {
+                "code": "stock_margin_daily",
+                "name": "两融数据（个股日明细）",
+                "desc": "stock_margin_daily（融资融券余额等）；日终以 Tushare margin_detail 为主，按 trade_date 区间",
+                "requires_date_range": True,
+            },
         ],
     },
     {
@@ -625,7 +632,7 @@ def catalog_for_api() -> Dict[str, Any]:
             {
                 "code": "fund_flow",
                 "name": "资金流（全部）",
-                "desc": "A股+港股个股资金流日表，须日期范围",
+                "desc": "A股+港股个股资金流日表 + 两融日明细，须日期范围",
             },
             {
                 "code": "computed_results",

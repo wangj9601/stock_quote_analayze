@@ -371,6 +371,56 @@ def remove_observe(
     return hist
 
 
+def remove_observe_batch(
+    db: Session,
+    user: User,
+    observe_ids: List[int],
+) -> Dict[str, Any]:
+    """批量移除观察并归档；跳过不存在或不属于当前用户的 id。"""
+    seen = set()
+    ids: List[int] = []
+    for raw in observe_ids or []:
+        try:
+            oid = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if oid <= 0 or oid in seen:
+            continue
+        seen.add(oid)
+        ids.append(oid)
+    if not ids:
+        raise HTTPException(status_code=400, detail="请至少选择一条观察记录")
+    if len(ids) > 200:
+        raise HTTPException(status_code=400, detail="单次最多移除 200 条")
+
+    removed = 0
+    missing: List[int] = []
+    history_ids: List[int] = []
+    for oid in ids:
+        row = get_observe(db, user.id, oid)
+        if not row:
+            missing.append(oid)
+            continue
+        hist = _archive_observe_row(db, row)
+        db.delete(row)
+        db.flush()
+        removed += 1
+        history_ids.append(hist.id)
+
+    db.commit()
+    logger.info(
+        "交易观察批量移除 user_id=%s removed=%s missing=%s",
+        user.id,
+        removed,
+        len(missing),
+    )
+    return {
+        "removed": removed,
+        "missing": missing,
+        "history_ids": history_ids,
+    }
+
+
 def list_history(
     db: Session,
     user_id: int,

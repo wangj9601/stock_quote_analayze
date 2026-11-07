@@ -199,3 +199,36 @@ def test_remove_observe_writes_history(client, memory_db):
     hist = client.get("/api/stock/trade-observe/history")
     assert hist.status_code == 200
     assert hist.json()["total"] >= 1
+
+
+def test_batch_remove_observe(client, memory_db):
+    ids = []
+    for code in ("300010", "300011", "300012"):
+        obs = client.post(
+            "/api/stock/trade-observe/add",
+            json={
+                "source": "recommend",
+                "code": code,
+                "signal_date": "2026-08-01",
+            },
+        )
+        assert obs.status_code == 200
+        ids.append(obs.json()["id"])
+    assert client.get("/api/stock/trade-observe/list?source=recommend").json()["total"] == 3
+
+    bad = client.post("/api/stock/trade-observe/batch-remove", json={"ids": []})
+    assert bad.status_code == 422
+
+    rm = client.post(
+        "/api/stock/trade-observe/batch-remove",
+        json={"ids": [ids[0], ids[1], 99999999]},
+    )
+    assert rm.status_code == 200
+    body = rm.json()
+    assert body["removed"] == 2
+    assert 99999999 in body["missing"]
+    assert client.get("/api/stock/trade-observe/list?source=recommend").json()["total"] == 1
+
+    left = client.delete(f"/api/stock/trade-observe/{ids[2]}")
+    assert left.status_code == 200
+    assert client.get("/api/stock/trade-observe/list?source=recommend").json()["total"] == 0

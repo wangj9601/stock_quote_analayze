@@ -177,6 +177,33 @@ def list_trade_observe_history(
     )
 
 
+class TradeObserveBatchRemoveRequest(BaseModel):
+    ids: List[int] = Field(..., min_length=1, max_length=200, description="观察记录 id 列表")
+
+
+@router.post("/batch-remove")
+def batch_remove_trade_observe(
+    body: TradeObserveBatchRemoveRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    result = svc.remove_observe_batch(db, user, body.ids)
+    removed = int(result.get("removed") or 0)
+    missing = result.get("missing") or []
+    if removed <= 0:
+        raise HTTPException(status_code=404, detail="所选记录均不存在或无权移除")
+    msg = f"已移出 {removed} 条交易观察并归档"
+    if missing:
+        msg += f"（{len(missing)} 条跳过）"
+    return {
+        "success": True,
+        "message": msg,
+        "removed": removed,
+        "missing": missing,
+        "history_ids": result.get("history_ids") or [],
+    }
+
+
 @router.delete("/{item_id}")
 def remove_trade_observe(
     item_id: int,

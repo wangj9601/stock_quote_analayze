@@ -193,6 +193,25 @@ body.ops-map .lm-board-picker-item {
     color: var(--ops-ink) !important;
 }
 
+/* 板块名/代码：弹层不在 .main-content 内，须单独压掉浅色页遗留的 #0f172a */
+body.ops-map .lm-board-picker-name,
+body.ops-map .gms-board-picker-name {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .lm-board-picker-code,
+body.ops-map .lm-board-picker-slope,
+body.ops-map .lm-board-picker-empty,
+body.ops-map .lm-board-picker-count,
+body.ops-map .lm-board-picker-filter {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .lm-modal-actions {
+    background: var(--ops-ground-elevated) !important;
+    border-top-color: var(--color-border) !important;
+}
+
 body.ops-map .news-card:hover,
 body.ops-map .stock-item:hover,
 body.ops-map .sector-item:hover,

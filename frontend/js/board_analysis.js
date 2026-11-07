@@ -311,11 +311,14 @@ const BoardAnalysis = {
         return `<label class="lm-board-picker-item" title="${this.escAttr(title)}">
           <input type="checkbox" value="${this.escAttr(code)}"${checked}>
           <span class="lm-board-picker-item-text">
-            <span class="lm-board-picker-name">${this.esc(name)}${n != null ? ` (${n})` : ''}
+            <span class="lm-board-picker-name-row">
+              <span class="lm-board-picker-name">${this.esc(name)}</span>
               <span class="ba-env-chip ${this.escAttr(envClass)}">${this.esc(envLabel)}</span>
+            </span>
+            <span class="lm-board-picker-meta">
+              <span class="lm-board-picker-code">${this.esc(code)}${countTxt ? ` · ${this.esc(countTxt)}` : ''}</span>
               <span class="lm-board-picker-slope">斜率 ${this.esc(slopeTxt)}</span>
             </span>
-            <span class="lm-board-picker-code">${this.esc(code)}${countTxt ? ` · ${this.esc(countTxt)}` : ''}</span>
           </span>
         </label>`;
       })

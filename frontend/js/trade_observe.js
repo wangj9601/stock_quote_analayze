@@ -18,8 +18,10 @@ const UnifiedTradeObserve = {
     LOTS_SOURCES: new Set(['gms', 'urt']),
     _observeItems: new Map(),
     _formalItems: new Map(),
+    _selectedIds: new Set(),
     _loading: false,
     _seq: 0,
+    OBSERVE_COLS: 10,
 
     apiBase() {
         if (typeof window !== 'undefined' && window.Config && typeof window.Config.getApiBaseUrl === 'function') {
@@ -59,11 +61,32 @@ const UnifiedTradeObserve = {
         const obsBody = document.getElementById('utoObserveTableBody');
         if (obsBody) {
             obsBody.addEventListener('click', (e) => this._onObserveClick(e));
+            obsBody.addEventListener('change', (e) => this._onObserveSelectChange(e));
+        }
+        const selectAll = document.getElementById('utoSelectAllCb');
+        if (selectAll) {
+            selectAll.addEventListener('change', () => {
+                this.setAllSelected(!!selectAll.checked);
+            });
+        }
+        const selectPageBtn = document.getElementById('utoSelectPageBtn');
+        if (selectPageBtn) {
+            selectPageBtn.addEventListener('click', () => this.setAllSelected(true));
+        }
+        const clearBtn = document.getElementById('utoClearSelectBtn');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => this.setAllSelected(false));
+        }
+        const batchBtn = document.getElementById('utoBatchRemoveBtn');
+        if (batchBtn) {
+            batchBtn.addEventListener('click', () => this.batchRemoveObserve(batchBtn));
         }
         const formalBody = document.getElementById('utoFormalTableBody');
         if (formalBody) {
             formalBody.addEventListener('click', (e) => this._onFormalClick(e));
         }
+        this._syncBatchBarVisibility();
+        this.updateSelectUi();
     },
 
     switchSub(sub) {
@@ -77,7 +100,13 @@ const UnifiedTradeObserve = {
         const formalWrap = document.getElementById('utoFormalWrap');
         if (obsWrap) obsWrap.hidden = this.sub !== 'observe';
         if (formalWrap) formalWrap.hidden = this.sub !== 'formal';
+        this._syncBatchBarVisibility();
         this.refresh();
+    },
+
+    _syncBatchBarVisibility() {
+        const bar = document.getElementById('utoBatchBar');
+        if (bar) bar.hidden = this.sub !== 'observe';
     },
 
     sourceQuery() {
@@ -133,6 +162,7 @@ const UnifiedTradeObserve = {
             btn.disabled = !!on;
             btn.textContent = on ? '加载中…' : '刷新';
         }
+        this.updateSelectUi();
     },
 
     _rowMessage(tbody, cols, text, isError) {
@@ -333,7 +363,7 @@ const UnifiedTradeObserve = {
         const tbody = document.getElementById('utoObserveTableBody');
         const countEl = document.getElementById('utoCount');
         this.setLoading(true);
-        this._rowMessage(tbody, 9, '加载中…');
+        this._rowMessage(tbody, this.OBSERVE_COLS, '加载中…');
         try {
             if (!window.CommonUtils || !CommonUtils.checkLoginAndHandleExpiry()) {
                 throw new Error('请先登录后查看交易观察列表');
@@ -351,7 +381,8 @@ const UnifiedTradeObserve = {
             this.renderObserve(items);
         } catch (e) {
             if (seq !== this._seq) return;
-            this._rowMessage(tbody, 9, e.message || '观察列表加载失败', true);
+            this._rowMessage(tbody, this.OBSERVE_COLS, e.message || '观察列表加载失败', true);
+            this.updateSelectUi();
             if (countEl) countEl.textContent = '';
         } finally {
             if (seq === this._seq) this.setLoading(false);
@@ -381,15 +412,18 @@ const UnifiedTradeObserve = {
         const tbody = document.getElementById('utoObserveTableBody');
         if (!tbody) return;
         this._observeItems = new Map(items.map((it) => [String(it.id), it]));
+        const valid = new Set(items.map((it) => String(it.id)));
+        this._selectedIds = new Set([...this._selectedIds].filter((id) => valid.has(id)));
         if (!items.length) {
             const filtered = !!this.sourceQuery();
             this._rowMessage(
                 tbody,
-                9,
+                this.OBSERVE_COLS,
                 filtered
                     ? '该来源下暂无观察股票，可切换「来源」为全部'
                     : '暂无交易观察股票。可在选股结果或个股分析中点「交易观察」加入'
             );
+            this.updateSelectUi();
             return;
         }
         tbody.innerHTML = items
@@ -400,6 +434,7 @@ const UnifiedTradeObserve = {
                 const name = it.name || '';
                 const label = this.esc(name || it.code);
                 const signalPrice = this.signalPriceFromItem(it);
+                const checked = this._selectedIds.has(String(it.id)) ? ' checked' : '';
                 const badge =
                     typeof MarginUI !== 'undefined'
                         ? MarginUI.badgeHtml(it.margin_signal, { hideEmpty: false })
@@ -413,6 +448,10 @@ const UnifiedTradeObserve = {
                     it.created_at ? `加入 ${this.fmtDt(it.created_at)}` : '',
                 ].filter(Boolean).join(' · ');
                 return `<tr data-id="${it.id}" data-source="${this.esc(src)}">
+                    <td class="uto-col-check">
+                        <input type="checkbox" class="uto-row-select" data-id="${it.id}"
+                            aria-label="勾选 ${label}"${checked}>
+                    </td>
                     <td class="uto-col-code"><a class="stock-code gms-stock-code-link" href="${this.esc(href)}" target="_blank" rel="noopener noreferrer" title="弹出个股分析">${this.esc(it.code)}</a></td>
                     <td class="uto-col-name"><span class="uto-name-text" title="${this.esc(nameTitle)}">${this.esc(name)}</span></td>
                     <td class="uto-col-market">${this.esc(this.marketLabel(it.market))}</td>
@@ -432,9 +471,66 @@ const UnifiedTradeObserve = {
                 </tr>`;
             })
             .join('');
+        this.updateSelectUi();
+    },
+
+    _onObserveSelectChange(e) {
+        const cb = e.target.closest('.uto-row-select');
+        if (!cb) return;
+        const id = String(cb.getAttribute('data-id') || '');
+        if (!id) return;
+        if (cb.checked) this._selectedIds.add(id);
+        else this._selectedIds.delete(id);
+        this.updateSelectUi();
+    },
+
+    setAllSelected(checked) {
+        const boxes = document.querySelectorAll('#utoObserveTableBody .uto-row-select');
+        if (checked) {
+            boxes.forEach((cb) => {
+                cb.checked = true;
+                const id = String(cb.getAttribute('data-id') || '');
+                if (id) this._selectedIds.add(id);
+            });
+        } else {
+            this._selectedIds.clear();
+            boxes.forEach((cb) => {
+                cb.checked = false;
+            });
+        }
+        this.updateSelectUi();
+    },
+
+    selectedObserveIds() {
+        return [...this._selectedIds]
+            .map((id) => parseInt(id, 10))
+            .filter((n) => Number.isFinite(n) && n > 0);
+    },
+
+    updateSelectUi() {
+        const ids = this.selectedObserveIds();
+        const n = ids.length;
+        const summary = document.getElementById('utoSelectSummary');
+        if (summary) {
+            summary.textContent = n ? `已选 ${n} 条` : '未勾选';
+        }
+        const batchBtn = document.getElementById('utoBatchRemoveBtn');
+        if (batchBtn) batchBtn.disabled = n === 0 || this._loading;
+        const clearBtn = document.getElementById('utoClearSelectBtn');
+        if (clearBtn) clearBtn.disabled = n === 0;
+        const boxes = [...document.querySelectorAll('#utoObserveTableBody .uto-row-select')];
+        const allCb = document.getElementById('utoSelectAllCb');
+        if (allCb) {
+            const total = boxes.length;
+            const checked = boxes.filter((b) => b.checked).length;
+            allCb.checked = total > 0 && checked === total;
+            allCb.indeterminate = checked > 0 && checked < total;
+            allCb.disabled = total === 0;
+        }
     },
 
     async _onObserveClick(e) {
+        if (e.target.closest('.uto-row-select, .uto-col-check')) return;
         const link = e.target.closest('a.gms-stock-code-link, a.stock-code');
         if (link) {
             this.openAnalysisPopup(link.getAttribute('href'), e);
@@ -474,10 +570,50 @@ const UnifiedTradeObserve = {
                 method: 'DELETE',
             });
             if (!res.ok) throw new Error(await this.readError(res, '移除失败'));
+            this._selectedIds.delete(String(id));
             this.toast('已移出交易观察', 'success');
             await this.refreshObserve();
         } catch (e) {
             this.toast(e.message || '移除失败', 'error');
+            if (btn) btn.disabled = false;
+        }
+    },
+
+    async batchRemoveObserve(btn) {
+        const ids = this.selectedObserveIds();
+        if (!ids.length) {
+            this.toast('请先勾选要移出的观察股票', 'warning');
+            return;
+        }
+        const sample = ids
+            .slice(0, 3)
+            .map((id) => this._itemTitle(this._observeItems.get(String(id))) || `#${id}`)
+            .filter(Boolean);
+        const more = ids.length > 3 ? ` 等 ${ids.length} 条` : '';
+        const ok = await this.openDialog({
+            title: '批量移出交易观察',
+            desc: `确定移出 ${sample.join('、')}${more}？移出后需从原入口重新加入。`,
+            fields: [],
+            confirmText: `移除 ${ids.length} 条`,
+            danger: true,
+        });
+        if (!ok) return;
+        if (btn) btn.disabled = true;
+        try {
+            const res = await this.fetchFn()(`${this.apiBase()}/api/stock/trade-observe/batch-remove`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids }),
+            });
+            if (!res.ok) throw new Error(await this.readError(res, '批量移除失败'));
+            const data = await res.json().catch(() => ({}));
+            this._selectedIds.clear();
+            this.toast(data.message || `已移出 ${ids.length} 条`, 'success');
+            await this.refreshObserve();
+        } catch (e) {
+            this.toast(e.message || '批量移除失败', 'error');
+            this.updateSelectUi();
+        } finally {
             if (btn) btn.disabled = false;
         }
     },

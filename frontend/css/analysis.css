@@ -1147,7 +1147,7 @@ a.ba-stock-code-link:focus {
 .ba-short-roles {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   padding: .65rem .85rem;
   margin-bottom: .75rem;
@@ -1155,6 +1155,29 @@ a.ba-stock-code-link:focus {
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   font-size: .85rem;
+}
+.ba-short-roles-head {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+  flex-shrink: 0;
+}
+.ba-short-roles-body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.ba-short-roles-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .ba-short-roles-label {
   color: #6b7280;
@@ -1165,6 +1188,12 @@ a.ba-stock-code-link:focus {
   font-weight: 600;
   flex-shrink: 0;
   margin-right: 2px;
+}
+.ba-role-pct--up {
+  color: #c23b3b;
+}
+.ba-role-pct--down {
+  color: #2f9e6b;
 }
 .ba-hit-wrap {
   display: inline-flex;
@@ -1505,13 +1534,26 @@ a.ba-stock-code-link:focus {
 .lm-board-picker-item-text {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.lm-board-picker-name-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
   min-width: 0;
 }
 .lm-board-picker-name {
   font-size: 0.9rem;
   color: #0f172a;
-  font-weight: 500;
+  font-weight: 600;
+}
+.lm-board-picker-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.65rem;
 }
 .lm-board-picker-code {
   font-size: 0.75rem;
@@ -4136,19 +4178,21 @@ body.ssa-png-capturing .ms-zigzag-svg,
   font-size: 13px;
 }
 
-/* Ã¨Â§ÂÃ¥Â¯ÂÃ¥ÂÂÃ¨Â¡Â¨Ã¯Â¼ÂÃ©Â»ÂÃ¨Â®Â¤Ã¥Â®Â½Ã¥Â±Â 8 Ã¥ÂÂ */
+/* 观察列表 */
 .uto-table--observe {
+  --uto-w-check: 36px;
   --uto-w-code: 8%;
-  --uto-w-name: 18%;
+  --uto-w-name: 17%;
   --uto-w-market: 6%;
-  --uto-w-source: 11%;
+  --uto-w-source: 10%;
   --uto-w-price: 9%;
-  --uto-w-date: 11%;
-  --uto-w-datetime: 16%;
-  --uto-w-ops: 21%;
+  --uto-w-date: 10%;
+  --uto-w-datetime: 15%;
+  --uto-w-ops: 20%;
   min-width: 0;
 }
 
+.uto-table--observe .uto-cg-check { width: var(--uto-w-check); }
 .uto-table--observe .uto-cg-code { width: var(--uto-w-code); }
 .uto-table--observe .uto-cg-name { width: var(--uto-w-name); }
 .uto-table--observe .uto-cg-market { width: var(--uto-w-market); }
@@ -4157,6 +4201,30 @@ body.ssa-png-capturing .ms-zigzag-svg,
 .uto-table--observe .uto-cg-date { width: var(--uto-w-date); }
 .uto-table--observe .uto-cg-datetime { width: var(--uto-w-datetime); }
 .uto-table--observe .uto-cg-ops { width: var(--uto-w-ops); }
+
+.uto-col-check {
+  width: 36px;
+  text-align: center !important;
+  vertical-align: middle;
+}
+.uto-col-check input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #c9a227;
+  cursor: pointer;
+}
+.uto-select-summary {
+  color: #64748b;
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+.uto-toolbar-group--batch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 
 /* Ã¦Â­Â£Ã¥Â¼ÂÃ¤ÂºÂ¤Ã¦ÂÂÃ¯Â¼ÂÃ©Â»ÂÃ¨Â®Â¤Ã¥Â®Â½Ã¥Â±Â 11 Ã¥ÂÂ */
 .uto-table--formal {
@@ -4301,15 +4369,21 @@ body.ssa-png-capturing .ms-zigzag-svg,
   text-decoration: none;
 }
 
-/* 操作对话框（转正式 / 平仓 / 移除） */
+/* 操作对话框（转正式 / 平仓 / 移除）
+   common.css 的 *{margin:0} 会清掉 UA 对 dialog 的 margin:auto，导致 showModal 贴左上角 */
 .uto-dialog {
   width: min(360px, calc(100vw - 32px));
+  max-height: min(90vh, 640px);
   padding: 0;
   border: 1px solid #e2e8f0;
   border-radius: 2px;
   background: #fff;
   color: #1e293b;
   box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28);
+  margin: auto;
+  position: fixed;
+  inset: 0;
+  overflow: auto;
 }
 .uto-dialog::backdrop { background: rgba(15, 20, 25, 0.6); }
 .uto-dialog-form { display: flex; flex-direction: column; gap: 12px; padding: 18px 18px 16px; margin: 0; }
@@ -4379,12 +4453,13 @@ body.ssa-png-capturing .ms-zigzag-svg,
     --uto-w-source: 17%;
     --uto-w-date: 17%;
     --uto-w-ops: 25%;
-    min-width: 520px;
+    min-width: 560px;
   }
 
-  .uto-table--observe thead th:nth-child(5),
-  .uto-table--observe tbody td:nth-child(5),
-  .uto-table--observe col.uto-cg-price {
+  .uto-table--observe .uto-col-num,
+  .uto-table--observe .uto-col-risk,
+  .uto-table--observe col.uto-cg-price,
+  .uto-table--observe col.uto-cg-risk {
     display: none;
   }
 

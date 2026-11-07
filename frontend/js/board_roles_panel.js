@@ -62,13 +62,21 @@
     const cls =
       kind === 'leader' ? 'ba-role-pill ba-role-pill--leader' : 'ba-role-pill ba-role-pill--mid';
     const pct = formatPct(s.change_percent);
-    const pctHtml = pct ? ` (${esc(pct)})` : '';
+    let pctHtml = '';
+    if (pct) {
+      const n = Number(s.change_percent);
+      const pctCls = n > 0 ? 'ba-role-pct ba-role-pct--up' : n < 0 ? 'ba-role-pct ba-role-pct--down' : 'ba-role-pct';
+      pctHtml = ` <span class="${pctCls}">${esc(pct)}</span>`;
+    }
     const title = esc(s.role_reason || label);
     const href = stockAnalysisHref(rawCode, rawName);
     let show;
-    if (rawCode && rawName) show = `${esc(rawCode)} ${esc(rawName)}`;
-    else show = esc(rawName || rawCode || '--');
-    const pill = `<a class="${cls}" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}">${label} ${show}${pctHtml}</a>`;
+    if (rawCode && rawName) {
+      show = `<span class="ba-role-code">${esc(rawCode)}</span> <span class="ba-role-name">${esc(rawName)}</span>`;
+    } else {
+      show = `<span class="ba-role-name">${esc(rawName || rawCode || '--')}</span>`;
+    }
+    const pill = `<a class="${cls}" href="${href}" target="_blank" rel="noopener noreferrer" title="${title}"><span class="ba-role-kind">${label}</span> ${show}${pctHtml}</a>`;
     const selectable = !!(opts && opts.selectableRoles && rawCode);
     const selectHtml = selectable
       ? `<label class="ba-role-select-wrap" title="勾选后可批量交易分析">
@@ -99,13 +107,17 @@
       ...mids.map((s) => shortlinePill('mid', s, opts)),
     ];
     const body = pills.length
-      ? pills.join('')
-      : '<span class="ba-muted">暂无</span>';
+      ? `<div class="ba-short-roles-body">${pills.join('')}</div>`
+      : '<div class="ba-short-roles-body"><span class="ba-muted">暂无</span></div>';
     const boardName = String(data.board_name || data.board_code || '').trim();
     const boardCode = String(data.board_code || '').trim();
     const boardLabel = boardName
       ? `<span class="ba-short-roles-board" title="${esc(boardCode)}">${esc(boardName)}</span>`
       : '';
+    const head = `<div class="ba-short-roles-head">
+      <span class="ba-short-roles-label">短线角色</span>
+      ${boardLabel || ''}
+    </div>`;
     let actions = '';
     if (opts && opts.showGmsWatchlistActions && pills.length) {
       const perm = esc(opts.gmsWatchlistPerm || 'channel.analyze.tab.board.btn.gms_watchlist');
@@ -118,11 +130,13 @@
       actions += `<button type="button" class="btn btn-secondary btn-sm ba-role-select-board"
         data-board-code="${esc(boardCode)}" title="勾选本板块全部龙头与中军">全选本板</button>`;
     }
+    const actionsHtml = actions
+      ? `<div class="ba-short-roles-actions">${actions}</div>`
+      : '';
     return `<div class="ba-short-roles" data-board-code="${esc(boardCode)}" data-board-name="${esc(boardName)}">
-      <span class="ba-short-roles-label">短线角色${boardLabel ? '' : '：'}</span>
-      ${boardLabel ? `${boardLabel}<span class="ba-short-roles-label">：</span>` : ''}
+      ${head}
       ${body}
-      ${actions}
+      ${actionsHtml}
     </div>`;
   }
 

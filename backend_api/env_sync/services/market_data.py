@@ -26,6 +26,7 @@ from backend_api.models import (
     StockFundFlowDaily,
     StockFundFlowDailyHK,
     StockFundFlowEmDaily,
+    StockMarginDaily,
 )
 from backend_api.utils.board_code_source import (
     DEFAULT_BOARD_CODE_SOURCE,
@@ -37,6 +38,7 @@ FUND_FLOW_TABLES = (
     "stock_fund_flow_daily",
     "stock_fund_flow_daily_hk",
     "stock_fund_flow_em_daily",
+    "stock_margin_daily",
 )
 ADJ_FACTOR_TABLES = ("stock_adj_factor",)
 FINA_TABLES = ("stock_fina_indicator",)
@@ -108,6 +110,23 @@ HK_FUND_FLOW_FIELDS = [
     "current_price",
     "outer_volume",
     "inner_volume",
+    "source",
+    "created_at",
+    "updated_at",
+]
+
+MARGIN_DAILY_FIELDS = [
+    "code",
+    "trade_date",
+    "name",
+    "rzye",
+    "rzmre",
+    "rzche",
+    "rqye",
+    "rqyl",
+    "rqmcl",
+    "rqchl",
+    "rzrqye",
     "source",
     "created_at",
     "updated_at",
@@ -1431,7 +1450,7 @@ def export_fund_flow(
     tables: Optional[Set[str]] = None,
     env_label: str = "local",
 ) -> Dict[str, Any]:
-    """导出个股资金流日表（A股/港股）；trade_date 为 YYYY-MM-DD 字符串。"""
+    """导出个股资金流日表（A股/港股）与两融日明细；trade_date 为 YYYY-MM-DD 字符串。"""
     want = tables or set(FUND_FLOW_TABLES)
     items: Dict[str, Any] = {}
     sd, ed = start.isoformat(), end.isoformat()
@@ -1476,9 +1495,69 @@ def export_fund_flow(
             _row_dict(r, EM_FUND_FLOW_FIELDS) for r in q.all()
         ]
 
+    if "stock_margin_daily" in want:
+        q = (
+            db.query(StockMarginDaily)
+            .filter(
+                StockMarginDaily.trade_date >= sd,
+                StockMarginDaily.trade_date <= ed,
+            )
+            .order_by(StockMarginDaily.trade_date, StockMarginDaily.code)
+        )
+        items["stock_margin_daily"] = [
+            _row_dict(r, MARGIN_DAILY_FIELDS) for r in q.all()
+        ]
+
     bundle = make_bundle(module="fund_flow", items=items, env_label=env_label)
     bundle["date_range"] = meta
     return bundle
+
+
+def _prepare_margin_daily_rows(
+    raw_rows: List[Dict],
+    result: Dict[str, Any],
+    *,
+    table: str = "stock_margin_daily",
+) -> List[Dict[str, Any]]:
+    prepared: List[Dict[str, Any]] = []
+    float_keys = [
+        "rzye",
+        "rzmre",
+        "rzche",
+        "rqye",
+        "rqyl",
+        "rqmcl",
+        "rqchl",
+        "rzrqye",
+    ]
+    for raw in raw_rows:
+        code = str(raw.get("code") or "").strip()
+        trade_date = str(raw.get("trade_date") or "").strip()[:10]
+        if not code or not trade_date:
+            result["skipped"] += 1
+            continue
+
+        def _f(key: str) -> Optional[float]:
+            v = raw.get(key)
+            if v is None or v == "":
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        row: Dict[str, Any] = {
+            "code": code,
+            "trade_date": trade_date,
+            "name": (str(raw.get("name") or "").strip() or None),
+            "source": (str(raw.get("source") or "").strip() or "tushare"),
+            "created_at": parse_dt(raw.get("created_at")),
+            "updated_at": parse_dt(raw.get("updated_at")),
+        }
+        for k in float_keys:
+            row[k] = _f(k)
+        prepared.append({k: row.get(k) for k in MARGIN_DAILY_FIELDS})
+    return prepared
 
 
 def _prepare_em_fund_flow_rows(
@@ -1730,6 +1809,32 @@ def import_fund_flow(
                     prepared,
                     result,
                     table="stock_fund_flow_em_daily",
+                )
+                db.commit()
+
+    if "stock_margin_daily" in want:
+        prepared = _prepare_margin_daily_rows(
+            items.get("stock_margin_daily") or [],
+            result,
+            table="stock_margin_daily",
+        )
+        if prepared:
+            if is_pg:
+                _import_fund_flow_pg_bulk(
+                    db,
+                    prepared,
+                    MARGIN_DAILY_FIELDS,
+                    result,
+                    table="stock_margin_daily",
+                    model=StockMarginDaily,
+                )
+            else:
+                _import_fund_flow_orm(
+                    db,
+                    StockMarginDaily,
+                    prepared,
+                    result,
+                    table="stock_margin_daily",
                 )
                 db.commit()
 

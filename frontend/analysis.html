@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261007b">
     <link rel="stylesheet" href="css/ops-responsive.css?v=20260930-rv">
-    <link rel="stylesheet" href="css/analysis.css?v=20261031-margin-read">
+    <link rel="stylesheet" href="css/analysis.css?v=20261107-uto-batch">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/recommend.css?v=20260930-rv">
     <script>
@@ -23,9 +23,9 @@
             } catch (e) { /* ignore */ }
         })();
     </script>
-    <link rel="stylesheet" href="css/analysis-ops.css?v=20261021-dr-fab">
+    <link rel="stylesheet" href="css/analysis-ops.css?v=20261107-uto-batch">
     <link rel="stylesheet" href="css/index_detail.css?v=20261015-idx">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261031-margin-read">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261107-board-picker">
 </head>
 
 <body data-channel="analyze" class="ops-map">
@@ -102,25 +102,33 @@
                             <button type="button" class="lm-subtab" data-lm-kind="concept">概念板块龙头中军</button>
                         </div>
                         <div class="lm-toolbar">
-                            <div class="lm-board-picker-row">
-                                <button type="button" class="btn btn-secondary" id="lmBoardPickBtn">选择板块</button>
-                                <button type="button" class="btn btn-secondary" id="lmSelectStrongBtn" title="按当前行业/概念自动勾选走强板块；勾选「含正常」时一并纳入板环境正常的板块（不自动查询命中）">选中走强板块</button>
-                                <label class="lm-board-picker-filter" title="勾选后，「选中走强板块」与弹窗「仅看走强」会同时纳入板环境为正常的板块">
-                                    <input type="checkbox" id="lmIncludeNeutral"> 含正常
-                                </label>
-                                <span id="lmBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
+                            <div class="lm-toolbar-row lm-toolbar-row--boards">
+                                <div class="lm-board-picker-row">
+                                    <button type="button" class="btn btn-secondary" id="lmBoardPickBtn">选择板块</button>
+                                    <button type="button" class="btn btn-secondary" id="lmSelectStrongBtn" title="按当前行业/概念自动勾选走强板块；勾选「含正常」时一并纳入板环境正常的板块（不自动查询命中）">选中走强板块</button>
+                                    <label class="lm-board-picker-filter" title="勾选后，「选中走强板块」与弹窗「仅看走强」会同时纳入板环境为正常的板块">
+                                        <input type="checkbox" id="lmIncludeNeutral"> 含正常
+                                    </label>
+                                    <span id="lmBoardSummary" class="lm-board-picker-summary">未选择板块，点击「选择板块」</span>
+                                </div>
                             </div>
-                            <button type="button" class="btn btn-primary" id="lmRunBtn" data-perm="channel.analyze.tab.leader_mid.btn.run">查询命中</button>
-                            <button type="button" class="btn btn-secondary" id="lmSelectAllRolesBtn" title="勾选当前已加载的全部龙头与中军">全选龙头中军</button>
-                            <button type="button" class="btn btn-secondary" id="lmClearRolesBtn" title="清空已勾选的龙头与中军">清空勾选</button>
-                            <button type="button" class="btn btn-primary" id="lmTradeAnalysisBtn" data-perm="channel.analyze.tab.leader_mid.btn.run" title="对新标签打开个股分析，对勾选的龙头/中军逐只做交易分析" disabled>交易分析</button>
-                            <span id="lmRoleSelectSummary" class="lm-board-picker-summary ba-role-select-summary">暂无可选龙头/中军</span>
-                            <button type="button" class="btn btn-secondary" id="lmExportExcelBtn" title="导出当前龙头/中军明细与板块汇总为 Excel">导出 Excel</button>
+                            <div class="lm-toolbar-row lm-toolbar-row--actions">
+                                <div class="lm-toolbar-group lm-toolbar-group--primary">
+                                    <button type="button" class="btn btn-primary" id="lmRunBtn" data-perm="channel.analyze.tab.leader_mid.btn.run">查询命中</button>
+                                    <button type="button" class="btn btn-primary" id="lmTradeAnalysisBtn" data-perm="channel.analyze.tab.leader_mid.btn.run" title="对新标签打开个股分析，对勾选的龙头/中军逐只做交易分析" disabled>交易分析</button>
+                                </div>
+                                <div class="lm-toolbar-group lm-toolbar-group--secondary">
+                                    <button type="button" class="btn btn-secondary" id="lmSelectAllRolesBtn" title="勾选当前已加载的全部龙头与中军">全选龙头中军</button>
+                                    <button type="button" class="btn btn-secondary" id="lmClearRolesBtn" title="清空已勾选的龙头与中军">清空勾选</button>
+                                    <button type="button" class="btn btn-secondary" id="lmExportExcelBtn" title="导出当前龙头/中军明细与板块汇总为 Excel">导出 Excel</button>
+                                    <span id="lmRoleSelectSummary" class="lm-board-picker-summary ba-role-select-summary">暂无可选龙头/中军</span>
+                                </div>
+                            </div>
                         </div>
                         <div id="lmBoardMeta" class="lm-meta"></div>
                         <div id="lmRolesHost" class="lm-roles"></div>
                         <div id="lmResults" class="lm-results">
-                            <p class="lm-empty">选择行业或概念板块后点击「查询命中」</p>
+                            <p class="lm-empty">选择板块后点击「查询命中」</p>
                         </div>
                     </div>
                 </div>
@@ -555,12 +563,19 @@
                                 </label>
                                 <button type="button" class="btn btn-primary uto-refresh-btn" id="utoRefreshBtn">刷新</button>
                             </div>
+                            <div class="uto-toolbar-group uto-toolbar-group--batch" id="utoBatchBar">
+                                <button type="button" class="btn btn-secondary" id="utoSelectPageBtn" title="勾选当前列表全部">全选本页</button>
+                                <button type="button" class="btn btn-secondary" id="utoClearSelectBtn" title="清空勾选" disabled>清空勾选</button>
+                                <button type="button" class="btn btn-secondary uto-batch-remove-btn" id="utoBatchRemoveBtn" title="移出勾选的交易观察" disabled>批量移除</button>
+                                <span id="utoSelectSummary" class="uto-select-summary">未勾选</span>
+                            </div>
                             <span id="utoCount" class="uto-count"></span>
                         </div>
                         <div id="utoObserveWrap" class="uto-panel" role="tabpanel">
                             <div class="results-table-wrapper">
                                 <table class="results-table uto-table uto-table--observe">
                                     <colgroup>
+                                        <col class="uto-cg-check" />
                                         <col class="uto-cg-code" />
                                         <col class="uto-cg-name" />
                                         <col class="uto-cg-market" />
@@ -573,6 +588,9 @@
                                     </colgroup>
                                     <thead>
                                         <tr>
+                                            <th class="uto-col-check">
+                                                <input type="checkbox" id="utoSelectAllCb" title="全选/取消全选本页" aria-label="全选本页">
+                                            </th>
                                             <th class="uto-col-code">代码</th>
                                             <th class="uto-col-name">名称</th>
                                             <th class="uto-col-market">市场</th>
@@ -585,7 +603,7 @@
                                         </tr>
                                     </thead>
                                     <tbody id="utoObserveTableBody">
-                                        <tr><td colspan="9" class="empty-state">点击「刷新」加载观察列表</td></tr>
+                                        <tr><td colspan="10" class="empty-state">点击「刷新」加载观察列表</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -1886,11 +1904,11 @@
     <script src="js/config.js"></script>
     <script src="js/stock_trade_link.js?v=20260917a"></script>
     <script src="js/common.js"></script>
-    <script src="js/board_roles_panel.js"></script>
+    <script src="js/board_roles_panel.js?v=20261107-lm-polish2"></script>
     <script src="js/board_picker_strong.js"></script>
     <script src="js/board_analysis_pdf.js"></script>
-    <script src="js/board_analysis.js"></script>
-    <script src="js/analysis.js?v=20261031-margin-tab"></script>
+    <script src="js/board_analysis.js?v=20261107-board-picker"></script>
+    <script src="js/analysis.js?v=20261107-lm-polish2"></script>
 </body>
 
 </html>

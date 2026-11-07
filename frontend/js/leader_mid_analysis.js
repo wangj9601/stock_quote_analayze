@@ -295,11 +295,14 @@ const LeaderMidAnalysis = {
         return `<label class="lm-board-picker-item" title="${this.escAttr(title)}">
           <input type="checkbox" value="${this.escAttr(code)}"${checked}>
           <span class="lm-board-picker-item-text">
-            <span class="lm-board-picker-name">${this.esc(name)}${n != null ? ` (${n})` : ''}
+            <span class="lm-board-picker-name-row">
+              <span class="lm-board-picker-name">${this.esc(name)}</span>
               <span class="ba-env-chip ${this.escAttr(envClass)}">${this.esc(envLabel)}</span>
+            </span>
+            <span class="lm-board-picker-meta">
+              <span class="lm-board-picker-code">${this.esc(code)}${countTxt ? ` · ${this.esc(countTxt)}` : ''}</span>
               <span class="lm-board-picker-slope">斜率 ${this.esc(slopeTxt)}</span>
             </span>
-            <span class="lm-board-picker-code">${this.esc(code)}${countTxt ? ` · ${this.esc(countTxt)}` : ''}</span>
           </span>
         </label>`;
       })
@@ -396,7 +399,9 @@ const LeaderMidAnalysis = {
     this.clearMeta();
     const host = document.getElementById('lmResults');
     if (host) {
-      host.innerHTML = '<p class="lm-empty">选择板块后点击「查询命中」</p>';
+      host.innerHTML = this.selectedBoardCodes.length
+        ? '<p class="lm-empty">角色已按所选板块加载；点击「查询命中」对照 GMS / URT / SBBR / RPE</p>'
+        : '<p class="lm-empty">选择板块后点击「查询命中」</p>';
     }
     if (this.selectedBoardCodes.length && window.BoardRolesPanel) {
       BoardRolesPanel.refresh(

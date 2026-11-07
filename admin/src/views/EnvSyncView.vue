@@ -4,7 +4,7 @@
       <template #header>
         <div class="card-head">
           <span>环境数据同步</span>
-          <el-tag type="info" size="small">策略/观察/行情/资金流/预计算复盘/财务/权限</el-tag>
+          <el-tag type="info" size="small">策略/观察/行情/资金流·两融/预计算复盘/财务/权限</el-tag>
         </div>
       </template>
       <p class="hint">
