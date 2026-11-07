@@ -2837,6 +2837,17 @@ body.ssa-png-capturing .ms-zigzag-svg,
 .ms-zigzag-svg { width: 100%; max-width: 100%; height: auto; display: block; }
 .ms-chart-hint { margin: 4px 0 0; font-size: 11px; }
 .ms-smc { margin: 10px 0; }
+.ms-smc-bias {
+    display: inline-block;
+    margin: 2px 0 4px;
+    font-size: 13px;
+}
+.ms-smc-bias-note {
+    margin: 0 0 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    max-width: 52em;
+}
 .ms-smc-badge {
     display: inline-block;
     margin-left: 6px;

@@ -6,11 +6,15 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from backend_core.analysis.smc_engine import (
+    REMOTE_DISTANCE_PCT,
     analyze_smc,
     detect_fvgs,
     detect_order_blocks,
     detect_structure_events,
+    merge_fvgs,
+    merge_order_blocks,
     parse_ohlc_bars,
+    structure_bias_meta,
     trend_to_structure_bias,
 )
 
@@ -30,6 +34,15 @@ def test_trend_to_structure_bias():
     assert trend_to_structure_bias("uptrend") == "bullish"
     assert trend_to_structure_bias("downtrend") == "bearish"
     assert trend_to_structure_bias("range") == "neutral"
+
+
+def test_structure_bias_meta_clarifies_hh_hl_basis():
+    meta = structure_bias_meta("bearish")
+    assert meta["structure_bias"] == "bearish"
+    assert meta["structure_bias_label"] == "看跌"
+    assert meta["structure_bias_basis"] == "hh_hl_trend"
+    assert "HH/HL" in meta["structure_bias_note"]
+    assert "CHOCH" in meta["structure_bias_note"]
 
 
 def test_choch_bullish_after_downtrend_labels():
@@ -175,6 +188,153 @@ def test_analyze_smc_keys():
     assert "fvgs" in smc
     assert "summary" in smc
     assert smc["structure_bias"] in ("bullish", "bearish", "neutral")
+    assert smc["structure_bias_basis"] == "hh_hl_trend"
+    assert smc["structure_bias_label"] in ("看涨", "看跌", "中性")
+    assert smc["params"]["zone_merge_ratio"] > 0
+    assert smc["params"]["remote_distance_pct"] == REMOTE_DISTANCE_PCT
+    for z in (smc["order_blocks"] or []) + (smc["fvgs"] or []):
+        assert z.get("relevance") in ("near", "remote")
+
+
+def test_merge_order_blocks_overlapping_same_direction():
+    """同向且重叠比例达标的 OB 合并为一条带（真实面板口径：11.69–12.06 与 11.81–12.14）。"""
+    blocks = [
+        {
+            "direction": "bearish",
+            "low": 11.69,
+            "high": 12.06,
+            "mid": 11.875,
+            "status": "active",
+            "source_event": "bos_bearish",
+            "bar_date": "2026-08-19",
+            "bar_index": 30,
+        },
+        {
+            "direction": "bearish",
+            "low": 11.81,
+            "high": 12.14,
+            "mid": 11.975,
+            "status": "mitigated",
+            "source_event": "structure_shift_unconfirmed",
+            "bar_date": "2026-06-03",
+            "bar_index": 10,
+        },
+        {
+            "direction": "bearish",
+            "low": 13.50,
+            "high": 14.07,
+            "mid": 13.785,
+            "status": "active",
+            "source_event": "bos_bearish",
+            "bar_date": "2026-06-01",
+            "bar_index": 8,
+        },
+        {
+            "direction": "bullish",
+            "low": 11.90,
+            "high": 12.20,
+            "mid": 12.05,
+            "status": "active",
+            "source_event": "choch_bullish",
+            "bar_date": "2026-05-20",
+            "bar_index": 5,
+        },
+    ]
+    out = merge_order_blocks(blocks, last_close=10.35)
+    assert len(out) == 3, "两条重叠看跌 OB 应并成一条；反向与不重叠者保留"
+    merged = [b for b in out if b["direction"] == "bearish" and b.get("merged_count")]
+    assert len(merged) == 1
+    m = merged[0]
+    assert (m["low"], m["high"]) == (11.69, 12.14)
+    assert m["merged_count"] == 2
+    assert m["status"] == "active", "任一 active 则合并结果为 active"
+    assert m["bar_date"] == "2026-08-19", "保留最近一条的描述字段"
+    assert m["source_event"] == "bos_bearish", "choch > bos > unconfirmed"
+    assert m["merged_from"] == [[11.69, 12.06], [11.81, 12.14]]
+    assert m["mid"] == 11.91
+    assert m["distance_pct"] is not None
+
+
+def test_merge_order_blocks_low_overlap_kept_separate():
+    """轻触但不重叠（34.54–36.27 与 36.00–37.36，重叠比例约 0.20）不应合并。"""
+    blocks = [
+        {"direction": "bearish", "low": 34.54, "high": 36.27, "status": "active", "bar_date": "2026-10-12"},
+        {"direction": "bearish", "low": 36.00, "high": 37.36, "status": "active", "bar_date": "2026-08-27"},
+    ]
+    out = merge_order_blocks(blocks)
+    assert len(out) == 2
+    assert all(not b.get("merged_count") for b in out)
+
+
+def test_merge_fvgs_prefers_open_status():
+    """看跌 FVG 30.10–30.86 / 30.15–31.51 合并成 30.10–31.51，状态取 open。"""
+    fvgs = [
+        {
+            "direction": "bearish",
+            "low": 30.10,
+            "high": 30.86,
+            "height": 0.76,
+            "status": "open",
+            "start_date": "2026-10-16",
+            "end_date": "2026-10-18",
+            "bar_index": 60,
+        },
+        {
+            "direction": "bearish",
+            "low": 30.15,
+            "high": 31.51,
+            "height": 1.36,
+            "status": "partial",
+            "start_date": "2026-10-13",
+            "end_date": "2026-10-15",
+            "bar_index": 57,
+        },
+        {
+            "direction": "bullish",
+            "low": 27.58,
+            "high": 28.13,
+            "height": 0.55,
+            "status": "open",
+            "start_date": "2026-11-04",
+            "end_date": "2026-11-06",
+            "bar_index": 88,
+        },
+    ]
+    out = merge_fvgs(fvgs)
+    assert len(out) == 2
+    merged = [f for f in out if f.get("merged_count")]
+    assert len(merged) == 1
+    m = merged[0]
+    assert (m["low"], m["high"]) == (30.10, 31.51)
+    assert m["status"] == "open"
+    assert m["start_date"] == "2026-10-13"
+    assert m["end_date"] == "2026-10-18"
+    assert m["height"] == 1.41
+
+
+def test_merge_can_be_disabled():
+    """zone_merge_ratio > 1.0 时不合并。"""
+    blocks = [
+        {"direction": "bearish", "low": 11.69, "high": 12.06, "status": "active", "bar_date": "2026-08-19"},
+        {"direction": "bearish", "low": 11.81, "high": 12.14, "status": "active", "bar_date": "2026-06-03"},
+    ]
+    assert len(merge_order_blocks(blocks, min_overlap_ratio=1.01)) == 2
+
+
+def test_analyze_smc_marks_remote_relevance():
+    """远离现价的 OB 标 remote，且排序上 near 优先。"""
+    from backend_core.analysis.smc_engine import _apply_zone_relevance, _sort_zones_near_first
+
+    zones = [
+        {"low": 50.0, "high": 52.0, "mid": 51.0, "bar_date": "2026-06-01", "bar_index": 1},
+        {"low": 27.0, "high": 28.0, "mid": 27.5, "bar_date": "2026-11-01", "bar_index": 2},
+    ]
+    _apply_zone_relevance(zones, last_close=28.64, remote_pct=20.0)
+    assert zones[0]["relevance"] == "remote"
+    assert zones[1]["relevance"] == "near"
+    ordered = _sort_zones_near_first(zones)
+    assert ordered[0]["relevance"] == "near"
+    assert ordered[1]["relevance"] == "remote"
 
 
 def test_order_blocks_and_fvgs_sorted_by_date_desc():

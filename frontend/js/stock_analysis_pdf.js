@@ -517,22 +517,32 @@
     const smc = (ms && ms.smc) || null;
     const obRows =
       smc && Array.isArray(smc.order_blocks)
-        ? smc.order_blocks.map((b) => [
-            b.direction === 'bullish' ? '看涨' : '看跌',
-            `${b.low != null ? Number(b.low).toFixed(2) : '--'}–${b.high != null ? Number(b.high).toFixed(2) : '--'}`,
-            cell(b.status),
-            cell(b.source_event || b.event_type),
-            cell(b.bar_date),
-          ])
+        ? smc.order_blocks.map((b) => {
+            const merge =
+              b.merged_count && Number(b.merged_count) > 1 ? `×${b.merged_count}` : '';
+            const rem = b.relevance === 'remote' ? ' remote' : '';
+            return [
+              b.direction === 'bullish' ? '看涨' : '看跌',
+              `${b.low != null ? Number(b.low).toFixed(2) : '--'}–${b.high != null ? Number(b.high).toFixed(2) : '--'}${merge}`,
+              cell(`${b.status || ''}${rem}`),
+              cell(b.source_event || b.event_type),
+              cell(b.bar_date),
+            ];
+          })
         : [];
     const fvgRows =
       smc && Array.isArray(smc.fvgs)
-        ? smc.fvgs.map((f) => [
-            f.direction === 'bullish' ? '看涨' : '看跌',
-            `${f.low != null ? Number(f.low).toFixed(2) : '--'}–${f.high != null ? Number(f.high).toFixed(2) : '--'}`,
-            cell(f.status),
-            cell(f.end_date || f.start_date),
-          ])
+        ? smc.fvgs.map((f) => {
+            const merge =
+              f.merged_count && Number(f.merged_count) > 1 ? `×${f.merged_count}` : '';
+            const rem = f.relevance === 'remote' ? ' remote' : '';
+            return [
+              f.direction === 'bullish' ? '看涨' : '看跌',
+              `${f.low != null ? Number(f.low).toFixed(2) : '--'}–${f.high != null ? Number(f.high).toFixed(2) : '--'}${merge}`,
+              cell(`${f.status || ''}${rem}`),
+              cell(f.end_date || f.start_date),
+            ];
+          })
         : [];
     return {
       error: pack.error || null,
@@ -542,6 +552,8 @@
       bos: ms && ms.last_bos_like,
       contrast: ms && ms.pattern_contrast,
       smcSummary: smc && smc.summary,
+      smcBiasLabel: smc && (smc.structure_bias_label || smc.structure_bias),
+      smcBiasNote: smc && smc.structure_bias_note,
       lastEvent: smc && smc.last_event,
       obRows: obRows.length ? obRows : null,
       fvgRows: fvgRows.length ? fvgRows : null,
@@ -759,6 +771,12 @@
           8.5,
           4
         );
+      }
+      if (sw.smcBiasLabel) {
+        drawWrapped(`结构偏向：${sw.smcBiasLabel}（HH/HL 趋势，非单次 CHOCH 翻转）`, 8.5, 4);
+      }
+      if (sw.smcBiasNote) {
+        drawWrapped(sw.smcBiasNote, 8, 3.8);
       }
       if (sw.lastEvent) {
         const e = sw.lastEvent;

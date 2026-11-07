@@ -260,18 +260,26 @@ const MarketStructureTool = {
     _smcZonesForSvg(smc) {
         if (!smc || typeof smc !== 'object') return [];
         const zones = [];
-        (smc.order_blocks || []).slice(0, 4).forEach((b) => {
-            zones.push({
-                kind: 'ob',
-                direction: b.direction,
-                low: b.low,
-                high: b.high,
-                status: b.status,
-                label: `OB·${b.direction === 'bullish' ? '多' : '空'}·${b.status || ''}`,
+        (smc.order_blocks || [])
+            .filter((b) => b && b.relevance !== 'remote')
+            .slice(0, 4)
+            .forEach((b) => {
+                zones.push({
+                    kind: 'ob',
+                    direction: b.direction,
+                    low: b.low,
+                    high: b.high,
+                    status: b.status,
+                    label: `OB·${b.direction === 'bullish' ? '多' : '空'}·${b.status || ''}`,
+                });
             });
-        });
         (smc.fvgs || [])
-            .filter((f) => f && (f.status === 'open' || f.status === 'partial'))
+            .filter(
+                (f) =>
+                    f &&
+                    f.relevance !== 'remote' &&
+                    (f.status === 'open' || f.status === 'partial')
+            )
             .slice(0, 3)
             .forEach((f) => {
                 zones.push({
@@ -291,20 +299,42 @@ const MarketStructureTool = {
         return s === 'mitigated' || s === 'filled';
     },
 
-    /** 活跃行直接展示；mitigated / filled 行收进默认折叠的 details */
+    _isRemoteSmcZone(z) {
+        return z && String(z.relevance || '') === 'remote';
+    },
+
+    _formatMergedHint(z) {
+        const n = z && (z.merged_count || z.member_count);
+        if (!n || Number(n) <= 1) return '';
+        return ` · 合并×${Number(n)}`;
+    },
+
+    /** 近端活跃直接展示；remote / mitigated / filled 默认折叠 */
     _renderSmcTable(title, headHtml, items, rowFn) {
         if (!items.length) return '';
-        const active = items.filter((x) => !this._isInactiveSmcStatus(x && x.status));
+        const nearActive = items.filter(
+            (x) => !this._isInactiveSmcStatus(x && x.status) && !this._isRemoteSmcZone(x)
+        );
+        const remote = items.filter(
+            (x) => this._isRemoteSmcZone(x) && !this._isInactiveSmcStatus(x && x.status)
+        );
         const inactive = items.filter((x) => this._isInactiveSmcStatus(x && x.status));
         const tableOf = (rows) =>
             `<table class="ms-points-table ms-smc-table"><thead><tr>${headHtml}</tr></thead><tbody>` +
             rows.map(rowFn).join('') +
             '</tbody></table>';
         let html = `<div class="ms-subtitle">${title}</div>`;
-        if (active.length) {
-            html += tableOf(active);
+        if (nearActive.length) {
+            html += tableOf(nearActive);
         } else {
-            html += '<p class="ms-muted ms-smc-empty">暂无活跃记录</p>';
+            html += '<p class="ms-muted ms-smc-empty">暂无近端活跃记录</p>';
+        }
+        if (remote.length) {
+            html +=
+                `<details class="ms-smc-inactive">` +
+                `<summary>远离现价（历史残余）${remote.length} 条</summary>` +
+                tableOf(remote) +
+                `</details>`;
         }
         if (inactive.length) {
             html +=
@@ -314,6 +344,23 @@ const MarketStructureTool = {
                 `</details>`;
         }
         return html;
+    },
+
+    _renderBiasHtml(smc) {
+        if (!smc || !smc.structure_bias) return '';
+        const code = String(smc.structure_bias);
+        const label = smc.structure_bias_label || code;
+        const note =
+            smc.structure_bias_note ||
+            '结构偏向由 HH/HL 趋势映射，单次 CHOCH/BOS 不会立刻改写。';
+        const basis = smc.structure_bias_basis === 'hh_hl_trend' ? 'HH/HL 趋势' : '';
+        return (
+            `<span class="ms-smc-bias" title="${this.esc(note)}">` +
+            `结构偏向 <strong>${this.esc(label)}</strong>` +
+            `<span class="ms-muted">（${this.esc(code)}${basis ? ' · ' + basis : ''}）</span>` +
+            `</span>` +
+            `<p class="ms-muted ms-smc-bias-note">${this.esc(note)}</p>`
+        );
     },
 
     renderSmcSection(smc) {
@@ -330,7 +377,8 @@ const MarketStructureTool = {
             (b) =>
                 `<tr><td>${b.direction === 'bullish' ? '看涨' : '看跌'}</td>` +
                 `<td>${b.low != null ? Number(b.low).toFixed(2) : '--'} – ` +
-                `${b.high != null ? Number(b.high).toFixed(2) : '--'}</td>` +
+                `${b.high != null ? Number(b.high).toFixed(2) : '--'}` +
+                `${this.esc(this._formatMergedHint(b))}</td>` +
                 `<td class="${this.statusCls(b.status)}">${this.esc(b.status || '--')}</td>` +
                 `<td>${this.esc(b.source_event || b.event_type || '--')}</td>` +
                 `<td>${this.esc(b.bar_date || '--')}</td></tr>`
@@ -342,16 +390,16 @@ const MarketStructureTool = {
             (f) =>
                 `<tr><td>${f.direction === 'bullish' ? '看涨' : '看跌'}</td>` +
                 `<td>${f.low != null ? Number(f.low).toFixed(2) : '--'} – ` +
-                `${f.high != null ? Number(f.high).toFixed(2) : '--'}</td>` +
+                `${f.high != null ? Number(f.high).toFixed(2) : '--'}` +
+                `${this.esc(this._formatMergedHint(f))}</td>` +
                 `<td class="${this.statusCls(f.status)}">${this.esc(f.status || '--')}</td>` +
                 `<td>${this.esc(f.end_date || f.start_date || '--')}</td></tr>`
         );
-        const bias = smc.structure_bias
-            ? `<span class="ms-muted">结构偏置 ${this.esc(smc.structure_bias)}</span>`
-            : '';
+        const bias = this._renderBiasHtml(smc);
         return (
             `<div class="ms-smc">` +
-            `<div class="ms-subtitle">SMC 结构（CHOCH / BOS · OB · FVG） ${badge} ${bias}</div>` +
+            `<div class="ms-subtitle">SMC 结构（CHOCH / BOS · OB · FVG） ${badge}</div>` +
+            bias +
             summary +
             obTable +
             fvgTable +
@@ -540,7 +588,11 @@ const MarketStructureTool = {
         const smc = m.smc;
         if (smc && smc.ok) {
             lines.push('【SMC】');
-            if (smc.structure_bias) lines.push(`结构偏置：${smc.structure_bias}`);
+            if (smc.structure_bias) {
+                const lab = smc.structure_bias_label || smc.structure_bias;
+                lines.push(`结构偏向：${lab}（${smc.structure_bias} · HH/HL 趋势）`);
+                if (smc.structure_bias_note) lines.push(smc.structure_bias_note);
+            }
             if (smc.summary) lines.push(smc.summary);
             if (smc.last_event) {
                 const e = smc.last_event;
@@ -549,13 +601,23 @@ const MarketStructureTool = {
                 );
             }
             (smc.order_blocks || []).forEach((b) => {
+                const merge =
+                    b.merged_count && Number(b.merged_count) > 1
+                        ? ` 合并×${b.merged_count}`
+                        : '';
+                const rem = b.relevance === 'remote' ? ' remote' : '';
                 lines.push(
-                    `  OB ${b.direction === 'bullish' ? '看涨' : '看跌'} [${b.low}–${b.high}] ${b.status || ''} ${b.bar_date || ''}`
+                    `  OB ${b.direction === 'bullish' ? '看涨' : '看跌'} [${b.low}–${b.high}] ${b.status || ''}${merge}${rem} ${b.bar_date || ''}`
                 );
             });
             (smc.fvgs || []).forEach((f) => {
+                const merge =
+                    f.merged_count && Number(f.merged_count) > 1
+                        ? ` 合并×${f.merged_count}`
+                        : '';
+                const rem = f.relevance === 'remote' ? ' remote' : '';
                 lines.push(
-                    `  FVG ${f.direction === 'bullish' ? '看涨' : '看跌'} [${f.low}–${f.high}] ${f.status || ''} ${f.end_date || ''}`
+                    `  FVG ${f.direction === 'bullish' ? '看涨' : '看跌'} [${f.low}–${f.high}] ${f.status || ''}${merge}${rem} ${f.end_date || ''}`
                 );
             });
         }

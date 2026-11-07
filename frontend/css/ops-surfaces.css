@@ -1337,7 +1337,8 @@ body.ops-map .main-content .ms-smc-badge--bos {
 body.ops-map .main-content .ms-muted,
 body.ops-map .main-content .ms-chart-hint,
 body.ops-map .main-content .ms-disclaimer,
-body.ops-map .main-content .ms-empty {
+body.ops-map .main-content .ms-empty,
+body.ops-map .main-content .ms-smc-bias-note {
     color: var(--ops-ink-muted) !important;
 }
 

@@ -19,12 +19,40 @@ FVG_MIN_PCT = 0.003
 MAX_ORDER_BLOCKS = 6
 MAX_FVGS = 8
 DEFAULT_CONFIRM_RIGHT = 2
+# 同向区间重叠比例（重叠长度 / 较窄区高度）≥ 该阈值即合并；包含关系记 1.0。
+# 设为 > 1.0 可关闭合并（如 1.01）。
+ZONE_MERGE_OVERLAP_RATIO = 0.5
+# 区间 mid 距现价超过该百分比 → relevance=remote（历史残余，默认折叠）
+REMOTE_DISTANCE_PCT = 20.0
+
+STRUCTURE_BIAS_LABELS = {
+    "bullish": "看涨",
+    "bearish": "看跌",
+    "neutral": "中性",
+}
+STRUCTURE_BIAS_NOTE = (
+    "结构偏向由 HH/HL 趋势映射，单次 CHOCH/BOS 不会立刻改写；"
+    "出现 choch 与偏向相反时表示「已有性质转换迹象，大结构尚未确认翻转」。"
+)
 
 
 def _trend_from_labels(points: Sequence[Dict[str, Any]]):
     from backend_core.analysis.market_structure import _trend_from_labels as _fn
 
     return _fn(points)
+
+
+def structure_bias_meta(bias: str) -> Dict[str, str]:
+    """结构偏向展示元数据：与 last_event/CHOCH 解耦，避免 UI 误读为同步翻转。"""
+    b = str(bias or "").strip().lower()
+    if b not in STRUCTURE_BIAS_LABELS:
+        b = "neutral"
+    return {
+        "structure_bias": b,
+        "structure_bias_label": STRUCTURE_BIAS_LABELS[b],
+        "structure_bias_basis": "hh_hl_trend",
+        "structure_bias_note": STRUCTURE_BIAS_NOTE,
+    }
 
 
 def _f(v: Any) -> Optional[float]:
@@ -114,6 +142,42 @@ def trend_to_structure_bias(trend: str) -> str:
     if t == "downtrend":
         return "bearish"
     return "neutral"
+
+
+def _apply_zone_relevance(
+    zones: Sequence[Dict[str, Any]],
+    *,
+    last_close: float,
+    remote_pct: float = REMOTE_DISTANCE_PCT,
+) -> None:
+    """就地标注 relevance=near|remote；remote 表示远离现价的历史残余。"""
+    thr = max(0.0, float(remote_pct))
+    for z in zones:
+        mid = _f(z.get("mid"))
+        if mid is None:
+            lo, hi = _f(z.get("low")), _f(z.get("high"))
+            if lo is not None and hi is not None:
+                mid = (lo + hi) / 2.0
+                z["mid"] = _round_px(mid)
+        dist = _f(z.get("distance_pct"))
+        if dist is None and mid is not None and last_close:
+            dist = abs(float(mid) - float(last_close)) / float(last_close) * 100.0
+            z["distance_pct"] = round(dist, 3)
+        if dist is not None and float(dist) >= thr:
+            z["relevance"] = "remote"
+        else:
+            z["relevance"] = "near"
+
+
+def _sort_zones_near_first(
+    zones: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """near 优先，同组内按 _recency_key 新→旧。"""
+    near = [z for z in zones if z.get("relevance") != "remote"]
+    remote = [z for z in zones if z.get("relevance") == "remote"]
+    near.sort(key=_recency_key, reverse=True)
+    remote.sort(key=_recency_key, reverse=True)
+    return near + remote
 
 
 def _last_swing(
@@ -276,7 +340,7 @@ def detect_order_blocks(
     *,
     max_blocks: int = MAX_ORDER_BLOCKS,
 ) -> List[Dict[str, Any]]:
-    """由结构事件回溯冲动腿内最后反向 K，生成 OB。"""
+    """由结构事件回溯冲动腿内最后反向 K，生成 OB（原始列表；合并/降权在 analyze_smc）。"""
     if not ohlc or not events:
         return []
     by_idx = {int(b["index"]): b for b in ohlc}
@@ -375,7 +439,7 @@ def detect_fvgs(
     atr_mult: float = FVG_ATR_MULT,
     min_pct: float = FVG_MIN_PCT,
 ) -> List[Dict[str, Any]]:
-    """三连 K 线公允价值缺口。"""
+    """三连 K 线公允价值缺口（原始列表；合并/降权在 analyze_smc）。"""
     n = len(ohlc)
     if n < 3:
         return []
@@ -397,16 +461,21 @@ def detect_fvgs(
             if height < min_gap:
                 continue
             status = _fvg_fill_status(ohlc, i + 1, gap_lo, gap_hi, "bullish")
+            mid = (gap_lo + gap_hi) / 2.0
             found.append(
                 {
                     "direction": "bullish",
                     "low": _round_px(gap_lo),
                     "high": _round_px(gap_hi),
+                    "mid": _round_px(mid),
                     "height": _round_px(height),
                     "status": status,
                     "start_date": a.get("date"),
                     "end_date": c.get("date"),
                     "bar_index": i,
+                    "distance_pct": round(abs(last_close - mid) / last_close * 100.0, 3)
+                    if last_close
+                    else None,
                 }
             )
         # 看跌：i-2 低 > i 高
@@ -417,16 +486,21 @@ def detect_fvgs(
             if height < min_gap:
                 continue
             status = _fvg_fill_status(ohlc, i + 1, gap_lo, gap_hi, "bearish")
+            mid = (gap_lo + gap_hi) / 2.0
             found.append(
                 {
                     "direction": "bearish",
                     "low": _round_px(gap_lo),
                     "high": _round_px(gap_hi),
+                    "mid": _round_px(mid),
                     "height": _round_px(height),
                     "status": status,
                     "start_date": a.get("date"),
                     "end_date": c.get("date"),
                     "bar_index": i,
+                    "distance_pct": round(abs(last_close - mid) / last_close * 100.0, 3)
+                    if last_close
+                    else None,
                 }
             )
 
@@ -465,6 +539,221 @@ def _fvg_fill_status(
         if lo <= gap_lo and hi >= gap_hi:
             return "filled"
     return "partial" if touched else "open"
+
+
+def _zone_overlap_ratio(
+    a_lo: float, a_hi: float, b_lo: float, b_hi: float
+) -> float:
+    """重叠长度 / 较窄区间高度；包含关系记 1.0，无重叠记 0。"""
+    inter = min(a_hi, b_hi) - max(a_lo, b_lo)
+    if inter <= 0:
+        return 0.0
+    base = min(a_hi - a_lo, b_hi - b_lo)
+    if base <= 0:
+        return 0.0
+    return inter / base
+
+
+def _merge_by_overlap(
+    zones: Sequence[Dict[str, Any]],
+    *,
+    min_overlap_ratio: float,
+    group_key,
+) -> List[List[Dict[str, Any]]]:
+    """并查集：同组（同方向）且重叠达标者归为一簇。区间数 <= 十余条，O(n^2) 足够。"""
+    n = len(zones)
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if group_key(zones[i]) != group_key(zones[j]):
+                continue
+            if (
+                _zone_overlap_ratio(
+                    float(zones[i]["low"]),
+                    float(zones[i]["high"]),
+                    float(zones[j]["low"]),
+                    float(zones[j]["high"]),
+                )
+                >= min_overlap_ratio
+            ):
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[rj] = ri
+
+    groups: Dict[int, List[Dict[str, Any]]] = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(zones[i])
+    return list(groups.values())
+
+
+def _recency_key(z: Dict[str, Any]) -> Tuple[str, int]:
+    return (
+        str(z.get("bar_date") or z.get("event_bar_date") or z.get("end_date") or ""),
+        int(z.get("bar_index") or 0),
+    )
+
+
+_SOURCE_PRIORITY = {
+    "choch_bullish": 3,
+    "choch_bearish": 3,
+    "bos_bullish": 2,
+    "bos_bearish": 2,
+}
+
+
+def _pick_source_event(members: Sequence[Dict[str, Any]]) -> Optional[str]:
+    """合并区来源：结构意义更强的优先（choch > bos > unconfirmed），同级取最近。"""
+
+    def key(m: Dict[str, Any]):
+        src = str(m.get("source_event") or m.get("event_type") or "")
+        return (_SOURCE_PRIORITY.get(src, 1), _recency_key(m))
+
+    return str(max(members, key=key).get("source_event") or max(members, key=key).get("event_type") or "") or None
+
+
+def merge_order_blocks(
+    blocks: Sequence[Dict[str, Any]],
+    *,
+    limit: Optional[int] = None,
+    last_close: Optional[float] = None,
+    min_overlap_ratio: float = ZONE_MERGE_OVERLAP_RATIO,
+) -> List[Dict[str, Any]]:
+    """同向重叠订单块合并为一条带，消除语义重复的阻力/支撑带。
+
+    - 仅合并同向；重叠比例 >= min_overlap_ratio（> 1.0 视为关闭）
+    - 合并后区间取并集；状态 active 优先；来源 choch > bos > unconfirmed
+    - 合并簇追加 merged_count / merged_from（原始区间列表），单条区不动原字段
+    """
+    items: List[Dict[str, Any]] = []
+    for b in blocks or []:
+        if not isinstance(b, dict):
+            continue
+        lo = _f(b.get("low"))
+        hi = _f(b.get("high"))
+        if lo is None or hi is None:
+            continue
+        if lo > hi:
+            lo, hi = hi, lo
+        z = dict(b)
+        z["low"], z["high"] = lo, hi
+        items.append(z)
+    if not items:
+        return []
+    if float(min_overlap_ratio) > 1.0:
+        out = list(items)
+    else:
+        clusters = _merge_by_overlap(
+            items,
+            min_overlap_ratio=float(min_overlap_ratio),
+            group_key=lambda z: str(z.get("direction") or ""),
+        )
+        out = [_finalize_merged_ob(c, last_close=last_close) for c in clusters]
+
+    out.sort(key=_recency_key, reverse=True)
+    if limit is not None:
+        out = out[: max(1, int(limit))]
+    return out
+
+
+def _finalize_merged_ob(
+    members: Sequence[Dict[str, Any]], *, last_close: Optional[float]
+) -> Dict[str, Any]:
+    if len(members) == 1:
+        return dict(members[0])
+    lo = min(float(m["low"]) for m in members)
+    hi = max(float(m["high"]) for m in members)
+    newest = max(members, key=_recency_key)
+    merged = dict(newest)
+    merged["low"] = _round_px(lo)
+    merged["high"] = _round_px(hi)
+    merged["mid"] = _round_px((lo + hi) / 2.0)
+    merged["status"] = "active" if any(m.get("status") == "active" for m in members) else "mitigated"
+    src = _pick_source_event(members)
+    if src:
+        merged["source_event"] = src
+    if last_close:
+        merged["distance_pct"] = round(
+            abs(float(last_close) - (lo + hi) / 2.0) / float(last_close) * 100.0, 3
+        )
+    merged["merged_count"] = len(members)
+    merged["merged_from"] = sorted(
+        [[_round_px(m["low"]), _round_px(m["high"])] for m in members],
+        key=lambda r: (r[0] if r[0] is not None else 0.0),
+    )
+    return merged
+
+
+def merge_fvgs(
+    fvgs: Sequence[Dict[str, Any]],
+    *,
+    limit: Optional[int] = None,
+    min_overlap_ratio: float = ZONE_MERGE_OVERLAP_RATIO,
+) -> List[Dict[str, Any]]:
+    """同向重叠 FVG 合并为一条缺口带；状态 open > partial > filled。"""
+    items: List[Dict[str, Any]] = []
+    for f in fvgs or []:
+        if not isinstance(f, dict):
+            continue
+        lo = _f(f.get("low"))
+        hi = _f(f.get("high"))
+        if lo is None or hi is None:
+            continue
+        if lo > hi:
+            lo, hi = hi, lo
+        z = dict(f)
+        z["low"], z["high"] = lo, hi
+        items.append(z)
+    if not items:
+        return []
+    if float(min_overlap_ratio) > 1.0:
+        out = list(items)
+    else:
+        clusters = _merge_by_overlap(
+            items,
+            min_overlap_ratio=float(min_overlap_ratio),
+            group_key=lambda z: str(z.get("direction") or ""),
+        )
+        out = [_finalize_merged_fvg(c) for c in clusters]
+
+    out.sort(key=_recency_key, reverse=True)
+    if limit is not None:
+        out = out[: max(1, int(limit))]
+    return out
+
+
+_FVG_STATUS_PRIORITY = {"open": 3, "partial": 2, "filled": 1}
+
+
+def _finalize_merged_fvg(members: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    if len(members) == 1:
+        return dict(members[0])
+    lo = min(float(m["low"]) for m in members)
+    hi = max(float(m["high"]) for m in members)
+    newest = max(members, key=_recency_key)
+    merged = dict(newest)
+    merged["low"] = _round_px(lo)
+    merged["high"] = _round_px(hi)
+    merged["mid"] = _round_px((lo + hi) / 2.0)
+    merged["height"] = _round_px(hi - lo)
+    merged["status"] = max(
+        (str(m.get("status") or "filled") for m in members),
+        key=lambda s: _FVG_STATUS_PRIORITY.get(s, 0),
+    )
+    starts = [str(m.get("start_date")) for m in members if m.get("start_date")]
+    merged["start_date"] = min(starts) if starts else newest.get("start_date")
+    merged["merged_count"] = len(members)
+    merged["merged_from"] = sorted(
+        [[_round_px(m["low"]), _round_px(m["high"])] for m in members],
+        key=lambda r: (r[0] if r[0] is not None else 0.0),
+    )
+    return merged
 
 
 def event_to_bos_like(event: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -537,18 +826,20 @@ def analyze_smc(
     atr: Optional[float] = None,
     max_order_blocks: int = MAX_ORDER_BLOCKS,
     max_fvgs: int = MAX_FVGS,
+    zone_merge_ratio: float = ZONE_MERGE_OVERLAP_RATIO,
+    remote_pct: float = REMOTE_DISTANCE_PCT,
 ) -> Dict[str, Any]:
     """完整 SMC 子集分析。"""
     ohlc = parse_ohlc_bars(bars)
     empty = {
         "ok": False,
-        "structure_bias": "neutral",
         "events": [],
         "last_event": None,
         "order_blocks": [],
         "fvgs": [],
         "summary": "样本不足，暂无 SMC 结构事件。",
     }
+    empty.update(structure_bias_meta("neutral"))
     if len(ohlc) < 3 or len(labeled_zigzag) < 2:
         return empty
 
@@ -557,6 +848,7 @@ def analyze_smc(
 
     trend, _ = _trend_from_labels(labeled_zigzag)
     bias = trend_to_structure_bias(trend)
+    bias_meta = structure_bias_meta(bias)
     events = detect_structure_events(
         ohlc, labeled_zigzag, confirm_right=confirm_right
     )
@@ -568,15 +860,28 @@ def analyze_smc(
             events = [snap]
             last_event = snap
 
-    order_blocks = detect_order_blocks(
-        ohlc, events, max_blocks=max_order_blocks
+    last_close = float(ohlc[-1]["close"])
+    # 先多取再合并/降权，避免截断吃掉可合并成员
+    raw_obs = detect_order_blocks(
+        ohlc, events, max_blocks=max(3, int(max_order_blocks) * 3)
     )
-    fvgs = detect_fvgs(ohlc, atr=atr, max_fvgs=max_fvgs)
+    order_blocks = merge_order_blocks(
+        raw_obs,
+        limit=None,
+        last_close=last_close,
+        min_overlap_ratio=zone_merge_ratio,
+    )
+    raw_fvgs = detect_fvgs(ohlc, atr=atr, max_fvgs=max(4, int(max_fvgs) * 3))
+    fvgs = merge_fvgs(raw_fvgs, limit=None, min_overlap_ratio=zone_merge_ratio)
+    _apply_zone_relevance(order_blocks, last_close=last_close, remote_pct=remote_pct)
+    _apply_zone_relevance(fvgs, last_close=last_close, remote_pct=remote_pct)
+    order_blocks = _sort_zones_near_first(order_blocks)[: max(1, int(max_order_blocks))]
+    fvgs = _sort_zones_near_first(fvgs)[: max(1, int(max_fvgs))]
     summary = build_smc_summary(last_event, order_blocks, fvgs)
 
     return {
         "ok": True,
-        "structure_bias": bias,
+        **bias_meta,
         "events": events[-12:],
         "last_event": last_event,
         "order_blocks": order_blocks,
@@ -590,6 +895,8 @@ def analyze_smc(
             "fvg_min_pct": FVG_MIN_PCT,
             "max_order_blocks": int(max_order_blocks),
             "max_fvgs": int(max_fvgs),
+            "zone_merge_ratio": float(zone_merge_ratio),
+            "remote_distance_pct": float(remote_pct),
         },
     }
 
