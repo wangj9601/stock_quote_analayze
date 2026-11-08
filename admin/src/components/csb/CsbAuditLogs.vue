@@ -7,6 +7,13 @@
         刷新
       </el-button>
     </div>
+    <el-alert
+      type="info"
+      :closable="false"
+      show-icon
+      class="mb-3"
+      title="区间强制刷新：csb_trace_refresh_range（已启动）影响数恒为 0；完成后另有 csb_trace_refresh_range_done，影响数=删除行数+写入买点数。状态 success 仅表示该条日志写入成功。"
+    />
     <el-table :data="items" v-loading="loading" stripe border size="small" max-height="480">
       <el-table-column prop="log_time" label="时间" width="168" />
       <el-table-column prop="log_type" label="类型" width="160" />

@@ -267,10 +267,21 @@
           <el-button :loading="traceRefreshing" @click="openTraceRefreshDialog">强制刷新区间预计算</el-button>
           <el-button type="danger" plain :loading="tracePurging" @click="confirmPurgeTrace">清空该版本 trace</el-button>
         </el-form-item>
+        <el-alert
+          v-if="traceRefreshStatus?.phase === 'running'"
+          type="info"
+          show-icon
+          :closable="false"
+          class="mb-3"
+          :title="`区间预计算进行中 ${Number(traceRefreshStatus.progress || 0)}%`"
+          :description="traceRefreshStatusText"
+        />
         <el-form-item>
           <span class="hint">
             回测在服务端后台线程执行：关闭本页或浏览器不会取消任务；请保持 API 服务进程运行。服务重启后会从检查点自动续跑。
             单日预计算只写选定交易日。「强制刷新区间」只删并重写所选日期内的 trace；要清空该版本全部预计算用「清空该版本 trace」。
+            启动后本页会轮询进度；操作记录里「已启动」的影响数恒为 0，真正结束看进度条到 100% 或类型
+            <code>csb_trace_refresh_range_done</code>。
             <template v-if="traceStatsLabel">当前 trace：{{ traceStatsLabel }}</template>
           </span>
         </el-form-item>
@@ -427,7 +438,11 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { csbApiService, type CSBStrategyConfig } from '@/services/csbApi'
+import {
+  csbApiService,
+  type CSBStrategyConfig,
+  type CsbTraceRefreshStatus,
+} from '@/services/csbApi'
 import { boardConstituentsService, type BoardSummary } from '@/services/boardConstituents.service'
 import CsbTaskDetail from './TaskDetail.vue'
 
@@ -783,6 +798,21 @@ const traceRefreshConfigId = ref<number | undefined>()
 const traceRefreshStart = ref('')
 const traceRefreshEnd = ref('')
 const traceStatsRows = ref<number | null>(null)
+const traceRefreshStatus = ref<CsbTraceRefreshStatus | null>(null)
+let traceRefreshPollTimer: number | undefined
+
+const traceRefreshStatusText = computed(() => {
+  const st = traceRefreshStatus.value
+  if (!st) return ''
+  const range =
+    st.start_date && st.end_date ? `${st.start_date}～${st.end_date}` : ''
+  const parts = [
+    st.config_id != null ? `版本 ID ${st.config_id}` : '',
+    range,
+    st.message || '',
+  ].filter(Boolean)
+  return parts.join(' · ')
+})
 const statusFilter = ref('')
 const selectedIds = ref<string[]>([])
 const detailVisible = ref(false)
@@ -1112,6 +1142,49 @@ function openTraceRefreshDialog() {
   traceRefreshVisible.value = true
 }
 
+function stopTraceRefreshPoll() {
+  if (traceRefreshPollTimer != null) {
+    window.clearInterval(traceRefreshPollTimer)
+    traceRefreshPollTimer = undefined
+  }
+}
+
+async function pollTraceRefreshOnce(configId?: number) {
+  try {
+    const st = await csbApiService.getTraceRefreshRangeStatus(configId)
+    traceRefreshStatus.value = st || null
+    const phase = String(st?.phase || '')
+    if (phase === 'running') {
+      if (st?.config_id != null) {
+        try {
+          const data = await csbApiService.getTraceStats(st.config_id)
+          traceStatsRows.value = data?.total_rows ?? traceStatsRows.value
+        } catch {
+          /* ignore */
+        }
+      }
+      return
+    }
+    stopTraceRefreshPoll()
+    if (phase === 'completed') {
+      ElMessage.success(st?.message || '区间预计算已完成')
+      await loadTraceStats()
+    } else if (phase === 'failed') {
+      ElMessage.error(st?.message || st?.error || '区间预计算失败')
+    }
+  } catch {
+    /* 轮询失败不打断；下次再试 */
+  }
+}
+
+function startTraceRefreshPoll(configId?: number) {
+  stopTraceRefreshPoll()
+  void pollTraceRefreshOnce(configId)
+  traceRefreshPollTimer = window.setInterval(() => {
+    void pollTraceRefreshOnce(configId)
+  }, 3000)
+}
+
 async function runTraceRefresh() {
   const cid = traceRefreshConfigId.value
   if (cid == null) {
@@ -1128,7 +1201,7 @@ async function runTraceRefresh() {
   }
   try {
     await ElMessageBox.confirm(
-      `将删除参数版本 ID ${cid} 在 ${traceRefreshStart.value}～${traceRefreshEnd.value} 的 trace，并重新扫描该区间全市场买点。区间外数据保留。耗时较长，在后台执行。`,
+      `将删除参数版本 ID ${cid} 在 ${traceRefreshStart.value}～${traceRefreshEnd.value} 的 trace，并重新扫描该区间全市场买点。区间外数据保留。耗时较长，在后台执行；本页会显示进度。`,
       '确认强制刷新',
       { type: 'warning', confirmButtonText: '启动', cancelButtonText: '取消' },
     )
@@ -1144,8 +1217,10 @@ async function runTraceRefresh() {
       purge_first: true,
     })
     ElMessage.success(res.message || '区间 trace 刷新已启动')
+    if (res.status) traceRefreshStatus.value = res.status
     traceRefreshVisible.value = false
     traceStatsRows.value = 0
+    startTraceRefreshPoll(cid)
   } catch (e: any) {
     ElMessage.error(e.message || '启动失败')
   } finally {
@@ -1285,10 +1360,23 @@ onMounted(async () => {
   await loadTasks()
   // 仅当存在 pending/running/paused 时才轮询；全部完成后自动 stopPoll
   syncPoll()
+  // 若服务端已有进行中的区间刷新（例如刷新页面后），恢复进度条
+  try {
+    const st = await csbApiService.getTraceRefreshRangeStatus(resolveTraceConfigId())
+    if (st?.phase === 'running') {
+      traceRefreshStatus.value = st
+      startTraceRefreshPoll(st.config_id)
+    } else if (st && st.phase !== 'idle') {
+      traceRefreshStatus.value = st
+    }
+  } catch {
+    /* ignore */
+  }
 })
 
 onUnmounted(() => {
   stopPoll()
+  stopTraceRefreshPoll()
 })
 </script>
 

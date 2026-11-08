@@ -92,9 +92,12 @@ API：
 
 **区间强制刷新 / 清空**
 
-- `POST /api/admin/csb/trace/refresh-range`：对 `[start, end]` 区间重算，`purge_first=true` 时先清空该版本全部 trace。
+- `POST /api/admin/csb/trace/refresh-range`：对 `[start, end]` 区间重算，`purge_first=true` 时先删除该版本**区间内** trace 再全市场重扫（后台线程）。
+- `GET /api/admin/csb/trace/refresh-range/status`：查询进程内进度（`phase` / `progress` / `message`）。管理端回测页会自动轮询并展示进度条。
 - `POST /api/admin/csb/trace/purge`：清空某版本全部 trace。
 - `GET /api/admin/csb/trace/stats`：查看某版本 trace 行数。
+
+审计：启动写 `csb_trace_refresh_range`（`phase=started`，**影响数恒为 0**）；结束写 `csb_trace_refresh_range_done`（影响数=删除行+写入买点）。不要把「已启动 + success」当成算完。
 
 > ⚠️ **收紧参数后旧买点可能残留**：日终预计算只覆盖「当日命中行」，不会自动删除历史 trace。若担心残留，请对该版本执行 `purge` 或 `refresh-range`。
 

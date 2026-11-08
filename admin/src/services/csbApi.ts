@@ -16,6 +16,24 @@ export interface CSBStrategyConfig {
   updated_at?: string | null
 }
 
+/** 强制刷新区间预计算的进程内进度 */
+export interface CsbTraceRefreshStatus {
+  phase?: 'idle' | 'running' | 'completed' | 'failed' | string
+  config_id?: number
+  start_date?: string
+  end_date?: string
+  purge_first?: boolean
+  progress?: number
+  message?: string
+  purged_rows?: number
+  precompute_hits?: number
+  precomputed_days?: number
+  started_at?: string | null
+  finished_at?: string | null
+  error?: string | null
+  updated_at?: string
+}
+
 class CSBApiService {
   private getAuthHeaders(): Record<string, string> {
     const token = localStorage.getItem('admin_token')
@@ -137,10 +155,20 @@ class CSBApiService {
       start_date: string
       end_date: string
       purge_first: boolean
+      already_running?: boolean
+      status?: CsbTraceRefreshStatus
     }>(`${PREFIX}/trace/refresh-range`, {
       method: 'POST',
       body: JSON.stringify(body),
     })
+  }
+
+  async getTraceRefreshRangeStatus(configId?: number) {
+    const q = configId != null ? `?config_id=${configId}` : ''
+    const res = await this.request<{ success: boolean; data: CsbTraceRefreshStatus }>(
+      `${PREFIX}/trace/refresh-range/status${q}`
+    )
+    return res.data
   }
 
   async listBacktestPresets() {

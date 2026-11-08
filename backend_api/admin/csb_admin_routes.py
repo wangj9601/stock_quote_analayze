@@ -965,6 +965,16 @@ async def purge_trace(body: TracePurgeBody, db: Session = Depends(get_db)):
     }
 
 
+@router.get("/trace/refresh-range/status")
+async def get_trace_refresh_range_status(
+    config_id: Optional[int] = Query(None, ge=1, description="参数版本；空则最近一次"),
+):
+    """查询「强制刷新区间预计算」进度（进程内状态，与后台线程同源）。"""
+    from backend_core.strategies.csb.scheduled_precompute import get_csb_trace_refresh_status
+
+    return {"success": True, "data": get_csb_trace_refresh_status(config_id)}
+
+
 @router.post("/trace/refresh-range")
 async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends(get_db)):
     start_s = str(body.start_date)[:10]
@@ -974,6 +984,26 @@ async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends
 
     cid = _resolve_strategy_config_id(db, body.config_id)
     purge_first = bool(body.purge_first)
+
+    from backend_core.strategies.csb.scheduled_precompute import begin_csb_trace_refresh_status
+
+    status, already_running = begin_csb_trace_refresh_status(
+        cid,
+        start_date=start_s,
+        end_date=end_s,
+        purge_first=purge_first,
+    )
+    if already_running:
+        return {
+            "success": True,
+            "message": "该参数版本的区间刷新仍在运行，请查看进度",
+            "config_id": cid,
+            "start_date": status.get("start_date") or start_s,
+            "end_date": status.get("end_date") or end_s,
+            "purge_first": bool(status.get("purge_first", purge_first)),
+            "already_running": True,
+            "status": status,
+        }
 
     def _job():
         from backend_api.database import SessionLocal
@@ -1025,6 +1055,7 @@ async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends
         daemon=True,
         name=f"csb-trace-refresh-{cid}",
     ).start()
+    # 启动审计：影响数恒为 0（尚未删/写）；真正影响数见完成后的 csb_trace_refresh_range_done
     write_csb_audit(
         db,
         "csb_trace_refresh_range",
@@ -1044,6 +1075,8 @@ async def refresh_trace_range(body: TraceRefreshRangeBody, db: Session = Depends
         "start_date": start_s,
         "end_date": end_s,
         "purge_first": bool(body.purge_first),
+        "already_running": False,
+        "status": status,
     }
 
 
