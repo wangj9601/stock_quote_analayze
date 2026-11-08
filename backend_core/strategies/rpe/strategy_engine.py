@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
+from backend_core.strategies.precompute_progress import maybe_log_precompute_progress
+
 from .config import RPEConfigManager
 from .data_loader import RPEDataLoader, _norm_code
 from .filters import liquidity_ok, structure_break, structure_filter, trend_veto
@@ -553,7 +555,9 @@ class RPEStrategyEngine:
             ]
 
         results: List[Dict[str, Any]] = []
-        for b in board_jobs:
+        total_boards = len(board_jobs)
+        progress_state: Dict[str, Any] = {"last": 0}
+        for idx, b in enumerate(board_jobs, start=1):
             rows = self.screen_board(
                 b["board_code"],
                 b.get("board_name") or b["board_code"],
@@ -575,6 +579,14 @@ class RPEStrategyEngine:
                 if signal_type and r.get("signal_type") != signal_type:
                     continue
                 results.append(r)
+            maybe_log_precompute_progress(
+                logger,
+                "RPE",
+                idx,
+                total_boards,
+                state=progress_state,
+                extra="板块",
+            )
 
         results.sort(
             key=lambda r: (

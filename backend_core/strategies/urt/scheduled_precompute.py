@@ -2,6 +2,10 @@
 """
 URT 信号定时预计算：写入 urt_signal_trace（A 股 / 港股）。
 由 backend_core/data_collectors/main.py 注册。
+
+为控制库体积，日终全市场预计算默认只入库 score≥地板分（默认 50，可用
+URT_PRECOMPUTE_MIN_SCORE 或配置 precompute_min_score 覆盖）；正式买点始终保留。
+当日扫描占位（mark_date_scanned）仍写，避免被当成「未预计算」。
 """
 
 from __future__ import annotations
@@ -9,11 +13,13 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_STORAGE_MIN_SCORE = 50.0
 
 
 def _env_bool(key: str, default: bool = True) -> bool:
@@ -21,6 +27,42 @@ def _env_bool(key: str, default: bool = True) -> bool:
     if not raw:
         return default
     return raw in ("1", "true", "yes", "y", "on")
+
+
+def resolve_urt_precompute_storage_min_score(cfg: Optional[Dict[str, Any]] = None) -> float:
+    """日终预计算入库地板分。环境变量优先，其次配置，默认 50。"""
+    raw = (os.getenv("URT_PRECOMPUTE_MIN_SCORE") or "").strip()
+    if raw:
+        try:
+            return max(0.0, float(raw))
+        except (TypeError, ValueError):
+            pass
+    if isinstance(cfg, dict) and cfg.get("precompute_min_score") is not None:
+        try:
+            return max(0.0, float(cfg.get("precompute_min_score")))
+        except (TypeError, ValueError):
+            pass
+    return _DEFAULT_STORAGE_MIN_SCORE
+
+
+def filter_urt_rows_for_storage(
+    rows: List[Dict[str, Any]],
+    *,
+    min_score: float,
+) -> List[Dict[str, Any]]:
+    """保留正式买点，或 score≥地板分的明细行。"""
+    kept: List[Dict[str, Any]] = []
+    for r in rows or []:
+        if r.get("buy_signal"):
+            kept.append(r)
+            continue
+        try:
+            score = float(r.get("score") if r.get("score") is not None else -1)
+        except (TypeError, ValueError):
+            score = -1.0
+        if score >= float(min_score):
+            kept.append(r)
+    return kept
 
 
 def resolve_urt_trade_date(db, *, market: str = "CN") -> str:
@@ -102,13 +144,15 @@ def run_urt_precompute_for_config(
         else:
             stocks = loader.list_a_share_candidates(limit=limit)
         engine = URTStrategyEngine(loader, cfg)
-        # 对齐 GMS 预计算：全市场都落库，不只写正式买点。
+        # 全市场扫描（含非买点），入库前按地板分裁剪以减库；扫描占位仍写。
         rows = engine.screen_universe(
             stocks,
             as_of_end_date=date_s,
             require_pass=False,
         )
-        written = upsert_trace_rows(db, config_id=config_id, rows=rows)
+        floor = resolve_urt_precompute_storage_min_score(cfg)
+        to_store = filter_urt_rows_for_storage(rows, min_score=floor)
+        written = upsert_trace_rows(db, config_id=config_id, rows=to_store)
         buy_n = sum(1 for r in rows if r.get("buy_signal"))
         mark_date_scanned(
             db,
@@ -117,18 +161,22 @@ def run_urt_precompute_for_config(
             extra={
                 "hits": buy_n,
                 "candidates": len(stocks),
+                "scanned_rows": len(rows),
                 "written": written,
+                "storage_min_score": floor,
                 "scope": "pool" if limit else "full_market",
             },
         )
         elapsed = (datetime.now() - started).total_seconds()
         logger.info(
-            "URT 预计算完成 config_id=%s market=%s date=%s candidates=%s rows=%s buys=%s written=%s elapsed=%.1fs",
+            "URT 预计算完成 config_id=%s market=%s date=%s candidates=%s scanned=%s "
+            "storage_min_score=%s buys=%s written=%s elapsed=%.1fs",
             config_id,
             mkt,
             date_s,
             len(stocks),
             len(rows),
+            floor,
             buy_n,
             written,
             elapsed,
@@ -142,6 +190,7 @@ def run_urt_precompute_for_config(
             "hits": buy_n,
             "rows": len(rows),
             "written": written,
+            "storage_min_score": floor,
             "elapsed_sec": elapsed,
         }
     except Exception as e:

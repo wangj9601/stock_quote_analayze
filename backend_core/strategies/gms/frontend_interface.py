@@ -17,11 +17,57 @@ from .config import GMSConfigManager
 from .json_safe import sanitize_for_pg_json
 
 from backend_api.services.gms_selection_snapshot import enrich_trace_meta
+from backend_core.strategies.precompute_progress import maybe_log_precompute_progress
 
 logger = logging.getLogger(__name__)
 
 _GMS_BATCH_SIZE = max(50, int(os.getenv("GMS_SCREENING_BATCH_SIZE", "200")))
 _GMS_TRACE_UPSERT_BATCH_SIZE = max(50, int(os.getenv("GMS_TRACE_UPSERT_BATCH_SIZE", "500")))
+_DEFAULT_TRACE_STORAGE_MIN_SCORE = 50.0
+
+
+def resolve_gms_trace_storage_min_score(config: Optional[dict] = None) -> float:
+    """
+    gms_signal_trace 入库地板分（只减库；缺行时选股仍可现算回填）。
+    环境变量 GMS_PRECOMPUTE_MIN_SCORE 优先，其次 scoring.precompute_min_score，默认 50。
+    """
+    raw = (os.getenv("GMS_PRECOMPUTE_MIN_SCORE") or "").strip()
+    if raw:
+        try:
+            return max(0.0, float(raw))
+        except (TypeError, ValueError):
+            pass
+    scoring = (config or {}).get("scoring") if isinstance(config, dict) else None
+    if isinstance(scoring, dict) and scoring.get("precompute_min_score") is not None:
+        try:
+            return max(0.0, float(scoring.get("precompute_min_score")))
+        except (TypeError, ValueError):
+            pass
+    if isinstance(config, dict) and config.get("precompute_min_score") is not None:
+        try:
+            return max(0.0, float(config.get("precompute_min_score")))
+        except (TypeError, ValueError):
+            pass
+    return _DEFAULT_TRACE_STORAGE_MIN_SCORE
+
+
+def _passes_gms_trace_storage_floor(
+    result: dict,
+    *,
+    min_score: Optional[float] = None,
+) -> bool:
+    floor = (
+        float(min_score)
+        if min_score is not None
+        else resolve_gms_trace_storage_min_score()
+    )
+    score = result.get("score_total")
+    if score is None:
+        return False
+    try:
+        return float(score) >= floor
+    except (TypeError, ValueError):
+        return False
 
 
 def _is_a_share(code: str) -> bool:
@@ -620,20 +666,39 @@ def _save_results_to_trace_batch(
     date: str,
     config_id: int,
     batch_size: int = _GMS_TRACE_UPSERT_BATCH_SIZE,
+    *,
+    storage_min_score: Optional[float] = None,
 ) -> int:
-    """批量 upsert gms_signal_trace，返回成功写入条数。"""
+    """批量 upsert gms_signal_trace，返回成功写入条数（默认跳过低于入库地板分的行）。"""
     if not results:
         return 0
     from sqlalchemy.dialects.postgresql import insert as pg_insert
     from backend_api.models import GMSSignalTrace
 
+    floor = (
+        float(storage_min_score)
+        if storage_min_score is not None
+        else resolve_gms_trace_storage_min_score()
+    )
     values_list = []
     paired: List[tuple] = []
+    skipped = 0
     for r in results:
+        if not _passes_gms_trace_storage_floor(r, min_score=floor):
+            skipped += 1
+            continue
         v = _build_trace_values(r, date, config_id)
         if v:
             values_list.append(v)
             paired.append((r, v))
+    if skipped:
+        logger.debug(
+            "GMS trace 入库跳过低于地板分 rows=%s floor=%s date=%s config_id=%s",
+            skipped,
+            floor,
+            date,
+            config_id,
+        )
     if not values_list:
         return 0
 
@@ -672,8 +737,11 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
     回测与选股均依赖此表：优先读 trace，缺失时增量计算并回填。
     使用 PostgreSQL ON CONFLICT UPSERT，避免并发预计算/选股回填时 UniqueViolation。
     单条失败用 SAVEPOINT 回滚，避免污染整批事务（PostgreSQL InFailedSqlTransaction）。
+    低于入库地板分（默认 50）的行不写库，需要时由选股路径现算。
     """
     code = result.get("code") or result.get("symbol") or ""
+    if not _passes_gms_trace_storage_floor(result):
+        return
     try:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from backend_api.models import GMSSignalTrace
@@ -1003,7 +1071,7 @@ class GMSFrontendInterface:
             missing_cn = [c for c, mt in missing if mt == "CN"]
             missing_etf = [c for c, mt in missing if mt == "ETF"]
             missing_hk = [c for c, mt in missing if mt == "HK"]
-            # 大批量股票池时每 100 只一批计算并打印进度，避免长时间无日志
+            # 大批量股票池分批计算；进度默认每 200 只打一条（PRECOMPUTE_PROGRESS_EVERY）
             batch_size = _GMS_BATCH_SIZE
             pool_label = {"CN": "全部A股", "ETF": "全部ETF", "HK": "全部港股"}
             for codes_sub, mt in [(missing_cn, "CN"), (missing_etf, "ETF"), (missing_hk, "HK")]:
@@ -1011,6 +1079,7 @@ class GMSFrontendInterface:
                     continue
                 total_missing = len(codes_sub)
                 label = pool_label.get(mt, mt)
+                progress_state: Dict[str, Any] = {"last": 0}
                 for start in range(0, total_missing, batch_size):
                     chunk = codes_sub[start : start + batch_size]
                     done = min(start + len(chunk), total_missing)
@@ -1031,15 +1100,21 @@ class GMSFrontendInterface:
                             computed.append(r)
                         if self.use_trace and sub:
                             _save_results_to_trace_batch(
-                                self.db, sub, date, self.config_id
+                                self.db,
+                                sub,
+                                date,
+                                self.config_id,
+                                storage_min_score=resolve_gms_trace_storage_min_score(
+                                    self.config
+                                ),
                             )
-                        logger.info(
-                            "GMS 策略信号计算进度 %s(%s) %s：已完成 %d/%d 只",
-                            label,
-                            mt,
-                            date,
+                        maybe_log_precompute_progress(
+                            logger,
+                            "GMS",
                             done,
                             total_missing,
+                            state=progress_state,
+                            extra=f"{label}({mt}) {date}",
                         )
                     except Exception as e:
                         logger.warning(

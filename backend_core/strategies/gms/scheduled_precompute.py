@@ -130,6 +130,7 @@ def run_gms_precompute_for_config(
         mgr = GMSConfigManager()
         cfg = mgr.get_config(config_id)
         gms = GMSFrontendInterface(db, cfg, config_id=config_id)
+        # min_score=0：全市场仍算完；入库地板分在 trace 写入侧裁剪（默认 50，只减库）
         gms.set_selection_config(min_score=0, max_results=200000)
         mkt = "all" if stock_pool else market
         results, meta = gms.get_selection_results(
@@ -139,6 +140,11 @@ def run_gms_precompute_for_config(
             trace_only=False,
             return_meta=True,
         )
+        from backend_core.strategies.gms.frontend_interface import (
+            resolve_gms_trace_storage_min_score,
+        )
+
+        floor = resolve_gms_trace_storage_min_score(cfg)
         duration_ms = int((time.perf_counter() - t0) * 1000)
         record_precompute_run(
             db,
@@ -150,12 +156,14 @@ def run_gms_precompute_for_config(
             duration_ms=duration_ms,
         )
         logger.info(
-            "[GMS预计算] 完成 config_id=%s date=%s market=%s pool=%s 返回=%s meta=%s",
+            "[GMS预计算] 完成 config_id=%s date=%s market=%s pool=%s 返回=%s "
+            "storage_min_score=%s meta=%s",
             config_id,
             target_date,
             market,
             "custom" if stock_pool else "full",
             len(results),
+            floor,
             meta,
         )
     except Exception as e:

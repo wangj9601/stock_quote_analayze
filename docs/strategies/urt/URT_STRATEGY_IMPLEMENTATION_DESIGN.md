@@ -243,6 +243,7 @@ admin/  # /urt-management 参数配置页
 | 结构盈亏比提示 | `structure.rr`：无量纲 RR=上行/max(价−支撑, 价×1.5%, k×ATR)；打分默认第二档，最近档只硬闸。明细展示 RR、上行%、下行%、是否触分母下限。`poor_structure_rr` 偏低为 warn（阈值 2～3）；破位/贴阻力为 danger。 |
 | 配置 | `urt_strategy_configs.precompute_enabled`；默认版本或开关开启才算 |
 | 任务 | `backend_core/strategies/urt/scheduled_precompute.py` → `scheduled_urt_signals_cn`；`data_collectors/main.py` 注册，默认 **16:45**（港股 17:20），`ENABLE_URT_PRECOMPUTE`；`urt_daily` 推送建议 **17:30**（须晚于预计算） |
+| 入库地板分 | 日终全市场扫描后，默认仅入库 `score≥50`（正式买点始终保留）；环境变量 `URT_PRECOMPUTE_MIN_SCORE` 或配置 `precompute_min_score` 可改。扫描占位仍写。目标只为减库，读侧 `min_score` 不变。 |
 | 选股 | `URTFrontendInterface.screen` 无 Query 覆盖时优先读 `urt_signal_trace` |
 | 手动 | `POST /api/admin/urt/precompute/run?date=&config_id=&market=CN|HK`；管理端「URT上升趋势策略」页「信号预计算」支持选日期 |
 
@@ -253,7 +254,7 @@ admin/  # /urt-management 参数配置页
 | 生效源 | 日常路径一律绑定 `is_default=true` 的版本；回测创建固化 `strategy_config_id`；前台默认同一生效 id |
 | 保存参数 | 管理端「策略参数」保存成功后提示重跑预计算；确认则打开「信号预计算」并预填当前 `config_id`（**不自动**全市场重算） |
 | 旧 trace | 按 `(code, date, config_id)` 隔离；保存**不删除**旧行；同 id 原地改参后，若 `trace.created_at < config.updated_at` 则接口标 `stale` / `need_recompute` |
-| 日终预计算 | 仅 `is_default` 或 `precompute_enabled`（及环境变量额外 id）；只 upsert 命中买点，收紧参数后旧买点可能残留，需手动预计算或个股强制重算 |
+| 日终预计算 | 仅 `is_default` 或 `precompute_enabled`（及环境变量额外 id）；按入库地板分 upsert（默认≥50，买点必留），收紧参数后旧买点可能残留，需手动预计算或个股强制重算 |
 | 个股强制重算 | `POST /api/stock/urt-signal-trace/recompute`：仅清除该 `code+config_id` 再全历史写入 |
 | 历史回测 | 已完成任务快照不改写；改参后重跑任务仍用任务内 `strategy_config_id`，读到的是**当前**该 id 的 trace |
 | 验收 | ① 保存有提示且可打开预计算；② 改参后选股/信号历史可见陈旧提示；③ 预计算或强制重算后 `stale=false`；④ 新旧 `config_id` 不串；⑤ 旧回测任务结果不变 |

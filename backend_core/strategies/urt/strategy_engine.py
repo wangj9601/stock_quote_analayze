@@ -8,6 +8,8 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from backend_core.strategies.precompute_progress import maybe_log_precompute_progress
+
 from .data_loader import URTDataLoader
 from .signal_detector import evaluate_buy_signal, history_calendar_days_for_fetch
 
@@ -121,6 +123,7 @@ class URTStrategyEngine:
             end_s,
             n_chunk,
         )
+        progress_state: Dict[str, Any] = {"last": 0}
 
         for i in range(0, total, n_chunk):
             chunk = stock_rows[i : i + n_chunk]
@@ -152,6 +155,10 @@ class URTStrategyEngine:
                     continue
             # 显式释放本批引用，便于长跑预计算及时回收
             hist_map = None
+            done = min(total, i + len(chunk))
+            maybe_log_precompute_progress(
+                logger, "URT", done, total, state=progress_state
+            )
 
         results.sort(key=lambda x: float(x.get("score") or 0), reverse=True)
         return results
@@ -201,6 +208,7 @@ class URTStrategyEngine:
         )
         if progress_cb:
             progress_cb(0, total, f"区间一次扫描 0/{total} 只（{len(date_list)} 个交易日）")
+        progress_state: Dict[str, Any] = {"last": 0}
 
         for i in range(0, total, n_chunk):
             if cancel_check and cancel_check():
@@ -237,6 +245,14 @@ class URTStrategyEngine:
                     if d in hits_by_date:
                         hits_by_date[d].append(h)
             done_stocks += len(chunk)
+            maybe_log_precompute_progress(
+                logger,
+                "URT",
+                done_stocks,
+                total,
+                state=progress_state,
+                extra=f"（区间 {len(date_list)} 日）",
+            )
             if progress_cb:
                 progress_cb(
                     done_stocks,

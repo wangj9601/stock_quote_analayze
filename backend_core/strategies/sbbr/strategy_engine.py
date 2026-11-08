@@ -10,6 +10,7 @@ from backend_core.strategies.gms.structure_levels import (
     empty_structure,
     kde_bars_limit,
 )
+from backend_core.strategies.precompute_progress import maybe_log_precompute_progress
 
 from .bottom_detector import detect_bottom
 from .config import SBBRConfigManager
@@ -418,7 +419,9 @@ class SBBRStrategyEngine:
             code_list = list(universe_infos.keys())
 
         results: List[Dict[str, Any]] = []
-        for code in code_list:
+        total = len(code_list)
+        progress_state: Dict[str, Any] = {"last": 0}
+        for idx, code in enumerate(code_list, start=1):
             try:
                 info = universe_infos.get(_norm_code(code))
                 row = self.evaluate_code(
@@ -440,6 +443,10 @@ class SBBRStrategyEngine:
             except Exception as e:
                 logger.debug("SBBR evaluate %s failed: %s", code, e)
                 continue
+            finally:
+                maybe_log_precompute_progress(
+                    logger, "SBBR", idx, total, state=progress_state
+                )
 
         # 优先入场信号，其次筑底
         results.sort(

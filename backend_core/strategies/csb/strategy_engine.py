@@ -9,6 +9,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from backend_core.strategies.precompute_progress import maybe_log_precompute_progress
+
 from .config import (
     BUY_SIGNAL_TYPES,
     CSB_BREAKOUT,
@@ -491,6 +493,7 @@ class CSBStrategyEngine:
             n_chunk,
             workers,
         )
+        progress_state: Dict[str, Any] = {"last": 0}
 
         for i in range(0, total, n_chunk):
             if cancel_check and cancel_check():
@@ -533,8 +536,11 @@ class CSBStrategyEngine:
             for row in chunk_rows:
                 if row:
                     results.append(row)
+            done = min(total, i + len(chunk))
+            maybe_log_precompute_progress(
+                logger, "CSB", done, total, state=progress_state
+            )
             if progress_cb:
-                done = min(total, i + len(chunk))
                 progress_cb(done, total, f"扫描 {done}/{total}")
 
         results.sort(
@@ -604,6 +610,7 @@ class CSBStrategyEngine:
             n_chunk,
             workers,
         )
+        progress_state: Dict[str, Any] = {"last": done_stocks}
         if progress_cb:
             progress_cb(
                 done_stocks,
@@ -655,14 +662,16 @@ class CSBStrategyEngine:
                         hits_by_date[d].append(h)
                     flat_hits.append(h)
             done_stocks = min(total, i + len(chunk))
-            logger.info(
-                "CSB 区间扫描 chunk done=%s/%s fetch_ms=%.0f eval_ms=%.0f hits=%s eval_range=%s",
+            maybe_log_precompute_progress(
+                logger,
+                "CSB",
                 done_stocks,
                 total,
-                fetch_ms,
-                eval_ms,
-                len(flat_hits),
-                _eval_range_enabled(),
+                state=progress_state,
+                extra=(
+                    f"（区间 {len(date_list)} 日 fetch_ms={fetch_ms:.0f} "
+                    f"eval_ms={eval_ms:.0f} hits={len(flat_hits)}）"
+                ),
             )
             if chunk_hits_cb:
                 try:

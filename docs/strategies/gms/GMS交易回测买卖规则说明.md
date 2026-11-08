@@ -210,6 +210,7 @@
 | `scoring.momentum_full_threshold` | 动量溢出态「全速切入」分数线 | 90 |
 | `scoring.momentum_batch_threshold` | 动量溢出态「分批买入」分数线 | 80 |
 | `scoring.watch_threshold` | 重点关注分数（选股提示用） | 60 |
+| `scoring.precompute_min_score` / `GMS_PRECOMPUTE_MIN_SCORE` | `gms_signal_trace` 入库地板分（只减库；默认 50，低于此分不写表，选股缺行可现算） | 50 |
 | `scoring.alert_threshold` | 动量突变预警分数 | 90 |
 | `scoring.instant_deviation_stable_days` | 推力支撑「站稳」判定所需交易日数 | 3 |
 
