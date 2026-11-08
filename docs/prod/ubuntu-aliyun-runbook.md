@@ -40,13 +40,14 @@
     /admin/  → 127.0.0.1:8002  (admin/dist；Ubuntu 默认，避开同机 DeepTutor 的 8001)
     /api/    → 127.0.0.1:5000  (backend_api)
   admin.xworld-wangxw.top
-    /        → 302 /admin/
-    /admin/  → 127.0.0.1:8002
+    /        → 127.0.0.1:8002  (admin/dist；Vite base=/，与百度云 admin 子域一致)
+    /assets/ → 127.0.0.1:8002/assets/
+    /admin/  → 301 剥前缀到 /...（兼容旧书签）
     /api/    → 127.0.0.1:5000
   backend_core / start_scheduler → PostgreSQL（只听 localhost）
 ```
 
-同机已部署 **DeepTutor**（`0.0.0.0:8001`）时：不要抢 8001。本系统管理端用 **`ADMIN_PORT=8002`**，与 `nginx.ubuntu.conf` 中 `admin_server` 一致。DeepTutor 继续原端口。用户站仍走 `/admin/`；管理端域名 `admin.xworld-wangxw.top` 同样反代到 **127.0.0.1:8002**，不要把 8002 对公网开放。管理端前端生产构建的 base 是 `/admin/`，所以入口是 `https://admin.xworld-wangxw.top/admin/`。
+同机已部署 **DeepTutor**（`0.0.0.0:8001`）时：不要抢 8001。本系统管理端用 **`ADMIN_PORT=8002`**，与 `nginx.ubuntu.conf` 中 `admin_server` 一致。DeepTutor 继续原端口。用户站 `www` 仍走 `/admin/`；管理端独立域名 `admin.xworld-wangxw.top` 同样反代到 **127.0.0.1:8002**，不要把 8002 对公网开放。管理端生产构建 **Vite `base=/`**（与 `admin.icemaplecity.com` 相同），入口是 `https://admin.xworld-wangxw.top/`（如 `/login`、`/dashboard`）。若 HTML 引用 `/assets/...` 但 Nginx 仍把入口指到 `/admin/` 且未转发根路径 `/assets/`，会出现 JS 404 与 CSS MIME=`text/html` 白屏。
 
 ```
 /opt/stock_quote/
@@ -433,10 +434,11 @@ sudo nginx -t && sudo systemctl reload nginx
 ```bash
 sudo EMAIL='你的邮箱@example.com' bash /opt/stock_quote/current/scripts/deploy/linux/setup_letsencrypt_ubuntu.sh
 sudo nginx -t && sudo systemctl reload nginx
-curl -sSI https://admin.xworld-wangxw.top/admin/ | head
+curl -sSI https://admin.xworld-wangxw.top/ | head
+curl -sSI https://admin.xworld-wangxw.top/assets/index-*.css | head
 ```
 
-入口是 `https://admin.xworld-wangxw.top/admin/`（根路径会 302 到这里）。`www` 上的 `/admin/` 保持不变。
+入口是 `https://admin.xworld-wangxw.top/`（旧地址 `/admin/` 会 301 到根路径）。`www` 上的 `/admin/` 保持不变。
 
 ## 9. 灰测
 

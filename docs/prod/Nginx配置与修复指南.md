@@ -427,10 +427,12 @@ nginx.exe -s reload
 
 ## 七、前端与 Vite 配置确认
 
-- **Vue Router**：生产 base 应为 `/admin/`，例如 `createWebHistory(process.env.NODE_ENV === 'production' ? '/admin/' : '/')`。
-- **Vite**：`vite.config.ts` 中 `base: process.env.NODE_ENV === 'production' ? '/admin/' : '/'`。
+管理端有两种部署方式，**base 必须与 Nginx 一致**，不可混用：
 
-与 Nginx 的 `location /admin/` 及 fallback 配合，才能保证刷新不 404。
+1. **同域路径**（`www.../admin/`）：Vite `base=/admin/`，Nginx 配 `location /admin/` + `/admin/assets/`。
+2. **独立子域**（`admin.icemaplecity.com`、`admin.xworld-wangxw.top`）：Vite `base=/`（可用 `VITE_BASE` 覆盖），Nginx 在该 `server_name` 下把 `/`、`/assets/` 反代到 admin 静态进程。若子域仍 302 到 `/admin/` 而 HTML 引用 `/assets/...`，会出现 JS 404 与 CSS MIME=`text/html` 白屏。
+
+当前仓库默认按独立子域根路径构建（`admin/vite.config.ts` 默认 `base: '/'`）。用户站 `www` 上的 `/admin/` 仍按路径方式反代同一份 dist 时，需确认构建 `base` 与该路径策略一致，或仅通过管理端子域访问。
 
 ---
 
