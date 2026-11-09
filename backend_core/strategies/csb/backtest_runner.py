@@ -412,15 +412,24 @@ def _ensure_trace_for_backtest_range(
                 }
             )
 
-    hits_by_date, completed = engine.screen_universe_for_dates(
-        stocks,
-        missing,
-        require_entry=True,
-        progress_cb=_range_progress,
-        cancel_check=cancel_check,
-        stock_offset=stock_offset,
-        chunk_hits_cb=_on_chunk,
-    )
+    # 补算落库按入库地板分（默认 50）；回测读侧仍按版本 min_score 过滤
+    from backend_core.strategies.csb.scheduled_precompute import cfg_with_precompute_storage_floor
+
+    scan_cfg = cfg_with_precompute_storage_floor(cfg)
+    prev_cfg = engine.config
+    engine.config = scan_cfg
+    try:
+        hits_by_date, completed = engine.screen_universe_for_dates(
+            stocks,
+            missing,
+            require_entry=True,
+            progress_cb=_range_progress,
+            cancel_check=cancel_check,
+            stock_offset=stock_offset,
+            chunk_hits_cb=_on_chunk,
+        )
+    finally:
+        engine.config = prev_cfg
     done = 0
     if completed:
         for d in missing:
@@ -656,8 +665,18 @@ def run_csb_backtest(
         if not signals and use_trace_ok:
             covered = dates_ready_for_universe_backtest(db, config_id=int(resolved_id), dates=[d], stock_pool=pool)
             if d not in covered:
+                from backend_core.strategies.csb.scheduled_precompute import (
+                    cfg_with_precompute_storage_floor,
+                )
+
                 stocks = loader.list_a_share_candidates(stock_codes=pool)
-                day_hits = engine.screen(stocks, as_of_end_date=d, require_entry=True)
+                # 写入 trace 用地板分；当日回测再用 filter_backtest_signals 按 min_score 筛
+                day_hits = engine.screen(
+                    stocks,
+                    as_of_end_date=d,
+                    require_entry=True,
+                    config=cfg_with_precompute_storage_floor(cfg),
+                )
                 signals = [h for h in day_hits if str(h.get("signal_date"))[:10] == d]
                 try:
                     if signals:

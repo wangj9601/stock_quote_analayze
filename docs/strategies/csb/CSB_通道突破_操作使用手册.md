@@ -88,7 +88,7 @@ API：
 - **参数版本**：空 = 全部「预计算启用」版本。
 - **候选上限** `limit`：仅调试用，正式跑留空（全市场）。
 
-**预计算做什么**：全市场硬筛 → 命中买点写入 `csb_signal_trace` → 写 `__CSB_SCANNED__` 扫描标记。
+**预计算做什么**：全市场硬筛 → 命中买点且 `score≥入库地板分`（默认 **50**，`CSB_PRECOMPUTE_MIN_SCORE` / `precompute_min_score`）写入 `csb_signal_trace` → 写 `__CSB_SCANNED__` 扫描标记。选股读侧仍按版本 `min_score`（默认 80）过滤。
 
 **区间强制刷新 / 清空**
 
@@ -172,6 +172,7 @@ API：
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `ENABLE_CSB_PRECOMPUTE` | true | 关闭日终 CSB 预计算 |
+| `CSB_PRECOMPUTE_MIN_SCORE` | 50 | 预计算入库地板分（只减库；读侧 `min_score` 不变） |
 | `SCHED_CSB_SIGNALS_CN_DOW/HOUR/MINUTE` | mon-fri / 19 / 50 | cron 时间 |
 | `CSB_SCREEN_WORKERS` | min(4, CPU) | 扫描线程数（上限 16） |
 | `CSB_HIST_BATCH_CODES` | 自动 | 批量拉行情的 codes 分块（上限 120） |

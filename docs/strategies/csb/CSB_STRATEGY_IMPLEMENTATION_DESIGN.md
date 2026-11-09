@@ -185,8 +185,9 @@ POST /api/admin/csb/backtests
 
 ## 6. 预计算与调度
 
-- **管理端单日预计算**：`run_csb_precompute_for_config` → `engine.screen(require_entry=True)` → `upsert_trace_rows` → `mark_date_scanned`。
-- **区间刷新**：`run_csb_trace_refresh_range`（可先 purge）→ `_ensure_trace_for_backtest_range`。
+- **管理端单日预计算**：`run_csb_precompute_for_config` → 按入库地板分（默认 50）构造扫描配置 → `engine.screen(require_entry=True)` → `upsert_trace_rows` → `mark_date_scanned`。
+- **入库地板分**：与选股 `min_score` 分离；`CSB_PRECOMPUTE_MIN_SCORE` 或配置 `precompute_min_score` 可改，默认 50。只写买点且 `score≥地板分`；读侧仍用版本 `min_score`。
+- **区间刷新**：`run_csb_trace_refresh_range`（可先 purge）→ `_ensure_trace_for_backtest_range`（同样按入库地板分落库）。
 - **日终 cron**：`csb_signals_cn`，周一~周五 19:50（`SCHED_CSB_SIGNALS_CN_*`，开关 `ENABLE_CSB_PRECOMPUTE`），注册于 `backend_core/data_collectors/main.py`。
 - **采集流程节点**：`csb_signals_cn`，位于 `urt_signals_cn` → `csb_signals_cn` → `sbbr_signals_cn`。
 - **覆盖度判定**：`dates_ready_for_universe_backtest` — 依据 `__CSB_SCANNED__` 标记或当日股票数阈值（`CSB_FULL_MARKET_TRACE_MIN_CODES`，默认 500）；限定股票池时按池覆盖 80% 判定。

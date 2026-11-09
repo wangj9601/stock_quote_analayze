@@ -118,7 +118,7 @@ def get_default_csb_config() -> Dict[str, Any]:
             "min_touches": 3,
             "vol_expand_mult": 2.5,
         },
-        # 结构基线：与回测常用门槛对齐；trace 仍按得分落库，读时再筛
+        # 选股/回测入选门槛；预计算入库地板分另见 CSB_PRECOMPUTE_MIN_SCORE（默认 50）
         "min_score": 80.0,
         "min_listing_bars": 250,
         "signal_quality_mode": "standard",
