@@ -659,11 +659,285 @@ body.ops-map[data-channel="analyze"] #leader-mid .lm-empty {
     border-radius: 2px;
     background: rgba(0, 0, 0, 0.16);
     margin-top: 8px;
-    padding: 12px 14px;
+    padding: 18px 16px;
+    text-align: center;
+    font-size: 0.9rem;
+    line-height: 1.5;
 }
 
 body.ops-map[data-channel="analyze"] #leader-mid .lm-results {
-    margin-top: 4px;
+    margin-top: 8px;
+}
+
+/* 已选板块芯片条 */
+body.ops-map[data-channel="analyze"] #leader-mid .lm-board-chip-row {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    vertical-align: middle;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-board-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 3px 9px;
+    border: 1px solid rgba(201, 162, 39, 0.45);
+    border-radius: 1px;
+    background: var(--ops-overlay-film);
+    color: var(--ops-ink);
+    line-height: 1.35;
+    max-width: 16rem;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-board-chip-name {
+    font-weight: 600;
+    font-size: 0.86rem;
+    color: var(--ops-ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-board-chip-code {
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    color: var(--ops-gold);
+    font-variant-numeric: tabular-nums;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-board-chip-more,
+body.ops-map[data-channel="analyze"] #leader-mid .lm-board-chip-count {
+    font-size: 0.8rem;
+    color: var(--ops-ink-muted);
+    margin-left: 2px;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-board-chip-count {
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+}
+
+/* 查询结果元信息条 */
+body.ops-map[data-channel="analyze"] #leader-mid .lm-meta {
+    margin-bottom: 10px !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-meta-line {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px !important;
+    padding: 8px 10px;
+    background: var(--ops-ground-elevated, #161c24);
+    border: 1px solid var(--color-border);
+    border-radius: 2px;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-meta-board {
+    font-size: 0.98rem !important;
+    font-weight: 600 !important;
+    color: var(--ops-ink) !important;
+    margin-right: 2px;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-meta-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 4px;
+    padding: 2px 8px;
+    border: 1px solid rgba(217, 226, 236, 0.14);
+    border-radius: 1px;
+    background: rgba(0, 0, 0, 0.22);
+    color: var(--ops-ink);
+    font-size: 0.82rem;
+    line-height: 1.4;
+    font-variant-numeric: tabular-nums;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-meta-chip b {
+    font-weight: 600;
+    color: var(--ops-ink);
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-meta-chip--muted {
+    color: var(--ops-ink-muted) !important;
+    border-color: transparent;
+    background: transparent;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-elapsed {
+    color: var(--ops-gold) !important;
+    font-weight: 600;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    letter-spacing: 0.04em;
+}
+
+/* 结果表：扫读密度、粘性表头、参考价网格、命中格 */
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table-wrap {
+    background: var(--ops-ground-elevated, #161c24) !important;
+    border: 1px solid var(--color-border) !important;
+    border-radius: 2px !important;
+    max-height: min(62vh, 720px);
+    overflow: auto;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table {
+    font-size: 0.84rem !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table th,
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table td {
+    padding: 0.45rem 0.55rem !important;
+    vertical-align: top;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #1a222c !important;
+    box-shadow: 0 1px 0 rgba(217, 226, 236, 0.12);
+    font-size: 0.78rem;
+    letter-spacing: 0.02em;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table .lm-th-mark {
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    font-size: 0.82rem;
+    text-align: center;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table .lm-th-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table .lm-th-ref {
+    min-width: 9.5rem;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table td.lm-num {
+    text-align: right;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table tbody tr.lm-row--hit {
+    background: transparent !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table tbody tr.lm-row--hit > td {
+    background: rgba(201, 162, 39, 0.07) !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table tbody tr:hover > td {
+    background: rgba(217, 226, 236, 0.045) !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-table tbody tr.lm-row--hit:hover > td {
+    background: rgba(201, 162, 39, 0.11) !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-ref {
+    color: var(--ops-ink) !important;
+    white-space: normal !important;
+    min-width: 9.5rem;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-ref-grid {
+    display: grid;
+    gap: 2px 0;
+    line-height: 1.3;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-ref-row {
+    display: grid;
+    grid-template-columns: 2.1rem minmax(0, 1fr);
+    column-gap: 6px;
+    align-items: baseline;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-ref-k {
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: var(--ops-ink-muted);
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-ref-v {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78rem;
+    color: var(--ops-ink);
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-ref-sep {
+    color: var(--ops-ink-muted);
+    opacity: 0.7;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-hit-cell {
+    text-align: center;
+    vertical-align: middle !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-hit {
+    display: inline-flex !important;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    min-width: 3.2rem;
+    max-width: 5.6rem;
+    padding: 3px 6px !important;
+    border-radius: 1px !important;
+    line-height: 1.25;
+    font-size: 0.75rem !important;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-hit-main {
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-hit-note {
+    font-size: 0.7rem;
+    font-weight: 500;
+    opacity: 0.92;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-hit--no {
+    background: transparent !important;
+    border-color: transparent !important;
+    color: rgba(139, 154, 171, 0.55) !important;
+    min-width: 1.5rem;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .lm-errors {
+    background: rgba(194, 59, 59, 0.12) !important;
+    color: #e07070 !important;
+    border: 1px solid rgba(194, 59, 59, 0.35);
+    border-radius: 2px;
+}
+
+body.ops-map[data-channel="analyze"] #leader-mid .btn-primary:disabled,
+body.ops-map[data-channel="analyze"] #leader-mid .btn-secondary:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 @media (max-width: 1100px) {
@@ -689,6 +963,10 @@ body.ops-map[data-channel="analyze"] #leader-mid .lm-results {
 
     body.ops-map[data-channel="analyze"] #leader-mid .ba-short-roles {
         grid-template-columns: 1fr;
+    }
+
+    body.ops-map[data-channel="analyze"] #leader-mid .lm-table-wrap {
+        max-height: min(70vh, 640px);
     }
 }
 

@@ -184,18 +184,20 @@ const LeaderMidAnalysis = {
       el.textContent = '未选择板块，点击「选择板块」';
       return;
     }
-    if (codes.length === 1) {
-      const b = this.boardByCode(codes[0]);
-      const name = b ? b.board_name || codes[0] : codes[0];
-      el.textContent = `已选 1 个：${name}（${codes[0]}）`;
-      return;
-    }
-    const names = codes.slice(0, 3).map((c) => {
-      const b = this.boardByCode(c);
-      return b ? b.board_name || c : c;
-    });
-    const more = codes.length > 3 ? ` 等 ${codes.length} 个` : '';
-    el.textContent = `已选 ${codes.length} 个：${names.join('、')}${more}`;
+    const visible = codes.slice(0, 4);
+    const chips = visible
+      .map((c) => {
+        const b = this.boardByCode(c);
+        const name = b ? b.board_name || c : c;
+        return `<span class="lm-board-chip" title="${this.escAttr(c)}"><span class="lm-board-chip-name">${this.esc(name)}</span><span class="lm-board-chip-code">${this.esc(c)}</span></span>`;
+      })
+      .join('');
+    const more =
+      codes.length > visible.length
+        ? `<span class="lm-board-chip-more">+${codes.length - visible.length}</span>`
+        : '';
+    const count = `<span class="lm-board-chip-count">已选 ${codes.length}</span>`;
+    el.innerHTML = `<span class="lm-board-chip-row">${chips}${more}</span>${count}`;
   },
 
   openBoardPicker() {
@@ -565,26 +567,38 @@ const LeaderMidAnalysis = {
     const kindLabel = board.board_kind === 'concept' ? '概念' : '行业';
     const multi = !!board.multi_boards || !!board.all_boards;
     const chg = board.board_change_percent_est;
+    const chgNum = chg == null || chg === '' ? null : Number(chg);
     const chgText =
-      chg == null || chg === ''
+      chgNum == null || !Number.isFinite(chgNum)
         ? '--'
-        : `${Number(chg) > 0 ? '+' : ''}${Number(chg).toFixed(2)}%`;
+        : `${chgNum > 0 ? '+' : ''}${chgNum.toFixed(2)}%`;
+    const chgCls =
+      chgNum == null || !Number.isFinite(chgNum)
+        ? ''
+        : chgNum > 0
+          ? 'lm-up'
+          : chgNum < 0
+            ? 'lm-down'
+            : '';
     const boardScope = multi
       ? `${kindLabel} · ${board.board_count != null ? board.board_count : '--'} 板`
-      : `${kindLabel} · ${board.board_code || ''}`;
+      : `${kindLabel} ${board.board_code || ''}`.trim();
     const elapsedText =
       this.lastElapsedMs != null
-        ? `<span class="lm-elapsed">耗时 ${this.esc(this.formatElapsed(this.lastElapsedMs))}</span>`
+        ? `<span class="lm-meta-chip lm-elapsed">耗时 ${this.esc(this.formatElapsed(this.lastElapsedMs))}</span>`
         : '';
+    const chgChip = multi
+      ? ''
+      : `<span class="lm-meta-chip">板涨跌估 <b class="${chgCls}">${this.esc(chgText)}</b></span>`;
     meta.innerHTML = `
       <div class="lm-meta-line">
-        <strong>${this.esc(board.board_name || '--')}</strong>
-        <span class="lm-muted">${this.esc(boardScope)}</span>
-        ${multi ? '' : `<span>板涨跌估 ${this.esc(chgText)}</span>`}
-        <span>龙头 ${data.leader_count != null ? data.leader_count : 0} / 中军 ${data.mid_count != null ? data.mid_count : 0}</span>
-        <span>去重后 ${data.role_count != null ? data.role_count : 0} 只</span>
+        <strong class="lm-meta-board">${this.esc(board.board_name || '--')}</strong>
+        <span class="lm-meta-chip lm-meta-chip--muted">${this.esc(boardScope)}</span>
+        ${chgChip}
+        <span class="lm-meta-chip">龙头 <b>${data.leader_count != null ? data.leader_count : 0}</b> / 中军 <b>${data.mid_count != null ? data.mid_count : 0}</b></span>
+        <span class="lm-meta-chip">去重 <b>${data.role_count != null ? data.role_count : 0}</b> 只</span>
         ${elapsedText}
-        <span class="lm-muted">${this.esc(data.asof || '')}</span>
+        <span class="lm-meta-chip lm-meta-chip--muted">${this.esc(data.asof || '')}</span>
       </div>`;
   },
 
@@ -663,9 +677,9 @@ const LeaderMidAnalysis = {
       errHtml +
       `<div class="lm-table-wrap"><table class="lm-table">
       <thead><tr>
-        <th>股票</th>${boardTh}<th>角色</th><th>收盘价</th><th>涨跌幅</th>
-        <th>KDE支撑</th><th>KDE压力</th><th>参考价 Fib/Cam/VP/合</th>
-        <th>GMS</th><th>URT</th><th>SBBR</th><th>RPE</th><th>命中数</th>
+        <th>股票</th>${boardTh}<th>角色</th><th class="lm-th-num">收盘价</th><th class="lm-th-num">涨跌幅</th>
+        <th class="lm-th-num">KDE支撑</th><th class="lm-th-num">KDE压力</th><th class="lm-th-ref">参考价</th>
+        <th class="lm-th-mark">GMS</th><th class="lm-th-mark">URT</th><th class="lm-th-mark">SBBR</th><th class="lm-th-mark">RPE</th><th class="lm-th-num">命中</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>`;
@@ -695,7 +709,9 @@ const LeaderMidAnalysis = {
     const confR = this.fmtPrice2(
       ref.nearest_confluence_resistance ?? conf.nearest_resistance_zone?.center
     );
-    return `Fib ${fibS}/${fibR}<br/>Cam ${camS}/${camR}<br/>VP ${vpS}/${vpR}<br/>合 ${confS}/${confR}`;
+    const row = (k, s, r) =>
+      `<div class="lm-ref-row"><span class="lm-ref-k">${k}</span><span class="lm-ref-v"><span class="lm-ref-s">${s}</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">${r}</span></span></div>`;
+    return `<div class="lm-ref-grid" aria-label="参考价 Fib/Cam/VP/合">${row('Fib', fibS, fibR)}${row('Cam', camS, camR)}${row('VP', vpS, vpR)}${row('合', confS, confR)}</div>`;
   },
 
   refHoverTip(ref, row) {
@@ -746,9 +762,14 @@ const LeaderMidAnalysis = {
   hitCell(cell) {
     const c = cell && typeof cell === 'object' ? cell : {};
     if (c.hit) {
-      return `<td><span class="lm-hit lm-hit--yes" title="${this.escAttr(c.label || '命中')}">${this.esc(c.label || '命中')}</span></td>`;
+      const label = String(c.label || '命中').trim() || '命中';
+      const isPlain = label === '命中';
+      const inner = isPlain
+        ? `<span class="lm-hit-main">命中</span>`
+        : `<span class="lm-hit-main">命中</span><span class="lm-hit-note">${this.esc(label)}</span>`;
+      return `<td class="lm-hit-cell"><span class="lm-hit lm-hit--yes" title="${this.escAttr(label)}">${inner}</span></td>`;
     }
-    return '<td><span class="lm-hit lm-hit--no">--</span></td>';
+    return '<td class="lm-hit-cell"><span class="lm-hit lm-hit--no">--</span></td>';
   },
 
   /** ---------- Excel 导出（业界扁平明细 + 板块汇总 + 字段说明） ---------- */

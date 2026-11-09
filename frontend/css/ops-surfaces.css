@@ -405,6 +405,20 @@ body.ops-map tbody tr:hover {
     background: var(--ops-table-row-hover) !important;
 }
 
+/* 龙头中军命中行：压掉 analysis.css 浅色 .lm-row--hit，改用金膜叠层 */
+body.ops-map .lm-table tbody tr.lm-row--hit {
+    background: transparent !important;
+}
+
+body.ops-map .lm-table tbody tr.lm-row--hit > td {
+    background: rgba(201, 162, 39, 0.07) !important;
+}
+
+body.ops-map .lm-table tbody tr.lm-row--hit:hover > td,
+body.ops-map .lm-table tbody tr.lm-row--hit:hover {
+    background: rgba(201, 162, 39, 0.11) !important;
+}
+
 /* ========== 6) 表单 / Tab / 按钮 ========== */
 body.ops-map input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 body.ops-map select,

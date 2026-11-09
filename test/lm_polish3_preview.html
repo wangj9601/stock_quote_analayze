@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>龙头中军 polish3 预览</title>
+  <link rel="stylesheet" href="../frontend/css/common.css">
+  <link rel="stylesheet" href="../frontend/css/design-tokens.css">
+  <link rel="stylesheet" href="../frontend/css/ops-shell.css">
+  <link rel="stylesheet" href="../frontend/css/ops-data.css">
+  <link rel="stylesheet" href="../frontend/css/ops-responsive.css">
+  <link rel="stylesheet" href="../frontend/css/analysis.css">
+  <link rel="stylesheet" href="../frontend/css/analysis-ops.css">
+  <link rel="stylesheet" href="../frontend/css/ops-surfaces.css?v=20261109-lm-polish3">
+  <style>
+    body { margin: 0; padding: 24px; }
+    .preview-note { color: var(--ops-ink-muted); font-size: 0.85rem; margin-bottom: 12px; }
+  </style>
+</head>
+<body data-channel="analyze" class="ops-map">
+  <main class="main-content">
+    <div class="container">
+      <p class="preview-note">本地预览：龙头中军 polish3（静态样例，不连 API）</p>
+      <div class="tab-panel active" id="leader-mid" style="display:block">
+        <div class="lm-workbench">
+          <p class="lm-desc">按行业或概念查看板块龙头/中军标签，并对照是否命中 GMS、URT、SBBR、RPE（仅角色股，不跑全成分）。<strong>龙头 / 中军可多选</strong>，点击「交易分析」对新标签批量做个股交易分析。</p>
+          <div class="lm-subtabs" role="tablist">
+            <button type="button" class="lm-subtab active">行业板块龙头中军</button>
+            <button type="button" class="lm-subtab">概念板块龙头中军</button>
+          </div>
+          <div class="lm-toolbar">
+            <div class="lm-toolbar-row lm-toolbar-row--boards">
+              <div class="lm-board-picker-row">
+                <button type="button" class="btn btn-secondary">选择板块</button>
+                <button type="button" class="btn btn-secondary">选中走强板块</button>
+                <label class="lm-board-picker-filter"><input type="checkbox"> 含正常</label>
+                <span id="lmBoardSummary" class="lm-board-picker-summary">
+                  <span class="lm-board-chip-row">
+                    <span class="lm-board-chip" title="881279"><span class="lm-board-chip-name">光伏设备</span><span class="lm-board-chip-code">881279</span></span>
+                  </span>
+                  <span class="lm-board-chip-count">已选 1</span>
+                </span>
+              </div>
+            </div>
+            <div class="lm-toolbar-row lm-toolbar-row--actions">
+              <div class="lm-toolbar-group lm-toolbar-group--primary">
+                <button type="button" class="btn btn-primary">查询命中</button>
+                <button type="button" class="btn btn-primary">交易分析</button>
+              </div>
+              <div class="lm-toolbar-group lm-toolbar-group--secondary">
+                <button type="button" class="btn btn-secondary">全选龙头中军</button>
+                <button type="button" class="btn btn-secondary">清空勾选</button>
+                <button type="button" class="btn btn-secondary">导出 Excel</button>
+                <span class="lm-board-picker-summary ba-role-select-summary">已选 1/3</span>
+              </div>
+            </div>
+          </div>
+          <div id="lmBoardMeta" class="lm-meta">
+            <div class="lm-meta-line">
+              <strong class="lm-meta-board">光伏设备</strong>
+              <span class="lm-meta-chip lm-meta-chip--muted">行业 881279</span>
+              <span class="lm-meta-chip">板涨跌估 <b class="lm-down">-2.00%</b></span>
+              <span class="lm-meta-chip">龙头 <b>1</b> / 中军 <b>3</b></span>
+              <span class="lm-meta-chip">去重 <b>4</b> 只</span>
+              <span class="lm-meta-chip lm-elapsed">耗时 1.8s</span>
+              <span class="lm-meta-chip lm-meta-chip--muted">2026-11-07</span>
+            </div>
+          </div>
+          <div id="lmRolesHost" class="lm-roles">
+            <div class="ba-short-roles">
+              <div class="ba-short-roles-head">
+                <span class="ba-short-roles-label">短线角色</span>
+                <span class="ba-short-roles-board">光伏设备</span>
+              </div>
+              <div class="ba-short-roles-body">
+                <span class="ba-role-item ba-role-item--selectable">
+                  <label class="ba-role-select-wrap"><input type="checkbox" class="ba-role-select" checked></label>
+                  <a class="ba-role-pill ba-role-pill--leader" href="#"><span class="ba-role-kind">龙头</span> <span class="ba-role-code">300118</span> <span class="ba-role-name">阳光电源</span> <span class="ba-role-pct ba-role-pct--up">+5.65%</span></a>
+                </span>
+                <span class="ba-role-item ba-role-item--selectable">
+                  <label class="ba-role-select-wrap"><input type="checkbox" class="ba-role-select"></label>
+                  <a class="ba-role-pill ba-role-pill--mid" href="#"><span class="ba-role-kind">中军</span> <span class="ba-role-code">300751</span> <span class="ba-role-name">迈为股份</span> <span class="ba-role-pct ba-role-pct--up">+0.99%</span></a>
+                </span>
+                <span class="ba-role-item ba-role-item--selectable">
+                  <label class="ba-role-select-wrap"><input type="checkbox" class="ba-role-select"></label>
+                  <a class="ba-role-pill ba-role-pill--mid" href="#"><span class="ba-role-kind">中军</span> <span class="ba-role-code">688503</span> <span class="ba-role-name">聚和材料</span> <span class="ba-role-pct ba-role-pct--up">+1.12%</span></a>
+                </span>
+              </div>
+              <div class="ba-short-roles-actions">
+                <button type="button" class="btn btn-secondary btn-sm ba-role-select-board">全选本板</button>
+              </div>
+            </div>
+          </div>
+          <div id="lmResults" class="lm-results">
+            <div class="lm-table-wrap">
+              <table class="lm-table">
+                <thead>
+                  <tr>
+                    <th>股票</th><th>角色</th><th class="lm-th-num">收盘价</th><th class="lm-th-num">涨跌幅</th>
+                    <th class="lm-th-num">KDE支撑</th><th class="lm-th-num">KDE压力</th><th class="lm-th-ref">参考价</th>
+                    <th class="lm-th-mark">GMS</th><th class="lm-th-mark">URT</th><th class="lm-th-mark">SBBR</th><th class="lm-th-mark">RPE</th><th class="lm-th-num">命中</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr class="lm-row--hit">
+                    <td><a class="ba-stock-code-link" href="#">300118</a><div class="lm-muted">阳光电源</div></td>
+                    <td><span class="lm-role lm-role--leader">龙头</span></td>
+                    <td class="lm-num">18.52</td>
+                    <td class="lm-num lm-up">+5.65%</td>
+                    <td class="lm-num">16.20</td>
+                    <td class="lm-num">19.80</td>
+                    <td class="lm-ref">
+                      <div class="lm-ref-grid">
+                        <div class="lm-ref-row"><span class="lm-ref-k">Fib</span><span class="lm-ref-v"><span class="lm-ref-s">16.40</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">19.20</span></span></div>
+                        <div class="lm-ref-row"><span class="lm-ref-k">Cam</span><span class="lm-ref-v"><span class="lm-ref-s">16.10</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">19.50</span></span></div>
+                        <div class="lm-ref-row"><span class="lm-ref-k">VP</span><span class="lm-ref-v"><span class="lm-ref-s">16.80</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">18.90</span></span></div>
+                        <div class="lm-ref-row"><span class="lm-ref-k">合</span><span class="lm-ref-v"><span class="lm-ref-s">16.50</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">19.10</span></span></div>
+                      </div>
+                    </td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--yes"><span class="lm-hit-main">命中</span></span></td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--no">--</span></td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--yes"><span class="lm-hit-main">命中</span><span class="lm-hit-note">右侧</span></span></td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--yes"><span class="lm-hit-main">命中</span><span class="lm-hit-note">强烈观察</span></span></td>
+                    <td class="lm-num">2</td>
+                  </tr>
+                  <tr>
+                    <td><a class="ba-stock-code-link" href="#">300751</a><div class="lm-muted">迈为股份</div></td>
+                    <td><span class="lm-role lm-role--mid">中军</span></td>
+                    <td class="lm-num">112.30</td>
+                    <td class="lm-num lm-up">+0.99%</td>
+                    <td class="lm-num">105.00</td>
+                    <td class="lm-num">118.00</td>
+                    <td class="lm-ref">
+                      <div class="lm-ref-grid">
+                        <div class="lm-ref-row"><span class="lm-ref-k">Fib</span><span class="lm-ref-v"><span class="lm-ref-s">104.20</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">116.80</span></span></div>
+                        <div class="lm-ref-row"><span class="lm-ref-k">Cam</span><span class="lm-ref-v"><span class="lm-ref-s">103.50</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">117.20</span></span></div>
+                        <div class="lm-ref-row"><span class="lm-ref-k">VP</span><span class="lm-ref-v"><span class="lm-ref-s">106.00</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">115.40</span></span></div>
+                        <div class="lm-ref-row"><span class="lm-ref-k">合</span><span class="lm-ref-v"><span class="lm-ref-s">105.10</span><span class="lm-ref-sep">/</span><span class="lm-ref-r">116.00</span></span></div>
+                      </div>
+                    </td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--no">--</span></td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--no">--</span></td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--no">--</span></td>
+                    <td class="lm-hit-cell"><span class="lm-hit lm-hit--no">--</span></td>
+                    <td class="lm-num">0</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
