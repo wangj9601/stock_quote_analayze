@@ -57,21 +57,29 @@ def main():
         print("若需机器学习等完整依赖: pip install -r backend_core/requirements.txt")
         return
 
-    # 启动 backend_core（自动拉起定时采集进程）
+    # 启动 backend_core（用当前解释器拉起定时采集，并等待其退出）
     print("\n[RUN] 启动定时采集进程...")
+    proc = None
     try:
         import backend_core
-        backend_core.start_collector_process()
-        print("[OK] backend_core 已启动，定时采集进程已在后台运行")
+        proc = backend_core.start_collector_process()
+        print(f"[OK] backend_core 已启动 pid={proc.pid}，定时采集进程运行中")
         print("如需查看日志，请查看项目根目录 logs/ 文件夹")
         print("按 Ctrl+C 停止服务")
         print("=" * 50)
-        # 阻塞主线程，保持进程存活
-        import time
-        while True:
-            time.sleep(60)
+        code = proc.wait()
+        if code != 0:
+            print(f"[ERROR] 定时采集进程退出 code={code}")
+            raise SystemExit(code if isinstance(code, int) and code > 0 else 1)
+    except KeyboardInterrupt:
+        if proc is not None and proc.poll() is None:
+            proc.terminate()
+        raise
+    except SystemExit:
+        raise
     except Exception as e:
         print(f"[ERROR] 启动 backend_core 失败: {e}")
+        raise SystemExit(1)
 
 if __name__ == "__main__":
     main() 

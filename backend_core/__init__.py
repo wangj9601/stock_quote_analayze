@@ -1,17 +1,19 @@
 #backend_core包
 #供股票分析系统的核心功能
 
-import multiprocessing
-import os
+import subprocess
+import sys
 
-def _run_collector_main():
-    os.system('python -m backend_core.data_collectors.main')
 
 def start_collector_process():
-    multiprocessing.set_start_method('spawn', force=True)
-    p = multiprocessing.Process(target=_run_collector_main)
-    p.daemon = True
-    p.start()
-    return p
+    """拉起定时采集。必须用当前解释器，不能走 PATH 上的 `python`。
 
-__version__ = '0.1.0' 
+    Ubuntu 公网机没有 `python` 命令，`os.system('python -m ...')` 会立刻
+    `python: not found`，主进程却继续 sleep，systemd 仍显示 active。
+    """
+    return subprocess.Popen(
+        [sys.executable, "-m", "backend_core.data_collectors.main"],
+    )
+
+
+__version__ = '0.1.0'
