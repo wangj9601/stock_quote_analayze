@@ -23,7 +23,7 @@ from backend_core.analysis.swing_zigzag import (
     zigzag_from_fractals,
 )
 
-# 收盘越过摆动高/低的缓冲（与形态突破量级接近）
+# 破位缓冲下限。有 ATR 时由 adaptive_break_mults 放大为 max(0.5%, 0.3×ATR/价位)。
 BOS_BREAK_MULT_UP = 1.005
 BOS_BREAK_MULT_DOWN = 0.995
 
@@ -166,6 +166,7 @@ def _last_bos_like(
     points: Sequence[Dict[str, Any]],
     *,
     last_close: Optional[float],
+    atr: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """轻量破摆动高/低：收盘有效越过最近确认的 swing high / swing low。"""
     if last_close is None or last_close <= 0 or len(points) < 2:
@@ -183,11 +184,19 @@ def _last_bos_like(
         return None
 
     close = float(last_close)
+    from backend_core.analysis.smc_engine import adaptive_break_mults
+
     # 优先判定与最近极值时间更近者；若双侧都破则取幅度更大者
     candidates: List[Dict[str, Any]] = []
     if last_high is not None:
         lvl = float(last_high["price"])
-        thr = lvl * BOS_BREAK_MULT_UP
+        up_m, _down_m = adaptive_break_mults(
+            lvl,
+            atr,
+            break_mult_up=BOS_BREAK_MULT_UP,
+            break_mult_down=BOS_BREAK_MULT_DOWN,
+        )
+        thr = lvl * up_m
         if close >= thr:
             candidates.append(
                 {
@@ -196,13 +205,19 @@ def _last_bos_like(
                     "level": round(lvl, PRICE_DECIMALS),
                     "level_date": last_high.get("date"),
                     "close": round(close, PRICE_DECIMALS),
-                    "buffer_mult": BOS_BREAK_MULT_UP,
+                    "buffer_mult": round(up_m, 6),
                     "excess_pct": round((close / lvl - 1.0) * 100.0, 3) if lvl else None,
                 }
             )
     if last_low is not None:
         lvl = float(last_low["price"])
-        thr = lvl * BOS_BREAK_MULT_DOWN
+        _up_m, down_m = adaptive_break_mults(
+            lvl,
+            atr,
+            break_mult_up=BOS_BREAK_MULT_UP,
+            break_mult_down=BOS_BREAK_MULT_DOWN,
+        )
+        thr = lvl * down_m
         if close <= thr:
             candidates.append(
                 {
@@ -211,7 +226,7 @@ def _last_bos_like(
                     "level": round(lvl, PRICE_DECIMALS),
                     "level_date": last_low.get("date"),
                     "close": round(close, PRICE_DECIMALS),
-                    "buffer_mult": BOS_BREAK_MULT_DOWN,
+                    "buffer_mult": round(down_m, 6),
                     "excess_pct": round((close / lvl - 1.0) * 100.0, 3) if lvl else None,
                 }
             )
@@ -500,7 +515,7 @@ def analyze_market_structure(
     # 对外只返回最近 max_points；标注仍基于全链（相对前一同向极值）
     points = labeled[-max_pts:]
     trend, trend_meta = _trend_from_labels(labeled)
-    bos = _last_bos_like(labeled, last_close=last_close)
+    bos = _last_bos_like(labeled, last_close=last_close, atr=atr)
     from backend_core.analysis.smc_engine import (
         analyze_smc,
         event_to_bos_like,

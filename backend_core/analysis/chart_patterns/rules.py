@@ -6,11 +6,14 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Sequence
+from typing import Any, Dict, Optional, Sequence
 
-# 巩固形态（楔/旗/三角）突破确认：收盘相对边界缓冲
-BREAKOUT_UP_MULT = 1.005  # last_close > upper * 1.005 → 上破已确认
-BREAKOUT_DOWN_MULT = 0.995  # last_close < lower * 0.995 → 下破已确认
+# 巩固形态突破确认：无 ATR 时用 0.5% 下限；有 ATR 时取 max(0.5%, 0.3×ATR/边界价)。
+# 与 SMC 破位缓冲同一口径。头肩失效仍用下面的 INVALIDATE_*，不走这条。
+BREAKOUT_FLOOR_PCT = 0.005
+BREAKOUT_ATR_FRAC = 0.3
+BREAKOUT_UP_MULT = 1.0 + BREAKOUT_FLOOR_PCT
+BREAKOUT_DOWN_MULT = 1.0 - BREAKOUT_FLOOR_PCT
 
 # 反转形态失效：跌破头部/低点或升破头部/高点
 INVALIDATE_BOTTOM_MULT = 0.99  # price < head/low * 0.99 → invalidated
@@ -45,6 +48,9 @@ HS_HEAD_MIN_DEPTH_PCT = 0.03
 HS_SHOULDER_TOL_PCT = 0.08
 # 颈线两峰相对差上限：过大视为虚高/虚低均价颈线，拒绝（双底冲高后再做肩）
 HS_NECK_ASYMMETRY_MAX = 0.22
+# 左右时段比（较长/较短）超过该值：不否决形态，置信乘以下系数
+HS_TIME_SYMMETRY_MAX = 1.8
+HS_TIME_ASYM_CONF_FACTOR = 0.6
 # 斜颈外推下限：≤0 视为崩塌（000533 类陡降外推到负值）；禁止作为展示/破位阈值
 HS_NECK_COLLAPSE_FLOOR = 0.01
 # 外推颈线相对两颈点过分偏离 → 几何失真失效（顶/底均可过低；底另可过高）
@@ -65,12 +71,63 @@ NMS_BOUND_REL_TOL = 0.01
 SLOPE_UNIT_NOTE = "元/K线索引(约交易日)"
 
 
-def breakout_up(last_close: float, upper: float) -> bool:
-    return upper > 0 and last_close > upper * BREAKOUT_UP_MULT
+def bars_wilder_atr(bars: Sequence[Dict[str, Any]]) -> Optional[float]:
+    """日线 Wilder ATR（价格单位）。样本不足返回 None，调用方退回 0.5% 下限。"""
+    from backend_core.analysis.swing_zigzag import _parse_bars, wilder_atr
+
+    parsed = _parse_bars(bars or [])
+    if len(parsed) < 2:
+        return None
+    return wilder_atr(parsed)
 
 
-def breakout_down(last_close: float, lower: float) -> bool:
-    return lower > 0 and last_close < lower * BREAKOUT_DOWN_MULT
+def breakout_buffer_pct(level: float, atr: Optional[float] = None) -> float:
+    """突破缓冲比例：max(0.5%, 0.3×ATR/边界价)。ATR 为价格单位。"""
+    pct = BREAKOUT_FLOOR_PCT
+    try:
+        lvl = abs(float(level))
+        a = float(atr) if atr is not None else 0.0
+    except (TypeError, ValueError):
+        return pct
+    if lvl > 0 and a > 0:
+        pct = max(BREAKOUT_FLOOR_PCT, BREAKOUT_ATR_FRAC * a / lvl)
+    return pct
+
+
+def breakout_mults(
+    upper: float,
+    lower: float,
+    atr: Optional[float] = None,
+) -> tuple[float, float]:
+    """返回 (上破倍数, 下破倍数)。上下沿各按自己的价格计算。"""
+    up_ref = upper if upper and upper > 0 else lower
+    down_ref = lower if lower and lower > 0 else upper
+    return (
+        1.0 + breakout_buffer_pct(up_ref, atr),
+        1.0 - breakout_buffer_pct(down_ref, atr),
+    )
+
+
+def breakout_up(
+    last_close: float,
+    upper: float,
+    *,
+    atr: Optional[float] = None,
+) -> bool:
+    if not (upper > 0):
+        return False
+    return last_close > upper * (1.0 + breakout_buffer_pct(upper, atr))
+
+
+def breakout_down(
+    last_close: float,
+    lower: float,
+    *,
+    atr: Optional[float] = None,
+) -> bool:
+    if not (lower > 0):
+        return False
+    return last_close < lower * (1.0 - breakout_buffer_pct(lower, atr))
 
 
 def consolidation_status(
@@ -80,13 +137,15 @@ def consolidation_status(
     *,
     expect_up: bool = False,
     expect_down: bool = False,
+    atr: Optional[float] = None,
 ) -> tuple[str, str]:
     """巩固形态状态：预期方向突破→confirmed；反向脱离通道→invalidated；否则 forming。
 
     返回 (status, note)；note 非空时可拼进 reason。
+    atr 给出时缓冲为 max(0.5%, 0.3×ATR/边界价)。
     """
-    up = breakout_up(last_close, upper)
-    down = breakout_down(last_close, lower)
+    up = breakout_up(last_close, upper, atr=atr)
+    down = breakout_down(last_close, lower, atr=atr)
     if expect_up and up:
         return "confirmed", ""
     if expect_down and down:

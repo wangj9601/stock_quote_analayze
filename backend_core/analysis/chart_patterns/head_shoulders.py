@@ -17,6 +17,8 @@ from .rules import (
     HS_NECK_EXTRAP_HI_FRAC,
     HS_NECK_EXTRAP_LO_FRAC,
     HS_SHOULDER_TOL_PCT,
+    HS_TIME_ASYM_CONF_FACTOR,
+    HS_TIME_SYMMETRY_MAX,
     INVALIDATE_BOTTOM_MULT,
     INVALIDATE_TOP_MULT,
     post_pivot_invalidate_bottom,
@@ -152,6 +154,36 @@ def _shoulder_ok(ls_px: float, rs_px: float, *, tol: float) -> bool:
     if mid_s <= 0:
         return False
     return abs(ls_px - rs_px) / mid_s <= float(tol)
+
+
+def _apply_time_symmetry(
+    conf: float,
+    reason: str,
+    bars: Sequence[Dict[str, Any]],
+    ls: Dict[str, Any],
+    head: Dict[str, Any],
+    rs: Dict[str, Any],
+) -> Tuple[float, str, Optional[float]]:
+    """左右时段比过大时降置信，不否决形态。返回 (置信, 说明, 时段比)。"""
+    ls_i = _pivot_bar_index(bars, ls)
+    head_i = _pivot_bar_index(bars, head)
+    rs_i = _pivot_bar_index(bars, rs)
+    if min(ls_i, head_i, rs_i) < 0:
+        return conf, reason, None
+    left = head_i - ls_i
+    right = rs_i - head_i
+    if left <= 0 or right <= 0:
+        return conf, reason, None
+    ratio = max(left, right) / float(min(left, right))
+    ratio_r = round(ratio, 3)
+    if ratio <= float(HS_TIME_SYMMETRY_MAX):
+        return conf, reason, ratio_r
+    conf_n = round(float(conf) * float(HS_TIME_ASYM_CONF_FACTOR), 2)
+    note = (
+        f"时间不对称:左肩→头{left}根/头→右肩{right}根"
+        f"(比{ratio:.2f}>{HS_TIME_SYMMETRY_MAX})，置信下调"
+    )
+    return conf_n, f"{reason} {note}", ratio_r
 
 
 def _neck_asymmetry_ok(n1: float, n2: float, *, max_asym: float) -> bool:
@@ -303,6 +335,9 @@ def _detect_hs_top(
         }
         if confirm_neck is not None and confirm_neck == confirm_neck:
             kl["confirm_neckline"] = round(float(confirm_neck), 4)
+        conf, reason, time_ratio = _apply_time_symmetry(conf, reason, bars, ls, head, rs)
+        if time_ratio is not None:
+            kl["time_ratio"] = time_ratio
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_top",
@@ -448,6 +483,9 @@ def _detect_hs_bottom(
         }
         if confirm_neck is not None and confirm_neck == confirm_neck:
             kl["confirm_neckline"] = round(float(confirm_neck), 4)
+        conf, reason, time_ratio = _apply_time_symmetry(conf, reason, bars, ls, head, rs)
+        if time_ratio is not None:
+            kl["time_ratio"] = time_ratio
         return make_hit(
             pattern_family="head_shoulders",
             pattern_type="head_shoulders_bottom",

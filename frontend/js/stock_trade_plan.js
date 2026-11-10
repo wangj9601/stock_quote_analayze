@@ -100,8 +100,16 @@ const StockTradePlan = {
                   .join('')}</div>`
             : '';
 
+        const decisionLines = Array.isArray(plan.decision_lines) ? plan.decision_lines : [];
+        const decisionHtml = decisionLines.length
+            ? `<div class="ssa-plan-decision">${decisionLines
+                  .map((line) => `<div>${this.esc(line)}</div>`)
+                  .join('')}</div>`
+            : '';
+
         host.innerHTML =
             `<div class="ssa-plan-wrap">` +
+            decisionHtml +
             `<div class="ssa-plan-head">` +
             `<div class="ssa-plan-badges">` +
             `<span class="ssa-plan-badge ${this.stanceClass('short', plan.stance_short)}">短线：${this.esc(plan.stance_short_label || st.action_label || '--')}</span>` +

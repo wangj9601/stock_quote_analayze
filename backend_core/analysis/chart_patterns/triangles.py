@@ -6,7 +6,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional, Sequence
 
 from .pivots import extract_pivot_sequence, linreg_slope
-from .rules import SLOPE_UNIT_NOTE, consolidation_status
+from .rules import SLOPE_UNIT_NOTE, bars_wilder_atr, breakout_mults, consolidation_status
 from .schema import fmt_px, make_hit
 
 
@@ -76,18 +76,20 @@ def detect_triangles(
         return []
 
     # 突破确认：预期方向 → confirmed；反向脱离 → invalidated
+    atr = bars_wilder_atr(bars)
     if pattern_type == "ascending_triangle":
         status, st_note = consolidation_status(
-            last_c, last_hi, last_lo, expect_up=True
+            last_c, last_hi, last_lo, expect_up=True, atr=atr
         )
     elif pattern_type == "descending_triangle":
         status, st_note = consolidation_status(
-            last_c, last_hi, last_lo, expect_down=True
+            last_c, last_hi, last_lo, expect_down=True, atr=atr
         )
     else:
         status, st_note = consolidation_status(
-            last_c, last_hi, last_lo, expect_up=True, expect_down=True
+            last_c, last_hi, last_lo, expect_up=True, expect_down=True, atr=atr
         )
+    up_m, down_m = breakout_mults(last_hi, last_lo, atr)
 
     if status == "confirmed":
         conf = 0.65
@@ -141,6 +143,8 @@ def detect_triangles(
         "lower_slope": round(ls, 8),
         "slope_unit": SLOPE_UNIT_NOTE,
         "shrink_pct": round(shrink * 100.0, 1),
+        "breakout_up_mult": round(up_m, 6),
+        "breakout_down_mult": round(down_m, 6),
     }
     if bars_to_apex is not None:
         key_levels["bars_to_apex"] = bars_to_apex

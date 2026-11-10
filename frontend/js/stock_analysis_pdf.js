@@ -185,8 +185,6 @@
       sections.push({ note: `共振带：${conf.reason}` });
     }
 
-    const supportRows = (d.support_levels || []).map((p, i) => [`支撑 ${i + 1}`, fmtPrice(p)]);
-    const resistRows = (d.resistance_levels || []).map((p, i) => [`压力 ${i + 1}`, fmtPrice(p)]);
     sections.push({
       title: 'KDE 结构位',
       head: [['项目', '价格']],
@@ -194,8 +192,7 @@
         ['现价', fmtPrice(d.current_price)],
         ['最近支撑', fmtPrice(d.nearest_support)],
         ['最近压力', fmtPrice(d.nearest_resistance)],
-        ...supportRows,
-        ...resistRows,
+        ['分档', '其余 KDE 价位见页面明细（默认折叠）'],
       ],
     });
 
@@ -267,18 +264,15 @@
         ['最近支撑', fmtPriceOrNote(fib.nearest_support ?? classic.nearest_fib_support, classic.fib_support_note || fib.support_note)],
         ['最近压力', fmtPriceOrNote(fib.nearest_resistance ?? classic.nearest_fib_resistance, classic.fib_resistance_note || fib.resistance_note)],
       ];
-      (fib.retracements || []).forEach((x) => {
-        fibBody.push([`回撤 ${x.ratio}`, fmtPrice(x.price)]);
-      });
+      fibBody.push(['分档', '回撤各档见页面明细（默认折叠）']);
       sections.push({ title: '黄金分割（ZigZag）', head: [['项目', '值']], body: fibBody });
     }
     if (pivot) {
-      const pivBody = ['R3', 'R2', 'R1', 'P', 'S1', 'S2', 'S3']
-        .filter((k) => pivot[k] != null)
-        .map((k) => [k, fmtPrice(pivot[k])]);
-      if (pivBody.length) {
-        sections.push({ title: 'Pivot', head: [['级别', '价格']], body: pivBody });
-      }
+      sections.push({
+        title: 'Pivot',
+        head: [['项目', '价格/说明']],
+        body: [['分档', 'R3–S3 见页面明细（默认折叠）']],
+      });
     }
 
     const cam = classic.camarilla || null;
@@ -302,9 +296,7 @@
           ),
         ],
       ];
-      ['R4', 'R3', 'R2', 'R1', 'S1', 'S2', 'S3', 'S4'].forEach((k) => {
-        if (cam[k] != null) camBody.push([k, fmtPrice(cam[k])]);
-      });
+      camBody.push(['分档', 'R4–S4 见页面明细（默认折叠）']);
       if (atrPiv && atrPiv.atr != null) {
         camBody.push([
           'ATR-Pivot',
@@ -477,6 +469,7 @@
       shortSummary: st.summary || '',
       mediumSummary: mt.summary || mt.holding_plan || '',
       conflicts: Array.isArray(plan.conflicts) ? plan.conflicts : [],
+      decisionLines: Array.isArray(plan.decision_lines) ? plan.decision_lines : [],
       smcNotes: Array.isArray(plan.smc_notes) ? plan.smc_notes : [],
       disclaimer: plan.disclaimer || '',
     };
@@ -520,12 +513,20 @@
         ? smc.order_blocks.map((b) => {
             const merge =
               b.merged_count && Number(b.merged_count) > 1 ? `×${b.merged_count}` : '';
-            const rem = b.relevance === 'remote' ? ' remote' : '';
+            const MST = global.MarketStructureTool;
+            const statusText =
+              MST && typeof MST.smcStatusLabel === 'function'
+                ? MST.smcStatusLabel(b.status, b.relevance)
+                : cell(`${b.status || ''}${b.relevance === 'remote' ? '·远离现价' : ''}`);
+            const sourceText =
+              MST && typeof MST.smcSourceLabel === 'function'
+                ? MST.smcSourceLabel(b.source_event || b.event_type)
+                : cell(b.source_event || b.event_type);
             return [
               b.direction === 'bullish' ? '看涨' : '看跌',
               `${b.low != null ? Number(b.low).toFixed(2) : '--'}–${b.high != null ? Number(b.high).toFixed(2) : '--'}${merge}`,
-              cell(`${b.status || ''}${rem}`),
-              cell(b.source_event || b.event_type),
+              cell(statusText),
+              cell(sourceText),
               cell(b.bar_date),
             ];
           })
@@ -535,11 +536,15 @@
         ? smc.fvgs.map((f) => {
             const merge =
               f.merged_count && Number(f.merged_count) > 1 ? `×${f.merged_count}` : '';
-            const rem = f.relevance === 'remote' ? ' remote' : '';
+            const MST = global.MarketStructureTool;
+            const statusText =
+              MST && typeof MST.smcStatusLabel === 'function'
+                ? MST.smcStatusLabel(f.status, f.relevance)
+                : cell(`${f.status || ''}${f.relevance === 'remote' ? '·远离现价' : ''}`);
             return [
               f.direction === 'bullish' ? '看涨' : '看跌',
               `${f.low != null ? Number(f.low).toFixed(2) : '--'}–${f.high != null ? Number(f.high).toFixed(2) : '--'}${merge}`,
-              cell(`${f.status || ''}${rem}`),
+              cell(statusText),
               cell(f.end_date || f.start_date),
             ];
           })
@@ -581,7 +586,13 @@
     }
     const angleRows = (g.angles || []).map((a) => [
       cell(a.name),
-      a.price_at_asof != null ? Number(a.price_at_asof).toFixed(2) : '--',
+      global.GannTrendTool && typeof global.GannTrendTool.anglePriceText === 'function'
+        ? global.GannTrendTool.anglePriceText(a)
+        : a.usable === false
+          ? '失真'
+          : a.price_at_asof != null
+            ? Number(a.price_at_asof).toFixed(2)
+            : '--',
       a.slope_per_bar != null ? Number(a.slope_per_bar).toFixed(4) : '--',
     ]);
     const twRows = (g.time_windows || []).map((t) => [
@@ -701,6 +712,10 @@
       drawWrapped(`综合交易策略合成失败：${tp.error}`, 9, 4.2);
       y += 2;
     } else {
+      if (tp.decisionLines && tp.decisionLines.length) {
+        tp.decisionLines.forEach((line) => drawWrapped(line, 10, 4.6));
+        y += 2;
+      }
       drawTable(
         [['项目', '价位/结论', '说明']],
         tp.rows,
@@ -763,8 +778,12 @@
         const b = sw.bos;
         const st = String(b.smc_type || '').toLowerCase();
         let bosTitle = b.label || b.type || '';
-        if (st === 'choch') bosTitle = `CHOCH${b.smc_event_key ? ' · ' + b.smc_event_key : ''}`;
-        else if (st === 'bos') bosTitle = `BOS${b.smc_event_key ? ' · ' + b.smc_event_key : ''}（非 CHOCH）`;
+        const srcZh =
+          global.MarketStructureTool && typeof global.MarketStructureTool.smcSourceLabel === 'function'
+            ? global.MarketStructureTool.smcSourceLabel(b.smc_event_key)
+            : b.smc_event_key;
+        if (st === 'choch') bosTitle = `CHOCH${srcZh ? ' · ' + srcZh : ''}`;
+        else if (st === 'bos') bosTitle = `BOS${srcZh ? ' · ' + srcZh : ''}（非 CHOCH）`;
         else if (bosTitle) bosTitle = `${bosTitle}（轻量破位 ≠ CHOCH）`;
         drawWrapped(
           `关键事件：${bosTitle} @ ${b.level != null ? b.level : '--'}`,
@@ -780,8 +799,12 @@
       }
       if (sw.lastEvent) {
         const e = sw.lastEvent;
+        const ekZh =
+          global.MarketStructureTool && typeof global.MarketStructureTool.smcSourceLabel === 'function'
+            ? global.MarketStructureTool.smcSourceLabel(e.event_key_label || e.event_key)
+            : e.event_key || '';
         drawWrapped(
-          `SMC：${e.type || ''} ${e.event_key || ''} @ ${e.level != null ? e.level : '--'}（${e.bar_date || ''}）`,
+          `SMC：${e.type || ''} ${ekZh} @ ${e.level != null ? e.level : '--'}（${e.bar_date || ''}）`,
           8.5,
           4
         );

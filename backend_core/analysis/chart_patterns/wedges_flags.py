@@ -11,6 +11,8 @@ from .rules import (
     WEDGE_ENDPOINT_REL_EPS,
     WEDGE_SLOPE_CONV_ABS_EPS,
     WEDGE_SLOPE_CONV_REL_EPS,
+    bars_wilder_atr,
+    breakout_mults,
     consolidation_status,
 )
 from .schema import fmt_px, make_hit
@@ -139,18 +141,20 @@ def detect_wedges(
         return []
     last_c = closes[-1]
     upper, lower = hi[-1]["price"], lo[-1]["price"]
+    atr = bars_wilder_atr(bars)
+    up_m, down_m = breakout_mults(upper, lower, atr)
 
     if same_up:
         pattern_type = "rising_wedge"
         label = "上升楔形"
         status, st_note = consolidation_status(
-            last_c, upper, lower, expect_down=True
+            last_c, upper, lower, expect_down=True, atr=atr
         )
     else:
         pattern_type = "falling_wedge"
         label = "下降楔形"
         status, st_note = consolidation_status(
-            last_c, upper, lower, expect_up=True
+            last_c, upper, lower, expect_up=True, atr=atr
         )
 
     if status == "confirmed":
@@ -181,6 +185,8 @@ def detect_wedges(
                 "upper_slope": round(hs, 8),
                 "lower_slope": round(ls, 8),
                 "slope_unit": SLOPE_UNIT_NOTE,
+                "breakout_up_mult": round(up_m, 6),
+                "breakout_down_mult": round(down_m, 6),
             },
             pivots=[
                 *[{"role": "high", "date": p.get("date"), "price": p["price"]} for p in hi],
@@ -240,17 +246,19 @@ def detect_flags(
 
     last_c = closes[-1]
     upper, lower = highs[-1]["price"], lows[-1]["price"]
+    atr = bars_wilder_atr(bars)
+    up_m, down_m = breakout_mults(upper, lower, atr)
     if pole_up:
         pattern_type = "bull_flag"
         label = "上升旗形"
         status, st_note = consolidation_status(
-            last_c, upper, lower, expect_up=True
+            last_c, upper, lower, expect_up=True, atr=atr
         )
     else:
         pattern_type = "bear_flag"
         label = "下降旗形"
         status, st_note = consolidation_status(
-            last_c, upper, lower, expect_down=True
+            last_c, upper, lower, expect_down=True, atr=atr
         )
 
     if status == "confirmed":
@@ -282,6 +290,8 @@ def detect_flags(
                 "upper_slope": round(hs, 8),
                 "lower_slope": round(ls, 8),
                 "slope_unit": SLOPE_UNIT_NOTE,
+                "breakout_up_mult": round(up_m, 6),
+                "breakout_down_mult": round(down_m, 6),
             },
             pivots=[
                 *[{"role": "high", "date": p.get("date"), "price": p["price"]} for p in highs],

@@ -113,6 +113,8 @@ def test_bos_break_swing_high():
     bos = _last_bos_like(pts, last_close=12.1)
     assert bos is not None
     assert bos["type"] == "break_swing_high"
+    # 12.1 只比 12.0 高 0.83%；ATR=2 时缓冲约 5%，不算破位
+    assert _last_bos_like(pts, last_close=12.1, atr=2.0) is None
 
 
 def test_bos_break_swing_low():

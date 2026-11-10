@@ -49,6 +49,35 @@ const MarketStructureTool = {
         return '';
     },
 
+    smcSourceLabel(key) {
+        const map = {
+            structure_shift_unconfirmed: '结构位移未确认',
+            choch_bullish: '看涨性质转换',
+            choch_bearish: '看跌性质转换',
+            bos_bullish: '看涨结构延续',
+            bos_bearish: '看跌结构延续',
+            choch: '性质转换',
+            bos: '结构延续',
+        };
+        const k = String(key || '').trim();
+        if (!k) return '';
+        return map[k] || k;
+    },
+
+    smcStatusLabel(status, relevance) {
+        const map = {
+            active: '活跃',
+            open: '未回补',
+            partial: '部分回补',
+            filled: '已回补',
+            mitigated: '已缓解',
+        };
+        const raw = String(status || '').trim();
+        let label = map[raw] || raw || '--';
+        if (String(relevance || '') === 'remote') label += '·远离现价';
+        return label;
+    },
+
     /**
      * 关键事件文案：仅 smc_type=choch 称 CHOCH；bos 称 BOS；其余为轻量破位（非 CHOCH）。
      */
@@ -61,9 +90,9 @@ const MarketStructureTool = {
         let title;
         let note = '';
         if (smcType === 'choch') {
-            title = `CHOCH${smcKey ? ' · ' + smcKey : ''}`;
+            title = `CHOCH${smcKey ? ' · ' + this.smcSourceLabel(smcKey) : ''}`;
         } else if (smcType === 'bos') {
-            title = `BOS${smcKey ? ' · ' + smcKey : ''}`;
+            title = `BOS${smcKey ? ' · ' + this.smcSourceLabel(smcKey) : ''}`;
             note = '（趋势延续破位，非 CHOCH）';
         } else {
             title = bos.label || bos.type || '轻量破位';
@@ -379,8 +408,8 @@ const MarketStructureTool = {
                 `<td>${b.low != null ? Number(b.low).toFixed(2) : '--'} – ` +
                 `${b.high != null ? Number(b.high).toFixed(2) : '--'}` +
                 `${this.esc(this._formatMergedHint(b))}</td>` +
-                `<td class="${this.statusCls(b.status)}">${this.esc(b.status || '--')}</td>` +
-                `<td>${this.esc(b.source_event || b.event_type || '--')}</td>` +
+                `<td class="${this.statusCls(b.status)}">${this.esc(this.smcStatusLabel(b.status, b.relevance))}</td>` +
+                `<td>${this.esc(this.smcSourceLabel(b.source_event || b.event_type) || '--')}</td>` +
                 `<td>${this.esc(b.bar_date || '--')}</td></tr>`
         );
         const fvgTable = this._renderSmcTable(
@@ -392,7 +421,7 @@ const MarketStructureTool = {
                 `<td>${f.low != null ? Number(f.low).toFixed(2) : '--'} – ` +
                 `${f.high != null ? Number(f.high).toFixed(2) : '--'}` +
                 `${this.esc(this._formatMergedHint(f))}</td>` +
-                `<td class="${this.statusCls(f.status)}">${this.esc(f.status || '--')}</td>` +
+                `<td class="${this.statusCls(f.status)}">${this.esc(this.smcStatusLabel(f.status, f.relevance))}</td>` +
                 `<td>${this.esc(f.end_date || f.start_date || '--')}</td></tr>`
         );
         const bias = this._renderBiasHtml(smc);
@@ -578,8 +607,8 @@ const MarketStructureTool = {
             const b = m.last_bos_like;
             const st = String(b.smc_type || '').toLowerCase();
             let title = b.label || b.type;
-            if (st === 'choch') title = `CHOCH${b.smc_event_key ? ' · ' + b.smc_event_key : ''}`;
-            else if (st === 'bos') title = `BOS${b.smc_event_key ? ' · ' + b.smc_event_key : ''}（非 CHOCH）`;
+            if (st === 'choch') title = `CHOCH${b.smc_event_key ? ' · ' + this.smcSourceLabel(b.smc_event_key) : ''}`;
+            else if (st === 'bos') title = `BOS${b.smc_event_key ? ' · ' + this.smcSourceLabel(b.smc_event_key) : ''}（非 CHOCH）`;
             else title = `${title || '轻量破位'}（轻量破位 ≠ CHOCH）`;
             lines.push(
                 `关键事件：${title} @ ${b.level != null ? b.level : '--'}（${b.level_date || ''}）`
@@ -597,7 +626,7 @@ const MarketStructureTool = {
             if (smc.last_event) {
                 const e = smc.last_event;
                 lines.push(
-                    `最近事件：${e.type || ''} ${e.event_key || ''} @ ${e.level != null ? e.level : '--'}（${e.bar_date || ''}）`
+                    `最近事件：${e.type || ''} ${this.smcSourceLabel(e.event_key_label || e.event_key)} @ ${e.level != null ? e.level : '--'}（${e.bar_date || ''}）`
                 );
             }
             (smc.order_blocks || []).forEach((b) => {
@@ -605,9 +634,8 @@ const MarketStructureTool = {
                     b.merged_count && Number(b.merged_count) > 1
                         ? ` 合并×${b.merged_count}`
                         : '';
-                const rem = b.relevance === 'remote' ? ' remote' : '';
                 lines.push(
-                    `  OB ${b.direction === 'bullish' ? '看涨' : '看跌'} [${b.low}–${b.high}] ${b.status || ''}${merge}${rem} ${b.bar_date || ''}`
+                    `  OB ${b.direction === 'bullish' ? '看涨' : '看跌'} [${b.low}–${b.high}] ${this.smcStatusLabel(b.status, b.relevance)}${merge} ${b.bar_date || ''}`
                 );
             });
             (smc.fvgs || []).forEach((f) => {
@@ -615,9 +643,8 @@ const MarketStructureTool = {
                     f.merged_count && Number(f.merged_count) > 1
                         ? ` 合并×${f.merged_count}`
                         : '';
-                const rem = f.relevance === 'remote' ? ' remote' : '';
                 lines.push(
-                    `  FVG ${f.direction === 'bullish' ? '看涨' : '看跌'} [${f.low}–${f.high}] ${f.status || ''}${merge}${rem} ${f.end_date || ''}`
+                    `  FVG ${f.direction === 'bullish' ? '看涨' : '看跌'} [${f.low}–${f.high}] ${this.smcStatusLabel(f.status, f.relevance)}${merge} ${f.end_date || ''}`
                 );
             });
         }

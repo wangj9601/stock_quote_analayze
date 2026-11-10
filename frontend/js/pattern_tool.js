@@ -1286,8 +1286,13 @@ const PatternTool = {
     const c = this._hitClose(h);
     const up = b.upper;
     const lo = b.lower;
-    if (c != null && up != null && c > up * 1.005) return 'up';
-    if (c != null && lo != null && c < lo * 0.995) return 'down';
+    const lv = (h && h.key_levels) || {};
+    const upMult = Number(lv.breakout_up_mult) > 1 ? Number(lv.breakout_up_mult) : 1.005;
+    const downMult = Number(lv.breakout_down_mult) > 0 && Number(lv.breakout_down_mult) < 1
+      ? Number(lv.breakout_down_mult)
+      : 0.995;
+    if (c != null && up != null && c > up * upMult) return 'up';
+    if (c != null && lo != null && c < lo * downMult) return 'down';
     if (
       t === 'falling_wedge' ||
       t === 'bull_flag' ||

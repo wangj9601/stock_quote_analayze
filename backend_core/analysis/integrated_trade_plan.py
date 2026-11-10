@@ -29,9 +29,12 @@ _STANCE_MEDIUM_MAP = {
 }
 _GANN_BIAS_MAP = {
     "bull": ("bull", "江恩偏多"),
+    "bullish": ("bull", "江恩偏多"),
     "bear": ("bear", "江恩偏空"),
+    "bearish": ("bear", "江恩偏空"),
     "near": ("neutral", "江恩临界"),
     "neutral": ("neutral", "江恩中性"),
+    "insufficient": ("neutral", ""),
 }
 
 
@@ -248,6 +251,45 @@ def _merge_medium_stance(*stances: str) -> str:
     if "bull" in vals and "bear" not in vals:
         return "bull"
     return "neutral"
+
+
+def _decision_lines(
+    *,
+    summaries: Dict[str, Dict[str, Any]],
+    primary: str,
+    primary_name: str,
+    action: str,
+    advice: Dict[str, Any],
+    conflicts: List[str],
+) -> List[str]:
+    """报告顶部三句：资格、触发、最大风险。后面的模块只作证据。"""
+    hits = sum(1 for key in _STRATEGY_PRIORITY if (summaries.get(key) or {}).get("hit"))
+    action_label = _ACTION_LABELS.get(action, action)
+    if action == "buy":
+        line1 = f"今天：有交易资格（{hits}/4，主策略 {primary_name}）"
+    elif primary == "none":
+        line1 = "今天：无交易资格（0/4）"
+    else:
+        line1 = f"今天：无买入资格（{hits}/4 有信号，已降为{action_label}）"
+
+    entry = advice.get("buy_zone") if isinstance(advice.get("buy_zone"), dict) else None
+    entry_label = str((entry or {}).get("label") or "").strip()
+    if action == "buy" and entry_label:
+        line2 = f"触发：{entry_label}"
+    elif entry_label:
+        line2 = f"唯一观察：{entry_label}"
+    else:
+        line2 = "触发：暂无待执行价位"
+
+    stop = advice.get("stop_zone") if isinstance(advice.get("stop_zone"), dict) else None
+    stop_label = str((stop or {}).get("label") or "").strip()
+    if stop_label:
+        line3 = f"最大风险：{stop_label}"
+    elif conflicts:
+        line3 = f"最大风险：{conflicts[0]}"
+    else:
+        line3 = "最大风险：暂无单独失效位"
+    return [line1, line2, line3]
 
 
 def _short_bias_label(bias: Optional[str]) -> str:
@@ -847,6 +889,15 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
             short_triggers.append(str(note))
 
     medium_summary = "；".join(holding_parts[:3]) if holding_parts else "暂无明确中长线计划，以周线趋势与结构位为主"
+    primary_name = primary_summary.get("name") if primary != "none" else "无命中"
+    decision_lines = _decision_lines(
+        summaries=summaries,
+        primary=primary,
+        primary_name=str(primary_name or "无命中"),
+        action=action,
+        advice=advice,
+        conflicts=conflicts,
+    )
 
     return {
         "stance_short": action,
@@ -855,7 +906,8 @@ def build_integrated_trade_plan(ctx: Dict[str, Any]) -> Dict[str, Any]:
         "stance_medium_label": bias_label or "中性观察",
         "confidence": confidence,
         "primary_strategy": primary,
-        "primary_strategy_name": primary_summary.get("name") if primary != "none" else "无命中",
+        "primary_strategy_name": primary_name,
+        "decision_lines": decision_lines,
         "short_term": {
             "action": action,
             "action_label": _ACTION_LABELS.get(action, action),

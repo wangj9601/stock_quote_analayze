@@ -23,8 +23,15 @@ const GannTrendTool = {
     biasClass(bias) {
         if (bias === 'bullish') return 'gann-bias--bull';
         if (bias === 'bearish') return 'gann-bias--bear';
-        if (bias === 'near') return 'gann-bias--near';
+        if (bias === 'near' || bias === 'neutral') return 'gann-bias--near';
         return 'gann-bias--na';
+    },
+
+    anglePriceText(a) {
+        if (!a || a.usable === false) return '失真';
+        const px = Number(a.price_at_asof);
+        if (!Number.isFinite(px) || px <= 0) return '失真';
+        return px.toFixed(2);
     },
 
     async fetchGann(code, opts) {
@@ -76,6 +83,7 @@ const GannTrendTool = {
             '1x4': '#ea580c',
         };
         const rays = fan.rays
+            .filter((r) => r && r.usable !== false)
             .map((r) => {
                 const c = rayColors[r.name] || '#64748b';
                 const x1 = xOf(r.start.bar_offset);
@@ -173,9 +181,7 @@ const GannTrendTool = {
         if (Array.isArray(g.angles) && g.angles.length) {
             lines.push('角度线（基准日理论价）：');
             g.angles.forEach((ang) => {
-                lines.push(
-                    `  ${ang.name}: ${ang.price_at_asof != null ? Number(ang.price_at_asof).toFixed(2) : '--'}`
-                );
+                lines.push(`  ${ang.name}: ${this.anglePriceText(ang)}`);
             });
         }
         if (Array.isArray(g.time_windows) && g.time_windows.length) {
@@ -219,7 +225,7 @@ const GannTrendTool = {
             .map(
                 (a) =>
                     `<tr><td>${this.esc(a.name)}</td>` +
-                    `<td>${a.price_at_asof != null ? Number(a.price_at_asof).toFixed(2) : '--'}</td>` +
+                    `<td>${this.esc(this.anglePriceText(a))}</td>` +
                     `<td>${a.slope_per_bar != null ? Number(a.slope_per_bar).toFixed(4) : '--'}</td></tr>`
             )
             .join('');

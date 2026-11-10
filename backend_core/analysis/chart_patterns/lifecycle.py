@@ -16,6 +16,8 @@ from .rules import (
     LIFECYCLE_MIN_BARS,
     LIFECYCLE_MIN_EXCURSION_PCT,
     LIFECYCLE_TARGET_RATIO,
+    breakout_down,
+    breakout_up,
 )
 
 # 仅对反转类做归档（巩固形态时效较短，另议）
@@ -294,9 +296,29 @@ def _newer_opposite_consol_breakout(
             c = _f(lv.get("last_close"))
             up = _f(lv.get("upper"))
             lo = _f(lv.get("lower"))
-            if c is not None and up is not None and c > up * 1.005:
+            up_m = _f(lv.get("breakout_up_mult"))
+            down_m = _f(lv.get("breakout_down_mult"))
+            broke_up = (
+                c is not None
+                and up is not None
+                and (
+                    c > up * up_m
+                    if up_m
+                    else breakout_up(c, up)
+                )
+            )
+            broke_down = (
+                c is not None
+                and lo is not None
+                and (
+                    c < lo * down_m
+                    if down_m
+                    else breakout_down(c, lo)
+                )
+            )
+            if broke_up:
                 bias = "bull"
-            elif c is not None and lo is not None and c < lo * 0.995:
+            elif broke_down:
                 bias = "bear"
             else:
                 continue

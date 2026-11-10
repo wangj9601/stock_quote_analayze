@@ -642,7 +642,7 @@ const KdeLevelsTool = {
                     <button type="button" class="btn btn-secondary btn-sm kde-levels-expand-all">展开全部算法明细</button>
                     <button type="button" class="btn btn-secondary btn-sm kde-levels-collapse-all">全部收起</button>
                 </div>
-                <details class="kde-algo-details" open>
+                <details class="kde-algo-details kde-algo-details--keep" open>
                     <summary>现价速览</summary>
                     <div class="kde-levels-card current kde-levels-card--inline">
                         ${this._priceRowHtml(d)}
@@ -653,7 +653,7 @@ const KdeLevelsTool = {
                         ${this._boardsPlaceholderHtml()}
                     </div>
                 </details>
-                <details class="kde-algo-details" open>
+                <details class="kde-algo-details">
                     <summary>KDE 结构位 <span class="${tagCls(d.price_adjust === 'qfq' ? 'qfq' : 'none')}">${tagTxt(d.price_adjust === 'qfq' ? 'qfq' : 'none')}</span></summary>
                     <div class="kde-levels-grid">
                         <div class="kde-levels-card support">
@@ -690,7 +690,7 @@ const KdeLevelsTool = {
                         </div>
                     </div>
                 </details>
-                <details class="kde-algo-details" open>
+                <details class="kde-algo-details kde-algo-details--keep" open>
                     <summary>Volume Profile（参考）
                         <span class="${tagCls(vpAdjust)}">${tagTxt(vpAdjust)}</span>
                     </summary>
@@ -752,7 +752,7 @@ const KdeLevelsTool = {
                         </div>
                     </div>
                 </details>
-                <details class="kde-algo-details" open>
+                <details class="kde-algo-details">
                     <summary>黄金分割 / Pivot / Camarilla
                         <span class="${tagCls(classicAdjust)}">${tagTxt(classicAdjust)}</span>
                     </summary>
@@ -799,8 +799,11 @@ const KdeLevelsTool = {
                 <p class="kde-levels-meta">${this._esc(metaParts.join(' · '))}</p>
             </div>`;
 
-        // 缺省全部展开（与模板 open 一致；保证动态插入后状态正确）
-        container.querySelectorAll('details.kde-algo-details, details.kde-conf-list-details').forEach((el) => {
+        // 共振与现价、VP 默认展开；KDE 分档和经典价位默认折叠
+        container.querySelectorAll('details.kde-algo-details').forEach((el) => {
+            el.open = el.classList.contains('kde-algo-details--keep');
+        });
+        container.querySelectorAll('details.kde-conf-list-details').forEach((el) => {
             el.open = true;
         });
 

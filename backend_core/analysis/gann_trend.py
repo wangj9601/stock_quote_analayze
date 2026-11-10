@@ -31,6 +31,12 @@ TIME_WINDOWS = (45, 90, 144, 180, 360)
 FAN_HORIZON_BARS = 90
 NEAR_BAND_ATR_MULT = 0.5
 NEAR_BAND_MIN_PCT = 0.005
+# 射线相对现价偏离超过该倍数 → 该射线失真（不画、不参与坐标）。整扇不因此作废。
+ANGLE_MAX_DEV_RATIO = 3.0
+# 方向结论须「相对 1×1 的位置」与「近端收盘斜率」同向；单边不给偏多/偏空。
+SLOPE_LOOKBACK = 10
+SLOPE_MIN_BARS = 3
+SLOPE_SCALE_FRAC = 0.25
 
 
 def _round_p(v: Any) -> Optional[float]:
@@ -78,6 +84,105 @@ def angle_price(
     if direction == "down":
         return float(anchor_price) - offset
     return float(anchor_price) + offset
+
+
+def angle_usable(price: float, last_close: float) -> Tuple[bool, Optional[str]]:
+    """单条角度线在基准日是否可展示、可参与坐标。穿零或远离现价只作废该线。"""
+    try:
+        px = float(price)
+        ref = abs(float(last_close))
+    except (TypeError, ValueError):
+        return False, "invalid"
+    if px != px or px <= 0:
+        return False, "non_positive"
+    if ref > 0 and abs(px - ref) / ref > ANGLE_MAX_DEV_RATIO:
+        return False, "far_from_spot"
+    return True, None
+
+
+def recent_close_slope(
+    parsed: Sequence[Tuple[Any, float, float, float]],
+    *,
+    lookback: int = SLOPE_LOOKBACK,
+) -> Optional[float]:
+    """近端收盘的每根变化。样本不足返回 None。"""
+    n = min(int(lookback), len(parsed) - 1)
+    if n < SLOPE_MIN_BARS:
+        return None
+    c0 = float(parsed[-1 - n][3])
+    c1 = float(parsed[-1][3])
+    return (c1 - c0) / float(n)
+
+
+def classify_gann_bias(
+    *,
+    last_close: float,
+    one_price: Optional[float],
+    one_usable: bool,
+    near_band: float,
+    scale: float,
+    fan_dir: str,
+    recent_slope: Optional[float],
+    slope_bars: int,
+) -> Tuple[str, str, str]:
+    """位置与近端斜率同向才给偏多/偏空。下行扇里「回到不断下移的 1×1 上方」本身不够。"""
+    fan_zh = "下行扇" if fan_dir == "down" else "上行扇"
+    if not one_usable or one_price is None:
+        return (
+            "insufficient",
+            "不可用",
+            "1×1 理论价穿零或远离现价，本扇不作为方向结论。",
+        )
+    diff = float(last_close) - float(one_price)
+    if abs(diff) <= float(near_band):
+        return (
+            "near",
+            "贴近1×1",
+            (
+                f"{fan_zh}：收盘 {last_close:.2f} 贴近 1×1 理论价 {one_price:.2f}"
+                f"（带宽 ±{near_band:.2f}），多空临界。"
+            ),
+        )
+    above = diff > 0
+    pos_zh = "上方" if above else "下方"
+    if recent_slope is None:
+        return (
+            "neutral",
+            "中性",
+            (
+                f"{fan_zh}：收盘 {last_close:.2f} 位于 1×1（{one_price:.2f}）{pos_zh}，"
+                "近端斜率样本不足，不单独作为方向。"
+            ),
+        )
+    eps = max(abs(float(scale)) * SLOPE_SCALE_FRAC, abs(float(last_close)) * 0.0005)
+    n = max(int(slope_bars), 1)
+    slope_txt = f"近{n}根斜率 {recent_slope:+.3f}/根"
+    if above and recent_slope > eps:
+        return (
+            "bullish",
+            "偏多",
+            (
+                f"{fan_zh}：收盘 {last_close:.2f} 位于 1×1（{one_price:.2f}）上方，"
+                f"且{slope_txt}向上，几何上偏强。"
+            ),
+        )
+    if (not above) and recent_slope < -eps:
+        return (
+            "bearish",
+            "偏空",
+            (
+                f"{fan_zh}：收盘 {last_close:.2f} 位于 1×1（{one_price:.2f}）下方，"
+                f"且{slope_txt}向下，几何上偏弱。"
+            ),
+        )
+    return (
+        "neutral",
+        "中性",
+        (
+            f"{fan_zh}：收盘 {last_close:.2f} 位于 1×1（{one_price:.2f}）{pos_zh}，"
+            f"但{slope_txt}与位置不一致，不单独作为方向。"
+        ),
+    )
 
 
 def _pick_anchor(swing: Dict[str, Any]) -> Dict[str, Any]:
@@ -223,6 +328,7 @@ def analyze_gann_trend(
             run=run,
             direction=fan_dir,
         )
+        usable, invalid_reason = angle_usable(px, last_close)
         angles.append(
             {
                 "name": name,
@@ -230,6 +336,8 @@ def analyze_gann_trend(
                 "run": run,
                 "price_at_asof": _round_p(px),
                 "slope_per_bar": _round_p(scale * (rise / run)),
+                "usable": usable,
+                "invalid_reason": invalid_reason,
             }
         )
 
@@ -239,6 +347,9 @@ def analyze_gann_trend(
         if one_one and one_one.get("price_at_asof") is not None
         else None
     )
+    one_usable = bool(one_one and one_one.get("usable"))
+    slope = recent_close_slope(parsed)
+    slope_bars = min(SLOPE_LOOKBACK, max(0, len(parsed) - 1))
     if one_price is None or bars_from_anchor < 0:
         bias, bias_label, summary = (
             "insufficient",
@@ -246,39 +357,16 @@ def analyze_gann_trend(
             "基准日早于锚点或缺少 1×1 价，无法判定。",
         )
     else:
-        diff = last_close - one_price
-        if abs(diff) <= near_band:
-            bias, bias_label = "near", "贴近1×1"
-            summary = (
-                f"收盘 {last_close:.2f} 贴近 1×1 理论价 {one_price:.2f}"
-                f"（带宽 ±{near_band:.2f}），多空临界，宜观察能否站稳/跌破。"
-            )
-        elif fan_dir == "up":
-            if diff > 0:
-                bias, bias_label = "bullish", "偏多"
-                summary = (
-                    f"上行扇：收盘 {last_close:.2f} 位于 1×1（{one_price:.2f}）上方，"
-                    f"短线结构偏强（几何参考）。"
-                )
-            else:
-                bias, bias_label = "bearish", "偏空"
-                summary = (
-                    f"上行扇：收盘 {last_close:.2f} 位于 1×1（{one_price:.2f}）下方，"
-                    f"相对该扇偏弱（几何参考）。"
-                )
-        else:
-            if diff < 0:
-                bias, bias_label = "bearish", "偏空"
-                summary = (
-                    f"下行扇：收盘 {last_close:.2f} 位于 1×1（{one_price:.2f}）下方，"
-                    f"空头角度仍占优（几何参考）。"
-                )
-            else:
-                bias, bias_label = "bullish", "偏多"
-                summary = (
-                    f"下行扇：收盘 {last_close:.2f} 已回到 1×1（{one_price:.2f}）上方，"
-                    f"空头角度有所削弱（几何参考）。"
-                )
+        bias, bias_label, summary = classify_gann_bias(
+            last_close=last_close,
+            one_price=one_price,
+            one_usable=one_usable,
+            near_band=near_band,
+            scale=scale,
+            fan_dir=fan_dir,
+            recent_slope=slope,
+            slope_bars=slope_bars,
+        )
 
     time_windows: List[Dict[str, Any]] = []
     for n in TIME_WINDOWS:
@@ -329,10 +417,15 @@ def analyze_gann_trend(
             run=run,
             direction=fan_dir,
         )
-        all_prices.extend([end_px, asof_px])
+        end_ok, _end_why = angle_usable(end_px, last_close)
+        asof_ok, _asof_why = angle_usable(asof_px, last_close)
+        ray_ok = end_ok and asof_ok
+        if ray_ok:
+            all_prices.extend([end_px, asof_px])
         rays.append(
             {
                 "name": name,
+                "usable": ray_ok,
                 "start": {"bar_offset": 0, "price": _round_p(anchor["price"])},
                 "end": {"bar_offset": int(end_offset), "price": _round_p(end_px)},
                 "asof_point": {

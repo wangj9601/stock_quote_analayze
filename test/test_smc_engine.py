@@ -8,9 +8,11 @@ from datetime import date, timedelta
 from backend_core.analysis.smc_engine import (
     REMOTE_DISTANCE_PCT,
     analyze_smc,
+    break_buffer_pct,
     detect_fvgs,
     detect_order_blocks,
     detect_structure_events,
+    event_key_zh,
     merge_fvgs,
     merge_order_blocks,
     parse_ohlc_bars,
@@ -390,3 +392,29 @@ def test_order_blocks_and_fvgs_sorted_by_date_desc():
     assert fvgs
     fvg_dates = [str(f.get("end_date") or "") for f in fvgs]
     assert fvg_dates == sorted(fvg_dates, reverse=True)
+
+
+def test_atr_buffer_filters_noise_break():
+    """ATR 约 5.2% 时，只高出摆动高 0.65% 不算有效上破。"""
+    pct = break_buffer_pct(27.76, 27.76 * 0.052)
+    assert abs(pct - max(0.005, 0.3 * 0.052)) < 1e-9
+    assert event_key_zh("structure_shift_unconfirmed") == "结构位移未确认"
+
+    base = date(2024, 6, 1)
+    bars = []
+    for i in range(10):
+        px = 28.0
+        bars.append(_bar(base + timedelta(days=i), px, px + 0.2, px - 0.2, px))
+    bars[-1]["close"] = 27.94
+    bars[-1]["high"] = 28.0
+    labeled = [
+        {"index": 1, "kind": "low", "price": 26.0, "date": "2024-06-02", "structure": "LL"},
+        {"index": 3, "kind": "high", "price": 27.76, "date": "2024-06-04", "structure": "LH"},
+        {"index": 5, "kind": "low", "price": 26.5, "date": "2024-06-06", "structure": "LL"},
+    ]
+    ohlc = parse_ohlc_bars(bars)
+    atr = 27.76 * 0.052
+    noisy = detect_structure_events(ohlc, labeled, confirm_right=0, atr=atr)
+    assert not any(e.get("direction") == "bullish" for e in noisy)
+    plain = detect_structure_events(ohlc, labeled, confirm_right=0)
+    assert any(e.get("direction") == "bullish" for e in plain)

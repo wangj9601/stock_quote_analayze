@@ -6,6 +6,8 @@ from datetime import date, timedelta
 from backend_core.analysis.gann_trend import (
     analyze_gann_trend,
     angle_price,
+    angle_usable,
+    classify_gann_bias,
     estimate_gann_scale,
 )
 
@@ -138,7 +140,7 @@ def test_analyze_gann_angles_and_fan():
     deltas = [t["bars_from_asof"] for t in tw]
     assert deltas == sorted(deltas)
 
-    assert out["verdict"]["bias"] in ("bullish", "bearish", "near", "insufficient")
+    assert out["verdict"]["bias"] in ("bullish", "bearish", "near", "neutral", "insufficient")
     assert out["last_close"] is not None
 
 
@@ -155,3 +157,56 @@ def test_insufficient_bars():
     out = analyze_gann_trend(bars, max_bars=60)
     assert out["ok"] is False
     assert out["verdict"]["bias"] == "insufficient"
+
+
+def test_angle_usable_rejects_non_positive_and_far():
+    ok, why = angle_usable(-6.36, 28.0)
+    assert ok is False and why == "non_positive"
+    ok, why = angle_usable(200.0, 28.0)
+    assert ok is False and why == "far_from_spot"
+    ok, why = angle_usable(30.0, 28.0)
+    assert ok is True and why is None
+
+
+def test_down_fan_above_falling_1x1_is_not_bullish():
+    """缓跌回到下移的 1×1 上方，斜率未向上，不得标偏多。"""
+    bias, label, summary = classify_gann_bias(
+        last_close=27.94,
+        one_price=25.8,
+        one_usable=True,
+        near_band=0.4,
+        scale=0.51,
+        fan_dir="down",
+        recent_slope=-0.05,
+        slope_bars=10,
+    )
+    assert bias == "neutral"
+    assert label == "中性"
+    assert "不单独作为方向" in summary
+
+
+def test_bias_needs_slope_to_agree():
+    bias, label, _ = classify_gann_bias(
+        last_close=30.0,
+        one_price=28.0,
+        one_usable=True,
+        near_band=0.2,
+        scale=0.2,
+        fan_dir="up",
+        recent_slope=0.2,
+        slope_bars=10,
+    )
+    assert bias == "bullish"
+    assert label == "偏多"
+    bias, label, _ = classify_gann_bias(
+        last_close=28.0,
+        one_price=-6.0,
+        one_usable=False,
+        near_band=0.2,
+        scale=2.0,
+        fan_dir="down",
+        recent_slope=0.1,
+        slope_bars=10,
+    )
+    assert bias == "insufficient"
+    assert label == "不可用"

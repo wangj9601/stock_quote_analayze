@@ -283,3 +283,29 @@ def test_watch_prefers_bullish_ob_over_kde():
     entry = plan["short_term"]["entry_zone"]
     assert entry["basis"] == "smc_ob_watch"
     assert abs(entry["low"] - 8.2) < 0.01
+
+
+def test_decision_lines_and_gann_bullish_votes():
+    ctx = {
+        "strategy_pack": _base_pack(),
+        "levels": {
+            "data": {
+                "nearest_support": 9.0,
+                "nearest_resistance": 11.0,
+                "current_price": 10.0,
+            }
+        },
+        "gann": {
+            "data": {
+                "gann_trend": {
+                    "ok": True,
+                    "verdict": {"bias": "bullish", "bias_label": "偏多"},
+                }
+            }
+        },
+    }
+    plan = build_integrated_trade_plan(ctx)
+    assert plan["decision_lines"][0] == "今天：无交易资格（0/4）"
+    assert plan["decision_lines"][1].startswith("唯一观察") or plan["decision_lines"][1].startswith("触发")
+    assert plan["stance_medium"] == "bull"
+    assert "江恩偏多" in (plan["stance_medium_label"] or "")

@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from backend_core.analysis.chart_patterns.rules import (
     BREAKOUT_DOWN_MULT,
     BREAKOUT_UP_MULT,
+    bars_wilder_atr,
+    breakout_buffer_pct,
 )
 
 DISCLAIMER = "规则模板，非投资建议"
@@ -1926,7 +1928,8 @@ def _reason_upside_invalidate(h: Dict[str, Any]) -> bool:
         return True
     close = _hit_close(h)
     upper, _lower = _hit_bounds(h)
-    if close is not None and upper is not None and upper > 0 and close > upper * BREAKOUT_UP_MULT:
+    up_m, _down_m = _stored_break_mults(h)
+    if close is not None and upper is not None and upper > 0 and close > upper * up_m:
         return True
     # 空头反转：收盘重新站上颈线 → 失效语义偏多
     neck = _hit_neck(h)
@@ -1948,7 +1951,8 @@ def _reason_downside_invalidate(h: Dict[str, Any]) -> bool:
         return True
     close = _hit_close(h)
     _upper, lower = _hit_bounds(h)
-    if close is not None and lower is not None and lower > 0 and close < lower * BREAKOUT_DOWN_MULT:
+    _up_m, down_m = _stored_break_mults(h)
+    if close is not None and lower is not None and lower > 0 and close < lower * down_m:
         return True
     neck = _hit_neck(h)
     t = str(h.get("pattern_type") or "")
@@ -2079,7 +2083,10 @@ def assess_breakout_quality(
     seq = [b for b in (bars or []) if isinstance(b, dict)]
     if len(seq) < 3:
         return None
-    gate = float(level) * float(hold_mult)
+    mult = float(hold_mult)
+    if abs(mult - float(BREAKOUT_UP_MULT)) < 1e-12:
+        mult = 1.0 + breakout_buffer_pct(float(level), bars_wilder_atr(seq))
+    gate = float(level) * mult
     # 找最近一次「上破」起点：从后往前找仍站在 gate 上的连续段，再取其首日
     hold_idx: List[int] = []
     for i in range(len(seq) - 1, -1, -1):
@@ -2518,14 +2525,26 @@ def pick_primary(hits: Optional[Sequence[Dict[str, Any]]]) -> Optional[Dict[str,
     return ranked[0]
 
 
+def _stored_break_mults(h: Dict[str, Any]) -> tuple:
+    """命中上记下的突破倍数；旧数据没有时退回 0.5% 下限。"""
+    lv = h.get("key_levels") if isinstance(h.get("key_levels"), dict) else {}
+    up = _f(lv.get("breakout_up_mult")) if isinstance(lv, dict) else None
+    down = _f(lv.get("breakout_down_mult")) if isinstance(lv, dict) else None
+    return (
+        float(up) if up and up > 1.0 else float(BREAKOUT_UP_MULT),
+        float(down) if down and 0.0 < down < 1.0 else float(BREAKOUT_DOWN_MULT),
+    )
+
+
 def consol_break_dir(h: Dict[str, Any]) -> str:
     """已确认巩固：up / down / out（与前端 _consolBreakDir 对齐）。"""
     t = str(h.get("pattern_type") or "")
     upper, lower = _hit_bounds(h)
     close = _hit_close(h)
-    if close is not None and upper is not None and upper > 0 and close > upper * BREAKOUT_UP_MULT:
+    up_m, down_m = _stored_break_mults(h)
+    if close is not None and upper is not None and upper > 0 and close > upper * up_m:
         return "up"
-    if close is not None and lower is not None and lower > 0 and close < lower * BREAKOUT_DOWN_MULT:
+    if close is not None and lower is not None and lower > 0 and close < lower * down_m:
         return "down"
     if t in ("falling_wedge", "bull_flag", "ascending_triangle", "cup_with_handle"):
         return "up"
@@ -3062,7 +3081,7 @@ def classify_short_bias(
         and close is not None
         and lower is not None
         and lower > 0
-        and close < lower * BREAKOUT_DOWN_MULT
+        and close < lower * _stored_break_mults(primary)[1]
     ):
         bear_ok = True
         rationale_bits.append(f"有效跌破{lab}下沿")

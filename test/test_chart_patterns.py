@@ -25,6 +25,7 @@ from backend_core.analysis.chart_patterns.rules import (
     INVALIDATE_TOP_MULT,
     SLOPE_UNIT_NOTE,
     WEDGE_ENDPOINT_REL_EPS,
+    breakout_down,
     breakout_up,
     consolidation_status,
 )
@@ -1340,6 +1341,14 @@ def test_breakout_threshold_documented():
     assert BREAKOUT_DOWN_MULT == 0.995
     assert breakout_up(20.2, 20.0) is True
     assert breakout_up(20.05, 20.0) is False
+    # ATR 5.2% 时缓冲约 1.56%：高出 1% 仍不算确认，高出 2% 才算
+    atr = 20.0 * 0.052
+    assert breakout_up(20.2, 20.0, atr=atr) is False
+    assert breakout_up(20.4, 20.0, atr=atr) is True
+    assert breakout_down(19.8, 20.0, atr=atr) is False
+    assert breakout_down(19.6, 20.0, atr=atr) is True
+    st, _ = consolidation_status(20.2, 20.0, 18.0, expect_up=True, atr=atr)
+    assert st == "forming"
     assert "K线" in SLOPE_UNIT_NOTE or "交易日" in SLOPE_UNIT_NOTE
 
 
@@ -1618,3 +1627,32 @@ def test_cup_with_handle_ref_bars_sync_prices():
     )
     raw_left = float(raw_row["high"])
     assert h["key_levels"]["left_rim"] == round(raw_left, 4)
+
+
+def test_head_shoulders_time_asymmetry_downgrades_confidence():
+    from backend_core.analysis.chart_patterns.head_shoulders import _apply_time_symmetry
+
+    bars = [{"date": f"2024-01-{i+1:02d}", "close": 10} for i in range(40)]
+    conf, reason, ratio = _apply_time_symmetry(
+        0.75,
+        "头肩顶",
+        bars,
+        {"index": 2, "price": 10},
+        {"index": 8, "price": 12},
+        {"index": 30, "price": 10},
+    )
+    assert ratio > 1.8
+    assert conf == round(0.75 * 0.6, 2)
+    assert "时间不对称" in reason
+
+    kept, reason2, ratio2 = _apply_time_symmetry(
+        0.7,
+        "头肩顶",
+        bars,
+        {"index": 2},
+        {"index": 12},
+        {"index": 22},
+    )
+    assert kept == 0.7
+    assert ratio2 <= 1.8
+    assert "时间不对称" not in reason2

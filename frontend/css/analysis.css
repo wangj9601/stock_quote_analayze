@@ -2082,6 +2082,15 @@ a.ba-stock-code-link:focus {
 }
 .ssa-plan-wrap { font-size: 0.9rem; color: #334155; }
 .ssa-plan-head { margin-bottom: 0.85rem; }
+.ssa-plan-decision {
+    margin: 0 0 0.75rem;
+    padding: 0.55rem 0.75rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    line-height: 1.55;
+    color: #0f172a;
+}
 .ssa-plan-badges {
     display: flex;
     flex-wrap: wrap;

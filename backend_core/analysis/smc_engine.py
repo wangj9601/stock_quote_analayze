@@ -12,8 +12,26 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from backend_core.analysis.swing_zigzag import PRICE_DECIMALS, wilder_atr
 
 # 与 market_structure 破位缓冲对齐（避免循环导入，常量本地维护）
-BOS_BREAK_MULT_UP = 1.005
-BOS_BREAK_MULT_DOWN = 0.995
+# 未给 ATR 时仍用 0.5% 下限；给出 ATR 后取 max(0.5%, 0.3×ATR/价位)。
+BOS_BREAK_FLOOR_PCT = 0.005
+BOS_BREAK_ATR_FRAC = 0.3
+BOS_BREAK_MULT_UP = 1.0 + BOS_BREAK_FLOOR_PCT
+BOS_BREAK_MULT_DOWN = 1.0 - BOS_BREAK_FLOOR_PCT
+
+_EVENT_KEY_ZH = {
+    "structure_shift_unconfirmed": "结构位移未确认",
+    "choch_bullish": "看涨性质转换",
+    "choch_bearish": "看跌性质转换",
+    "bos_bullish": "看涨结构延续",
+    "bos_bearish": "看跌结构延续",
+}
+_ZONE_STATUS_ZH = {
+    "active": "活跃",
+    "open": "未回补",
+    "partial": "部分回补",
+    "filled": "已回补",
+    "mitigated": "已缓解",
+}
 FVG_ATR_MULT = 0.15
 FVG_MIN_PCT = 0.003
 MAX_ORDER_BLOCKS = 6
@@ -189,6 +207,50 @@ def _last_swing(
     return None
 
 
+def event_key_zh(key: Optional[str]) -> str:
+    k = str(key or "").strip()
+    return _EVENT_KEY_ZH.get(k, k)
+
+
+def zone_status_zh(status: Optional[str], relevance: Optional[str] = None) -> str:
+    raw = str(status or "").strip()
+    label = _ZONE_STATUS_ZH.get(raw, raw)
+    if str(relevance or "") == "remote":
+        label = f"{label}·远离现价" if label else "远离现价"
+    return label or "--"
+
+
+def break_buffer_pct(level: float, atr: Optional[float]) -> float:
+    """破位缓冲比例：max(0.5%, 0.3×ATR/价位)。ATR 为价格单位。"""
+    pct = BOS_BREAK_FLOOR_PCT
+    try:
+        lvl = abs(float(level))
+        a = float(atr) if atr is not None else 0.0
+    except (TypeError, ValueError):
+        return pct
+    if lvl > 0 and a > 0:
+        pct = max(BOS_BREAK_FLOOR_PCT, BOS_BREAK_ATR_FRAC * a / lvl)
+    return pct
+
+
+def adaptive_break_mults(
+    level: float,
+    atr: Optional[float],
+    *,
+    break_mult_up: float = BOS_BREAK_MULT_UP,
+    break_mult_down: float = BOS_BREAK_MULT_DOWN,
+) -> Tuple[float, float]:
+    """显式改写倍数时尊重调用方；否则在有 ATR 时按波动率放大缓冲。"""
+    custom = (
+        abs(float(break_mult_up) - BOS_BREAK_MULT_UP) > 1e-12
+        or abs(float(break_mult_down) - BOS_BREAK_MULT_DOWN) > 1e-12
+    )
+    if custom or atr is None:
+        return float(break_mult_up), float(break_mult_down)
+    pct = break_buffer_pct(level, atr)
+    return 1.0 + pct, 1.0 - pct
+
+
 def _classify_break(
     *,
     bias: str,
@@ -218,6 +280,7 @@ def detect_structure_events(
     confirm_right: int = DEFAULT_CONFIRM_RIGHT,
     break_mult_up: float = BOS_BREAK_MULT_UP,
     break_mult_down: float = BOS_BREAK_MULT_DOWN,
+    atr: Optional[float] = None,
 ) -> List[Dict[str, Any]]:
     """沿 K 线扫描：用已确认摆动点判定 BOS/CHOCH。"""
     if len(ohlc) < 3 or len(labeled) < 2:
@@ -247,7 +310,10 @@ def detect_structure_events(
         if last_high is not None:
             lvl = float(last_high["price"])
             key = (last_high.get("date"), round(lvl, PRICE_DECIMALS), "high")
-            thr = lvl * break_mult_up
+            up_m, _down_m = adaptive_break_mults(
+                lvl, atr, break_mult_up=break_mult_up, break_mult_down=break_mult_down
+            )
+            thr = lvl * up_m
             if key not in broken_high_keys and close >= thr:
                 etype, direction, ekey = _classify_break(bias=bias, break_side="high")
                 candidates.append(
@@ -255,6 +321,8 @@ def detect_structure_events(
                         "type": etype,
                         "direction": direction,
                         "event_key": ekey,
+                        "event_key_label": event_key_zh(ekey),
+                        "buffer_mult": round(up_m, 6),
                         "level": _round_px(lvl),
                         "level_date": last_high.get("date"),
                         "level_index": last_high.get("index"),
@@ -270,7 +338,10 @@ def detect_structure_events(
         if last_low is not None:
             lvl = float(last_low["price"])
             key = (last_low.get("date"), round(lvl, PRICE_DECIMALS), "low")
-            thr = lvl * break_mult_down
+            _up_m, down_m = adaptive_break_mults(
+                lvl, atr, break_mult_up=break_mult_up, break_mult_down=break_mult_down
+            )
+            thr = lvl * down_m
             if key not in broken_low_keys and close <= thr:
                 etype, direction, ekey = _classify_break(bias=bias, break_side="low")
                 candidates.append(
@@ -278,6 +349,8 @@ def detect_structure_events(
                         "type": etype,
                         "direction": direction,
                         "event_key": ekey,
+                        "event_key_label": event_key_zh(ekey),
+                        "buffer_mult": round(down_m, 6),
                         "level": _round_px(lvl),
                         "level_date": last_low.get("date"),
                         "level_index": last_low.get("index"),
@@ -777,7 +850,9 @@ def event_to_bos_like(event: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any
         "level": event.get("level"),
         "level_date": event.get("level_date"),
         "close": event.get("close"),
-        "buffer_mult": BOS_BREAK_MULT_UP if direction == "bullish" else BOS_BREAK_MULT_DOWN,
+        "buffer_mult": event.get("buffer_mult")
+        if event.get("buffer_mult") is not None
+        else (BOS_BREAK_MULT_UP if direction == "bullish" else BOS_BREAK_MULT_DOWN),
         "excess_pct": event.get("excess_pct"),
         "smc_type": event.get("type"),
         "smc_event_key": event.get("event_key"),
@@ -793,7 +868,7 @@ def build_smc_summary(
     parts: List[str] = []
     if last_event:
         et = str(last_event.get("type") or "").upper()
-        ek = str(last_event.get("event_key") or "")
+        ek = event_key_zh(str(last_event.get("event_key") or ""))
         direction = "多" if last_event.get("direction") == "bullish" else "空"
         lvl = last_event.get("level")
         parts.append(
@@ -809,7 +884,7 @@ def build_smc_summary(
     open_fvg = next((f for f in fvgs if f.get("status") in ("open", "partial")), None)
     if open_fvg:
         d = "看涨" if open_fvg.get("direction") == "bullish" else "看跌"
-        st = open_fvg.get("status")
+        st = zone_status_zh(open_fvg.get("status"))
         parts.append(
             f"{d}FVG({st}) [{open_fvg.get('low')}–{open_fvg.get('high')}]"
         )
@@ -850,12 +925,12 @@ def analyze_smc(
     bias = trend_to_structure_bias(trend)
     bias_meta = structure_bias_meta(bias)
     events = detect_structure_events(
-        ohlc, labeled_zigzag, confirm_right=confirm_right
+        ohlc, labeled_zigzag, confirm_right=confirm_right, atr=atr
     )
     last_event = events[-1] if events else None
     # 若历史扫描无事件，用最新收盘对全链做一次即时判定（与旧 last_bos_like 对齐）
     if last_event is None and ohlc:
-        snap = _snapshot_last_event(ohlc[-1], labeled_zigzag, bias)
+        snap = _snapshot_last_event(ohlc[-1], labeled_zigzag, bias, atr=atr)
         if snap:
             events = [snap]
             last_event = snap
@@ -891,6 +966,9 @@ def analyze_smc(
             "confirm_right": int(confirm_right),
             "break_mult_up": BOS_BREAK_MULT_UP,
             "break_mult_down": BOS_BREAK_MULT_DOWN,
+            "break_floor_pct": BOS_BREAK_FLOOR_PCT,
+            "break_atr_frac": BOS_BREAK_ATR_FRAC,
+            "break_buffer_pct": round(break_buffer_pct(last_close, atr), 6),
             "fvg_atr_mult": FVG_ATR_MULT,
             "fvg_min_pct": FVG_MIN_PCT,
             "max_order_blocks": int(max_order_blocks),
@@ -905,6 +983,8 @@ def _snapshot_last_event(
     last_bar: Dict[str, Any],
     labeled: Sequence[Dict[str, Any]],
     bias: str,
+    *,
+    atr: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     close = float(last_bar["close"])
     last_high = _last_swing(labeled, "high")
@@ -912,13 +992,16 @@ def _snapshot_last_event(
     candidates: List[Dict[str, Any]] = []
     if last_high is not None:
         lvl = float(last_high["price"])
-        if close >= lvl * BOS_BREAK_MULT_UP:
+        up_m, _down_m = adaptive_break_mults(lvl, atr)
+        if close >= lvl * up_m:
             etype, direction, ekey = _classify_break(bias=bias, break_side="high")
             candidates.append(
                 {
                     "type": etype,
                     "direction": direction,
                     "event_key": ekey,
+                    "event_key_label": event_key_zh(ekey),
+                    "buffer_mult": round(up_m, 6),
                     "level": _round_px(lvl),
                     "level_date": last_high.get("date"),
                     "level_index": last_high.get("index"),
@@ -932,13 +1015,16 @@ def _snapshot_last_event(
             )
     if last_low is not None:
         lvl = float(last_low["price"])
-        if close <= lvl * BOS_BREAK_MULT_DOWN:
+        _up_m, down_m = adaptive_break_mults(lvl, atr)
+        if close <= lvl * down_m:
             etype, direction, ekey = _classify_break(bias=bias, break_side="low")
             candidates.append(
                 {
                     "type": etype,
                     "direction": direction,
                     "event_key": ekey,
+                    "event_key_label": event_key_zh(ekey),
+                    "buffer_mult": round(down_m, 6),
                     "level": _round_px(lvl),
                     "level_date": last_low.get("date"),
                     "level_index": last_low.get("index"),
