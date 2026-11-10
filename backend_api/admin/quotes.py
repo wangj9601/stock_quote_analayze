@@ -15,12 +15,21 @@ from backend_core.logging_utils import make_rotating_file_handler
 import csv
 import json
 import os
-import akshare as ak
-import pandas as pd
 from pathlib import Path
 from io import BytesIO, StringIO
 from pydantic import BaseModel, Field, model_validator
 from fastapi.responses import StreamingResponse
+
+_pd_mod = None
+
+
+def _pd():
+    """pandas 仅在行情导入/导出路径使用，启动时不预加载。"""
+    global _pd_mod
+    if _pd_mod is None:
+        import pandas as pd
+        _pd_mod = pd
+    return _pd_mod
 
 from backend_api.models import (
     QuoteData, QuoteDataCreate, QuoteDataInDB,
@@ -176,7 +185,7 @@ async def import_turnover_rate(
     if name.endswith(".csv"):
         for enc in ("utf-8-sig", "utf-8", "gbk"):
             try:
-                df = pd.read_csv(BytesIO(content), encoding=enc)
+                df = _pd().read_csv(BytesIO(content), encoding=enc)
                 break
             except Exception as e:
                 parse_errors.append(f"csv({enc}): {e}")
@@ -185,7 +194,7 @@ async def import_turnover_rate(
     if df is None and (name.endswith(".xlsx") or name.endswith(".xls")):
         for engine in ("openpyxl", "xlrd"):
             try:
-                df = pd.read_excel(BytesIO(content), engine=engine)
+                df = _pd().read_excel(BytesIO(content), engine=engine)
                 break
             except Exception as e:
                 parse_errors.append(f"excel({engine}): {e}")
@@ -194,7 +203,7 @@ async def import_turnover_rate(
     if df is None and not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls")):
         for enc in ("utf-8-sig", "utf-8", "gbk"):
             try:
-                trial = pd.read_csv(BytesIO(content), encoding=enc)
+                trial = _pd().read_csv(BytesIO(content), encoding=enc)
                 if trial is not None and not trial.empty and len(trial.columns) >= 2:
                     df = trial
                     break
@@ -203,7 +212,7 @@ async def import_turnover_rate(
         if df is None:
             for engine in ("openpyxl", "xlrd"):
                 try:
-                    df = pd.read_excel(BytesIO(content), engine=engine)
+                    df = _pd().read_excel(BytesIO(content), engine=engine)
                     break
                 except Exception as e:
                     parse_errors.append(f"probe-excel({engine}): {e}")
@@ -215,9 +224,9 @@ async def import_turnover_rate(
                 txt = content.decode(enc, errors="strict")
                 # 优先按制表符读取；若不是制表符，交给 python 引擎自动探测分隔符
                 if "\t" in txt:
-                    trial = pd.read_csv(StringIO(txt), sep="\t")
+                    trial = _pd().read_csv(StringIO(txt), sep="\t")
                 else:
-                    trial = pd.read_csv(StringIO(txt), sep=None, engine="python")
+                    trial = _pd().read_csv(StringIO(txt), sep=None, engine="python")
                 if trial is not None and not trial.empty and len(trial.columns) >= 2:
                     df = trial
                     break
@@ -228,7 +237,7 @@ async def import_turnover_rate(
     if df is None:
         for enc in ("utf-8", "gbk", "gb18030"):
             try:
-                html_tables = pd.read_html(BytesIO(content), encoding=enc)
+                html_tables = _pd().read_html(BytesIO(content), encoding=enc)
                 if html_tables:
                     df = html_tables[0]
                     break
@@ -378,7 +387,7 @@ async def import_turnover_rate_historical(
     if name.endswith(".csv"):
         for enc in ("utf-8-sig", "utf-8", "gbk"):
             try:
-                df = pd.read_csv(BytesIO(content), encoding=enc)
+                df = _pd().read_csv(BytesIO(content), encoding=enc)
                 break
             except Exception as e:
                 parse_errors.append(f"csv({enc}): {e}")
@@ -386,7 +395,7 @@ async def import_turnover_rate_historical(
     if df is None and (name.endswith(".xlsx") or name.endswith(".xls")):
         for engine in ("openpyxl", "xlrd"):
             try:
-                df = pd.read_excel(BytesIO(content), engine=engine)
+                df = _pd().read_excel(BytesIO(content), engine=engine)
                 break
             except Exception as e:
                 parse_errors.append(f"excel({engine}): {e}")
@@ -394,7 +403,7 @@ async def import_turnover_rate_historical(
     if df is None and not (name.endswith(".csv") or name.endswith(".xlsx") or name.endswith(".xls")):
         for enc in ("utf-8-sig", "utf-8", "gbk"):
             try:
-                trial = pd.read_csv(BytesIO(content), encoding=enc)
+                trial = _pd().read_csv(BytesIO(content), encoding=enc)
                 if trial is not None and not trial.empty and len(trial.columns) >= 2:
                     df = trial
                     break
@@ -403,7 +412,7 @@ async def import_turnover_rate_historical(
         if df is None:
             for engine in ("openpyxl", "xlrd"):
                 try:
-                    df = pd.read_excel(BytesIO(content), engine=engine)
+                    df = _pd().read_excel(BytesIO(content), engine=engine)
                     break
                 except Exception as e:
                     parse_errors.append(f"probe-excel({engine}): {e}")
@@ -413,9 +422,9 @@ async def import_turnover_rate_historical(
             try:
                 txt = content.decode(enc, errors="strict")
                 if "\t" in txt:
-                    trial = pd.read_csv(StringIO(txt), sep="\t")
+                    trial = _pd().read_csv(StringIO(txt), sep="\t")
                 else:
-                    trial = pd.read_csv(StringIO(txt), sep=None, engine="python")
+                    trial = _pd().read_csv(StringIO(txt), sep=None, engine="python")
                 if trial is not None and not trial.empty and len(trial.columns) >= 2:
                     df = trial
                     break
@@ -425,7 +434,7 @@ async def import_turnover_rate_historical(
     if df is None:
         for enc in ("utf-8", "gbk", "gb18030"):
             try:
-                html_tables = pd.read_html(BytesIO(content), encoding=enc)
+                html_tables = _pd().read_html(BytesIO(content), encoding=enc)
                 if html_tables:
                     df = html_tables[0]
                     break
@@ -571,9 +580,9 @@ async def download_turnover_import_template(
             headers={"Content-Disposition": "attachment; filename=turnover_rate_import_template.csv"},
         )
 
-    df = pd.DataFrame(sample, columns=cols)
+    df = _pd().DataFrame(sample, columns=cols)
     bio = BytesIO()
-    with pd.ExcelWriter(bio, engine="openpyxl") as writer:
+    with _pd().ExcelWriter(bio, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="template")
     bio.seek(0)
     return StreamingResponse(
@@ -1534,7 +1543,7 @@ async def export_quote_data(
     quotes = query.order_by(desc(QuoteData.trade_date)).all()
     
     # 转换为DataFrame
-    df = pd.DataFrame([{
+    df = _pd().DataFrame([{
         "股票代码": q.stock_code,
         "股票名称": q.stock_name,
         "最新价": q.last_price,
@@ -1557,7 +1566,7 @@ async def export_quote_data(
     filepath = output_dir / filename
     
     # 保存为Excel
-    with pd.ExcelWriter(filepath, engine="openpyxl") as writer:
+    with _pd().ExcelWriter(filepath, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="行情数据")
         
         # 调整列宽

@@ -3,18 +3,39 @@
 提供港股实时行情数据查询服务
 """
 
+from __future__ import annotations
+
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import JSONResponse
 from backend_api.database import get_db
 from sqlalchemy.orm import Session
 import traceback
-import numpy as np
-import pandas as pd
-import akshare as ak
+
+def _ak():
+    import akshare as ak
+    return ak
+
+
+class _LazyMod:
+    def __init__(self, name: str):
+        self._name = name
+        self._mod = None
+
+    def _load(self):
+        if self._mod is None:
+            self._mod = __import__(self._name)
+        return self._mod
+
+    def __getattr__(self, item: str):
+        return getattr(self._load(), item)
+
+
+pd = _LazyMod("pandas")
+np = _LazyMod("numpy")
+
 from sqlalchemy import text, create_engine, func
 from backend_api.models import StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
 from backend_api.stock.stock_manage import MA_MARKET_TYPES_HK, _normalize_indicator_date
-from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
 import datetime
 
 # 创建两个路由器：一个用于旧的接口（保持原路径），一个用于新的港股详情页接口
@@ -374,8 +395,7 @@ async def get_hk_realtime_quote_by_code(code: str = Query(None, description="股
         # 4. 彻底没数据时的兜底 logic (可选是否保留 AK)
         print(f"[hk_realtime_quote_by_code] 数据库中未找到股票代码: {code}，尝试AK保底")
         try:
-            import akshare as ak
-            df_hk_spot = ak.stock_hk_spot_em()
+            df_hk_spot = _ak().stock_hk_spot_em()
             stock_data = df_hk_spot[df_hk_spot['代码'] == code]
             if not stock_data.empty:
                 row = stock_data.iloc[0]
@@ -430,7 +450,7 @@ async def get_hk_minute_data_by_code(code: str = Query(None, description="股票
         # 获取最近几天的分钟数据（确保能获取到当日数据）
         # 使用1分钟周期
         try:
-            df = ak.stock_hk_hist_min_em(symbol=code, period="1", start_date=today_str, end_date=today_str, adjust="")
+            df = _ak().stock_hk_hist_min_em(symbol=code, period="1", start_date=today_str, end_date=today_str, adjust="")
             
             if df is None or df.empty:
                 # 如果当日没有数据，尝试获取最近一个交易日的数据
@@ -438,7 +458,7 @@ async def get_hk_minute_data_by_code(code: str = Query(None, description="股票
                 for i in range(1, 6):
                     prev_date = (today - datetime.timedelta(days=i)).strftime('%Y%m%d')
                     try:
-                        df = ak.stock_hk_hist_min_em(symbol=code, period="1", start_date=prev_date, end_date=prev_date, adjust="")
+                        df = _ak().stock_hk_hist_min_em(symbol=code, period="1", start_date=prev_date, end_date=prev_date, adjust="")
                         if df is not None and not df.empty:
                             print(f"[hk_minute_data_by_code] 使用日期 {prev_date} 的数据")
                             break
@@ -906,6 +926,7 @@ async def get_hk_kline_hist(
                     'amount': 'sum'
                 })
             elif period in ('quarterly', 'semiannual', 'annual'):
+                from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
                 resampled = resample_ohlcv_to_period_ends(
                     df, period, columns=('open', 'high', 'low', 'close', 'volume', 'amount')
                 )
@@ -1013,7 +1034,7 @@ async def get_hk_kline_min_hist(
         print(f"[hk_kline_min_hist] 调用akshare: symbol={code}, period={period}, start_date={start_date}, end_date={end_date}")
         
         # 调用akshare接口
-        df = ak.stock_hk_hist_min_em(symbol=code, period=period, start_date=start_date, end_date=end_date, adjust=adjust)
+        df = _ak().stock_hk_hist_min_em(symbol=code, period=period, start_date=start_date, end_date=end_date, adjust=adjust)
         
         if df is None or df.empty:
             print(f"[hk_kline_min_hist] 未找到股票代码: {code}")

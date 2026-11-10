@@ -8,10 +8,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import Optional
 from backend_api.database import get_db
-from backend_api.utils.turnover_backfill import backfill_missing_turnover_a_share
 from fastapi.responses import JSONResponse, Response
 import logging
-import pandas as pd
 import io
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
@@ -131,6 +129,7 @@ def get_historical_quotes_multi_period(
 
         if period == "daily" and fill_turnover and data:
             try:
+                from backend_api.utils.turnover_backfill import backfill_missing_turnover_a_share
                 backfill_missing_turnover_a_share(data, db, start_date=start_date, end_date=end_date)
             except Exception as ex:
                 logger.warning("multi-period 日线换手率回填失败: %s", ex)
@@ -195,6 +194,8 @@ def export_historical_quotes(
         result = db.execute(data_query, params)
         rows = result.fetchall()
         
+        import pandas as pd
+
         df = pd.DataFrame(rows, columns=['code', 'name', 'date', 'open', 'high', 'low', 'close', 'pre_close', 'volume', 'amount', 'change_percent', 'turnover_rate'])
         
         if format == 'xlsx':

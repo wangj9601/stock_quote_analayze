@@ -28,15 +28,19 @@ async function loadRealData() {
     console.log('开始加载真实数据...');
     
     try {
-        // 并行加载所有数据
-        await Promise.all([
-            loadMarketIndices(),
+        // 首屏优先：指数先出；其余并行，不互相阻塞首屏
+        const critical = loadMarketIndices().catch((e) => {
+            console.error('指数加载失败:', e);
+        });
+        const deferred = Promise.allSettled([
             loadWatchlist(),
             loadSectors(),
             loadGainers(),
             loadNews(),
-            loadUserInfo()
+            loadUserInfo(),
         ]);
+        await critical;
+        await deferred;
         
         console.log('所有数据加载完成');
     } catch (error) {

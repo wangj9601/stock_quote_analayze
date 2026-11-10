@@ -12,6 +12,11 @@ from sqlalchemy.pool import StaticPool
 from backend_api.auth import get_current_admin
 from backend_api.database import get_db
 from backend_api.env_sync.auth import hash_sync_key, verify_sync_key
+from backend_api.env_sync.config_store import (
+    add_server_key,
+    delete_server_key,
+    get_server_config_public,
+)
 from backend_api.env_sync.gateway_routes import router as gateway_router
 from backend_api.env_sync.admin_routes import router as admin_router
 from backend_api.env_sync.services.strategy_configs import (
@@ -22,6 +27,7 @@ from backend_api.env_sync.services.trade_observe import import_trade_observe
 from backend_api.models import (
     Base,
     EnvSyncServerConfig,
+    EnvSyncServerKey,
     GMSStrategyConfig,
     UrtTradeObserveStock,
     User,
@@ -1107,6 +1113,27 @@ def test_verify_sync_key_hash(db):
     assert verify_sync_key(db, "") is False
 
 
+def test_verify_multiple_server_keys(db):
+    db.add(EnvSyncServerConfig(id=1, enabled=True, updated_at=datetime.now()))
+    db.commit()
+    out1 = add_server_key(db, label="dev", sync_key="multi-key-one")
+    out2 = add_server_key(db, label="office", sync_key="multi-key-two")
+    assert out1["key"]["label"] == "dev"
+    assert out2["key"]["label"] == "office"
+    assert verify_sync_key(db, "multi-key-one") is True
+    assert verify_sync_key(db, "multi-key-two") is True
+    assert verify_sync_key(db, "multi-key-other") is False
+
+    pub = get_server_config_public(db)
+    assert pub["key_count"] == 2
+    assert len(pub["keys"]) == 2
+
+    delete_server_key(db, out1["key"]["id"])
+    assert verify_sync_key(db, "multi-key-one") is False
+    assert verify_sync_key(db, "multi-key-two") is True
+    assert db.query(EnvSyncServerKey).count() == 1
+
+
 def test_gateway_requires_key(db):
     app = FastAPI()
     app.include_router(gateway_router)
@@ -1137,6 +1164,13 @@ def test_gateway_requires_key(db):
     )
     assert res2.status_code == 200
     assert res2.json()["success"] is True
+
+    add_server_key(db, label="second", sync_key="k2")
+    res3 = client.get(
+        "/api/env-sync/v1/health",
+        headers={"X-Env-Sync-Key": "k2"},
+    )
+    assert res3.status_code == 200
 
 
 def test_strategy_import_by_name(db):

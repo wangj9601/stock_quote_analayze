@@ -24,6 +24,14 @@
     }
 
     async function boot() {
+        if (typeof ensureEchartsLoaded === 'function') {
+            try {
+                await ensureEchartsLoaded();
+            } catch (e) {
+                console.error('echarts 加载失败', e);
+            }
+        }
+
         const q = parseQuery();
         const code = String(q.get('board_code') || '').trim();
         const kind = kindFromQuery(q);

@@ -3,23 +3,12 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from backend_api.database import get_db
-from backend_api.utils.turnover_backfill import (
-    backfill_missing_turnover_a_share,
-    backfill_missing_turnover_hk,
-)
 from typing import List, Optional
 import io
 import csv
 from sqlalchemy import text
 from datetime import datetime
 from pydantic import BaseModel
-
-# 新增依赖
-import pandas as pd
-from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font, PatternFill
-from openpyxl import Workbook
-from openpyxl.styles.alignment import Alignment
 
 router = APIRouter(prefix="/api/stock/history", tags=["StockHistory"])
 
@@ -333,6 +322,10 @@ def get_stock_history(
     ]
     if need_fill_items:
         try:
+            from backend_api.utils.turnover_backfill import (
+                backfill_missing_turnover_a_share,
+                backfill_missing_turnover_hk,
+            )
             if is_hk_data:
                 backfill_missing_turnover_hk(
                     items, db, start_date=start_date_fmt, end_date=end_date_fmt
@@ -673,6 +666,11 @@ def export_to_text(rows, include_notes, has_notes_data, code):
 
 def export_to_excel(rows, include_notes, has_notes_data, code):
     """导出为Excel格式，支持颜色效果"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    from openpyxl.styles.alignment import Alignment
+    from openpyxl.utils import get_column_letter
+
     # 数据格式化函数
     def format_volume_text(volume):
         """格式化成交量为文本：超过亿以亿为单位，其他值以万为单位，2位小数，四舍五入"""

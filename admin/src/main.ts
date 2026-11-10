@@ -3,12 +3,6 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
-import '@fontsource/noto-sans-sc/latin-400.css'
-import '@fontsource/noto-sans-sc/latin-700.css'
-import '@fontsource/noto-sans-sc/chinese-simplified-400.css'
-import '@fontsource/noto-sans-sc/chinese-simplified-600.css'
-import '@fontsource/noto-sans-sc/chinese-simplified-700.css'
 import './style.css'
 import './archive-theme.css'
 
@@ -17,10 +11,7 @@ import router from './router'
 
 const app = createApp(App)
 
-// 注册所有图标
-for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-  app.component(key, component)
-}
+// 图标由各页面/组件按需 import，不再全量注册（可显著减小首包）
 
 app.use(createPinia())
 app.use(router)

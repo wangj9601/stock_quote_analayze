@@ -5,12 +5,16 @@ from sqlalchemy.orm import Session
 from typing import Any, Dict, List, Optional, Tuple
 import logging
 
+
+def StockAnalysisService(*args, **kwargs):
+    from .stock_analysis import StockAnalysisService as _Cls
+    return _Cls(*args, **kwargs)
+
 try:
     from backend_api.database import get_db
 except ImportError:  # 仅 backend_api 在 sys.path 上时
     from database import get_db  # type: ignore
 
-from .stock_analysis import StockAnalysisService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/analysis", tags=["智能分析"])

@@ -4,6 +4,8 @@
 历史数据采集API服务
 """
 
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, File, UploadFile, Form, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
@@ -14,10 +16,30 @@ import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import threading
-import akshare as ak
-import pandas as pd
 import time
 import random
+
+
+def _ak():
+    import akshare as ak
+    return ak
+
+
+class _LazyMod:
+    def __init__(self, name: str):
+        self._name = name
+        self._mod = None
+
+    def _load(self):
+        if self._mod is None:
+            self._mod = __import__(self._name)
+        return self._mod
+
+    def __getattr__(self, item: str):
+        return getattr(self._load(), item)
+
+
+pd = _LazyMod("pandas")
 
 from backend_api.database import get_db
 from backend_api.models import (
@@ -31,11 +53,6 @@ from backend_api.models import (
     FileHistoricalCollectionRequest,
     HKFileHistoricalCollectionRequest,
 )
-from backend_core.utils.ma_calculator import MACalculator
-from backend_core.utils.mavol_calculator import MAVOLCalculator
-from backend_core.utils.kdj_calculator import KDJCalculator
-from backend_core.utils.rsi_calculator import RSICalculator
-from backend_core.utils.boll_calculator import BOLLCalculator
 from sqlalchemy import text, bindparam
 
 router = APIRouter(prefix="/api/data-collection", tags=["数据采集"])
@@ -308,7 +325,7 @@ class AkshareDataCollector:
             if count < 100: # 如果数据太少，尝试重新获取
                 logger.info("港股基础信息表数据过少，尝试从AkShare获取最新列表...")
                 try:
-                    df = ak.stock_hk_spot()
+                    df = _ak().stock_hk_spot()
                     if df is not None and not df.empty:
                         # akshare返回列: symbol, name, ...
                         for _, row in df.iterrows():
@@ -422,7 +439,6 @@ class AkshareDataCollector:
     def get_non_holiday_date_range(self, market: str, start_date: str, end_date: str) -> List[str]:
         """返回 start_date ~ end_date 之间排除节假日后的日期列表"""
         self._load_holidays()
-        import pandas as pd
         dates = pd.date_range(start=start_date, end=end_date, freq='B')  # 仅工作日
         result = []
         holidays = self._holiday_cache.get(market, set())
@@ -457,7 +473,7 @@ class AkshareDataCollector:
             last_em_error = None
             for attempt in range(max_retries):
                 try:
-                    df = ak.stock_zh_a_hist(
+                    df = _ak().stock_zh_a_hist(
                         symbol=stock_code,
                         period='daily',
                         start_date=start_ymd,
@@ -484,7 +500,7 @@ class AkshareDataCollector:
                     else:
                         sina_symbol = "bj" + stock_code
 
-                    daily_df = ak.stock_zh_a_daily(
+                    daily_df = _ak().stock_zh_a_daily(
                         symbol=sina_symbol,
                         start_date=start_ymd,
                         end_date=end_ymd,
@@ -937,6 +953,7 @@ class AkshareDataCollector:
     def _generate_ma_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成MA指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
+            from backend_core.utils.ma_calculator import MACalculator
             ma_calc = MACalculator()
             ma_df = ma_calc.calculate_ma_for_dataframe(df)
             for _, row in ma_df.iterrows():
@@ -971,6 +988,7 @@ class AkshareDataCollector:
     def _generate_mavol_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成MAVOL指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
+            from backend_core.utils.mavol_calculator import MAVOLCalculator
             mavol_calc = MAVOLCalculator()
             mavol_df = mavol_calc.calculate_mavol_for_dataframe(df)
             for _, row in mavol_df.iterrows():
@@ -1033,6 +1051,7 @@ class AkshareDataCollector:
     def _generate_kdj_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成KDJ指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
+            from backend_core.utils.kdj_calculator import KDJCalculator
             kdj_calc = KDJCalculator()
             kdj_data = kdj_calc.calculate_kdj_batch(df['close'].tolist(), df['high'].tolist(), df['low'].tolist())
             for i, (_, row) in enumerate(df.iterrows()):
@@ -1059,6 +1078,7 @@ class AkshareDataCollector:
     def _generate_rsi_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成RSI指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
+            from backend_core.utils.rsi_calculator import RSICalculator
             rsi_calc = RSICalculator()
             rsi_data = rsi_calc.calculate_rsi_batch(df['close'].tolist())
             for i, (_, row) in enumerate(df.iterrows()):
@@ -1085,6 +1105,7 @@ class AkshareDataCollector:
     def _generate_boll_indicators(self, stock_code: str, df: pd.DataFrame, do_commit: bool = True, only_dates: Optional[set] = None, market_type: str = 'CN'):
         """生成BOLL指标。do_commit=False 时由调用方批量提交。only_dates 非空时仅写入这些日期（增量）。"""
         try:
+            from backend_core.utils.boll_calculator import BOLLCalculator
             boll_calc = BOLLCalculator()
             boll_data = boll_calc.calculate_boll_batch(df['close'].tolist())
             for i, (_, row) in enumerate(df.iterrows()):
@@ -1353,7 +1374,7 @@ class AkshareDataCollector:
                 max_retries = 3
                 for attempt in range(max_retries):
                     try:
-                        df = ak.stock_hk_hist(
+                        df = _ak().stock_hk_hist(
                             symbol=stock_code,
                             period='daily',
                             start_date=start_date_str,
@@ -1381,7 +1402,7 @@ class AkshareDataCollector:
                 source = 'akshare_sina'
                 try:
                     # 2. 尝试使用 stock_hk_daily (Sina)
-                    df = ak.stock_hk_daily(symbol=stock_code, adjust="")
+                    df = _ak().stock_hk_daily(symbol=stock_code, adjust="")
                     
                     if df is not None and not df.empty:
                         # Sina返回: date, open, high, low, close, volume
@@ -1879,7 +1900,6 @@ class AkshareDataCollector:
         5天、10天、30天、60天涨跌百分比。
         """
         try:
-            import pandas as pd
 
             start = pd.to_datetime(start_date)
             end = pd.to_datetime(end_date)
@@ -2107,7 +2127,6 @@ def run_file_historical_collection_task(
         
         try:
             # 文件采集按天循环
-            import pandas as pd
             start = pd.to_datetime(start_date)
             end = pd.to_datetime(end_date)
             date_range = pd.date_range(start, end)
@@ -2223,7 +2242,6 @@ def run_hk_file_historical_collection_task(
         
         try:
             # 文件采集按天循环
-            import pandas as pd
             start = pd.to_datetime(start_date)
             end = pd.to_datetime(end_date)
             date_range = pd.date_range(start, end)
@@ -3172,7 +3190,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                         
                         # 尝试第一个接口
                         try:
-                            df = ak.stock_hk_spot_em()
+                            df = _ak().stock_hk_spot_em()
                             logger.info(f"使用 stock_hk_spot_em 接口获取数据")
                             if not hk_realtime_spot_insufficient(df):
                                 break
@@ -3187,7 +3205,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                         # 如果第一个接口失败或条数不足，尝试第二个接口
                         if hk_realtime_spot_insufficient(df):
                             try:
-                                df = ak.stock_hk_spot()
+                                df = _ak().stock_hk_spot()
                                 logger.info(f"使用 stock_hk_spot 接口获取数据")
                                 if not hk_realtime_spot_insufficient(df):
                                     break
@@ -3411,7 +3429,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                         
                         # 优先新浪财经
                         try:
-                            df = ak.stock_zh_a_spot()
+                            df = _ak().stock_zh_a_spot()
                             data_source = 'sina'
                             logger.info(f"使用 stock_zh_a_spot 接口获取数据")
                             if df is not None and not df.empty:
@@ -3422,7 +3440,7 @@ def run_realtime_collection_task(task_id: str, market: str, stock_code: Optional
                         # 新浪失败或为空时，切换东方财富
                         if df is None or df.empty:
                             try:
-                                df = ak.stock_zh_a_spot_em()
+                                df = _ak().stock_zh_a_spot_em()
                                 data_source = 'em'
                                 logger.info(f"使用 stock_zh_a_spot_em 接口获取数据")
                                 if df is not None and not df.empty:
@@ -3782,7 +3800,6 @@ class TushareDataCollector:
             采集结果
         """
         try:
-            import pandas as pd
             
             # 检查已存在的数据
             if not force_update:

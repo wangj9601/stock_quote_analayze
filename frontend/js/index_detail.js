@@ -19,6 +19,14 @@
             const hidden = document.getElementById('isaIndexCode');
             if (hidden) hidden.value = this.code;
 
+            if (typeof ensureEchartsLoaded === 'function') {
+                try {
+                    await ensureEchartsLoaded();
+                } catch (e) {
+                    console.error('echarts 加载失败', e);
+                }
+            }
+
             await this.loadHeader();
             await this.loadChart();
             // 按钮由 IndexAnalysis.init 绑定（读 #isaIndexCode）

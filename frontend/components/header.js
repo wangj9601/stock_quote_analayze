@@ -39,9 +39,18 @@ async function fetchWithRetry(url, { retries = 3, baseDelayMs = 250 } = {}) {
 
 async function loadPermissionEngine() {
     try {
-        await loadScript('js/permission-registry.js');
-        await loadScript('js/permission.js');
+        // 先并行预取 registry，再加载 engine（engine 依赖 registry 数据，脚本本身可并行下载）
+        const registryP = loadScript('js/permission-registry.js');
+        const engineP = loadScript('js/permission.js');
+        await Promise.all([registryP, engineP]);
         if (window.PermissionEngine) {
+            // 先用本地缓存权限渲染，再后台刷新
+            if (typeof PermissionEngine.loadFromCache === 'function') {
+                PermissionEngine.loadFromCache();
+                if (typeof PermissionEngine.applyToPage === 'function') {
+                    PermissionEngine.applyToPage();
+                }
+            }
             await PermissionEngine.init();
             if (typeof PermissionEngine.decorateStrategyTabs === 'function') {
                 PermissionEngine.decorateStrategyTabs();

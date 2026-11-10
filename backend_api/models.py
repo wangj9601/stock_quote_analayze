@@ -2663,7 +2663,10 @@ class RPETraceRecomputeTask(Base):
 # ========== 环境数据同步 ==========
 
 class EnvSyncServerConfig(Base):
-    """生产端 Sync Key（单行 id=1）：仅存哈希，用于校验对端请求。"""
+    """生产端 Sync Key 总开关（单行 id=1）。
+
+    历史字段 sync_key_hash/key_hint 仍保留作兼容；正式多 Key 存 env_sync_server_keys。
+    """
 
     __tablename__ = "env_sync_server_config"
 
@@ -2671,6 +2674,20 @@ class EnvSyncServerConfig(Base):
     enabled = Column(Boolean, nullable=False, default=False)
     sync_key_hash = Column(String(128), nullable=True)
     key_hint = Column(String(16), nullable=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+
+class EnvSyncServerKey(Base):
+    """生产端 Sync Key 列表：仅存哈希，支持多把并行校验。"""
+
+    __tablename__ = "env_sync_server_keys"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    label = Column(String(100), nullable=False, default="")
+    sync_key_hash = Column(String(128), nullable=False)
+    key_hint = Column(String(16), nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 

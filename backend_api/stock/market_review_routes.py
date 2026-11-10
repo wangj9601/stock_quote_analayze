@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from urllib.parse import quote
 
 from backend_api.database import get_db
-from backend_core.data_collectors.akshare.zt_pool_em import collect_zt_pool_em
 from backend_core.market_review.compute import (
     build_review_snapshot,
     get_review_snapshot,
@@ -35,6 +34,11 @@ from backend_core.market_review.period_render import (
 )
 
 router = APIRouter(prefix="/api/market_review", tags=["market_review"])
+
+
+def collect_zt_pool_em(*args, **kwargs):
+    from backend_core.data_collectors.akshare.zt_pool_em import collect_zt_pool_em as _fn
+    return _fn(*args, **kwargs)
 
 
 class ReviewTextBody(BaseModel):

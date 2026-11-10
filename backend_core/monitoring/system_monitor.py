@@ -4,16 +4,17 @@
 """
 
 import logging
+import os
 import psutil
 import threading
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Any, Callable
+from typing import List, Dict, Optional, Any, Callable, Tuple
 from sqlalchemy import func, desc, and_, text
 from dataclasses import dataclass
 from enum import Enum
 
-from backend_api.database import SessionLocal
+from backend_api.database import SessionLocal, engine
 from backend_api.models import (
     SystemAlert, 
     SystemMonitorMetric, 
@@ -21,6 +22,11 @@ from backend_api.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+# PostgreSQL advisory lock：多 worker 时仅一个进程跑后台监控
+_MONITOR_ADVISORY_LOCK_KEY = 874512301
+_MONITOR_INITIAL_DELAY_SEC = int(os.getenv("SYSTEM_MONITOR_INITIAL_DELAY_SEC", "60") or "60")
+_MONITOR_INTERVAL_SEC = int(os.getenv("SYSTEM_MONITOR_INTERVAL_SEC", "1800") or "1800")
 
 class AlertLevel(Enum):
     """告警级别"""
@@ -77,6 +83,7 @@ class SystemMonitor:
             self.monitor_thread = None
             self.alert_rules: Dict[str, AlertRule] = {}
             self.metric_callbacks: Dict[str, List[Callable]] = {}
+            self._leader_conn = None  # 持有 PG advisory lock 的专用连接
             self._init_default_rules()
             logger.info("系统监控服务单例初始化")
 
@@ -129,53 +136,115 @@ class SystemMonitor:
         for rule in default_rules:
             self.alert_rules[rule.name] = rule
 
+    def _monitor_disabled_by_env(self) -> bool:
+        v = (os.getenv("DISABLE_SYSTEM_MONITOR") or "").strip().lower()
+        return v in ("1", "true", "yes", "on")
+
+    def _try_claim_monitor_leader(self) -> bool:
+        """多 worker 时用 PG advisory lock 争抢唯一监控领导权。
+
+        锁绑在数据库 session 上，必须单独占住一条连接直到进程退出；
+        不可用连接池短会话，否则归还连接后锁语义混乱。
+        """
+        if self._leader_conn is not None:
+            return True
+        try:
+            conn = engine.raw_connection()
+            cur = conn.cursor()
+            try:
+                cur.execute(
+                    "SELECT pg_try_advisory_lock(%s)",
+                    (_MONITOR_ADVISORY_LOCK_KEY,),
+                )
+                claimed = bool(cur.fetchone()[0])
+            finally:
+                cur.close()
+            if claimed:
+                self._leader_conn = conn
+                return True
+            conn.close()
+            return False
+        except Exception as e:
+            # 非 PG / 连不上时：宁可不跑也不要多 worker 一起打库
+            logger.warning("系统监控 leadership 争抢失败，本进程跳过监控: %s", e)
+            return False
+
     def start_background_monitoring(self):
-        """启动后台监控线程"""
+        """启动后台监控线程（仅一个进程；启动后先延时再首次采集）。"""
         if self.monitor_thread and self.monitor_thread.is_alive():
             return
-        
+        if self._monitor_disabled_by_env():
+            logger.info("已设置 DISABLE_SYSTEM_MONITOR，跳过系统后台监控")
+            return
+        if not self._try_claim_monitor_leader():
+            logger.info("其它 worker 已持有系统监控锁，本进程跳过")
+            return
+
         self.stop_event.clear()
         self.monitor_thread = threading.Thread(target=self._monitoring_loop, daemon=True)
         self.monitor_thread.start()
-        logger.info("系统后台监控线程已启动")
+        logger.info(
+            "系统后台监控线程已启动（首次采集延时 %ss，周期 %ss）",
+            _MONITOR_INITIAL_DELAY_SEC,
+            _MONITOR_INTERVAL_SEC,
+        )
 
     def stop_background_monitoring(self):
         """停止后台监控线程"""
         self.stop_event.set()
         if self.monitor_thread:
             self.monitor_thread.join(timeout=5)
+        if self._leader_conn is not None:
+            try:
+                self._leader_conn.close()
+            except Exception:
+                pass
+            self._leader_conn = None
         logger.info("系统后台监控线程已停止")
+
+    def _sleep_interruptible(self, seconds: int) -> None:
+        for _ in range(max(0, int(seconds))):
+            if self.stop_event.is_set():
+                break
+            time.sleep(1)
 
     def _monitoring_loop(self):
         """核心监控循环"""
+        # 让 API 先就绪，避免启动瞬间扫全库 + 数百次 commit
+        self._sleep_interruptible(_MONITOR_INITIAL_DELAY_SEC)
         while not self.stop_event.is_set():
             try:
                 # 1. 采集系统指标
                 system_metrics = self._collect_system_metrics()
-                
-                # 2. 记录指标
-                for metric_name, value in system_metrics.items():
-                    self.record_metric(metric_name, value)
-                
+
+                # 2. 批量记录指标（单事务）
+                batch: List[Tuple[str, float, Optional[Dict]]] = [
+                    (metric_name, value, None) for metric_name, value in system_metrics.items()
+                ]
+
                 # 3. 检查告警规则
                 self._check_alert_rules(system_metrics)
-                
+
                 # 4. 采集数据库指标
                 db_metrics = self._collect_database_metrics()
                 for table_name, metrics in db_metrics.items():
-                    self.record_metric(f"db_table_size_{table_name}", metrics['table_size_mb'], {"unit": "MB", "type": "table"})
-                    self.record_metric(f"db_index_size_{table_name}", metrics['index_size_mb'], {"unit": "MB", "type": "index"})
-                    self.record_metric(f"db_total_size_{table_name}", metrics['total_size_mb'], {"unit": "MB", "type": "total"})
-                
+                    batch.append(
+                        (f"db_table_size_{table_name}", metrics["table_size_mb"], {"unit": "MB", "type": "table"})
+                    )
+                    batch.append(
+                        (f"db_index_size_{table_name}", metrics["index_size_mb"], {"unit": "MB", "type": "index"})
+                    )
+                    batch.append(
+                        (f"db_total_size_{table_name}", metrics["total_size_mb"], {"unit": "MB", "type": "total"})
+                    )
+
+                self.record_metrics_batch(batch)
+
                 # 5. 更新服务状态
                 self._update_service_status()
-                
-                # 休眠30分钟 (1800秒)
-                for _ in range(1800):
-                    if self.stop_event.is_set():
-                        break
-                    time.sleep(1)
-                    
+
+                self._sleep_interruptible(_MONITOR_INTERVAL_SEC)
+
             except Exception as e:
                 logger.error(f"监控循环异常: {e}")
                 time.sleep(10)
@@ -185,8 +254,8 @@ class SystemMonitor:
         try:
             metrics = {}
             
-            # CPU指标
-            metrics['cpu_usage'] = psutil.cpu_percent(interval=1)
+            # CPU指标：非阻塞；阻塞 1s 会拖慢启动后首轮采集
+            metrics['cpu_usage'] = psutil.cpu_percent(interval=None)
             metrics['cpu_count'] = psutil.cpu_count()
             
             # 内存指标
@@ -538,28 +607,36 @@ class SystemMonitor:
             return {"error": str(e)}
 
     def record_metric(self, name: str, value: float, tags: Optional[Dict] = None):
-        """记录监控指标"""
+        """记录单条监控指标（兼容旧调用）。"""
+        self.record_metrics_batch([(name, value, tags)])
+
+    def record_metrics_batch(self, items: List[Tuple[str, float, Optional[Dict]]]) -> None:
+        """批量写入监控指标，避免每张表三次独立 commit。"""
+        if not items:
+            return
         try:
+            now = datetime.now()
             with SessionLocal() as db:
-                metric = SystemMonitorMetric(
-                    metric_name=name,
-                    metric_value=value,
-                    tags=tags,
-                    timestamp=datetime.now()
-                )
-                db.add(metric)
+                for name, value, tags in items:
+                    db.add(
+                        SystemMonitorMetric(
+                            metric_name=name,
+                            metric_value=value,
+                            tags=tags,
+                            timestamp=now,
+                        )
+                    )
                 db.commit()
-                
-                # 触发回调
+
+            for name, value, tags in items:
                 if name in self.metric_callbacks:
                     for callback in self.metric_callbacks[name]:
                         try:
                             callback(name, value, tags)
                         except Exception as e:
                             logger.error(f"指标回调执行失败: {e}")
-                            
         except Exception as e:
-            logger.error(f"记录指标失败 {name}: {e}")
+            logger.error(f"批量记录指标失败 ({len(items)} 条): {e}")
 
     def add_alert(self, level: str, title: str, message: str, 
                   alert_type: str = "system", source: str = "monitor", 

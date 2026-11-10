@@ -83,6 +83,42 @@ _CLIENT_DISCONNECT_ERRORS = (
 )
 
 
+# 生产可缓存的静态扩展名（HTML 除外；带 ?v= 或发版替换文件名即可刷新）
+_STATIC_CACHE_EXT = {
+    ".js",
+    ".css",
+    ".mjs",
+    ".map",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".otf",
+    ".eot",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".svg",
+    ".webp",
+    ".ico",
+}
+
+
+def cache_control_for_path(path: str, *, production: bool) -> str:
+    """按路径决定 Cache-Control。生产：静态 7 天；HTML 协商缓存；开发：不缓存。"""
+    if not production:
+        return "no-store, no-cache, must-revalidate"
+    raw = (path or "/").split("?", 1)[0]
+    if raw.endswith("/"):
+        return "no-cache"
+    ext = Path(raw).suffix.lower()
+    if ext in (".html", ".htm") or ext == "":
+        return "no-cache"
+    if ext in _STATIC_CACHE_EXT:
+        return "public, max-age=604800"
+    return "no-cache"
+
+
 class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
     """自定义HTTP请求处理器"""
 
@@ -114,7 +150,11 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
         super().do_GET()
 
     def end_headers(self):
-        self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+        path = urllib.parse.urlparse(self.path).path
+        self.send_header(
+            "Cache-Control",
+            cache_control_for_path(path, production=is_production_env()),
+        )
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")

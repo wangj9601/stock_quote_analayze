@@ -39,13 +39,57 @@ class EnvSyncApiService {
   }
 
   getServerConfig() {
-    return this.request(`${PREFIX}/server-config`)
+    return this.request<{
+      enabled: boolean
+      has_key: boolean
+      key_hint?: string
+      key_count?: number
+      keys?: Array<{
+        id: number
+        label: string
+        key_hint: string
+        enabled: boolean
+        created_at?: string | null
+      }>
+      updated_at?: string | null
+      env_fallback?: boolean
+    }>(`${PREFIX}/server-config`)
   }
 
   updateServerConfig(body: { enabled?: boolean; sync_key?: string; rotate?: boolean }) {
     return this.request(`${PREFIX}/server-config`, {
       method: 'POST',
       body: JSON.stringify(body),
+    })
+  }
+
+  listServerKeys() {
+    return this.request<{ keys: Array<any>; config: any }>(`${PREFIX}/server-keys`)
+  }
+
+  createServerKey(body: { label?: string; sync_key?: string }) {
+    return this.request<{
+      sync_key: string
+      key_hint?: string
+      key?: any
+      message?: string
+      config?: any
+    }>(`${PREFIX}/server-keys`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  }
+
+  updateServerKey(keyId: number, body: { label?: string; enabled?: boolean }) {
+    return this.request(`${PREFIX}/server-keys/${keyId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    })
+  }
+
+  deleteServerKey(keyId: number) {
+    return this.request(`${PREFIX}/server-keys/${keyId}`, {
+      method: 'DELETE',
     })
   }
 

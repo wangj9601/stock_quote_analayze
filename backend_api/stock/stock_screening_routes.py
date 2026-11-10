@@ -62,12 +62,7 @@ from backend_api.models import Watchlist, TokenData
 
 from backend_api.database import get_db, SessionLocal
 from backend_api.models import MeanFrequencyResonanceIndicators
-from .stock_screening import StockScreeningStrategy
-from .high_tight_flag_strategy import HighTightFlagStrategy
-from .keep_increasing_strategy import KeepIncreasingStrategy
-from .long_lower_shadow_strategy import LongLowerShadowStrategy
-from .low_nine_strategy import LowNineStrategy
-from .one_yang_three_lines_strategy import OneYangThreeLinesStrategy
+# 选股策略实现（pandas/numpy 重）改为各接口内按需导入，缩短启动时间
 
 logger = logging.getLogger(__name__)
 logger.info(
@@ -643,46 +638,88 @@ oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_er
 logger.info("stock_screening_routes.py 模块加载完成，开始注册路由...")
 print("[DEBUG] stock_screening_routes.py 模块加载完成")
 
-# 尝试导入PVFRS前端接口与配置
-try:
-    from backend_core.strategies.pvfrs.frontend_interface import create_frontend_interface
-    from backend_core.strategies.pvfrs.config import PVFRSConfigManager
-    from backend_core.strategies.pvfrs.pvfrs_system import PVFRSSystem
-    print(" DEBUG: PVFRS前端接口导入成功")
-    logger.info("PVFRS前端接口导入成功")
-    PVFRS_AVAILABLE = True
-except Exception as e:
-    print(f"🔧 DEBUG: PVFRS前端接口导入失败: {e}")
-    logger.error(f"PVFRS前端接口导入失败: {e}")
-    PVFRS_AVAILABLE = False
+# 策略前端接口改为首次请求时再导入，避免启动扫描整套策略/pandas 依赖
+create_frontend_interface = None
+PVFRSConfigManager = None
+PVFRSSystem = None
+PVFRS_AVAILABLE = None  # type: ignore[assignment]
 
-# 尝试导入 GMS 前端接口
-try:
-    from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
-    from backend_core.strategies.gms.config import GMSConfigManager as GMSConfigManagerCls
-    GMS_AVAILABLE = True
-except Exception as e:
-    print(f"GMS 前端接口导入失败: {e}")
-    logger.warning(f"GMS 前端接口导入失败: {e}")
-    GMS_AVAILABLE = False
+GMSFrontendInterface = None
+GMSConfigManagerCls = None
+GMS_AVAILABLE = None  # type: ignore[assignment]
 
-try:
-    from backend_core.strategies.volume_shrink_breakout import VolumeShrinkBreakoutFrontendInterface
+VolumeShrinkBreakoutFrontendInterface = None
+VSB_AVAILABLE = None  # type: ignore[assignment]
 
-    VSB_AVAILABLE = True
-except Exception as e:
-    VolumeShrinkBreakoutFrontendInterface = None  # type: ignore
-    VSB_AVAILABLE = False
-    logger.warning("VSB 策略模块导入失败: %s", e)
+URTFrontendInterface = None
+URT_AVAILABLE = None  # type: ignore[assignment]
 
-try:
-    from backend_core.strategies.urt import URTFrontendInterface
 
-    URT_AVAILABLE = True
-except Exception as e:
-    URTFrontendInterface = None  # type: ignore
-    URT_AVAILABLE = False
-    logger.warning("URT 策略模块导入失败: %s", e)
+def _ensure_pvfrs_imports() -> bool:
+    global create_frontend_interface, PVFRSConfigManager, PVFRSSystem, PVFRS_AVAILABLE
+    if PVFRS_AVAILABLE is not None:
+        return bool(PVFRS_AVAILABLE)
+    try:
+        from backend_core.strategies.pvfrs.frontend_interface import create_frontend_interface as _cfi
+        from backend_core.strategies.pvfrs.config import PVFRSConfigManager as _pcm
+        from backend_core.strategies.pvfrs.pvfrs_system import PVFRSSystem as _ps
+        create_frontend_interface = _cfi
+        PVFRSConfigManager = _pcm
+        PVFRSSystem = _ps
+        PVFRS_AVAILABLE = True
+        logger.info("PVFRS前端接口延迟导入成功")
+    except Exception as e:
+        logger.error("PVFRS前端接口延迟导入失败: %s", e)
+        PVFRS_AVAILABLE = False
+    return bool(PVFRS_AVAILABLE)
+
+
+def _ensure_gms_imports() -> bool:
+    global GMSFrontendInterface, GMSConfigManagerCls, GMS_AVAILABLE
+    if GMS_AVAILABLE is not None:
+        return bool(GMS_AVAILABLE)
+    try:
+        from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface as _gfi
+        from backend_core.strategies.gms.config import GMSConfigManager as _gcm
+        GMSFrontendInterface = _gfi
+        GMSConfigManagerCls = _gcm
+        GMS_AVAILABLE = True
+    except Exception as e:
+        logger.warning("GMS 前端接口延迟导入失败: %s", e)
+        GMS_AVAILABLE = False
+    return bool(GMS_AVAILABLE)
+
+
+def _ensure_vsb_imports() -> bool:
+    global VolumeShrinkBreakoutFrontendInterface, VSB_AVAILABLE
+    if VSB_AVAILABLE is not None:
+        return bool(VSB_AVAILABLE)
+    try:
+        from backend_core.strategies.volume_shrink_breakout import (
+            VolumeShrinkBreakoutFrontendInterface as _vsb,
+        )
+        VolumeShrinkBreakoutFrontendInterface = _vsb
+        VSB_AVAILABLE = True
+    except Exception as e:
+        VolumeShrinkBreakoutFrontendInterface = None
+        VSB_AVAILABLE = False
+        logger.warning("VSB 策略模块延迟导入失败: %s", e)
+    return bool(VSB_AVAILABLE)
+
+
+def _ensure_urt_imports() -> bool:
+    global URTFrontendInterface, URT_AVAILABLE
+    if URT_AVAILABLE is not None:
+        return bool(URT_AVAILABLE)
+    try:
+        from backend_core.strategies.urt import URTFrontendInterface as _urt
+        URTFrontendInterface = _urt
+        URT_AVAILABLE = True
+    except Exception as e:
+        URTFrontendInterface = None
+        URT_AVAILABLE = False
+        logger.warning("URT 策略模块延迟导入失败: %s", e)
+    return bool(URT_AVAILABLE)
 
 # PVFRS 策略参数（供选股界面显示与编辑）
 PVFRS_PARAM_KEYS = [
@@ -695,7 +732,7 @@ PVFRS_PARAM_KEYS = [
 @router.get("/pvfrs-params")
 async def get_pvfrs_params():
     """获取 PVFARS 选股策略参数（供前端显示与编辑）"""
-    if not PVFRS_AVAILABLE:
+    if not _ensure_pvfrs_imports():
         return JSONResponse(
             status_code=503,
             content={"success": False, "message": "PVFARS 暂不可用", "data": {}}
@@ -725,7 +762,7 @@ async def get_pvfrs_params():
 @router.post("/pvfrs-params")
 async def save_pvfrs_params(body: Dict[str, Any] = Body(...)):
     """保存 PVFARS 选股策略参数"""
-    if not PVFRS_AVAILABLE:
+    if not _ensure_pvfrs_imports():
         return JSONResponse(
             status_code=503,
             content={"success": False, "message": "PVFARS 暂不可用"}
@@ -765,7 +802,7 @@ async def get_pvfrs_strategy(
     logger.info(f"开始执行PVFARS策略选股 - 日期: {date or '当前'}, 限制: {limit}, 最低强度: {min_strength}")
     
     # 检查PVFRS是否可用
-    if not PVFRS_AVAILABLE:
+    if not _ensure_pvfrs_imports():
         logger.error("PVFRS前端接口不可用")
         return JSONResponse(
             status_code=503,
@@ -1285,7 +1322,7 @@ async def test_pvfrs():
     return JSONResponse({
         "success": True,
         "message": "PVFRS测试路由工作正常",
-        "pvfrs_available": PVFRS_AVAILABLE
+        "pvfrs_available": _ensure_pvfrs_imports()
     })
 
 
@@ -1556,7 +1593,7 @@ async def get_gms_strategy(
     数据来源由 scope 决定：watchlist=当前用户自选股；gms_watchlist=管理端 GMS 观察股表（启用版本且 status=active）；
     industry_board=指定行业板块成分股；concept_board=指定概念板块成分股；cn/hk/etf=全市场对应品种。
     """
-    if not GMS_AVAILABLE:
+    if not _ensure_gms_imports():
         return JSONResponse(
             status_code=503,
             content={"success": False, "message": "GMS策略暂不可用", "data": []},
@@ -2674,6 +2711,8 @@ async def get_cyb_midline_strategy(
     try:
         logger.info(f"开始执行创业板中线选股策略，查询月数: {months}")
         
+        from .stock_screening import StockScreeningStrategy
+
         # 执行选股策略
         results = StockScreeningStrategy.screening_cyb_midline_strategy(db, months=months)
         
@@ -2720,6 +2759,7 @@ async def get_parking_apron_strategy(
         logger.info("开始执行停机坪选股策略")
         
         # 执行选股策略
+        from .stock_screening import StockScreeningStrategy
         results = StockScreeningStrategy.screening_parking_apron_strategy(db)
         
         logger.info(f"停机坪选股策略执行完成，找到 {len(results)} 只符合条件的股票")
@@ -2765,6 +2805,7 @@ async def get_backtrace_ma250_strategy(
         logger.info("开始执行回踩年线选股策略")
         
         # 执行选股策略
+        from .stock_screening import StockScreeningStrategy
         results = StockScreeningStrategy.screening_backtrace_ma250_strategy(db)
         
         logger.info(f"回踩年线选股策略执行完成，找到 {len(results)} 只符合条件的股票")
@@ -2809,6 +2850,7 @@ async def get_high_tight_flag_strategy(
         logger.info("开始执行高而窄的旗形选股策略")
         
         # 执行选股策略
+        from .high_tight_flag_strategy import HighTightFlagStrategy
         results = HighTightFlagStrategy.screening_high_tight_flag_strategy(db)
         
         logger.info(f"高而窄的旗形选股策略执行完成，找到 {len(results)} 只符合条件的股票")
@@ -2932,6 +2974,7 @@ async def get_keep_increasing_strategy(
         logger.info("开始执行持续上涨（MA30向上）选股策略")
         
         # 执行选股策略
+        from .keep_increasing_strategy import KeepIncreasingStrategy
         results = KeepIncreasingStrategy.screening_keep_increasing_strategy(db)
         
         logger.info(f"持续上涨（MA30向上）选股策略执行完成，找到 {len(results)} 只符合条件的股票")
@@ -2993,6 +3036,7 @@ async def get_long_lower_shadow_strategy(
                    f"上影线比例={upper_shadow_ratio}, 最小振幅={min_amplitude}, 检查天数={recent_days}")
         
         # 执行选股策略（传入参数）
+        from .long_lower_shadow_strategy import LongLowerShadowStrategy
         results = LongLowerShadowStrategy.screening_long_lower_shadow_strategy(
             db, 
             lower_shadow_ratio=lower_shadow_ratio,
@@ -3057,6 +3101,7 @@ async def get_low_nine_strategy(
             logger.info("开始执行低九策略选股（生产模式：处理所有股票）")
         
         # 执行选股策略
+        from .low_nine_strategy import LowNineStrategy
         results = LowNineStrategy.screening_low_nine_strategy(db, limit=limit)
         
         logger.info(f"低九策略选股执行完成，找到 {len(results)} 只符合条件的股票")
@@ -3104,7 +3149,7 @@ async def get_volume_shrink_breakout_strategy(
     3倍量缩量突破策略（独立 core 模块）。
     爆量：volume[k] >= volume_ratio * volume[k+1]；均线多头在爆量日；最新日缩量突破爆量日收盘。
     """
-    if not VSB_AVAILABLE or VolumeShrinkBreakoutFrontendInterface is None:
+    if not _ensure_vsb_imports() or VolumeShrinkBreakoutFrontendInterface is None:
         return JSONResponse(
             status_code=503,
             content={"success": False, "message": "3倍量缩量突破策略模块不可用", "data": []},
@@ -3243,7 +3288,7 @@ async def get_urt_strategy(
     全部A股/全部港股：应用硬筛 + min_score（可被 Query 覆盖）；默认优先读每日预计算 urt_signal_trace。
     自选/行业/概念/单股：对齐 GMS，不按硬筛与最低得分过滤列表，返回可算明细（含未买点），得分原样展示。
     """
-    if not URT_AVAILABLE or URTFrontendInterface is None:
+    if not _ensure_urt_imports() or URTFrontendInterface is None:
         return JSONResponse(
             status_code=503,
             content={"success": False, "message": "上升趋势策略模块不可用", "data": []},
@@ -3592,7 +3637,7 @@ async def screening_post_vsb_signals_recalculate(
     db: Session = Depends(get_db),
 ):
     """单股重算 VSB 并落库（与 POST /api/vsb/signals/recalculate 同源）。"""
-    if not VSB_AVAILABLE or VolumeShrinkBreakoutFrontendInterface is None:
+    if not _ensure_vsb_imports() or VolumeShrinkBreakoutFrontendInterface is None:
         return JSONResponse(
             status_code=503,
             content={
@@ -3778,6 +3823,7 @@ async def get_one_yang_three_lines_strategy(
         logger.info(f"策略参数: {strategy_params}")
         
         # 执行选股策略
+        from .one_yang_three_lines_strategy import OneYangThreeLinesStrategy
         all_results = OneYangThreeLinesStrategy.screening_one_yang_three_lines_strategy(db, **strategy_params)
         
         # 日期范围过滤（如果提供）

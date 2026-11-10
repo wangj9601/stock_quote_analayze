@@ -15,12 +15,16 @@ from backend_api.database import get_db
 from backend_api.env_sync import DEFAULT_RESOURCES, filter_modules_for_bundle
 from backend_api.env_sync import remote_http
 from backend_api.env_sync.config_store import (
+    add_server_key,
+    delete_server_key,
     get_client_config_public,
     get_server_config_public,
+    list_server_keys,
     resolve_client_credentials,
     rotate_server_key,
     update_client_config,
     update_server_config,
+    update_server_key,
     write_audit,
 )
 from backend_api.env_sync.bundle import merge_results
@@ -243,6 +247,18 @@ class ServerConfigUpdate(BaseModel):
     rotate: bool = False
 
 
+class ServerKeyCreate(BaseModel):
+    label: Optional[str] = None
+    sync_key: Optional[str] = Field(
+        None, description="可选：粘贴已有 Key；留空则自动生成"
+    )
+
+
+class ServerKeyUpdate(BaseModel):
+    label: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
 class ClientConfigUpdate(BaseModel):
     enabled: Optional[bool] = None
     prod_base_url: Optional[str] = None
@@ -276,7 +292,8 @@ def _remote_fail_detail(action: str, status_code: int, body: str) -> str:
     if status_code == 401:
         return (
             f"{action} 失败 HTTP 401：生产 Sync Key 无效或未启用校验。"
-            f"请在生产管理端「服务端 Sync Key」生成并启用后，把同一明文 Key 填到本地客户端。"
+            f"请在生产管理端「服务端 Sync Key」添加/生成一把 Key 并启用校验后，"
+            f"把同一明文 Key 填到本地客户端。"
             f" 响应: {text}"
         )
     if status_code == 404:
@@ -323,8 +340,57 @@ def admin_update_server_config(
     db: Session = Depends(get_db),
 ):
     if body.rotate:
+        # 兼容旧前端：改为新增一把 Key，不再覆盖旧 Key
         return rotate_server_key(db, enabled=body.enabled)
     return update_server_config(db, enabled=body.enabled, sync_key=body.sync_key)
+
+
+@router.get("/server-keys")
+def admin_list_server_keys(
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    return {"keys": list_server_keys(db), "config": get_server_config_public(db)}
+
+
+@router.post("/server-keys")
+def admin_create_server_key(
+    body: ServerKeyCreate,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return add_server_key(db, label=body.label, sync_key=body.sync_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@router.patch("/server-keys/{key_id}")
+@router.put("/server-keys/{key_id}")
+def admin_update_server_key(
+    key_id: int,
+    body: ServerKeyUpdate,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return update_server_key(
+            db, key_id, label=body.label, enabled=body.enabled
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+
+@router.delete("/server-keys/{key_id}")
+def admin_delete_server_key(
+    key_id: int,
+    _: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    try:
+        return delete_server_key(db, key_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.get("/client-config")

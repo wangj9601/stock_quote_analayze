@@ -1,15 +1,13 @@
 # backend_api/market_routes.py
 
 from fastapi import APIRouter, Depends, Query
-import akshare as ak
 from datetime import datetime
 from fastapi.responses import JSONResponse
 import logging
+import math
 import random
 import threading
 import traceback
-import pandas as pd
-import numpy as np
 import sqlite3
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -43,11 +41,14 @@ router = APIRouter(prefix="/api/market", tags=["market"])
 logger = logging.getLogger(__name__)
 
 def safe_float(value):
-    """安全地将值转换为浮点数，处理 NaN 和无效值"""
+    """安全地将值转换为浮点数，处理 NaN 和无效值（不依赖 pandas）。"""
     try:
-        if pd.isna(value) or value in [None, '', '-']:
+        if value in [None, '', '-']:
             return None
-        return float(value)
+        f = float(value)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
     except (ValueError, TypeError):
         return None
 

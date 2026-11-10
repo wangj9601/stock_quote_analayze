@@ -27,7 +27,7 @@ param(
     [switch]$SkipAdminBuild,
     # 服务器上不执行 pip（磁盘极紧张且依赖已预装时使用）
     [switch]$SkipPip,
-    # 手工进程模式下管理端静态站端口（python -m http.server，cwd=current\admin\dist）
+    # 手工进程模式下管理端静态站端口（start_admin.py，读 ADMIN_PORT）
     [int]$ManualAdminHttpPort = 8001,
     # 相对于 -NginxHome 的配置路径（用于 ManualProcessDeploy 时校验 upstream）
     [string]$NginxConfFile = 'conf\nginx.conf',
@@ -98,7 +98,7 @@ function Assert-ReleaseScriptPathMatchesDeployRoot {
   低磁盘 / 不用 NSSM：本地用 scripts\deploy\deploy.ps1 打好含 admin 产物的 zip，上传后在服务器：
   -ManualProcessDeploy [-SkipAdminBuild] [-SkipPip] [-SkipHealthCheck] [-ManualAdminHttpPort 8001]
   将解压、possibly pip、镜像 current，并后台启动 5 个进程（与手工一致，日志 shared\logs\manual-*.log）：
-  (1) python -m http.server 于 admin\dist  (2) start_backend_core (3) start_backend_api (4) start_scheduler (5) start_frontend
+  (1) start_admin.py  (2) start_backend_core (3) start_backend_api (4) start_scheduler (5) start_frontend
   nginx：仓库根目录 nginx.conf（与 docs/prod/nginx.conf 同步）应与上述端口一致；-ManualProcessDeploy 且指定 -NginxHome 时会在 nginx -t 前校验 conf 内 upstream。
 #>
 
@@ -835,8 +835,7 @@ function Invoke-KillPythonSameInterpreter {
 }
 
 # 无 NSSM：后台启动与手工一致的 5 个入口（顺序固定）；日志 shared\logs\manual-*.log
-# 1) admin 静态：python -m http.server 8001（cwd=admin\dist）
-# 2) start_backend_core.py  3) start_backend_api.py  4) start_scheduler.py  5) start_frontend.py
+# 1) start_admin.py  2) start_backend_core.py  3) start_backend_api.py  4) start_scheduler.py  5) start_frontend.py
 function Start-ManualStockQuoteProcesses {
     param(
         [Parameter(Mandatory = $true)][string]$PythonExePath,
@@ -846,7 +845,7 @@ function Start-ManualStockQuoteProcesses {
     )
     New-Item -ItemType Directory -Path $LogDir -Force | Out-Null
     $tasks = @(
-        @{ Mode = 'httpServer'; Name = 'manual-admin-http'; CwdRel = 'admin\dist'; Display = ('python -m http.server {0} (cwd admin\dist)' -f $AdminHttpPort) },
+        @{ Mode = 'script'; Name = 'manual-admin-http'; Script = 'start_admin.py'; Display = ('python start_admin.py (ADMIN_PORT={0})' -f $AdminHttpPort) },
         @{ Mode = 'script'; Name = 'manual-core'; Script = 'start_backend_core.py'; Display = 'python start_backend_core.py' },
         @{ Mode = 'script'; Name = 'manual-api'; Script = 'start_backend_api.py'; Display = 'python start_backend_api.py' },
         @{ Mode = 'script'; Name = 'manual-notify'; Script = 'start_scheduler.py'; Display = 'python start_scheduler.py' },
@@ -857,48 +856,54 @@ function Start-ManualStockQuoteProcesses {
         $errLog = Join-Path $LogDir ($t.Name + '.err.log')
         $workForTask = $WorkDir
         $argList = $null
-        if ($t.Mode -eq 'httpServer') {
-            $workForTask = Join-Path $WorkDir $t.CwdRel
-            if (-not (Test-Path -LiteralPath $workForTask)) {
-                Write-Host ('[WARN] admin\dist missing, skip admin static server: {0}' -f $workForTask) -ForegroundColor Yellow
-                continue
-            }
-            $argList = @('-m', 'http.server', ([string]$AdminHttpPort))
+        $scriptFull = Join-Path $WorkDir $t.Script
+        if (-not (Test-Path -LiteralPath $scriptFull)) {
+            Write-Host ('[WARN] Missing script, skip: {0}' -f $scriptFull) -ForegroundColor Yellow
+            continue
         }
-        else {
-            $scriptFull = Join-Path $WorkDir $t.Script
-            if (-not (Test-Path -LiteralPath $scriptFull)) {
-                Write-Host ('[WARN] Missing script, skip: {0}' -f $scriptFull) -ForegroundColor Yellow
+        if ($t.Name -eq 'manual-admin-http') {
+            $adminDist = Join-Path $WorkDir 'admin\dist'
+            if (-not (Test-Path -LiteralPath $adminDist)) {
+                Write-Host ('[WARN] admin\dist missing, skip admin static server: {0}' -f $adminDist) -ForegroundColor Yellow
                 continue
             }
-            # 若已用 NSSM 托管 frontend，发布时改走服务重启，避免与手工进程抢 8000
-            if ($t.Name -eq 'manual-frontend') {
-                $feSvc = Get-Service -Name 'stock-quote-frontend' -ErrorAction SilentlyContinue
-                if ($null -ne $feSvc) {
-                    try {
-                        if ($feSvc.Status -eq 'Running') {
-                            Restart-Service -Name 'stock-quote-frontend' -Force -ErrorAction Stop
-                            Write-Host '[START] stock-quote-frontend service restarted (skip manual process)' -ForegroundColor Green
-                        }
-                        else {
-                            Start-Service -Name 'stock-quote-frontend' -ErrorAction Stop
-                            Write-Host '[START] stock-quote-frontend service started (skip manual process)' -ForegroundColor Green
-                        }
+        }
+        # 若已用 NSSM 托管 frontend，发布时改走服务重启，避免与手工进程抢 8000
+        if ($t.Name -eq 'manual-frontend') {
+            $feSvc = Get-Service -Name 'stock-quote-frontend' -ErrorAction SilentlyContinue
+            if ($null -ne $feSvc) {
+                try {
+                    if ($feSvc.Status -eq 'Running') {
+                        Restart-Service -Name 'stock-quote-frontend' -Force -ErrorAction Stop
+                        Write-Host '[START] stock-quote-frontend service restarted (skip manual process)' -ForegroundColor Green
                     }
-                    catch {
-                        Write-Host ('[WARN] stock-quote-frontend service control failed: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+                    else {
+                        Start-Service -Name 'stock-quote-frontend' -ErrorAction Stop
+                        Write-Host '[START] stock-quote-frontend service started (skip manual process)' -ForegroundColor Green
                     }
-                    continue
                 }
+                catch {
+                    Write-Host ('[WARN] stock-quote-frontend service control failed: {0}' -f $_.Exception.Message) -ForegroundColor Yellow
+                }
+                continue
             }
-            $argList = @($scriptFull)
         }
+        $argList = @($scriptFull)
         $prevFrontendPort = $env:FRONTEND_PORT
         $prevEnvironment = $env:ENVIRONMENT
+        $prevAdminPort = $env:ADMIN_PORT
+        $prevBindHost = $env:BIND_HOST
         try {
             # 与 nginx upstream frontend_server(127.0.0.1:8000) 对齐，禁止生产静默换端口
             if ($t.Name -eq 'manual-frontend') {
                 $env:FRONTEND_PORT = '8000'
+                if ([string]::IsNullOrWhiteSpace($env:ENVIRONMENT)) {
+                    $env:ENVIRONMENT = 'production'
+                }
+            }
+            if ($t.Name -eq 'manual-admin-http') {
+                $env:ADMIN_PORT = [string]$AdminHttpPort
+                $env:BIND_HOST = '127.0.0.1'
                 if ([string]::IsNullOrWhiteSpace($env:ENVIRONMENT)) {
                     $env:ENVIRONMENT = 'production'
                 }
@@ -922,6 +927,8 @@ function Start-ManualStockQuoteProcesses {
         finally {
             if ($null -eq $prevFrontendPort) { Remove-Item Env:FRONTEND_PORT -ErrorAction SilentlyContinue } else { $env:FRONTEND_PORT = $prevFrontendPort }
             if ($null -eq $prevEnvironment) { Remove-Item Env:ENVIRONMENT -ErrorAction SilentlyContinue } else { $env:ENVIRONMENT = $prevEnvironment }
+            if ($null -eq $prevAdminPort) { Remove-Item Env:ADMIN_PORT -ErrorAction SilentlyContinue } else { $env:ADMIN_PORT = $prevAdminPort }
+            if ($null -eq $prevBindHost) { Remove-Item Env:BIND_HOST -ErrorAction SilentlyContinue } else { $env:BIND_HOST = $prevBindHost }
         }
     }
 }

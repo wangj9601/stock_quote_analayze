@@ -82,44 +82,63 @@ async function smartFetch(url, options = {}) {
 window.authFetch = authFetch;
 window.smartFetch = smartFetch;
 
-/** SheetJS 本地按需加载（与旧 CDN 版全局 `XLSX` 一致）；路径相对 `js/config.js`。 */
+/** 按需加载脚本：相对 `js/config.js` 解析路径，失败时可走 CDN。 */
 (function () {
-    let _xlsxInflight = null;
-    window.ensureSheetJsLoaded = function ensureSheetJsLoaded() {
-        if (typeof XLSX !== 'undefined') {
+    function resolveJsSibling(relPath) {
+        const ref = document.querySelector('script[src*="config.js"]');
+        if (ref && ref.src) {
+            try {
+                return new URL(relPath, ref.src).href;
+            } catch (_) {
+                /* keep default */
+            }
+        }
+        return 'js/' + relPath.replace(/^\.?\/?/, '');
+    }
+
+    function loadScriptOnce(src, { globalCheck, cdnFallback } = {}) {
+        if (globalCheck && globalCheck()) {
             return Promise.resolve();
         }
-        if (_xlsxInflight) {
-            return _xlsxInflight;
-        }
-        _xlsxInflight = new Promise((resolve, reject) => {
-            const ref = document.querySelector('script[src*="config.js"]');
-            let src = 'js/vendor/xlsx.full.min.js';
-            if (ref && ref.src) {
-                try {
-                    src = new URL('vendor/xlsx.full.min.js', ref.src).href;
-                } catch (_) {
-                    /* keep default */
-                }
-            }
+        const key = '_inflight_' + src;
+        if (window[key]) return window[key];
+        window[key] = new Promise((resolve, reject) => {
             const el = document.createElement('script');
             el.async = true;
             el.src = src;
             el.onload = function () {
-                if (typeof XLSX !== 'undefined') {
+                if (!globalCheck || globalCheck()) {
                     resolve();
                 } else {
-                    _xlsxInflight = null;
-                    reject(new Error('XLSX 未定义'));
+                    window[key] = null;
+                    reject(new Error('全局对象未就绪: ' + src));
                 }
             };
             el.onerror = function () {
-                _xlsxInflight = null;
+                if (cdnFallback && el.dataset.fallback !== '1') {
+                    el.dataset.fallback = '1';
+                    el.src = cdnFallback;
+                    return;
+                }
+                window[key] = null;
                 reject(new Error('加载失败: ' + src));
             };
             document.head.appendChild(el);
         });
-        return _xlsxInflight;
+        return window[key];
+    }
+
+    window.ensureSheetJsLoaded = function ensureSheetJsLoaded() {
+        return loadScriptOnce(resolveJsSibling('vendor/xlsx.full.min.js'), {
+            globalCheck: () => typeof XLSX !== 'undefined',
+        });
+    };
+
+    window.ensureEchartsLoaded = function ensureEchartsLoaded() {
+        return loadScriptOnce(resolveJsSibling('echarts.min.js'), {
+            globalCheck: () => typeof echarts !== 'undefined',
+            cdnFallback: 'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js',
+        });
     };
 })();
 

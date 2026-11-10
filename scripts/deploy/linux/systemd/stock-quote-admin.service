@@ -7,13 +7,15 @@ Wants=network-online.target
 Type=simple
 User=stockquote
 Group=stockquote
-WorkingDirectory=/opt/stock_quote/current/admin/dist
+WorkingDirectory=/opt/stock_quote/current
 EnvironmentFile=-/opt/stock_quote/shared/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONNOUSERSITE=1
 Environment=ADMIN_PORT=8001
+Environment=BIND_HOST=127.0.0.1
 # EnvironmentFile 中的 ADMIN_PORT 会覆盖上面的默认值（Ubuntu 与 DeepTutor 共存时用 8002）
-ExecStart=/bin/bash -c 'exec /opt/stock_quote/.venv/bin/python -m http.server "${ADMIN_PORT:-8001}" --bind 127.0.0.1'
+# start_admin.py：/assets/* 长期缓存，HTML no-cache（替代 python -m http.server）
+ExecStart=/opt/stock_quote/.venv/bin/python /opt/stock_quote/current/start_admin.py
 Restart=always
 RestartSec=5
 StandardOutput=journal

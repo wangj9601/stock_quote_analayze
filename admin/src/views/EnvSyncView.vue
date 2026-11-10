@@ -53,31 +53,74 @@
           <template #header>服务端 Sync Key（本机作为被同步方）</template>
           <el-form label-width="120px" class="env-sync-form">
             <el-form-item label="启用校验">
-              <el-switch v-model="serverForm.enabled" />
+              <el-switch v-model="serverForm.enabled" @change="saveServerEnabled" />
             </el-form-item>
-            <el-form-item label="Key 状态">
-              <span>{{ serverMeta.has_key ? `已配置（${serverMeta.key_hint || '***'}）` : '未配置' }}</span>
+            <el-form-item label="Key 列表">
+              <span class="sub-hint">
+                {{
+                  serverKeys.length
+                    ? `共 ${serverKeys.length} 把，任一启用中的 Key 均可通过校验`
+                    : '尚未配置'
+                }}
+              </span>
             </el-form-item>
-            <el-form-item label="手动设置 Key">
+            <el-table :data="serverKeys" size="small" empty-text="暂无 Key" class="server-keys-table">
+              <el-table-column prop="label" label="备注" min-width="90">
+                <template #default="{ row }">
+                  <span>{{ row.label || '—' }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column prop="key_hint" label="提示" min-width="100" />
+              <el-table-column label="启用" width="72" align="center">
+                <template #default="{ row }">
+                  <el-switch
+                    :model-value="row.enabled"
+                    :loading="togglingKeyId === row.id"
+                    @change="(v: boolean | string | number) => toggleServerKey(row, !!v)"
+                  />
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="72" align="center">
+                <template #default="{ row }">
+                  <el-button
+                    link
+                    type="danger"
+                    :loading="deletingKeyId === row.id"
+                    @click="removeServerKey(row)"
+                  >
+                    删除
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+            <el-form-item label="备注" class="mt-2">
+              <el-input v-model="newKeyLabel" placeholder="可选，如：本机开发 / 办公机" maxlength="100" />
+            </el-form-item>
+            <el-form-item label="粘贴 Key">
               <el-input
                 v-model="serverForm.sync_key"
                 type="password"
                 show-password
-                placeholder="可选：粘贴已有 Key；留空不改"
+                placeholder="可选：粘贴已有 Key；留空则自动生成"
               />
             </el-form-item>
             <el-form-item>
-              <el-button type="primary" :loading="savingServer" @click="saveServer">保存</el-button>
-              <el-button type="warning" :loading="rotating" @click="rotateKey">生成并轮换 Key</el-button>
+              <el-button type="primary" :loading="addingKey" @click="addServerKey">
+                添加 Key
+              </el-button>
+              <el-button type="warning" :loading="addingKey" @click="generateServerKey">
+                生成并添加
+              </el-button>
             </el-form-item>
             <el-alert
               v-if="rotatedKey"
               type="success"
-              :closable="false"
+              :closable="true"
               show-icon
               title="请立即复制明文 Key（仅展示一次）"
               :description="rotatedKey"
               class="mt-2"
+              @close="rotatedKey = ''"
             />
           </el-form>
         </el-card>
@@ -214,7 +257,9 @@ const loadingClient = ref(false)
 const loadingServer = ref(false)
 const savingClient = ref(false)
 const savingServer = ref(false)
-const rotating = ref(false)
+const addingKey = ref(false)
+const togglingKeyId = ref<number | null>(null)
+const deletingKeyId = ref<number | null>(null)
 const testing = ref(false)
 const pulling = ref(false)
 const pushing = ref(false)
@@ -294,8 +339,17 @@ async function cancelActiveJob() {
   }
 }
 const rotatedKey = ref('')
+const newKeyLabel = ref('')
 const lastOk = ref(true)
 const lastResultText = ref('')
+
+type ServerKeyRow = {
+  id: number
+  label: string
+  key_hint: string
+  enabled: boolean
+  created_at?: string | null
+}
 
 const clientForm = reactive({
   enabled: false,
@@ -308,7 +362,7 @@ const serverForm = reactive({
   enabled: false,
   sync_key: '',
 })
-const serverMeta = reactive({ has_key: false, key_hint: '' })
+const serverKeys = ref<ServerKeyRow[]>([])
 
 const moduleGroups = ref<ModuleGroup[]>([])
 const selectedModules = ref<string[]>([])
@@ -428,8 +482,7 @@ async function loadAll() {
 
     serverForm.enabled = !!s.enabled
     serverForm.sync_key = ''
-    serverMeta.has_key = !!s.has_key
-    serverMeta.key_hint = s.key_hint || ''
+    serverKeys.value = (s.keys || []) as ServerKeyRow[]
 
     moduleGroups.value = (mods.groups || []) as ModuleGroup[]
     defaultResources.value = mods.default_resources || []
@@ -469,38 +522,94 @@ async function saveClient() {
   }
 }
 
-async function saveServer() {
+async function saveServerEnabled() {
   savingServer.value = true
   try {
-    const body: any = { enabled: serverForm.enabled, rotate: false }
-    if (serverForm.sync_key.trim()) body.sync_key = serverForm.sync_key.trim()
-    await envSyncApi.updateServerConfig(body)
-    serverForm.sync_key = ''
-    await loadAll()
-    ElMessage.success('服务端配置已保存')
+    const s = await envSyncApi.updateServerConfig({ enabled: serverForm.enabled })
+    serverForm.enabled = !!s.enabled
+    serverKeys.value = (s.keys || serverKeys.value) as ServerKeyRow[]
+    ElMessage.success(serverForm.enabled ? '已启用校验' : '已关闭校验')
   } catch (e: any) {
     ElMessage.error(e.message || '保存失败')
+    await loadAll()
   } finally {
     savingServer.value = false
   }
 }
 
-async function rotateKey() {
-  rotating.value = true
+function applyServerConfig(cfg: any) {
+  if (!cfg) return
+  serverForm.enabled = !!cfg.enabled
+  if (Array.isArray(cfg.keys)) {
+    serverKeys.value = cfg.keys as ServerKeyRow[]
+  }
+}
+
+async function createKey(payload: { label?: string; sync_key?: string }) {
+  addingKey.value = true
   try {
-    const res = await envSyncApi.updateServerConfig({
-      enabled: true,
-      rotate: true,
-    })
+    const res = await envSyncApi.createServerKey(payload)
     rotatedKey.value = res.sync_key || ''
-    serverMeta.has_key = true
-    serverMeta.key_hint = res.key_hint || ''
-    serverForm.enabled = true
-    ElMessage.success('已生成新 Key，请复制后配置到本地客户端')
+    applyServerConfig(res.config)
+    serverForm.sync_key = ''
+    newKeyLabel.value = ''
+    ElMessage.success('已添加 Key，请复制明文后配置到客户端')
   } catch (e: any) {
-    ElMessage.error(e.message || '轮换失败')
+    ElMessage.error(e.message || '添加失败')
   } finally {
-    rotating.value = false
+    addingKey.value = false
+  }
+}
+
+async function addServerKey() {
+  const pasted = serverForm.sync_key.trim()
+  if (!pasted) {
+    ElMessage.warning('请粘贴已有 Key，或使用「生成并添加」')
+    return
+  }
+  await createKey({ label: newKeyLabel.value.trim() || undefined, sync_key: pasted })
+}
+
+async function generateServerKey() {
+  await createKey({ label: newKeyLabel.value.trim() || undefined })
+}
+
+async function toggleServerKey(row: ServerKeyRow, enabled: boolean) {
+  togglingKeyId.value = row.id
+  try {
+    const res = await envSyncApi.updateServerKey(row.id, { enabled })
+    applyServerConfig(res.config)
+    if (res.key) {
+      const idx = serverKeys.value.findIndex((k) => k.id === row.id)
+      if (idx >= 0) serverKeys.value[idx] = { ...serverKeys.value[idx], ...res.key }
+    }
+  } catch (e: any) {
+    ElMessage.error(e.message || '更新失败')
+    await loadAll()
+  } finally {
+    togglingKeyId.value = null
+  }
+}
+
+async function removeServerKey(row: ServerKeyRow) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除 Key「${row.label || row.key_hint || row.id}」？删除后使用该 Key 的客户端将无法同步。`,
+      '删除 Sync Key',
+      { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  deletingKeyId.value = row.id
+  try {
+    const cfg = await envSyncApi.deleteServerKey(row.id)
+    applyServerConfig(cfg)
+    ElMessage.success('已删除')
+  } catch (e: any) {
+    ElMessage.error(e.message || '删除失败')
+  } finally {
+    deletingKeyId.value = null
   }
 }
 
@@ -708,6 +817,13 @@ onUnmounted(stopJobPoll)
   margin-top: 4px;
   font-size: 12px;
   color: #9ca3af;
+}
+.server-keys-table {
+  width: 100%;
+  margin-bottom: 8px;
+}
+.mt-2 {
+  margin-top: 8px;
 }
 .sub-hint.inline {
   margin-top: 0;

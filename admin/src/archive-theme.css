@@ -21,7 +21,7 @@
   --el-fill-color-blank: #ffffff;
   --el-fill-color-light: #f7f4ee;
   --el-mask-color: rgba(26, 35, 50, 0.45);
-  --el-font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --el-font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
   color-scheme: light;
 }
 
@@ -30,7 +30,7 @@ body,
 #app {
   background: #f3f1ec;
   color: #1a2332;
-  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
 }
 
 .admin-layout {

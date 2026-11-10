@@ -13,11 +13,15 @@ from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
 from backend_api.utils.board_code_source import DEFAULT_BOARD_CODE_SOURCE
-from backend_core.data_collectors.akshare.board_fund_flow_daily import (
-    collect_board_fund_flow_daily,
-)
 
 router = APIRouter(prefix="/api/board_fund_flow", tags=["board_fund_flow"])
+
+
+def collect_board_fund_flow_daily(*args, **kwargs):
+    from backend_core.data_collectors.akshare.board_fund_flow_daily import (
+        collect_board_fund_flow_daily as _fn,
+    )
+    return _fn(*args, **kwargs)
 
 
 def _safe_float(value: Any) -> Optional[float]:

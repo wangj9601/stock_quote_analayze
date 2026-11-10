@@ -1,14 +1,14 @@
 /* 本地托管：Barlow Condensed + Noto Sans SC（替代 fonts.googleapis.com）
+ * 第二波精简：中文仅 400；Barlow 仅 600；latin 仅 400。
  * 字体文件：../fonts/*.woff2（SIL OFL 1.1，见 fonts/OFL-*.txt）
  */
 
-/* —— Barlow Condensed（数字/标题用，latin） —— */
 @font-face {
     font-family: "Barlow Condensed";
     font-style: normal;
     font-weight: 500;
     font-display: swap;
-    src: url("../fonts/barlow-condensed-latin-500-normal.woff2") format("woff2");
+    src: url("../fonts/barlow-condensed-latin-600-normal.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -26,11 +26,10 @@
     font-style: normal;
     font-weight: 700;
     font-display: swap;
-    src: url("../fonts/barlow-condensed-latin-700-normal.woff2") format("woff2");
+    src: url("../fonts/barlow-condensed-latin-600-normal.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* —— Noto Sans SC latin（与中文子集分文件，按 unicode-range 按需加载） —— */
 @font-face {
     font-family: "Noto Sans SC";
     font-style: normal;
@@ -45,7 +44,7 @@
     font-style: normal;
     font-weight: 500;
     font-display: swap;
-    src: url("../fonts/noto-sans-sc-latin-500-normal.woff2") format("woff2");
+    src: url("../fonts/noto-sans-sc-latin-400-normal.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -54,7 +53,7 @@
     font-style: normal;
     font-weight: 600;
     font-display: swap;
-    src: url("../fonts/noto-sans-sc-latin-600-normal.woff2") format("woff2");
+    src: url("../fonts/noto-sans-sc-latin-400-normal.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
@@ -63,11 +62,11 @@
     font-style: normal;
     font-weight: 700;
     font-display: swap;
-    src: url("../fonts/noto-sans-sc-latin-700-normal.woff2") format("woff2");
+    src: url("../fonts/noto-sans-sc-latin-400-normal.woff2") format("woff2");
     unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* —— Noto Sans SC 简体（UI 正文） —— */
+/* 简体仅 400：500/600/700 合成到同一文件，避免再下 2～3MB */
 @font-face {
     font-family: "Noto Sans SC";
     font-style: normal;
@@ -77,12 +76,29 @@
     unicode-range: U+2E80-2EFF, U+3000-303F, U+3200-32FF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF;
 }
 
-/* 简体只保留 400 / 600。字重 500 会落到 400，600 以上落到 600，避免再下载 500/700 两套约 2.2MB 的中文文件。 */
+@font-face {
+    font-family: "Noto Sans SC";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("../fonts/noto-sans-sc-chinese-simplified-400-normal.woff2") format("woff2");
+    unicode-range: U+2E80-2EFF, U+3000-303F, U+3200-32FF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF;
+}
+
 @font-face {
     font-family: "Noto Sans SC";
     font-style: normal;
     font-weight: 600;
     font-display: swap;
-    src: url("../fonts/noto-sans-sc-chinese-simplified-600-normal.woff2") format("woff2");
+    src: url("../fonts/noto-sans-sc-chinese-simplified-400-normal.woff2") format("woff2");
+    unicode-range: U+2E80-2EFF, U+3000-303F, U+3200-32FF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF;
+}
+
+@font-face {
+    font-family: "Noto Sans SC";
+    font-style: normal;
+    font-weight: 700;
+    font-display: swap;
+    src: url("../fonts/noto-sans-sc-chinese-simplified-400-normal.woff2") format("woff2");
     unicode-range: U+2E80-2EFF, U+3000-303F, U+3200-32FF, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE10-FE1F, U+FE30-FE4F, U+FF00-FFEF;
 }

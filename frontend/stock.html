@@ -24,9 +24,7 @@
             } catch (e) { /* ignore */ }
         })();
     </script>
-    <!-- ECharts库 - 优先使用本地文件，失败时使用CDN -->
-    <script src="js/echarts.min.js"
-        onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';"></script>
+    <!-- ECharts 改为页面脚本按需加载（ensureEchartsLoaded），避免阻塞首屏 HTML -->
     <link rel="stylesheet" href="css/ops-surfaces.css?v=20261031-margin-read">
 </head>
 
@@ -446,22 +444,18 @@
             }
         })();
 
-        // 确保echarts已加载（备用方案）
-        if (typeof echarts === 'undefined') {
-            console.warn('echarts未加载，尝试从CDN加载');
-            const echartsScript = document.createElement('script');
-            echartsScript.src = 'https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js';
-            echartsScript.onerror = function () {
-                console.error('echarts CDN加载也失败');
-            };
-            document.head.appendChild(echartsScript);
-        }
-
         // 由本页动态加载 stock.js / stock_hk.js 并负责 init，避免脚本内 DOMContentLoaded 再 init 一次
         window.__STOCK_PAGE_MANAGED_INIT__ = true;
 
         // 根据股票类型动态加载对应的JS文件
         (async function () {
+            try {
+                if (typeof ensureEchartsLoaded === 'function') {
+                    await ensureEchartsLoaded();
+                }
+            } catch (e) {
+                console.error('echarts 加载失败', e);
+            }
             // 从URL获取股票代码
             const urlParams = new URLSearchParams(window.location.search);
             const code = urlParams.get('code');

@@ -17,21 +17,37 @@ try:
 except ImportError:
     PVFRSException = Exception  # 无 pvfrs 时用 Exception 占位，避免 except 块 NameError
 
-try:
-    from backend_core.strategies.pvfrs.frontend_interface import FrontendInterface
-except ImportError:
-    FrontendInterface = None  # type: ignore
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/frontend/pvfrs", tags=["PVFRS前端接口"])
 
+_FrontendInterface = None
+_FrontendInterface_load_error: Optional[str] = None
 
-def get_pvfrs_frontend_interface() -> "FrontendInterface":
+
+def _load_frontend_interface_cls():
+    """按需加载 PVFRS FrontendInterface，避免启动时拉起整套策略栈。"""
+    global _FrontendInterface, _FrontendInterface_load_error
+    if _FrontendInterface is not None:
+        return _FrontendInterface
+    if _FrontendInterface_load_error is not None:
+        return None
+    try:
+        from backend_core.strategies.pvfrs.frontend_interface import FrontendInterface
+        _FrontendInterface = FrontendInterface
+        return _FrontendInterface
+    except Exception as e:
+        _FrontendInterface_load_error = str(e)
+        logger.warning("PVFRS FrontendInterface 延迟导入失败: %s", e)
+        return None
+
+
+def get_pvfrs_frontend_interface():
     """PVFRS 策略前端接口（与 GMS 的 GMSFrontendInterface 完全独立）。"""
-    if FrontendInterface is None:
+    cls = _load_frontend_interface_cls()
+    if cls is None:
         raise HTTPException(status_code=503, detail="PVFRS 策略模块未加载")
-    return FrontendInterface()
+    return cls()
 
 
 @router.get("/selection-results")

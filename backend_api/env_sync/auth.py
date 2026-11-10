@@ -7,13 +7,13 @@ import hashlib
 import hmac
 import os
 import secrets
-from typing import Optional, Tuple
+from typing import List, Optional
 
 from fastapi import Header, HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
-from backend_api.models import EnvSyncServerConfig
+from backend_api.models import EnvSyncServerConfig, EnvSyncServerKey
 
 
 def hash_sync_key(raw: str) -> str:
@@ -52,23 +52,55 @@ def _extract_key(
     return ""
 
 
-def get_server_expected_hash(db: Session) -> Tuple[bool, Optional[str]]:
-    """返回 (enabled, hash)。DB 优先，否则 ENV_SYNC_KEY。"""
+def _collect_expected_hashes(db: Session) -> tuple[bool, List[str]]:
+    """返回 (enabled, hashes)。多 Key 表优先；兼容旧单行 hash 与 ENV_SYNC_KEY。"""
     row = db.query(EnvSyncServerConfig).filter(EnvSyncServerConfig.id == 1).first()
+    enabled = bool(row.enabled) if row else False
+    hashes: List[str] = []
+
+    try:
+        key_rows = (
+            db.query(EnvSyncServerKey)
+            .filter(EnvSyncServerKey.enabled.is_(True))
+            .all()
+        )
+        for kr in key_rows:
+            h = (kr.sync_key_hash or "").strip()
+            if h and h not in hashes:
+                hashes.append(h)
+    except Exception:
+        # 表尚未迁移时降级到旧逻辑
+        db.rollback()
+
     if row and row.sync_key_hash:
-        return bool(row.enabled), row.sync_key_hash
-    env_key = (os.getenv("ENV_SYNC_KEY") or "").strip()
-    if env_key:
-        return True, hash_sync_key(env_key)
-    return False, None
+        h = (row.sync_key_hash or "").strip()
+        if h and h not in hashes:
+            hashes.append(h)
+
+    if not hashes:
+        env_key = (os.getenv("ENV_SYNC_KEY") or "").strip()
+        if env_key:
+            return True, [hash_sync_key(env_key)]
+        return enabled, []
+
+    # 有 DB Key 时以服务端开关为准；无 config 行但有 keys 时默认开启
+    if row is None and hashes:
+        return True, hashes
+    return enabled, hashes
+
+
+def get_server_expected_hash(db: Session):
+    """兼容旧调用：返回 (enabled, 首个 hash 或 None)。"""
+    enabled, hashes = _collect_expected_hashes(db)
+    return enabled, hashes[0] if hashes else None
 
 
 def verify_sync_key(db: Session, presented: str) -> bool:
-    enabled, expected = get_server_expected_hash(db)
-    if not enabled or not expected or not presented:
+    enabled, expected_list = _collect_expected_hashes(db)
+    if not enabled or not expected_list or not presented:
         return False
     got = hash_sync_key(presented)
-    return hmac.compare_digest(got, expected)
+    return any(hmac.compare_digest(got, expected) for expected in expected_list)
 
 
 def require_env_sync_key(

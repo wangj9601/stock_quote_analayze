@@ -120,6 +120,7 @@ try:
         RPEPrecomputeRun = getattr(models_module, 'RPEPrecomputeRun', None)
         RPETraceRecomputeTask = getattr(models_module, 'RPETraceRecomputeTask', None)
         EnvSyncServerConfig = getattr(models_module, 'EnvSyncServerConfig', None)
+        EnvSyncServerKey = getattr(models_module, 'EnvSyncServerKey', None)
         EnvSyncClientConfig = getattr(models_module, 'EnvSyncClientConfig', None)
         EnvSyncAuditLog = getattr(models_module, 'EnvSyncAuditLog', None)
         StockBasicInfo = getattr(models_module, 'StockBasicInfo', None)
@@ -194,6 +195,37 @@ try:
         TradingCalendarInDB = getattr(models_module, 'TradingCalendarInDB', None)
         StockCodeTextPK = getattr(models_module, 'StockCodeTextPK', None)
 
+        # 启动热路径常用模型：必须静态导出，避免 __getattr__ 反复 force_reload models.py
+        EnvSyncJob = getattr(models_module, 'EnvSyncJob', None)
+        StockAdjFactor = getattr(models_module, 'StockAdjFactor', None)
+        StockFinaIndicator = getattr(models_module, 'StockFinaIndicator', None)
+        StockFundFlowEmDaily = getattr(models_module, 'StockFundFlowEmDaily', None)
+        StockMarginDaily = getattr(models_module, 'StockMarginDaily', None)
+        BoardFundFlowDaily = getattr(models_module, 'BoardFundFlowDaily', None)
+        IndexHistoricalQuotes = getattr(models_module, 'IndexHistoricalQuotes', None)
+        IndexBoardConstituent = getattr(models_module, 'IndexBoardConstituent', None)
+        RSRatings = getattr(models_module, 'RSRatings', None)
+        RSRatingsHK = getattr(models_module, 'RSRatingsHK', None)
+        StockRecommendBrief = getattr(models_module, 'StockRecommendBrief', None)
+        StockNoticeReport = getattr(models_module, 'StockNoticeReport', None)
+        StockResearchReport = getattr(models_module, 'StockResearchReport', None)
+        OneYangThreeLinesSignal = getattr(models_module, 'OneYangThreeLinesSignal', None)
+        CSBStrategyConfig = getattr(models_module, 'CSBStrategyConfig', None)
+        CSBSignalTrace = getattr(models_module, 'CSBSignalTrace', None)
+        CSBBacktestTask = getattr(models_module, 'CSBBacktestTask', None)
+        BvfStrategyConfig = getattr(models_module, 'BvfStrategyConfig', None)
+        BvfSignalTrace = getattr(models_module, 'BvfSignalTrace', None)
+        CupbStrategyConfig = getattr(models_module, 'CupbStrategyConfig', None)
+        CupbSignalTrace = getattr(models_module, 'CupbSignalTrace', None)
+        DblbStrategyConfig = getattr(models_module, 'DblbStrategyConfig', None)
+        DblbSignalTrace = getattr(models_module, 'DblbSignalTrace', None)
+        KgtStrategyConfig = getattr(models_module, 'KgtStrategyConfig', None)
+        KgtSignalTrace = getattr(models_module, 'KgtSignalTrace', None)
+        LdsStrategyConfig = getattr(models_module, 'LdsStrategyConfig', None)
+        LdsSignalTrace = getattr(models_module, 'LdsSignalTrace', None)
+        ZhabStrategyConfig = getattr(models_module, 'ZhabStrategyConfig', None)
+        ZhabSignalTrace = getattr(models_module, 'ZhabSignalTrace', None)
+
 except Exception as e:
     # 如果导入失败，创建占位符
     import traceback
@@ -267,6 +299,7 @@ except Exception as e:
     RPEPrecomputeRun = None
     RPETraceRecomputeTask = None
     EnvSyncServerConfig = None
+    EnvSyncServerKey = None
     EnvSyncClientConfig = None
     EnvSyncAuditLog = None
     StockCodeTextPK = None
@@ -338,6 +371,35 @@ except Exception as e:
     TradingCalendar = None
     TradingCalendarCreate = None
     TradingCalendarInDB = None
+    EnvSyncJob = None
+    StockAdjFactor = None
+    StockFinaIndicator = None
+    StockFundFlowEmDaily = None
+    StockMarginDaily = None
+    BoardFundFlowDaily = None
+    IndexHistoricalQuotes = None
+    IndexBoardConstituent = None
+    RSRatings = None
+    RSRatingsHK = None
+    StockRecommendBrief = None
+    StockNoticeReport = None
+    StockResearchReport = None
+    OneYangThreeLinesSignal = None
+    CSBStrategyConfig = None
+    CSBSignalTrace = None
+    CSBBacktestTask = None
+    BvfStrategyConfig = None
+    BvfSignalTrace = None
+    CupbStrategyConfig = None
+    CupbSignalTrace = None
+    DblbStrategyConfig = None
+    DblbSignalTrace = None
+    KgtStrategyConfig = None
+    KgtSignalTrace = None
+    LdsStrategyConfig = None
+    LdsSignalTrace = None
+    ZhabStrategyConfig = None
+    ZhabSignalTrace = None
 
 __all__ = [
     'PVFRSStrategyConfig',
@@ -419,6 +481,7 @@ __all__ = [
     'RPEPrecomputeRun',
     'RPETraceRecomputeTask',
     'EnvSyncServerConfig',
+    'EnvSyncServerKey',
     'EnvSyncClientConfig',
     'EnvSyncAuditLog',
     'StockBasicInfo',
@@ -484,15 +547,48 @@ __all__ = [
     'TradingCalendarCreate',
     'TradingCalendarInDB',
     'StockCodeTextPK',
+    'EnvSyncJob',
+    'StockAdjFactor',
+    'StockFinaIndicator',
+    'StockFundFlowEmDaily',
+    'StockMarginDaily',
+    'BoardFundFlowDaily',
+    'IndexHistoricalQuotes',
+    'IndexBoardConstituent',
+    'RSRatings',
+    'RSRatingsHK',
+    'StockRecommendBrief',
+    'StockNoticeReport',
+    'StockResearchReport',
+    'OneYangThreeLinesSignal',
+    'CSBStrategyConfig',
+    'CSBSignalTrace',
+    'CSBBacktestTask',
+    'BvfStrategyConfig',
+    'BvfSignalTrace',
+    'CupbStrategyConfig',
+    'CupbSignalTrace',
+    'DblbStrategyConfig',
+    'DblbSignalTrace',
+    'KgtStrategyConfig',
+    'KgtSignalTrace',
+    'LdsStrategyConfig',
+    'LdsSignalTrace',
+    'ZhabStrategyConfig',
+    'ZhabSignalTrace',
 ]
 
 
 def __getattr__(name: str):
-    """热重载/切分支后包缓存过期时，按需从 models.py 补齐缺失符号。"""
+    """按需从已缓存的 models.py 补齐符号；绝不默认 force_reload。
+
+    以前缺一个名字就会重新 exec 整份 models.py（SQLAlchemy 再 map 一遍），
+    启动导入链上可重复十几次，单次可达数秒。
+    """
     if name.startswith('_'):
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     try:
-        mod = _load_models_py_module(force_reload=True)
+        mod = _load_models_py_module(force_reload=False)
         val = getattr(mod, name, None)
     except Exception as exc:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc

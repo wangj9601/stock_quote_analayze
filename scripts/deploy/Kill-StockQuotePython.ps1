@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Match if CommandLine contains paths under DeployRoot\current for:
-    start_backend_core.py, start_backend_api.py, start_scheduler.py, start_frontend.py, or current\admin\dist.
+    start_backend_core.py, start_backend_api.py, start_scheduler.py, start_frontend.py, start_admin.py, or current\admin\dist.
 
     -WhatIf typically lists ~4 roots (the four entry scripts). Production start_backend_api.py runs uvicorn with
     --workers N; worker python.exe processes usually do NOT contain start_backend_api.py in CommandLine, so they
@@ -51,7 +51,7 @@ else {
 }
 
 $markers = [System.Collections.ArrayList]@()
-foreach ($rel in @('start_backend_core.py', 'start_backend_api.py', 'start_scheduler.py', 'start_frontend.py')) {
+foreach ($rel in @('start_backend_core.py', 'start_backend_api.py', 'start_scheduler.py', 'start_frontend.py', 'start_admin.py')) {
     [void]$markers.Add((Join-Path $currentFull $rel))
 }
 [void]$markers.Add((Join-Path $currentFull 'admin\dist'))

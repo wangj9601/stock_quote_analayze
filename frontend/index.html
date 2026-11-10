@@ -6,14 +6,21 @@
     <title>北京冰枫堂商贸有限公司</title>
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/design-tokens.css?v=20261017-w400-600">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20261110-font400">
     <link rel="stylesheet" href="css/ops-shell.css">
-    <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
-    <link rel="stylesheet" href="css/ops-responsive.css">
     <link rel="stylesheet" href="css/home.css">
-    <link rel="stylesheet" href="css/home_colors.css">
     <link rel="stylesheet" href="css/home-ops.css?v=20260925a">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c">
+    <!-- 次要样式延后加载，缩短首屏阻塞链 -->
+    <link rel="stylesheet" href="css/ops-data.css?v=20261008b" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/ops-responsive.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/home_colors.css" media="print" onload="this.media='all'">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c" media="print" onload="this.media='all'">
+    <noscript>
+        <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
+        <link rel="stylesheet" href="css/ops-responsive.css">
+        <link rel="stylesheet" href="css/home_colors.css">
+        <link rel="stylesheet" href="css/ops-surfaces.css?v=20261008c">
+    </noscript>
 </head>
 <body class="ops-map" data-channel="home">
 <script src="components/header.js"></script>

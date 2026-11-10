@@ -21,7 +21,22 @@ engine = create_engine(
     pool_recycle=1800,
 )
 
-print("数据库连接URL:", repr(DATABASE_CONFIG["url"]))
+def _redact_db_url(url: str) -> str:
+    """日志中隐藏口令，避免启动时把 DATABASE_URL 明文打到终端。"""
+    if not url or "://" not in url:
+        return url
+    try:
+        scheme, rest = url.split("://", 1)
+        if "@" not in rest or ":" not in rest.split("@", 1)[0]:
+            return url
+        creds, hostpart = rest.split("@", 1)
+        user = creds.split(":", 1)[0]
+        return f"{scheme}://{user}:***@{hostpart}"
+    except Exception:
+        return "<redacted>"
+
+
+print("数据库连接URL:", repr(_redact_db_url(DATABASE_CONFIG["url"])))
 
 # 创建会话工厂（autocommit=False：首次 SQL 即开事务，必须 commit/rollback/close）
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

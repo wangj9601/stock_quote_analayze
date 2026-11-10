@@ -1,20 +1,43 @@
+from __future__ import annotations
+
 from fastapi import APIRouter, Request, Query
 from fastapi.responses import JSONResponse
-import akshare as ak
 from backend_api.database import get_db
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, desc, cast, Date as SQLDate
 from fastapi import Depends
 import traceback
-import numpy as np
 import time
 from threading import Lock
 import datetime
-import pandas as pd
 import math
 from typing import Any, Dict, Optional, cast as typing_cast
 from backend_api.models import StockRealtimeQuote, StockBasicInfo, StockRealtimeQuoteHK, StockBasicInfoHK, HistoricalQuotes, HistoricalQuotesHK, MACDIndicators, KDJIndicators, RSIIndicators, MAIndicators, BOLLIndicators, MAVOLIndicators
-from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
+
+
+class _LazyMod:
+    """模块级懒加载代理：注解在 from __future__ import annotations 下不会提前触发。"""
+
+    def __init__(self, name: str):
+        self._name = name
+        self._mod = None
+
+    def _load(self):
+        if self._mod is None:
+            self._mod = __import__(self._name)
+        return self._mod
+
+    def __getattr__(self, item: str):
+        return getattr(self._load(), item)
+
+
+pd = _LazyMod("pandas")
+np = _LazyMod("numpy")
+
+
+def _ak():
+    import akshare as ak
+    return ak
 
 
 def _is_na(val: Any) -> bool:
@@ -125,7 +148,7 @@ def get_cached_spot_df():
     try:
         df = stock_spot_cache.get()
         if df is None:
-            df = ak.stock_zh_a_spot_em()
+            df = _ak().stock_zh_a_spot_em()
             if df is not None:
                 stock_spot_cache.set(df)
         if df is not None and hasattr(df, 'copy'):
@@ -1253,7 +1276,7 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
         print(f"[minute_data_by_code] 缺少参数code")
         return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
     try:
-        trade_dates = ak.tool_trade_date_hist_sina()['trade_date'].tolist()
+        trade_dates = _ak().tool_trade_date_hist_sina()['trade_date'].tolist()
         trade_dates_str = [d.strftime('%Y-%m-%d') for d in trade_dates]
         print(f"[minute_data_by_code] 交易日历: {trade_dates_str[:10]} ... 共{len(trade_dates_str)}天")
         today = datetime.date.today()
@@ -1266,7 +1289,7 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
         print(f"[minute_data_by_code] 今日是否交易日: {is_trading_day}")
         result = []
         if is_trading_day:
-            df = ak.stock_intraday_em(symbol=code)
+            df = _ak().stock_intraday_em(symbol=code)
             if df is None or df.empty:
                 print(f"[minute_data_by_code] 未找到股票代码: {code}")
                 return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
@@ -1291,7 +1314,7 @@ async def get_minute_data_by_code(code: str = Query(None, description="股票代
             print(f"[minute_data_by_code] 交易日，返回{len(result)}条分时数据")
         else:
             # 非交易日，取最近一个交易日的分钟数据
-            df = ak.stock_zh_a_hist_pre_min_em(symbol=code, start_time="09:00:00", end_time="15:40:00")
+            df = _ak().stock_zh_a_hist_pre_min_em(symbol=code, start_time="09:00:00", end_time="15:40:00")
             if df is None or df.empty:
                 print(f"[minute_data_by_code] 非交易日未找到股票代码: {code}")
                 return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
@@ -1749,6 +1772,7 @@ async def get_kline_hist(
                 })
             elif period in ('quarterly', 'semiannual', 'annual'):
                 # 季/半年/年：日历期末日（03-31/06-30/09-30/12-31；半年 06-30/12-31；年 12-31）
+                from backend_core.data_collectors.akshare.period_agg import resample_ohlcv_to_period_ends
                 resampled = resample_ohlcv_to_period_ends(
                     df, period, columns=('open', 'high', 'low', 'close', 'volume', 'amount')
                 )
@@ -1806,7 +1830,7 @@ async def get_kline_min_hist(
         # 1分钟线不支持复权，adjust传空
         ak_adjust = '' if period == '1' else adjust
         print(f"[kline_min_hist] 调用ak，symbol={code}, period={period}, start={start_dt_fmt}, end={end_dt_fmt}, adjust={ak_adjust}")
-        df = ak.stock_zh_a_hist_min_em(symbol=code, period=period, start_date=start_dt_fmt, end_date=end_dt_fmt, adjust=ak_adjust)
+        df = _ak().stock_zh_a_hist_min_em(symbol=code, period=period, start_date=start_dt_fmt, end_date=end_dt_fmt, adjust=ak_adjust)
         if df is None or df.empty:
             print(f"[kline_min_hist] 未找到股票代码: {code}")
             return JSONResponse({"success": False, "message": f"未找到股票代码: {code}"}, status_code=404)
@@ -1967,7 +1991,7 @@ async def get_latest_financial(code: str = Query(..., description="股票代码"
         if is_hk:
             # 港股：使用 stock_financial_hk_analysis_indicator_em（东方财富-港股-财务分析-主要指标）
             try:
-                df = ak.stock_financial_hk_analysis_indicator_em(symbol=code, indicator="报告期")
+                df = _ak().stock_financial_hk_analysis_indicator_em(symbol=code, indicator="报告期")
             except Exception as e:
                 print(f"[latest_financial] 港股调用akshare接口失败: {e}")
                 import traceback
@@ -2048,7 +2072,7 @@ async def get_latest_financial(code: str = Query(..., description="股票代码"
             return JSONResponse({"success": True, "data": result})
         else:
             # A股：使用 stock_financial_abstract 接口（原有逻辑）
-            df = ak.stock_financial_abstract(symbol=code)
+            df = _ak().stock_financial_abstract(symbol=code)
             print(f"[latest_financial] A股获取到原始数据: {df.shape if df is not None else None}")
             if df is None or df.empty:
                 print(f"[latest_financial] A股未获取到财务数据")
@@ -2144,7 +2168,7 @@ async def get_financial_indicator_list(
             elif indicator in ("年度", "报告期"):
                 hk_indicator = indicator
             try:
-                df = ak.stock_financial_hk_analysis_indicator_em(symbol=symbol, indicator=hk_indicator)
+                df = _ak().stock_financial_hk_analysis_indicator_em(symbol=symbol, indicator=hk_indicator)
             except Exception as e:
                 print(f"[financial_indicator_list] 港股调用akshare接口失败: {e}")
                 import traceback
@@ -2214,7 +2238,7 @@ async def get_financial_indicator_list(
                 indicator = "按单季度"
             else:
                 indicator = "按报告期"
-            df = ak.stock_financial_abstract_ths(symbol=symbol, indicator=indicator)
+            df = _ak().stock_financial_abstract_ths(symbol=symbol, indicator=indicator)
             print(f"[financial_indicator_list] A股原始数据列: {df.columns.tolist()}")
             if df is None or df.empty:
                 return JSONResponse({"success": False, "message": "未获取到财务数据"}, status_code=404)

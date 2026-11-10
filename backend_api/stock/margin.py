@@ -14,14 +14,44 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
-from backend_core.data_collectors.akshare.em_stock_fund_flow_daily import (
-    normalize_code,
-    safe_float,
-)
 from backend_core.market_review.margin_summary import (
     compute_margin_market_summary,
     resolve_margin_trade_date,
 )
+
+
+def normalize_code(val: Any) -> Optional[str]:
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    if s.endswith(".0") and s.replace(".", "", 1).isdigit():
+        s = s[:-2]
+    if "." in s:
+        s = s.split(".", 1)[0]
+    if s.isdigit() and len(s) <= 6:
+        return s.zfill(6)
+    return s or None
+
+
+def safe_float(val: Any) -> Optional[float]:
+    if val is None:
+        return None
+    try:
+        if isinstance(val, float) and val != val:  # NaN
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(val, (int, float)) and not isinstance(val, bool):
+        return float(val)
+    s = str(val).strip().replace(",", "").replace("%", "")
+    if not s or s in ("-", "--", "None", "nan", "NaN"):
+        return None
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
 
 logger = logging.getLogger(__name__)
 

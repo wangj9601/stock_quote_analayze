@@ -8,11 +8,15 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
+
+
+def _pd():
+    import pandas as pd
+    return pd
 
 
 def _date_str(d: Any) -> str:
@@ -24,7 +28,7 @@ def _date_str(d: Any) -> str:
     return s[:10] if len(s) >= 10 else s
 
 
-def _fetch_a_share_hist_df(code: str, start_ymd: str, end_ymd: str) -> Optional[pd.DataFrame]:
+def _fetch_a_share_hist_df(code: str, start_ymd: str, end_ymd: str) -> Optional["pd.DataFrame"]:
     """返回含「日期」「换手率」列的 DataFrame，失败返回 None。"""
     try:
         import akshare as ak
@@ -47,8 +51,8 @@ def _fetch_a_share_hist_df(code: str, start_ymd: str, end_ymd: str) -> Optional[
                 _symbol = "bj" + code
             _daily_df = ak.stock_zh_a_daily(symbol=_symbol, start_date=start_ymd, end_date=end_ymd, adjust="")
             if _daily_df is not None and not _daily_df.empty and "date" in _daily_df.columns and "turnover" in _daily_df.columns:
-                hist_df = pd.DataFrame()
-                hist_df["日期"] = pd.to_datetime(_daily_df["date"]).dt.strftime("%Y-%m-%d")
+                hist_df = _pd().DataFrame()
+                hist_df["日期"] = _pd().to_datetime(_daily_df["date"]).dt.strftime("%Y-%m-%d")
                 hist_df["换手率"] = _daily_df["turnover"].astype(float) * 100
         except Exception as e2:
             logger.debug("stock_zh_a_daily 失败 %s: %s", code, e2)
@@ -78,7 +82,7 @@ def _fetch_a_share_hist_df(code: str, start_ymd: str, end_ymd: str) -> Optional[
     return hist_df
 
 
-def _fetch_hk_hist_df(code: str, start_ymd: str, end_ymd: str) -> Optional[pd.DataFrame]:
+def _fetch_hk_hist_df(code: str, start_ymd: str, end_ymd: str) -> Optional["pd.DataFrame"]:
     try:
         import akshare as ak
     except ImportError:
@@ -156,9 +160,9 @@ def backfill_missing_turnover_a_share(
                 if ds not in hist_df.index:
                     continue
                 val = hist_df.loc[ds, "换手率"]
-                if isinstance(val, pd.Series):
+                if isinstance(val, _pd().Series):
                     val = val.iloc[0]
-                if pd.isna(val):
+                if _pd().isna(val):
                     continue
                 if isinstance(val, str):
                     val = val.replace("%", "")
@@ -228,9 +232,9 @@ def backfill_missing_turnover_hk(
                 if ds not in hist_df.index:
                     continue
                 val = hist_df.loc[ds, "换手率"]
-                if isinstance(val, pd.Series):
+                if isinstance(val, _pd().Series):
                     val = val.iloc[0]
-                if pd.isna(val):
+                if _pd().isna(val):
                     continue
                 if isinstance(val, str):
                     val = val.replace("%", "")

@@ -4,7 +4,6 @@ import re
 import math
 import logging
 from datetime import datetime
-import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -93,6 +92,8 @@ def parse_watchlist_upload(filename: str, content: bytes) -> list:
     解析上传文件为记录列表（dict）。
     华泰证券等客户端导出的 Table.xls 实为 GBK/Tab 文本，并非真正 Excel。
     """
+    import pandas as pd
+
     name = (filename or "").lower()
     stocks: list = []
 
@@ -654,6 +655,8 @@ async def export_watchlist(
     db: Session = Depends(get_db)
 ):
     """导出自选股列表"""
+    import pandas as pd
+
     try:
         user_id = current_user.id
         watchlist_rows = db.query(Watchlist).filter(

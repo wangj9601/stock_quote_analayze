@@ -5,15 +5,59 @@ from sqlalchemy import text
 from datetime import datetime
 from typing import Optional
 
-import akshare as ak
-
 from backend_api.database import get_db
 from backend_api.utils.equity_code import is_hk_equity_code, normalize_equity_code
-from backend_core.data_collectors.akshare.ths_fund_flow_daily import (
-    analyze_fund_flow_series,
-    collect_ths_fund_flow_daily,
-    normalize_ths_code,
-)
+
+
+def _ak():
+    import akshare as ak
+    return ak
+
+
+def _ths_fund_flow_daily():
+    from backend_core.data_collectors.akshare.ths_fund_flow_daily import (
+        analyze_fund_flow_series,
+        collect_ths_fund_flow_daily,
+        normalize_ths_code,
+    )
+    return analyze_fund_flow_series, collect_ths_fund_flow_daily, normalize_ths_code
+
+
+class _LazyThs:
+    _mods = None
+
+    def _load(self):
+        if self._mods is None:
+            self._mods = _ths_fund_flow_daily()
+        return self._mods
+
+    @property
+    def analyze_fund_flow_series(self):
+        return self._load()[0]
+
+    @property
+    def collect_ths_fund_flow_daily(self):
+        return self._load()[1]
+
+    @property
+    def normalize_ths_code(self):
+        return self._load()[2]
+
+
+_ths = _LazyThs()
+
+
+def normalize_ths_code(*args, **kwargs):
+    return _ths.normalize_ths_code(*args, **kwargs)
+
+
+def analyze_fund_flow_series(*args, **kwargs):
+    return _ths.analyze_fund_flow_series(*args, **kwargs)
+
+
+def collect_ths_fund_flow_daily(*args, **kwargs):
+    return _ths.collect_ths_fund_flow_daily(*args, **kwargs)
+
 
 router = APIRouter(prefix="/api/stock_fund_flow", tags=["stock_fund_flow"])
 
@@ -35,7 +79,7 @@ async def get_history(code: str = Query(None, description="股票代码")):
         return JSONResponse({"success": False, "message": "缺少股票代码参数code"}, status_code=400)
     try:
         print(f"[get_history] 调用ak.stock_individual_fund_flow_rank")
-        df = ak.stock_individual_fund_flow_rank(indicator="今日")
+        df = _ak().stock_individual_fund_flow_rank(indicator="今日")
         if df is None or df.empty:
             print(f"[get_history] 未找到股票代码: {code} 的资金流向数据")
             return JSONResponse(
@@ -513,7 +557,7 @@ async def get_today(
                     f"[get_stock_fund_flow_today] 尝试方法-{market}: "
                     f"调用ak.stock_individual_fund_flow, stock={code}"
                 )
-                df = ak.stock_individual_fund_flow(stock=code, market=market)
+                df = _ak().stock_individual_fund_flow(stock=code, market=market)
                 if df is not None and not df.empty:
                     break
                 df = None
@@ -945,6 +989,7 @@ async def sync_fund_flow_to_quotes(
     db: Session = Depends(get_db),
 ):
     """将 stock_fund_flow_daily 回写到 historical_quotes / stock_realtime_quote。"""
+    # ths helpers via module-level lazy wrappers
     from backend_core.data_collectors.akshare.ths_fund_flow_daily import (
         ThsFundFlowDailyCollector,
     )
