@@ -1,10 +1,13 @@
 /**
- * 分析频道 · 市场分析：个股/板块资金流向 + 板块斜率趋势（图形 / 列表 / Excel 导出）
+ * 分析频道 · 市场分析：个股/板块资金流向（排行/趋势/结构/列表）+ 板块斜率趋势 + 两融
  */
 const MarketAnalysis = {
   API_BASE_URL: typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '',
   BOARD_CODE_SOURCE: 'tonghuashun',
   STOCK_SIDES: 80,
+  WATERFALL_SIDES: 5,
+  TREND_DAYS_BY_PERIOD: { day: 20, week: 40, month: 60 },
+  TOP_LINE_COLORS: ['#2563eb', '#d97706', '#7c3aed', '#0891b2', '#be185d'],
   /** ln(I_t) 日斜率走强门槛，与后端 DEFAULT_SLOPE_STRONG_THRESHOLD 一致 */
   SLOPE_STRONG_DAILY: 0.001,
   SLOPE_CHART_VISIBLE: 18,
@@ -15,10 +18,10 @@ const MarketAnalysis = {
     unknown: '#94a3b8',
   },
 
-  views: { stock: 'chart', board: 'chart', slope: 'chart', margin: 'chart' },
+  views: { stock: 'rank', board: 'rank', slope: 'chart', margin: 'chart' },
   cache: {
-    stock: { items: [], meta: {} },
-    board: { items: [], meta: {} },
+    stock: { items: [], meta: {}, trend: null },
+    board: { items: [], meta: {}, trend: null },
     slope: { items: [], meta: {}, raw: [] },
     margin: { items: [], meta: {} },
   },
@@ -145,8 +148,24 @@ const MarketAnalysis = {
     return el ? el.value : fallback;
   },
 
+  isChartView(view) {
+    return view === 'chart' || view === 'rank' || view === 'trend' || view === 'structure';
+  },
+
+  normalizeView(block, view) {
+    const v = String(view || '').trim();
+    if (block === 'stock' || block === 'board') {
+      if (v === 'chart') return 'rank';
+      if (v === 'rank' || v === 'trend' || v === 'structure' || v === 'list') return v;
+      return 'rank';
+    }
+    return v === 'list' ? 'list' : 'chart';
+  },
+
   setView(block, view) {
-    this.views[block] = view === 'list' ? 'list' : 'chart';
+    const next = this.normalizeView(block, view);
+    const prev = this.views[block];
+    this.views[block] = next;
     document.querySelectorAll(`.ma-view-btn[data-ma-block="${block}"]`).forEach((btn) => {
       btn.classList.toggle('active', btn.getAttribute('data-ma-view') === this.views[block]);
     });
@@ -160,9 +179,17 @@ const MarketAnalysis = {
     if (!pair) return;
     const chartEl = document.getElementById(pair.chart);
     const tableEl = document.getElementById(pair.table);
-    const isChart = this.views[block] === 'chart';
+    const isChart = this.isChartView(this.views[block]);
     if (chartEl) chartEl.hidden = !isChart;
     if (tableEl) tableEl.hidden = isChart;
+
+    // 资金流向：切换视图时按需重载（趋势走序列接口，排行/结构走排名接口）
+    if ((block === 'stock' || block === 'board') && next !== prev) {
+      if (block === 'stock') this.loadStockFlow();
+      else this.loadBoardFlow();
+      return;
+    }
+
     if (isChart) {
       requestAnimationFrame(() => {
         this.renderChart(block);
@@ -342,17 +369,294 @@ const MarketAnalysis = {
             value: v,
             itemStyle: {
               color: v >= 0 ? '#dc2626' : '#16a34a',
-              borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3],
+              borderRadius: v >= 0 ? [0, 2, 2, 0] : [2, 0, 0, 2],
             },
           })),
-          barMaxWidth: 14,
+          barMaxWidth: 8,
         },
       ],
     };
   },
 
+  fmtYiSigned(v) {
+    if (v == null || !Number.isFinite(Number(v))) return '--';
+    const n = Number(v);
+    const sign = n > 0 ? '+' : '';
+    return `${sign}${n.toFixed(2)} 亿`;
+  },
+
+  isOpsDarkTheme() {
+    return !!(document.body && document.body.classList.contains('ops-map'));
+  },
+
+  /**
+   * 趋势图：TopN 用左轴，合计用右轴，避免合计量级把个股/板块线压扁。
+   */
+  buildTrendOption(dates, aggregateYi, topEntities, aggName) {
+    const dark = this.isOpsDarkTheme();
+    const ink = dark ? '#d9e2ec' : '#374151';
+    const muted = dark ? '#8b9aab' : '#6b7280';
+    const split = dark ? 'rgba(217,226,236,0.12)' : '#e5e7eb';
+    const zeroLine = dark ? 'rgba(217,226,236,0.28)' : 'rgba(55,65,81,0.35)';
+    const aggColor = dark ? '#c9a227' : '#4b5563';
+    const tooltipBg = dark ? 'rgba(22,28,36,0.96)' : 'rgba(255,255,255,0.96)';
+    const tooltipBorder = dark ? 'rgba(217,226,236,0.18)' : '#e5e7eb';
+    const aggLabel = aggName || '合计';
+
+    const series = [];
+    (topEntities || []).forEach((ent, idx) => {
+      const color = this.TOP_LINE_COLORS[idx % this.TOP_LINE_COLORS.length];
+      series.push({
+        name: ent.name,
+        type: 'line',
+        yAxisIndex: 0,
+        data: ent.values,
+        smooth: 0.25,
+        showSymbol: false,
+        connectNulls: false,
+        lineStyle: { width: 2.2, color },
+        itemStyle: { color },
+        emphasis: { focus: 'series', lineStyle: { width: 3 } },
+        z: 3,
+      });
+    });
+    series.push({
+      name: aggLabel,
+      type: 'line',
+      yAxisIndex: 1,
+      data: aggregateYi,
+      smooth: 0.2,
+      showSymbol: false,
+      connectNulls: false,
+      lineStyle: { width: 1.6, color: aggColor, type: 'dashed' },
+      itemStyle: { color: aggColor },
+      areaStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          { offset: 0, color: dark ? 'rgba(201,162,39,0.16)' : 'rgba(75,85,99,0.12)' },
+          { offset: 1, color: dark ? 'rgba(201,162,39,0.02)' : 'rgba(75,85,99,0.01)' },
+        ]),
+      },
+      emphasis: { focus: 'series' },
+      z: 1,
+    });
+
+    return {
+      backgroundColor: 'transparent',
+      color: this.TOP_LINE_COLORS,
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: tooltipBg,
+        borderColor: tooltipBorder,
+        textStyle: { color: ink, fontSize: 12 },
+        axisPointer: {
+          type: 'cross',
+          crossStyle: { color: muted },
+          lineStyle: { color: muted, type: 'dashed' },
+        },
+        formatter: (params) => {
+          const list = Array.isArray(params) ? params : [params];
+          const head = (list[0] && list[0].axisValueLabel) || '';
+          const lines = list.map((p) => {
+            const v = p.value;
+            const axisHint = p.seriesName === aggLabel ? '（右轴）' : '';
+            return `${p.marker || ''}${p.seriesName || ''}${axisHint}：${this.fmtYiSigned(
+              v == null ? null : Number(v)
+            )}`;
+          });
+          return [head, ...lines].join('<br/>');
+        },
+      },
+      legend: {
+        type: 'scroll',
+        top: 4,
+        left: 8,
+        right: 8,
+        itemWidth: 14,
+        itemHeight: 8,
+        itemGap: 12,
+        textStyle: { fontSize: 12, color: ink },
+        pageIconColor: muted,
+        pageTextStyle: { color: muted },
+      },
+      grid: { left: 56, right: 58, top: 44, bottom: 32, containLabel: false },
+      xAxis: {
+        type: 'category',
+        data: dates,
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: split } },
+        axisTick: { show: false },
+        axisLabel: {
+          fontSize: 10,
+          color: muted,
+          hideOverlap: true,
+          formatter: (v) => (v && String(v).length >= 10 ? String(v).slice(5) : v),
+        },
+        splitLine: { show: false },
+      },
+      yAxis: [
+        {
+          type: 'value',
+          name: '标的(亿)',
+          nameGap: 8,
+          nameTextStyle: { fontSize: 11, color: muted },
+          axisLabel: { fontSize: 11, color: muted },
+          axisLine: { show: false },
+          axisTick: { show: false },
+          splitLine: { lineStyle: { type: 'dashed', color: split } },
+          scale: true,
+          markLine: undefined,
+        },
+        {
+          type: 'value',
+          name: '合计(亿)',
+          nameGap: 8,
+          nameTextStyle: { fontSize: 11, color: muted },
+          axisLabel: { fontSize: 11, color: muted },
+          axisLine: { show: false },
+          axisTick: { show: false },
+          splitLine: { show: false },
+          scale: true,
+        },
+      ],
+      series: series.map((s, i) => {
+        // 左轴画零线，便于读正负
+        if (i === 0) {
+          return {
+            ...s,
+            markLine: {
+              silent: true,
+              symbol: 'none',
+              label: { show: false },
+              data: [{ yAxis: 0, lineStyle: { color: zeroLine, width: 1, type: 'solid' } }],
+            },
+          };
+        }
+        return s;
+      }),
+    };
+  },
+
+  buildWaterfallOption(steps, periodLabel) {
+    const names = steps.map((s) => s.name);
+    const helpers = [];
+    const display = [];
+    let running = 0;
+    steps.forEach((step, idx) => {
+      const v = step.valueYi;
+      const isTotal = idx === steps.length - 1;
+      if (isTotal) {
+        helpers.push(v >= 0 ? 0 : v);
+        display.push({
+          value: Math.abs(v),
+          itemStyle: { color: '#374151', borderRadius: [3, 3, 3, 3] },
+        });
+        return;
+      }
+      if (v >= 0) {
+        helpers.push(running);
+        display.push({
+          value: v,
+          itemStyle: { color: '#dc2626', borderRadius: [3, 3, 0, 0] },
+        });
+        running += v;
+      } else {
+        helpers.push(running + v);
+        display.push({
+          value: Math.abs(v),
+          itemStyle: { color: '#16a34a', borderRadius: [0, 0, 3, 3] },
+        });
+        running += v;
+      }
+    });
+    return {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' },
+        formatter: (params) => {
+          const list = Array.isArray(params) ? params : [params];
+          const p = list.find((x) => x && x.seriesName === '变动');
+          const idx = Number(p && p.dataIndex);
+          const step = Number.isFinite(idx) ? steps[idx] : undefined;
+          if (!step) return '';
+          return `${step.name}<br/>${periodLabel}：${this.fmtYiSigned(step.valueYi)}`;
+        },
+      },
+      grid: { left: 48, right: 20, top: 16, bottom: 64 },
+      xAxis: {
+        type: 'category',
+        data: names,
+        axisLabel: {
+          fontSize: 10,
+          interval: 0,
+          rotate: names.length > 6 ? 28 : 0,
+          width: 72,
+          overflow: 'truncate',
+        },
+      },
+      yAxis: {
+        type: 'value',
+        name: '净流入(亿)',
+        axisLabel: { fontSize: 11 },
+        splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } },
+      },
+      series: [
+        {
+          name: '辅助',
+          type: 'bar',
+          stack: 'wf',
+          data: helpers,
+          itemStyle: { borderColor: 'transparent', color: 'transparent' },
+          emphasis: {
+            itemStyle: { borderColor: 'transparent', color: 'transparent' },
+          },
+          barMaxWidth: 28,
+        },
+        {
+          name: '变动',
+          type: 'bar',
+          stack: 'wf',
+          data: display,
+          barMaxWidth: 28,
+          label: {
+            show: true,
+            position: 'top',
+            fontSize: 10,
+            formatter: (p) => {
+              const idx = Number(p && p.dataIndex);
+              const step = Number.isFinite(idx) ? steps[idx] : undefined;
+              if (!step) return '';
+              return this.fmtYiSigned(step.valueYi).replace(' 亿', '');
+            },
+          },
+        },
+      ],
+    };
+  },
+
+  buildStructureSteps(items, valueKey, nameFn, sides) {
+    const lim = sides || this.WATERFALL_SIDES;
+    const sorted = [...(items || [])]
+      .filter((x) => x[valueKey] != null && Number.isFinite(Number(x[valueKey])))
+      .sort((a, b) => Number(b[valueKey]) - Number(a[valueKey]));
+    const inflows = sorted.filter((x) => Number(x[valueKey]) > 0).slice(0, lim);
+    const outflows = sorted
+      .filter((x) => Number(x[valueKey]) < 0)
+      .slice(-lim)
+      .reverse();
+    const steps = [];
+    inflows.forEach((r) => {
+      steps.push({ name: nameFn(r), valueYi: this.toYi(r[valueKey]) || 0 });
+    });
+    outflows.forEach((r) => {
+      steps.push({ name: nameFn(r), valueYi: this.toYi(r[valueKey]) || 0 });
+    });
+    const total = steps.reduce((s, x) => s + x.valueYi, 0);
+    steps.push({ name: '结构净额', valueYi: Math.round(total * 100) / 100 });
+    return steps;
+  },
+
   renderChart(block) {
-    if (this.views[block] !== 'chart') return;
+    if (!this.isChartView(this.views[block])) return;
     if (typeof echarts === 'undefined') {
       const statusMap = {
         stock: 'maStockFlowStatus',
@@ -524,6 +828,12 @@ const MarketAnalysis = {
   /* ---------- 个股资金流向 ---------- */
 
   async loadStockFlow() {
+    const view = this.normalizeView('stock', this.views.stock);
+    this.views.stock = view;
+    if (view === 'trend') {
+      await this.loadStockTrend();
+      return;
+    }
     const period = this.radioValue('maStockPeriod', 'day');
     const statusId = 'maStockFlowStatus';
     this.setStatus(statusId, '加载中…', false);
@@ -549,6 +859,7 @@ const MarketAnalysis = {
           sides: data.sides != null ? data.sides : this.STOCK_SIDES,
           total_universe: data.total_universe,
         },
+        trend: this.cache.stock.trend || null,
       };
       const range = this.fmtRange(data.start_date, data.end_date);
       const parts = [
@@ -562,10 +873,55 @@ const MarketAnalysis = {
       this.renderChart('stock');
       this.setStatus(statusId, items.length ? '' : '暂无个股资金流（请先日采同花顺资金流向）', false);
     } catch (e) {
-      this.cache.stock = { items: [], meta: {} };
+      this.cache.stock = { items: [], meta: {}, trend: null };
       this.renderStockTable();
       this.setStatus(statusId, e.message || '加载失败', true);
       if (window.CommonUtils) CommonUtils.showToast(e.message || '个股资金流向加载失败', 'error');
+    }
+  },
+
+  async loadStockTrend() {
+    const period = this.radioValue('maStockPeriod', 'day');
+    const statusId = 'maStockFlowStatus';
+    this.setStatus(statusId, '加载中…', false);
+    try {
+      const q = new URLSearchParams({ period, top_n: '5' });
+      const body = await this.fetchJson(
+        `${this.API_BASE_URL}/api/stock_fund_flow/trend_series?${q.toString()}`
+      );
+      if (!body.success) throw new Error(body.message || '加载趋势失败');
+      const data = body.data || {};
+      const dates = Array.isArray(data.dates) ? data.dates : [];
+      this.cache.stock.trend = data;
+      this.cache.stock.meta = {
+        ...(this.cache.stock.meta || {}),
+        period: data.period || period,
+        period_label: data.period_label || '日',
+        start_date: data.start_date || null,
+        end_date: data.end_date || null,
+        trend_days: data.trend_days,
+      };
+      const range = this.fmtRange(data.start_date, data.end_date);
+      const trendDays =
+        data.trend_days || this.TREND_DAYS_BY_PERIOD[period] || 20;
+      const parts = [
+        `近 ${trendDays} 交易日净流入`,
+        range || null,
+        (data.top_entities || []).length
+          ? `Top${(data.top_entities || []).length}`
+          : null,
+      ].filter(Boolean);
+      this.setMeta('maStockFlowMeta', parts.join(' · '));
+      this.renderChart('stock');
+      this.setStatus(
+        statusId,
+        dates.length ? '' : '暂无个股资金流趋势（请先日采同花顺资金流向）',
+        false
+      );
+    } catch (e) {
+      this.cache.stock.trend = null;
+      this.setStatus(statusId, e.message || '加载趋势失败', true);
+      if (window.CommonUtils) CommonUtils.showToast(e.message || '个股资金流向趋势加载失败', 'error');
     }
   },
 
@@ -573,8 +929,44 @@ const MarketAnalysis = {
     const el = document.getElementById('maStockFlowChart');
     const chart = this.ensureChart('stock', el);
     if (!chart) return;
+    const view = this.normalizeView('stock', this.views.stock);
+    const label = (this.cache.stock.meta && this.cache.stock.meta.period_label) || '日';
+
+    if (view === 'trend') {
+      const trend = this.cache.stock.trend || {};
+      const dates = trend.dates || [];
+      if (!dates.length) {
+        chart.clear();
+        return;
+      }
+      const agg = ((trend.aggregate && trend.aggregate.net_amount) || []).map((v) =>
+        this.toYi(v)
+      );
+      const tops = (trend.top_entities || []).map((ent) => ({
+        name: String(ent.name || ent.code || '--'),
+        values: (ent.net_amount || []).map((v) => this.toYi(v)),
+      }));
+      chart.setOption(this.buildTrendOption(dates, agg, tops, '全市场合计'), true);
+      chart.resize();
+      return;
+    }
+
+    if (view === 'structure') {
+      const steps = this.buildStructureSteps(
+        this.cache.stock.items || [],
+        'net_amount',
+        (r) => String(r.name || r.code || '--')
+      );
+      if (steps.length <= 1) {
+        chart.clear();
+        return;
+      }
+      chart.setOption(this.buildWaterfallOption(steps, label), true);
+      chart.resize();
+      return;
+    }
+
     const items = this.cache.stock.items || [];
-    const label = this.cache.stock.meta.period_label || '日';
     if (!items.length) {
       chart.clear();
       return;
@@ -637,6 +1029,12 @@ const MarketAnalysis = {
   /* ---------- 板块资金流向 ---------- */
 
   async loadBoardFlow() {
+    const view = this.normalizeView('board', this.views.board);
+    this.views.board = view;
+    if (view === 'trend') {
+      await this.loadBoardTrend();
+      return;
+    }
     const kind = this.radioValue('maBoardKind', 'industry');
     const period = this.radioValue('maBoardPeriod', 'day');
     const statusId = 'maBoardFlowStatus';
@@ -665,6 +1063,7 @@ const MarketAnalysis = {
           start_date: data.start_date || null,
           end_date: data.end_date || null,
         },
+        trend: this.cache.board.trend || null,
       };
       const kindLabel = kind === 'concept' ? '概念' : '行业';
       const range = this.fmtRange(data.start_date, data.end_date);
@@ -675,14 +1074,80 @@ const MarketAnalysis = {
         items.length ? `${items.length} 个` : null,
       ].filter(Boolean);
       this.setMeta('maBoardFlowMeta', parts.join(' · '));
+      this.updateBoardFlowHint(view);
       this.renderBoardTable();
       this.renderChart('board');
       this.setStatus(statusId, items.length ? '' : '暂无板块资金流（请先日采）', false);
     } catch (e) {
-      this.cache.board = { items: [], meta: {} };
+      this.cache.board = { items: [], meta: {}, trend: null };
       this.renderBoardTable();
       this.setStatus(statusId, e.message || '加载失败', true);
       if (window.CommonUtils) CommonUtils.showToast(e.message || '板块资金流向加载失败', 'error');
+    }
+  },
+
+  async loadBoardTrend() {
+    const kind = this.radioValue('maBoardKind', 'industry');
+    const period = this.radioValue('maBoardPeriod', 'day');
+    const statusId = 'maBoardFlowStatus';
+    this.setStatus(statusId, '加载中…', false);
+    try {
+      const q = new URLSearchParams({
+        board_kind: kind,
+        period,
+        board_code_source: this.BOARD_CODE_SOURCE,
+        top_n: '5',
+      });
+      const body = await this.fetchJson(
+        `${this.API_BASE_URL}/api/board_fund_flow/trend_series?${q.toString()}`
+      );
+      if (!body.success) throw new Error(body.message || '加载趋势失败');
+      const data = body.data || {};
+      const dates = Array.isArray(data.dates) ? data.dates : [];
+      this.cache.board.trend = data;
+      this.cache.board.meta = {
+        ...(this.cache.board.meta || {}),
+        kind,
+        period: data.period || period,
+        period_label: data.period_label || '日',
+        start_date: data.start_date || null,
+        end_date: data.end_date || null,
+        trend_days: data.trend_days,
+      };
+      const kindLabel = kind === 'concept' ? '概念' : '行业';
+      const range = this.fmtRange(data.start_date, data.end_date);
+      const trendDays =
+        data.trend_days || this.TREND_DAYS_BY_PERIOD[period] || 20;
+      const parts = [
+        kindLabel,
+        `近 ${trendDays} 交易日净流入`,
+        range || null,
+        (data.top_entities || []).length
+          ? `Top${(data.top_entities || []).length}`
+          : null,
+      ].filter(Boolean);
+      this.setMeta('maBoardFlowMeta', parts.join(' · '));
+      this.updateBoardFlowHint('trend');
+      this.renderChart('board');
+      this.setStatus(statusId, dates.length ? '' : '暂无板块资金流趋势（请先日采）', false);
+    } catch (e) {
+      this.cache.board.trend = null;
+      this.setStatus(statusId, e.message || '加载趋势失败', true);
+      if (window.CommonUtils) CommonUtils.showToast(e.message || '板块资金流向趋势加载失败', 'error');
+    }
+  },
+
+  updateBoardFlowHint(view) {
+    const hint = document.getElementById('maBoardFlowHint');
+    if (!hint) return;
+    if (view === 'trend') {
+      hint.textContent =
+        '趋势：左轴看 Top5 板块波动，右轴看全板合计（虚线）；图例可开关系列；切回排行后可点击下钻成分股';
+    } else if (view === 'structure') {
+      hint.textContent = '结构：前5流入与前5流出瀑布拆解；列表行仍可点击查看成分股';
+    } else {
+      hint.textContent =
+        '排行/列表：点击图形或行可查看成分股资金流向；详情内可批量交易分析、进入比价选股';
     }
   },
 
@@ -690,8 +1155,46 @@ const MarketAnalysis = {
     const el = document.getElementById('maBoardFlowChart');
     const chart = this.ensureChart('board', el);
     if (!chart) return;
+    const view = this.normalizeView('board', this.views.board);
+    const label = (this.cache.board.meta && this.cache.board.meta.period_label) || '日';
+
+    if (view === 'trend') {
+      if (el) el.classList.remove('ma-chart--clickable');
+      const trend = this.cache.board.trend || {};
+      const dates = trend.dates || [];
+      if (!dates.length) {
+        chart.clear();
+        return;
+      }
+      const agg = ((trend.aggregate && trend.aggregate.main_net_inflow) || []).map((v) =>
+        this.toYi(v)
+      );
+      const tops = (trend.top_entities || []).map((ent) => ({
+        name: String(ent.board_name || ent.board_code || '--'),
+        values: (ent.main_net_inflow || []).map((v) => this.toYi(v)),
+      }));
+      chart.setOption(this.buildTrendOption(dates, agg, tops, '全板合计'), true);
+      chart.resize();
+      return;
+    }
+
+    if (view === 'structure') {
+      if (el) el.classList.remove('ma-chart--clickable');
+      const steps = this.buildStructureSteps(
+        this.cache.board.items || [],
+        'main_net_inflow',
+        (r) => String(r.board_name || r.board_code || '--')
+      );
+      if (steps.length <= 1) {
+        chart.clear();
+        return;
+      }
+      chart.setOption(this.buildWaterfallOption(steps, label), true);
+      chart.resize();
+      return;
+    }
+
     const items = this.cache.board.items || [];
-    const label = this.cache.board.meta.period_label || '日';
     if (!items.length) {
       chart.clear();
       return;
@@ -711,6 +1214,7 @@ const MarketAnalysis = {
     if (!this._boardClickBound) {
       this._boardClickBound = true;
       chart.on('click', (params) => {
+        if (this.normalizeView('board', this.views.board) !== 'rank') return;
         const idx = Number(params && params.dataIndex);
         const row = Number.isFinite(idx) ? (this.cache.board.items || [])[idx] : null;
         if (row && row.board_code) {

@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
@@ -381,6 +381,256 @@ async def get_board_fund_flow_rank(
     except Exception as e:
         return JSONResponse(
             {"success": False, "message": f"查询板块资金流排名失败: {e}"},
+            status_code=500,
+        )
+
+
+# 趋势图交易日窗口：日/周/月分别拉长，避免「日」只有 1 点无法看趋势
+_BOARD_FUND_FLOW_TREND_DAYS = {
+    "day": 20,
+    "week": 40,
+    "month": 60,
+}
+
+
+def _iso_date(value: Any) -> str:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()[:10]
+    return str(value)[:10]
+
+
+@router.get("/trend_series")
+async def get_board_fund_flow_trend_series(
+    period: str = Query("day", description="day|week|month → 趋势窗口 20/40/60 交易日"),
+    board_kind: str = Query(..., description="industry | concept"),
+    board_code_source: str = Query(DEFAULT_BOARD_CODE_SOURCE),
+    trade_date: Optional[str] = Query(
+        None, description="锚定交易日 YYYY-MM-DD；默认取库内最新日"
+    ),
+    top_n: int = Query(5, ge=1, le=10, description="叠加展示的净流入最强板块数"),
+    db: Session = Depends(get_db),
+):
+    """
+    板块资金流向趋势序列：全板按日合计净流入/流入/流出 + TopN 板块日序列。
+    数据源：board_fund_flow_daily。
+    """
+    key = (period or "day").strip().lower()
+    trend_days = _BOARD_FUND_FLOW_TREND_DAYS.get(key)
+    period_meta = _BOARD_FUND_FLOW_RANK_PERIODS.get(key)
+    if trend_days is None or period_meta is None:
+        return JSONResponse(
+            {"success": False, "message": "period 应为 day / week / month"},
+            status_code=400,
+        )
+    kind = (board_kind or "").strip().lower()
+    if kind not in ("industry", "concept"):
+        return JSONResponse(
+            {"success": False, "message": "board_kind 应为 industry | concept"},
+            status_code=400,
+        )
+    src = str(board_code_source or DEFAULT_BOARD_CODE_SOURCE).strip() or DEFAULT_BOARD_CODE_SOURCE
+    anchor = None
+    if trade_date:
+        try:
+            datetime.strptime(trade_date, "%Y-%m-%d")
+            anchor = trade_date
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+                status_code=400,
+            )
+
+    def _empty(end: Optional[str] = None) -> Dict[str, Any]:
+        return {
+            "success": True,
+            "data": {
+                "period": key,
+                "period_label": period_meta["label"],
+                "board_kind": kind,
+                "board_code_source": src,
+                "trend_days": int(trend_days),
+                "start_date": None,
+                "end_date": end,
+                "dates": [],
+                "aggregate": {
+                    "main_net_inflow": [],
+                    "inflow_amount": [],
+                    "outflow_amount": [],
+                },
+                "top_entities": [],
+            },
+        }
+
+    try:
+        if not anchor:
+            latest = db.execute(
+                text(
+                    """
+                    SELECT MAX(trade_date) FROM board_fund_flow_daily
+                    WHERE board_code_source = :src
+                      AND board_kind = :kind
+                    """
+                ),
+                {"src": src, "kind": kind},
+            ).scalar()
+            if latest is None:
+                return _empty()
+            anchor = _iso_date(latest)
+
+        date_rows = db.execute(
+            text(
+                """
+                SELECT DISTINCT trade_date
+                FROM board_fund_flow_daily
+                WHERE board_code_source = :src
+                  AND board_kind = :kind
+                  AND trade_date <= CAST(:anchor AS date)
+                ORDER BY trade_date DESC
+                LIMIT :n_days
+                """
+            ),
+            {"src": src, "kind": kind, "anchor": anchor, "n_days": int(trend_days)},
+        ).fetchall()
+        trade_dates_desc = [
+            _iso_date(r[0]) for r in date_rows if r and r[0] is not None
+        ]
+        if not trade_dates_desc:
+            return _empty(anchor)
+
+        dates = list(reversed(trade_dates_desc))
+        start_date = dates[0]
+        end_date = dates[-1]
+
+        agg_rows = db.execute(
+            text(
+                """
+                SELECT
+                    trade_date,
+                    SUM(main_net_inflow) AS main_net_inflow,
+                    SUM(inflow_amount) AS inflow_amount,
+                    SUM(outflow_amount) AS outflow_amount
+                FROM board_fund_flow_daily
+                WHERE board_code_source = :src
+                  AND board_kind = :kind
+                  AND trade_date >= CAST(:start_d AS date)
+                  AND trade_date <= CAST(:end_d AS date)
+                GROUP BY trade_date
+                ORDER BY trade_date ASC
+                """
+            ),
+            {"src": src, "kind": kind, "start_d": start_date, "end_d": end_date},
+        ).mappings().all()
+        agg_by_date = {
+            _iso_date(r["trade_date"]): {
+                "main_net_inflow": _safe_float(r["main_net_inflow"]),
+                "inflow_amount": _safe_float(r["inflow_amount"]),
+                "outflow_amount": _safe_float(r["outflow_amount"]),
+            }
+            for r in agg_rows
+        }
+
+        top_rows = db.execute(
+            text(
+                """
+                SELECT
+                    board_code,
+                    (array_agg(board_name ORDER BY trade_date DESC))[1] AS board_name,
+                    SUM(main_net_inflow) AS window_net
+                FROM board_fund_flow_daily
+                WHERE board_code_source = :src
+                  AND board_kind = :kind
+                  AND trade_date >= CAST(:start_d AS date)
+                  AND trade_date <= CAST(:end_d AS date)
+                GROUP BY board_code
+                HAVING SUM(main_net_inflow) IS NOT NULL
+                ORDER BY SUM(main_net_inflow) DESC NULLS LAST
+                LIMIT :top_n
+                """
+            ),
+            {
+                "src": src,
+                "kind": kind,
+                "start_d": start_date,
+                "end_d": end_date,
+                "top_n": int(top_n),
+            },
+        ).mappings().all()
+
+        top_codes = [str(r["board_code"]) for r in top_rows if r.get("board_code")]
+        series_by_code: Dict[str, Dict[str, Optional[float]]] = {
+            c: {} for c in top_codes
+        }
+        if top_codes:
+            daily_sql = text(
+                """
+                SELECT board_code, trade_date, main_net_inflow
+                FROM board_fund_flow_daily
+                WHERE board_code_source = :src
+                  AND board_kind = :kind
+                  AND trade_date >= CAST(:start_d AS date)
+                  AND trade_date <= CAST(:end_d AS date)
+                  AND board_code IN :codes
+                """
+            ).bindparams(bindparam("codes", expanding=True))
+            daily_rows = db.execute(
+                daily_sql,
+                {
+                    "src": src,
+                    "kind": kind,
+                    "start_d": start_date,
+                    "end_d": end_date,
+                    "codes": top_codes,
+                },
+            ).mappings().all()
+            for r in daily_rows:
+                code = str(r["board_code"])
+                if code not in series_by_code:
+                    continue
+                series_by_code[code][_iso_date(r["trade_date"])] = _safe_float(
+                    r["main_net_inflow"]
+                )
+
+        top_entities: List[Dict[str, Any]] = []
+        for r in top_rows:
+            code = str(r["board_code"])
+            by_date = series_by_code.get(code, {})
+            top_entities.append(
+                {
+                    "board_code": code,
+                    "board_name": r["board_name"],
+                    "window_net": _safe_float(r["window_net"]),
+                    "main_net_inflow": [by_date.get(d) for d in dates],
+                }
+            )
+
+        return {
+            "success": True,
+            "data": {
+                "period": key,
+                "period_label": period_meta["label"],
+                "board_kind": kind,
+                "board_code_source": src,
+                "trend_days": int(trend_days),
+                "start_date": start_date,
+                "end_date": end_date,
+                "dates": dates,
+                "aggregate": {
+                    "main_net_inflow": [
+                        (agg_by_date.get(d) or {}).get("main_net_inflow") for d in dates
+                    ],
+                    "inflow_amount": [
+                        (agg_by_date.get(d) or {}).get("inflow_amount") for d in dates
+                    ],
+                    "outflow_amount": [
+                        (agg_by_date.get(d) or {}).get("outflow_amount") for d in dates
+                    ],
+                },
+                "top_entities": top_entities,
+            },
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"查询板块资金流趋势失败: {e}"},
             status_code=500,
         )
 

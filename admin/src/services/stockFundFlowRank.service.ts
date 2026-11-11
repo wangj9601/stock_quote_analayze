@@ -39,6 +39,40 @@ export interface StockFundFlowRankParams {
   trade_date?: string
 }
 
+export interface StockFundFlowTrendEntity {
+  code: string
+  name: string | null
+  window_net: number | null
+  net_amount: Array<number | null>
+}
+
+export interface StockFundFlowTrendSeriesData {
+  period: StockFundFlowRankPeriod
+  period_label: string
+  trend_days: number
+  start_date: string | null
+  end_date: string | null
+  dates: string[]
+  aggregate: {
+    net_amount: Array<number | null>
+    inflow_amount: Array<number | null>
+    outflow_amount: Array<number | null>
+  }
+  top_entities: StockFundFlowTrendEntity[]
+}
+
+export interface StockFundFlowTrendSeriesResponse {
+  success: boolean
+  data?: StockFundFlowTrendSeriesData
+  message?: string
+}
+
+export interface StockFundFlowTrendSeriesParams {
+  period?: StockFundFlowRankPeriod
+  trade_date?: string
+  top_n?: number
+}
+
 export const STOCK_FUND_FLOW_RANK_PERIODS: {
   value: StockFundFlowRankPeriod
   label: string
@@ -81,8 +115,35 @@ export async function getStockFundFlowRank(
   return body
 }
 
+export async function getStockFundFlowTrendSeries(
+  params: StockFundFlowTrendSeriesParams = {}
+): Promise<StockFundFlowTrendSeriesResponse> {
+  const q = new URLSearchParams()
+  q.set('period', params.period || 'day')
+  if (params.trade_date) q.set('trade_date', params.trade_date)
+  if (params.top_n != null) q.set('top_n', String(params.top_n))
+
+  const url = `/api/stock_fund_flow/trend_series?${q.toString()}`
+  const res = await fetch(url, { headers: authHeaders() })
+  const text = await res.text()
+  let body: StockFundFlowTrendSeriesResponse = { success: false }
+  try {
+    body = text ? (JSON.parse(text) as StockFundFlowTrendSeriesResponse) : body
+  } catch {
+    body = { success: false, message: text?.slice(0, 200) || `HTTP ${res.status}` }
+  }
+  if (!res.ok) {
+    return {
+      success: false,
+      message: body.message || `请求失败(${res.status})`,
+    }
+  }
+  return body
+}
+
 const stockFundFlowRankService = {
   getRank: getStockFundFlowRank,
+  getTrendSeries: getStockFundFlowTrendSeries,
   periods: STOCK_FUND_FLOW_RANK_PERIODS,
 }
 

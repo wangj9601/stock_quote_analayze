@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Query, BackgroundTasks, File, Form, UploadFile, Depends
 from fastapi.responses import JSONResponse, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from backend_api.database import get_db
 from backend_api.utils.equity_code import is_hk_equity_code, normalize_equity_code
@@ -977,6 +977,219 @@ async def get_stock_fund_flow_rank(
     except Exception as e:
         return JSONResponse(
             {"success": False, "message": f"查询个股资金流排名失败: {e}"},
+            status_code=500,
+        )
+
+
+_STOCK_FUND_FLOW_TREND_DAYS = {
+    "day": 20,
+    "week": 40,
+    "month": 60,
+}
+
+
+def _iso_date_str(value: Any) -> str:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()[:10]
+    return str(value)[:10]
+
+
+@router.get("/trend_series")
+async def get_stock_fund_flow_trend_series(
+    period: str = Query("day", description="day|week|month → 趋势窗口 20/40/60 交易日"),
+    trade_date: Optional[str] = Query(
+        None, description="锚定交易日 YYYY-MM-DD；默认取库内最新日"
+    ),
+    top_n: int = Query(5, ge=1, le=10, description="叠加展示的净流入最强个股数"),
+    db: Session = Depends(get_db),
+):
+    """
+    个股资金流向趋势序列：全市场按日合计净流入/流入/流出 + TopN 个股日序列。
+    数据源：stock_fund_flow_daily。
+    """
+    key = (period or "day").strip().lower()
+    trend_days = _STOCK_FUND_FLOW_TREND_DAYS.get(key)
+    period_meta = _STOCK_FUND_FLOW_RANK_PERIODS.get(key)
+    if trend_days is None or period_meta is None:
+        return JSONResponse(
+            {"success": False, "message": "period 应为 day / week / month"},
+            status_code=400,
+        )
+    anchor = None
+    if trade_date:
+        try:
+            datetime.strptime(trade_date, "%Y-%m-%d")
+            anchor = trade_date
+        except ValueError:
+            return JSONResponse(
+                {"success": False, "message": "trade_date 格式应为 YYYY-MM-DD"},
+                status_code=400,
+            )
+
+    def _empty(end: Optional[str] = None) -> Dict[str, Any]:
+        return {
+            "success": True,
+            "data": {
+                "period": key,
+                "period_label": period_meta["label"],
+                "trend_days": int(trend_days),
+                "start_date": None,
+                "end_date": end,
+                "dates": [],
+                "aggregate": {
+                    "net_amount": [],
+                    "inflow_amount": [],
+                    "outflow_amount": [],
+                },
+                "top_entities": [],
+            },
+        }
+
+    try:
+        if not anchor:
+            latest = db.execute(
+                text("SELECT MAX(trade_date) FROM stock_fund_flow_daily")
+            ).scalar()
+            if latest is None:
+                return _empty()
+            anchor = _iso_date_str(latest)
+
+        date_rows = db.execute(
+            text(
+                """
+                SELECT DISTINCT trade_date
+                FROM stock_fund_flow_daily
+                WHERE trade_date <= :anchor
+                ORDER BY trade_date DESC
+                LIMIT :n_days
+                """
+            ),
+            {"anchor": anchor, "n_days": int(trend_days)},
+        ).fetchall()
+        trade_dates_desc = [
+            _iso_date_str(r[0]) for r in date_rows if r and r[0] is not None
+        ]
+        if not trade_dates_desc:
+            return _empty(anchor)
+
+        dates = list(reversed(trade_dates_desc))
+        start_date = dates[0]
+        end_date = dates[-1]
+
+        agg_rows = db.execute(
+            text(
+                """
+                SELECT
+                    trade_date,
+                    SUM(net_amount) AS net_amount,
+                    SUM(inflow_amount) AS inflow_amount,
+                    SUM(outflow_amount) AS outflow_amount
+                FROM stock_fund_flow_daily
+                WHERE trade_date >= :start_d
+                  AND trade_date <= :end_d
+                GROUP BY trade_date
+                ORDER BY trade_date ASC
+                """
+            ),
+            {"start_d": start_date, "end_d": end_date},
+        ).mappings().all()
+        agg_by_date = {
+            _iso_date_str(r["trade_date"]): {
+                "net_amount": safe_float(r["net_amount"]),
+                "inflow_amount": safe_float(r["inflow_amount"]),
+                "outflow_amount": safe_float(r["outflow_amount"]),
+            }
+            for r in agg_rows
+        }
+
+        top_rows = db.execute(
+            text(
+                """
+                SELECT
+                    code,
+                    (array_agg(name ORDER BY trade_date DESC))[1] AS name,
+                    SUM(net_amount) AS window_net
+                FROM stock_fund_flow_daily
+                WHERE trade_date >= :start_d
+                  AND trade_date <= :end_d
+                GROUP BY code
+                HAVING SUM(net_amount) IS NOT NULL
+                ORDER BY SUM(net_amount) DESC NULLS LAST
+                LIMIT :top_n
+                """
+            ),
+            {"start_d": start_date, "end_d": end_date, "top_n": int(top_n)},
+        ).mappings().all()
+
+        top_codes = [str(r["code"]) for r in top_rows if r.get("code")]
+        series_by_code: Dict[str, Dict[str, Optional[float]]] = {
+            c: {} for c in top_codes
+        }
+        if top_codes:
+            daily_sql = text(
+                """
+                SELECT code, trade_date, net_amount
+                FROM stock_fund_flow_daily
+                WHERE trade_date >= :start_d
+                  AND trade_date <= :end_d
+                  AND code IN :codes
+                """
+            ).bindparams(bindparam("codes", expanding=True))
+            daily_rows = db.execute(
+                daily_sql,
+                {
+                    "start_d": start_date,
+                    "end_d": end_date,
+                    "codes": top_codes,
+                },
+            ).mappings().all()
+            for r in daily_rows:
+                code = str(r["code"])
+                if code not in series_by_code:
+                    continue
+                series_by_code[code][_iso_date_str(r["trade_date"])] = safe_float(
+                    r["net_amount"]
+                )
+
+        top_entities: List[Dict[str, Any]] = []
+        for r in top_rows:
+            code = str(r["code"])
+            by_date = series_by_code.get(code, {})
+            top_entities.append(
+                {
+                    "code": code,
+                    "name": r["name"],
+                    "window_net": safe_float(r["window_net"]),
+                    "net_amount": [by_date.get(d) for d in dates],
+                }
+            )
+
+        return {
+            "success": True,
+            "data": {
+                "period": key,
+                "period_label": period_meta["label"],
+                "trend_days": int(trend_days),
+                "start_date": start_date,
+                "end_date": end_date,
+                "dates": dates,
+                "aggregate": {
+                    "net_amount": [
+                        (agg_by_date.get(d) or {}).get("net_amount") for d in dates
+                    ],
+                    "inflow_amount": [
+                        (agg_by_date.get(d) or {}).get("inflow_amount") for d in dates
+                    ],
+                    "outflow_amount": [
+                        (agg_by_date.get(d) or {}).get("outflow_amount") for d in dates
+                    ],
+                },
+                "top_entities": top_entities,
+            },
+        }
+    except Exception as e:
+        return JSONResponse(
+            {"success": False, "message": f"查询个股资金流趋势失败: {e}"},
             status_code=500,
         )
 

@@ -10,9 +10,16 @@
             <div class="ff-card-title-row">
               <span class="ff-card-title">板块资金流向趋势跟踪</span>
               <span class="fund-flow-date">
-                {{ boardFlowPeriodLabel }}净流入
+                <template v-if="boardFlowView === 'trend'">
+                  近 {{ boardTrendDaysText }} 交易日净流入
+                </template>
+                <template v-else>
+                  {{ boardFlowPeriodLabel }}净流入
+                </template>
                 <template v-if="boardFlowRangeText"> · {{ boardFlowRangeText }}</template>
-                <span class="board-flow-hint"> · 点击柱形/列表行查看成分股</span>
+                <span v-if="boardFlowView === 'rank' || boardFlowView === 'list'" class="board-flow-hint">
+                  · 点击图形/列表行查看成分股
+                </span>
               </span>
             </div>
             <div class="ff-toolbar">
@@ -31,7 +38,9 @@
                 </el-radio-button>
               </el-radio-group>
               <el-radio-group v-model="boardFlowView" size="small" class="ff-view-toggle">
-                <el-radio-button value="chart">图形</el-radio-button>
+                <el-radio-button value="rank">排行</el-radio-button>
+                <el-radio-button value="trend">趋势</el-radio-button>
+                <el-radio-button value="structure">结构</el-radio-button>
                 <el-radio-button value="list">列表</el-radio-button>
               </el-radio-group>
             </div>
@@ -48,9 +57,10 @@
                 </span>
               </div>
               <div
-                v-show="boardFlowView === 'chart' && !industryEmpty && !industryError"
+                v-show="boardChartVisible && !industryEmpty && !industryError"
                 ref="industryChartRef"
-                class="fund-flow-chart fund-flow-chart--clickable"
+                class="fund-flow-chart"
+                :class="{ 'fund-flow-chart--clickable': boardFlowView === 'rank' }"
               />
               <el-table
                 v-if="boardFlowView === 'list' && !industryEmpty && !industryError"
@@ -92,9 +102,10 @@
                 </span>
               </div>
               <div
-                v-show="boardFlowView === 'chart' && !conceptEmpty && !conceptError"
+                v-show="boardChartVisible && !conceptEmpty && !conceptError"
                 ref="conceptChartRef"
-                class="fund-flow-chart fund-flow-chart--clickable"
+                class="fund-flow-chart"
+                :class="{ 'fund-flow-chart--clickable': boardFlowView === 'rank' }"
               />
               <el-table
                 v-if="boardFlowView === 'list' && !conceptEmpty && !conceptError"
@@ -191,9 +202,14 @@
             <div class="ff-card-title-row">
               <span class="ff-card-title">个股资金流向趋势跟踪</span>
               <span class="fund-flow-date">
-                {{ stockFlowPeriodLabel }}净流入
+                <template v-if="stockFlowView === 'trend'">
+                  近 {{ stockTrendDaysText }} 交易日净流入
+                </template>
+                <template v-else>
+                  {{ stockFlowPeriodLabel }}净流入
+                </template>
                 <template v-if="stockFlowRangeText"> · {{ stockFlowRangeText }}</template>
-                <template v-if="stockFlowCount"> · {{ stockFlowCount }} 只</template>
+                <template v-if="stockFlowCount && stockFlowView !== 'trend'"> · {{ stockFlowCount }} 只</template>
               </span>
             </div>
             <div class="ff-toolbar">
@@ -212,14 +228,16 @@
                 </el-radio-button>
               </el-radio-group>
               <el-radio-group v-model="stockFlowView" size="small" class="ff-view-toggle">
-                <el-radio-button value="chart">图形</el-radio-button>
+                <el-radio-button value="rank">排行</el-radio-button>
+                <el-radio-button value="trend">趋势</el-radio-button>
+                <el-radio-button value="structure">结构</el-radio-button>
                 <el-radio-button value="list">列表</el-radio-button>
               </el-radio-group>
             </div>
           </div>
         </template>
         <div
-          v-show="stockFlowView === 'chart' && !stockFlowEmpty && !stockFlowError"
+          v-show="stockChartVisible && !stockFlowEmpty && !stockFlowError"
           ref="stockFlowChartRef"
           class="fund-flow-chart"
         />
@@ -391,7 +409,8 @@ import boardFundFlowService, {
   BOARD_FUND_FLOW_RANK_PERIODS,
   type BoardConstituentFundFlowItem,
   type BoardFundFlowRankPeriod,
-  type BoardFundFlowTodayItem
+  type BoardFundFlowTodayItem,
+  type BoardFundFlowTrendSeriesData
 } from '@/services/boardFundFlow.service'
 import boardSectorTrendService, {
   type BoardSectorTrendItem
@@ -399,15 +418,36 @@ import boardSectorTrendService, {
 import stockFundFlowRankService, {
   STOCK_FUND_FLOW_RANK_PERIODS,
   type StockFundFlowRankItem,
-  type StockFundFlowRankPeriod
+  type StockFundFlowRankPeriod,
+  type StockFundFlowTrendSeriesData
 } from '@/services/stockFundFlowRank.service'
 
 const dashboardTab = ref('fund-flow')
 const reviewSubTab = ref('daily')
-type FundFlowViewMode = 'chart' | 'list'
-const boardFlowView = ref<FundFlowViewMode>('chart')
-const stockFlowView = ref<FundFlowViewMode>('chart')
-const slopeView = ref<FundFlowViewMode>('chart')
+type FundFlowChartViewMode = 'rank' | 'trend' | 'structure' | 'list'
+type SlopeViewMode = 'chart' | 'list'
+const boardFlowView = ref<FundFlowChartViewMode>('rank')
+const stockFlowView = ref<FundFlowChartViewMode>('rank')
+const slopeView = ref<SlopeViewMode>('chart')
+const boardChartVisible = computed(
+  () =>
+    boardFlowView.value === 'rank' ||
+    boardFlowView.value === 'trend' ||
+    boardFlowView.value === 'structure'
+)
+const stockChartVisible = computed(
+  () =>
+    stockFlowView.value === 'rank' ||
+    stockFlowView.value === 'trend' ||
+    stockFlowView.value === 'structure'
+)
+const TREND_DAYS_BY_PERIOD: Record<BoardFundFlowRankPeriod, number> = {
+  day: 20,
+  week: 40,
+  month: 60
+}
+const TOP_LINE_COLORS = ['#2563eb', '#d97706', '#7c3aed', '#0891b2', '#be185d']
+const WATERFALL_SIDES = 5
 
 const industryChartRef = ref<HTMLDivElement | null>(null)
 const conceptChartRef = ref<HTMLDivElement | null>(null)
@@ -450,6 +490,11 @@ const boardFlowPeriods = BOARD_FUND_FLOW_RANK_PERIODS
 const boardFlowPeriod = ref<BoardFundFlowRankPeriod>('day')
 const boardFlowPeriodLabel = ref('日')
 const boardFlowRangeText = ref('')
+const boardTrendDaysText = computed(
+  () => String(TREND_DAYS_BY_PERIOD[boardFlowPeriod.value] || 20)
+)
+const industryTrendCache = ref<BoardFundFlowTrendSeriesData | null>(null)
+const conceptTrendCache = ref<BoardFundFlowTrendSeriesData | null>(null)
 
 const industrySlopeLoading = ref(false)
 const conceptSlopeLoading = ref(false)
@@ -471,6 +516,10 @@ const stockFlowCount = ref(0)
 const stockFlowPeriodLabel = ref('日')
 const stockFlowRangeText = ref('')
 const stockFlowRows = ref<StockFundFlowRankItem[]>([])
+const stockTrendCache = ref<StockFundFlowTrendSeriesData | null>(null)
+const stockTrendDaysText = computed(
+  () => String(TREND_DAYS_BY_PERIOD[stockFlowPeriod.value] || 20)
+)
 const industrySlopeRows = ref<BoardSectorTrendItem[]>([])
 const conceptSlopeRows = ref<BoardSectorTrendItem[]>([])
 
@@ -507,16 +556,25 @@ function sortAllByNetInflow(items: BoardFundFlowTodayItem[]) {
     .sort((a, b) => Number(a.main_net_inflow) - Number(b.main_net_inflow))
 }
 
+function yuanToYi(yuan: number | null | undefined): number | null {
+  if (yuan == null || !Number.isFinite(Number(yuan))) return null
+  return Math.round((Number(yuan) / 1e8) * 100) / 100
+}
+
+function formatYiSigned(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(Number(v))) return '--'
+  const n = Number(v)
+  const sign = n > 0 ? '+' : ''
+  return `${sign}${n.toFixed(2)} 亿`
+}
+
 function buildChartOption(
   rows: BoardFundFlowTodayItem[],
   titleHint: string,
   periodLabel: string
 ) {
   const names = rows.map((r) => String(r.board_name || r.board_code || '--'))
-  const values = rows.map((r) => {
-    const yuan = Number(r.main_net_inflow) || 0
-    return Math.round((yuan / 1e8) * 100) / 100
-  })
+  const values = rows.map((r) => yuanToYi(r.main_net_inflow) || 0)
   const useZoom = rows.length > 20
   // dataZoom 初始窗口：优先露出净流入最强的一段（数组末尾 = 图顶部）
   const windowSize = 20
@@ -588,13 +646,298 @@ function buildChartOption(
           value: v,
           itemStyle: {
             color: v >= 0 ? '#c23b3b' : '#2f9e6b',
-            borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
+            borderRadius: v >= 0 ? [0, 2, 2, 0] : [2, 0, 0, 2]
           }
         })),
-        barMaxWidth: 14
+        barMaxWidth: 8
       }
     ]
   }
+}
+
+/** 趋势图双 Y 轴：左=TopN，右=合计，避免合计量级压扁标的线 */
+function buildFundTrendOption(opts: {
+  dates: string[]
+  aggregateYi: Array<number | null>
+  topSeries: Array<{ name: string; values: Array<number | null> }>
+  aggName: string
+}) {
+  const { dates, aggregateYi, topSeries, aggName } = opts
+  const muted = '#6b7280'
+  const split = '#e5e7eb'
+  const aggColor = '#4b5563'
+  const series: echarts.SeriesOption[] = []
+  topSeries.forEach((ent, idx) => {
+    const color = TOP_LINE_COLORS[idx % TOP_LINE_COLORS.length]
+    const base: echarts.SeriesOption = {
+      name: ent.name,
+      type: 'line',
+      yAxisIndex: 0,
+      data: ent.values,
+      smooth: 0.25,
+      showSymbol: false,
+      connectNulls: false,
+      lineStyle: { width: 2.2, color },
+      itemStyle: { color },
+      emphasis: { focus: 'series', lineStyle: { width: 3 } },
+      z: 3
+    }
+    if (idx === 0) {
+      ;(base as { markLine?: unknown }).markLine = {
+        silent: true,
+        symbol: 'none',
+        label: { show: false },
+        data: [
+          {
+            yAxis: 0,
+            lineStyle: { color: 'rgba(55,65,81,0.35)', width: 1, type: 'solid' }
+          }
+        ]
+      }
+    }
+    series.push(base)
+  })
+  series.push({
+    name: aggName,
+    type: 'line',
+    yAxisIndex: 1,
+    data: aggregateYi,
+    smooth: 0.2,
+    showSymbol: false,
+    connectNulls: false,
+    lineStyle: { width: 1.6, color: aggColor, type: 'dashed' },
+    itemStyle: { color: aggColor },
+    areaStyle: {
+      color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+        { offset: 0, color: 'rgba(75,85,99,0.12)' },
+        { offset: 1, color: 'rgba(75,85,99,0.01)' }
+      ])
+    },
+    emphasis: { focus: 'series' },
+    z: 1
+  })
+  return {
+    backgroundColor: 'transparent',
+    color: TOP_LINE_COLORS,
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        crossStyle: { color: muted },
+        lineStyle: { color: muted, type: 'dashed' }
+      },
+      formatter: (params: unknown) => {
+        const list = (Array.isArray(params) ? params : [params]) as Array<{
+          seriesName?: string
+          value?: number | null
+          axisValueLabel?: string
+          marker?: string
+        }>
+        const head = list[0]?.axisValueLabel || ''
+        const lines = list.map((p) => {
+          const axisHint = p.seriesName === aggName ? '（右轴）' : ''
+          return `${p.marker || ''}${p.seriesName || ''}${axisHint}：${formatYiSigned(
+            p.value == null ? null : Number(p.value)
+          )}`
+        })
+        return [head, ...lines].join('<br/>')
+      }
+    },
+    legend: {
+      type: 'scroll',
+      top: 4,
+      left: 8,
+      right: 8,
+      itemWidth: 14,
+      itemHeight: 8,
+      itemGap: 12,
+      textStyle: { fontSize: 12, color: '#374151' }
+    },
+    grid: { left: 56, right: 58, top: 44, bottom: 32 },
+    xAxis: {
+      type: 'category',
+      data: dates,
+      boundaryGap: false,
+      axisLine: { lineStyle: { color: split } },
+      axisTick: { show: false },
+      axisLabel: {
+        fontSize: 10,
+        color: muted,
+        hideOverlap: true,
+        formatter: (v: string) => (v && v.length >= 10 ? v.slice(5) : v)
+      }
+    },
+    yAxis: [
+      {
+        type: 'value',
+        name: '标的(亿)',
+        nameGap: 8,
+        nameTextStyle: { fontSize: 11, color: muted },
+        axisLabel: { fontSize: 11, color: muted },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { type: 'dashed', color: split } },
+        scale: true
+      },
+      {
+        type: 'value',
+        name: '合计(亿)',
+        nameGap: 8,
+        nameTextStyle: { fontSize: 11, color: muted },
+        axisLabel: { fontSize: 11, color: muted },
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        scale: true
+      }
+    ],
+    series
+  }
+}
+
+function buildBoardTrendOption(data: BoardFundFlowTrendSeriesData) {
+  return buildFundTrendOption({
+    dates: data.dates || [],
+    aggregateYi: (data.aggregate?.main_net_inflow || []).map((v) => yuanToYi(v)),
+    topSeries: (data.top_entities || []).map((ent, idx) => ({
+      name: String(ent.board_name || ent.board_code || `Top${idx + 1}`),
+      values: (ent.main_net_inflow || []).map((v) => yuanToYi(v))
+    })),
+    aggName: '全板合计'
+  })
+}
+
+function buildWaterfallOption(
+  steps: Array<{ name: string; valueYi: number }>,
+  periodLabel: string
+) {
+  const names = steps.map((s) => s.name)
+  const helpers: number[] = []
+  const display: Array<{
+    value: number
+    itemStyle: { color: string; borderRadius: number[] }
+  }> = []
+  let running = 0
+  steps.forEach((step, idx) => {
+    const v = step.valueYi
+    const isTotal = idx === steps.length - 1
+    if (isTotal) {
+      helpers.push(v >= 0 ? 0 : v)
+      display.push({
+        value: Math.abs(v),
+        itemStyle: { color: '#374151', borderRadius: [3, 3, 3, 3] }
+      })
+      return
+    }
+    if (v >= 0) {
+      helpers.push(running)
+      display.push({
+        value: v,
+        itemStyle: { color: '#c23b3b', borderRadius: [3, 3, 0, 0] }
+      })
+      running += v
+    } else {
+      helpers.push(running + v)
+      display.push({
+        value: Math.abs(v),
+        itemStyle: { color: '#2f9e6b', borderRadius: [0, 0, 3, 3] }
+      })
+      running += v
+    }
+  })
+  return {
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow' },
+      formatter: (params: unknown) => {
+        const list = Array.isArray(params) ? params : [params]
+        const p = list.find(
+          (x) => (x as { seriesName?: string }).seriesName === '变动'
+        ) as { dataIndex?: number } | undefined
+        const idx = Number(p?.dataIndex)
+        const step = Number.isFinite(idx) ? steps[idx] : undefined
+        if (!step) return ''
+        return `${step.name}<br/>${periodLabel}：${formatYiSigned(step.valueYi)}`
+      }
+    },
+    grid: { left: 48, right: 20, top: 16, bottom: 64 },
+    xAxis: {
+      type: 'category',
+      data: names,
+      axisLabel: {
+        fontSize: 10,
+        interval: 0,
+        rotate: names.length > 6 ? 28 : 0,
+        width: 72,
+        overflow: 'truncate'
+      }
+    },
+    yAxis: {
+      type: 'value',
+      name: '净流入(亿)',
+      axisLabel: { fontSize: 11 },
+      splitLine: { lineStyle: { type: 'dashed', color: '#e5e7eb' } }
+    },
+    series: [
+      {
+        name: '辅助',
+        type: 'bar',
+        stack: 'wf',
+        data: helpers,
+        itemStyle: { borderColor: 'transparent', color: 'transparent' },
+        emphasis: { itemStyle: { borderColor: 'transparent', color: 'transparent' } },
+        barMaxWidth: 28
+      },
+      {
+        name: '变动',
+        type: 'bar',
+        stack: 'wf',
+        data: display,
+        barMaxWidth: 28,
+        label: {
+          show: true,
+          position: 'top',
+          fontSize: 10,
+          formatter: (p: { dataIndex?: number }) => {
+            const idx = Number(p?.dataIndex)
+            const step = Number.isFinite(idx) ? steps[idx] : undefined
+            if (!step) return ''
+            return formatYiSigned(step.valueYi).replace(' 亿', '')
+          }
+        }
+      }
+    ]
+  }
+}
+
+function buildBoardStructureSteps(
+  rows: BoardFundFlowTodayItem[],
+  sides = WATERFALL_SIDES
+): Array<{ name: string; valueYi: number }> {
+  const sorted = [...rows]
+    .filter((x) => x.main_net_inflow != null && Number.isFinite(Number(x.main_net_inflow)))
+    .sort((a, b) => Number(b.main_net_inflow) - Number(a.main_net_inflow))
+  const inflows = sorted.filter((x) => Number(x.main_net_inflow) > 0).slice(0, sides)
+  const outflows = sorted
+    .filter((x) => Number(x.main_net_inflow) < 0)
+    .slice(-sides)
+    .reverse()
+  const steps: Array<{ name: string; valueYi: number }> = []
+  inflows.forEach((r) => {
+    steps.push({
+      name: String(r.board_name || r.board_code || '--'),
+      valueYi: yuanToYi(r.main_net_inflow) || 0
+    })
+  })
+  outflows.forEach((r) => {
+    steps.push({
+      name: String(r.board_name || r.board_code || '--'),
+      valueYi: yuanToYi(r.main_net_inflow) || 0
+    })
+  })
+  const total = steps.reduce((s, x) => s + x.valueYi, 0)
+  steps.push({ name: '结构净额', valueYi: Math.round(total * 100) / 100 })
+  return steps
 }
 
 function ensureChart(el: HTMLDivElement | null, existing: echarts.ECharts | null) {
@@ -622,24 +965,109 @@ function bindBoardChartClick(kind: 'industry' | 'concept', chart: echarts.EChart
   })
 }
 
+function paintBoardChart(kind: 'industry' | 'concept') {
+  const label = boardFlowPeriodLabel.value || '日'
+  const rows = kind === 'industry' ? industryRows.value : conceptRows.value
+  const mode = boardFlowView.value
+  if (kind === 'industry') {
+    industryChart = ensureChart(industryChartRef.value, industryChart)
+  } else {
+    conceptChart = ensureChart(conceptChartRef.value, conceptChart)
+  }
+  const chart = kind === 'industry' ? industryChart : conceptChart
+  if (!chart) return
+
+  if (mode === 'trend') {
+    const trend =
+      kind === 'industry' ? industryTrendCache.value : conceptTrendCache.value
+    if (!trend || !trend.dates?.length) {
+      chart.clear()
+      return
+    }
+    chart.setOption(buildBoardTrendOption(trend), true)
+    chart.resize()
+    return
+  }
+
+  if (mode === 'structure') {
+    if (kind === 'industry') industryCount.value = rows.length
+    else conceptCount.value = rows.length
+    const steps = buildBoardStructureSteps(rows)
+    if (steps.length <= 1) {
+      chart.clear()
+      return
+    }
+    chart.setOption(buildWaterfallOption(steps, label), true)
+    chart.resize()
+    return
+  }
+
+  // rank（默认）
+  if (kind === 'industry') industryCount.value = rows.length
+  else conceptCount.value = rows.length
+  chart.setOption(buildChartOption(rows, kind === 'industry' ? '行业' : '概念', label), true)
+  chart.resize()
+  bindBoardChartClick(kind, chart)
+}
+
 function renderFundFlowChart(
   kind: 'industry' | 'concept',
   items: BoardFundFlowTodayItem[]
 ) {
   const rows = sortAllByNetInflow(items)
-  const label = boardFlowPeriodLabel.value || '日'
-  if (kind === 'industry') {
-    industryRows.value = rows
-    industryChart = ensureChart(industryChartRef.value, industryChart)
-    industryChart?.setOption(buildChartOption(rows, '行业', label), true)
-    industryChart?.resize()
-    bindBoardChartClick('industry', industryChart)
+  if (kind === 'industry') industryRows.value = rows
+  else conceptRows.value = rows
+  paintBoardChart(kind)
+}
+
+async function loadBoardTrend(kind: 'industry' | 'concept') {
+  const isIndustry = kind === 'industry'
+  if (isIndustry) {
+    industryLoading.value = true
+    industryError.value = ''
   } else {
-    conceptRows.value = rows
-    conceptChart = ensureChart(conceptChartRef.value, conceptChart)
-    conceptChart?.setOption(buildChartOption(rows, '概念', label), true)
-    conceptChart?.resize()
-    bindBoardChartClick('concept', conceptChart)
+    conceptLoading.value = true
+    conceptError.value = ''
+  }
+  try {
+    const resp = await boardFundFlowService.getTrendSeries({
+      board_kind: kind,
+      period: boardFlowPeriod.value,
+      top_n: 5
+    })
+    if (!resp.success) throw new Error(resp.message || '加载趋势失败')
+    const data = resp.data
+    if (!data?.dates?.length) {
+      if (isIndustry) {
+        industryEmpty.value = true
+        industryTrendCache.value = null
+      } else {
+        conceptEmpty.value = true
+        conceptTrendCache.value = null
+      }
+      return
+    }
+    if (isIndustry) {
+      industryEmpty.value = false
+      industryTrendCache.value = data
+      industryCount.value = data.top_entities?.length || 0
+    } else {
+      conceptEmpty.value = false
+      conceptTrendCache.value = data
+      conceptCount.value = data.top_entities?.length || 0
+    }
+    boardFlowPeriodLabel.value = data.period_label || boardFlowPeriodLabel.value
+    const range = formatBoardFlowRange(data.start_date, data.end_date)
+    if (range) boardFlowRangeText.value = range
+    await nextTick()
+    paintBoardChart(kind)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : '加载趋势失败'
+    if (isIndustry) industryError.value = msg
+    else conceptError.value = msg
+  } finally {
+    if (isIndustry) industryLoading.value = false
+    else conceptLoading.value = false
   }
 }
 
@@ -843,6 +1271,10 @@ function formatBoardFlowRange(start: string | null | undefined, end: string | nu
 }
 
 async function loadKind(kind: 'industry' | 'concept') {
+  if (boardFlowView.value === 'trend') {
+    await loadBoardTrend(kind)
+    return
+  }
   const isIndustry = kind === 'industry'
   if (isIndustry) {
     industryLoading.value = true
@@ -875,9 +1307,11 @@ async function loadKind(kind: 'industry' | 'concept') {
       if (isIndustry) {
         industryEmpty.value = true
         industryRows.value = []
+        industryChart?.clear()
       } else {
         conceptEmpty.value = true
         conceptRows.value = []
+        conceptChart?.clear()
       }
       return
     }
@@ -894,6 +1328,8 @@ async function loadKind(kind: 'industry' | 'concept') {
 }
 
 function onBoardFlowPeriodChange() {
+  industryTrendCache.value = null
+  conceptTrendCache.value = null
   void loadKind('industry')
   void loadKind('concept')
 }
@@ -1096,10 +1532,7 @@ function buildStockFlowChartOption(rows: StockFundFlowRankItem[], periodLabel: s
     const code = String(r.code || '')
     return name ? `${name}` : code || '--'
   })
-  const values = rows.map((r) => {
-    const yuan = Number(r.net_amount) || 0
-    return Math.round((yuan / 1e8) * 100) / 100
-  })
+  const values = rows.map((r) => yuanToYi(r.net_amount) || 0)
   const meta = rows.map((r) => ({
     code: r.code,
     inflow: r.inflow_amount,
@@ -1122,17 +1555,11 @@ function buildStockFlowChartOption(rows: StockFundFlowRankItem[], periodLabel: s
         const m = Number.isFinite(idx) ? meta[idx] : undefined
         const v = Number(p?.value)
         const sign = v > 0 ? '+' : ''
-        const toYi = (yuan: number | null | undefined) => {
-          if (yuan == null || !Number.isFinite(Number(yuan))) return '--'
-          const yi = Math.round((Number(yuan) / 1e8) * 100) / 100
-          const s = yi > 0 ? '+' : ''
-          return `${s}${yi.toFixed(2)} 亿`
-        }
         return [
           `${p?.name || ''}${m?.code ? `（${m.code}）` : ''}`,
           `${periodLabel}净流入：${sign}${v.toFixed(2)} 亿`,
-          `流入：${toYi(m?.inflow)}`,
-          `流出：${toYi(m?.outflow)}`,
+          `流入：${formatYiSigned(yuanToYi(m?.inflow))}`,
+          `流出：${formatYiSigned(yuanToYi(m?.outflow))}`,
           m?.days != null ? `覆盖交易日：${m.days}` : ''
         ]
           .filter(Boolean)
@@ -1188,24 +1615,129 @@ function buildStockFlowChartOption(rows: StockFundFlowRankItem[], periodLabel: s
           value: v,
           itemStyle: {
             color: v >= 0 ? '#c23b3b' : '#2f9e6b',
-            borderRadius: v >= 0 ? [0, 3, 3, 0] : [3, 0, 0, 3]
+            borderRadius: v >= 0 ? [0, 2, 2, 0] : [2, 0, 0, 2]
           }
         })),
-        barMaxWidth: 14
+        barMaxWidth: 8
       }
     ]
   }
 }
 
-function renderStockFlowChart(items: StockFundFlowRankItem[], periodLabel: string) {
-  const rows = sortStockFlowByNet(items)
-  stockFlowRows.value = rows
+function buildStockTrendOption(data: StockFundFlowTrendSeriesData) {
+  return buildFundTrendOption({
+    dates: data.dates || [],
+    aggregateYi: (data.aggregate?.net_amount || []).map((v) => yuanToYi(v)),
+    topSeries: (data.top_entities || []).map((ent, idx) => ({
+      name: String(ent.name || ent.code || `Top${idx + 1}`),
+      values: (ent.net_amount || []).map((v) => yuanToYi(v))
+    })),
+    aggName: '全市场合计'
+  })
+}
+
+function buildStockStructureSteps(
+  rows: StockFundFlowRankItem[],
+  sides = WATERFALL_SIDES
+): Array<{ name: string; valueYi: number }> {
+  const sorted = [...rows]
+    .filter((x) => x.net_amount != null && Number.isFinite(Number(x.net_amount)))
+    .sort((a, b) => Number(b.net_amount) - Number(a.net_amount))
+  const inflows = sorted.filter((x) => Number(x.net_amount) > 0).slice(0, sides)
+  const outflows = sorted
+    .filter((x) => Number(x.net_amount) < 0)
+    .slice(-sides)
+    .reverse()
+  const steps: Array<{ name: string; valueYi: number }> = []
+  inflows.forEach((r) => {
+    steps.push({
+      name: String(r.name || r.code || '--'),
+      valueYi: yuanToYi(r.net_amount) || 0
+    })
+  })
+  outflows.forEach((r) => {
+    steps.push({
+      name: String(r.name || r.code || '--'),
+      valueYi: yuanToYi(r.net_amount) || 0
+    })
+  })
+  const total = steps.reduce((s, x) => s + x.valueYi, 0)
+  steps.push({ name: '结构净额', valueYi: Math.round(total * 100) / 100 })
+  return steps
+}
+
+function paintStockChart() {
+  const label = stockFlowPeriodLabel.value || '日'
   stockFlowChart = ensureChart(stockFlowChartRef.value, stockFlowChart)
-  stockFlowChart?.setOption(buildStockFlowChartOption(rows, periodLabel), true)
-  stockFlowChart?.resize()
+  if (!stockFlowChart) return
+  const mode = stockFlowView.value
+  if (mode === 'trend') {
+    const trend = stockTrendCache.value
+    if (!trend?.dates?.length) {
+      stockFlowChart.clear()
+      return
+    }
+    stockFlowChart.setOption(buildStockTrendOption(trend), true)
+    stockFlowChart.resize()
+    return
+  }
+  if (mode === 'structure') {
+    stockFlowCount.value = stockFlowRows.value.length
+    const steps = buildStockStructureSteps(stockFlowRows.value)
+    if (steps.length <= 1) {
+      stockFlowChart.clear()
+      return
+    }
+    stockFlowChart.setOption(buildWaterfallOption(steps, label), true)
+    stockFlowChart.resize()
+    return
+  }
+  stockFlowCount.value = stockFlowRows.value.length
+  stockFlowChart.setOption(buildStockFlowChartOption(stockFlowRows.value, label), true)
+  stockFlowChart.resize()
+}
+
+function renderStockFlowChart(items: StockFundFlowRankItem[], _periodLabel: string) {
+  stockFlowRows.value = sortStockFlowByNet(items)
+  paintStockChart()
+}
+
+async function loadStockTrend() {
+  stockFlowLoading.value = true
+  stockFlowError.value = ''
+  stockFlowEmpty.value = false
+  try {
+    const resp = await stockFundFlowRankService.getTrendSeries({
+      period: stockFlowPeriod.value,
+      top_n: 5
+    })
+    if (!resp.success) throw new Error(resp.message || '加载趋势失败')
+    const data = resp.data
+    if (!data?.dates?.length) {
+      stockFlowEmpty.value = true
+      stockTrendCache.value = null
+      stockFlowChart?.clear()
+      return
+    }
+    stockTrendCache.value = data
+    stockFlowPeriodLabel.value = data.period_label || '日'
+    stockFlowRangeText.value = formatBoardFlowRange(data.start_date, data.end_date)
+    stockFlowCount.value = data.top_entities?.length || 0
+    await nextTick()
+    paintStockChart()
+  } catch (e: unknown) {
+    stockFlowError.value = e instanceof Error ? e.message : '加载趋势失败'
+    stockTrendCache.value = null
+  } finally {
+    stockFlowLoading.value = false
+  }
 }
 
 async function loadStockFlowRank() {
+  if (stockFlowView.value === 'trend') {
+    await loadStockTrend()
+    return
+  }
   stockFlowLoading.value = true
   stockFlowError.value = ''
   stockFlowEmpty.value = false
@@ -1220,11 +1752,7 @@ async function loadStockFlowRank() {
     const data = resp.data
     const items = data?.items || []
     stockFlowPeriodLabel.value = data?.period_label || '日'
-    if (data?.start_date && data?.end_date && data.start_date !== data.end_date) {
-      stockFlowRangeText.value = `${data.start_date} ~ ${data.end_date}`
-    } else {
-      stockFlowRangeText.value = data?.end_date || data?.start_date || ''
-    }
+    stockFlowRangeText.value = formatBoardFlowRange(data?.start_date, data?.end_date)
     stockFlowCount.value = items.length
 
     if (!items.length) {
@@ -1244,6 +1772,7 @@ async function loadStockFlowRank() {
 }
 
 function onStockFlowPeriodChange() {
+  stockTrendCache.value = null
   void loadStockFlowRank()
 }
 
@@ -1264,16 +1793,24 @@ function onDashboardTabChange(name: string | number) {
 }
 
 watch(boardFlowView, async (mode) => {
-  if (mode !== 'chart') return
-  await nextTick()
-  industryChart?.resize()
-  conceptChart?.resize()
+  if (mode === 'list') return
+  if (mode === 'trend') {
+    void loadBoardTrend('industry')
+    void loadBoardTrend('concept')
+    return
+  }
+  // 排行/结构共用 period 窗口排名数据；从趋势切回时强制按当前周期重载
+  void loadKind('industry')
+  void loadKind('concept')
 })
 
 watch(stockFlowView, async (mode) => {
-  if (mode !== 'chart') return
-  await nextTick()
-  stockFlowChart?.resize()
+  if (mode === 'list') return
+  if (mode === 'trend') {
+    void loadStockTrend()
+    return
+  }
+  void loadStockFlowRank()
 })
 
 watch(slopeView, async (mode) => {

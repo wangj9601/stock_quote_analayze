@@ -749,7 +749,7 @@
                 <!-- 市场分析：个股/板块资金流向 + 板块斜率趋势 -->
                 <div class="tab-panel" id="market-analysis">
                     <div class="ma-workbench" data-perm="channel.analyze.tab.market">
-                        <p class="ma-desc">汇总个股与板块资金净流入排名、两融排行、板块多窗口斜率趋势；支持图形 / 列表切换，并可导出当前区块数据为 Excel。两融为 T+1 披露旁证，不能证明机构爆仓。</p>
+                        <p class="ma-desc">汇总个股与板块资金净流入（排行 / 趋势 / 结构 / 列表）、两融排行、板块多窗口斜率趋势；可导出当前区块数据为 Excel。两融为 T+1 披露旁证，不能证明机构爆仓。</p>
 
                         <!-- 个股资金流向 -->
                         <section class="ma-section" id="maStockFlowSection" data-ma-block="stock">
@@ -765,7 +765,9 @@
                                         <label><input type="radio" name="maStockPeriod" value="month"> 月</label>
                                     </div>
                                     <div class="ma-view" role="group" aria-label="展示方式">
-                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="chart" data-ma-block="stock">图形</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="rank" data-ma-block="stock">排行</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="trend" data-ma-block="stock">趋势</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="structure" data-ma-block="stock">结构</button>
                                         <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="list" data-ma-block="stock">列表</button>
                                     </div>
                                     <button type="button" class="btn btn-secondary" id="maStockRefreshBtn" title="重新加载">刷新</button>
@@ -860,7 +862,9 @@
                                         <label><input type="radio" name="maBoardPeriod" value="month"> 月</label>
                                     </div>
                                     <div class="ma-view" role="group" aria-label="展示方式">
-                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="chart" data-ma-block="board">图形</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn active" data-ma-view="rank" data-ma-block="board">排行</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="trend" data-ma-block="board">趋势</button>
+                                        <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="structure" data-ma-block="board">结构</button>
                                         <button type="button" class="btn btn-secondary ma-view-btn" data-ma-view="list" data-ma-block="board">列表</button>
                                     </div>
                                     <button type="button" class="btn btn-secondary" id="maBoardRefreshBtn" title="重新加载">刷新</button>
@@ -868,7 +872,7 @@
                                 </div>
                             </div>
                             <div class="ma-body">
-                                <p class="ma-hint" id="maBoardFlowHint">点击板块柱形或列表行，可查看该板块成分股资金流向；详情内可批量交易分析、进入比价选股</p>
+                                <p class="ma-hint" id="maBoardFlowHint">排行/列表：点击图形或行可查看成分股；趋势为双轴（左 Top5 / 右合计）；结构为流入/流出瀑布图</p>
                                 <div class="ma-chart" id="maBoardFlowChart"></div>
                                 <div class="ma-table-wrap" id="maBoardFlowTableWrap" hidden>
                                     <table class="ma-table" id="maBoardFlowTable">

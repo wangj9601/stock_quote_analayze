@@ -230,6 +230,11 @@
     color: #fff;
 }
 
+.ma-view .ma-view-btn {
+    padding: 0.25rem 0.55rem;
+    font-size: 0.82rem;
+}
+
 .ma-body {
     position: relative;
 }
