@@ -574,7 +574,44 @@ const BoardAnalysis = {
         <span>斜率 ${slope}</span>
         <span class="ba-env">${this.esc(env)}</span>
         <span>成分 ${memberN}</span>
+        <span id="baBoardGateInline" class="ba-gate-inline bgate-muted">闸门加载中…</span>
       </div>`;
+    this.loadBoardGateMeta(board);
+  },
+
+  async loadBoardGateMeta(board) {
+    const host = document.getElementById('baBoardGateInline');
+    if (!host || !board || !board.board_code) return;
+    try {
+      if (!window.BoardGateUI) {
+        await this._ensureBoardGateUi();
+      }
+      if (!window.BoardGateUI) throw new Error('BoardGateUI 未加载');
+      const kind = (board.board_kind || this.boardKind || 'industry') === 'concept' ? 'concept' : 'industry';
+      const src = board.board_code_source || 'tonghuashun';
+      const row = await BoardGateUI.fetchGateDaily(board.board_code, kind, src);
+      host.className = 'ba-gate-inline';
+      host.innerHTML = BoardGateUI.metaInlineHtml(
+        row ? { ...row, board_kind: kind } : null
+      );
+    } catch (e) {
+      host.className = 'ba-gate-inline bgate-muted';
+      host.textContent = '闸门 --';
+      console.debug('board gate meta', e);
+    }
+  },
+
+  _ensureBoardGateUi() {
+    if (window.BoardGateUI) return Promise.resolve();
+    if (this._boardGateUiPromise) return this._boardGateUiPromise;
+    this._boardGateUiPromise = new Promise((resolve, reject) => {
+      const el = document.createElement('script');
+      el.src = 'js/board_gate_ui.js?v=20261112-gate';
+      el.onload = () => resolve();
+      el.onerror = () => reject(new Error('加载 board_gate_ui.js 失败'));
+      document.body.appendChild(el);
+    });
+    return this._boardGateUiPromise;
   },
 
   defaultBoardLabel(payload) {

@@ -319,6 +319,69 @@
     color: #64748b;
 }
 
+/* 板块入场闸门 */
+.bgate-chip {
+    display: inline-block;
+    padding: 0.1rem 0.45rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+.bgate-alloc {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+.bgate-watch {
+    background: #f1f5f9;
+    color: #475569;
+}
+.bgate-avoid {
+    background: #dcfce7;
+    color: #15803d;
+}
+.bgate-muted {
+    background: #f8fafc;
+    color: #94a3b8;
+}
+.bgate-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+.bgate-sep {
+    color: #cbd5e1;
+}
+.bgate-detail {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.bgate-detail-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.55rem 0.85rem;
+}
+.bgate-k {
+    font-size: 0.75rem;
+    color: #64748b;
+}
+.bgate-detail-meta {
+    font-size: 0.8rem;
+    color: #475569;
+}
+.bgate-deg {
+    color: #b45309;
+}
+.bgate-empty {
+    color: #94a3b8;
+    font-size: 0.875rem;
+    padding: 0.35rem 0;
+}
+
 .ma-table tbody tr.ma-row-clickable {
     cursor: pointer;
 }

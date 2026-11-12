@@ -1798,6 +1798,12 @@ const MarketsPage = {
                 ${item('上涨/下跌', `${d.up_count != null ? d.up_count : '--'} / ${d.down_count != null ? d.down_count : '--'}`)}
                 ${item('成分股数量', d.member_count != null ? d.member_count : (d.stock_count != null ? d.stock_count : '--'))}
             </div>
+            <div class="sector-detail-section sector-board-gate-section">
+                <h3>入场闸门</h3>
+                <div id="sectorBoardGateHost" class="sector-board-gate-host">
+                    <div class="sector-detail-loading">闸门加载中…</div>
+                </div>
+            </div>
             <div class="sector-detail-section">
                 <div class="sector-detail-section-head">
                     <h3>板块斜率与强弱</h3>
@@ -1868,12 +1874,52 @@ const MarketsPage = {
         }
 
         const src = String(d.board_code_source || (this._sectorDetailCtx && this._sectorDetailCtx.boardSource) || 'tonghuashun').trim();
+        this.loadSectorBoardGate(kind, code, src);
         this.loadSectorSlopeTrend(kind, code);
         this.loadSectorFundFlow(kind, code, src);
         this.loadSectorLimitUpStocks(kind, code, src, d.board_name || '', {
             waveStartMode: (this._sectorLimitUpPrefs && this._sectorLimitUpPrefs.waveStartMode) || 'board_start',
             startMinCount: (this._sectorLimitUpPrefs && this._sectorLimitUpPrefs.startMinCount) || 2,
         });
+    },
+
+    async loadSectorBoardGate(kind, boardCode, boardSource) {
+        const host = document.getElementById('sectorBoardGateHost');
+        if (!host) return;
+        const code = String(boardCode || '').trim();
+        if (!code) {
+            host.innerHTML = '<div class="bgate-empty">缺少板块代码</div>';
+            return;
+        }
+        const token = `${kind}|${code}|gate|${Date.now()}`;
+        this._sectorBoardGateToken = token;
+        host.innerHTML = '<div class="sector-detail-loading">闸门加载中…</div>';
+        try {
+            if (!window.BoardGateUI) {
+                await this._ensureBoardGateUiScript();
+            }
+            if (!window.BoardGateUI) throw new Error('BoardGateUI 未加载');
+            const row = await BoardGateUI.fetchGateDaily(code, kind, boardSource || 'tonghuashun');
+            if (this._sectorBoardGateToken !== token) return;
+            host.innerHTML = BoardGateUI.detailCardHtml(row);
+        } catch (err) {
+            if (this._sectorBoardGateToken !== token) return;
+            console.error(err);
+            host.innerHTML = `<div class="sector-detail-error">${this.escapeHtml(err.message || '闸门加载失败')}</div>`;
+        }
+    },
+
+    _ensureBoardGateUiScript() {
+        if (window.BoardGateUI) return Promise.resolve();
+        if (this._boardGateUiPromise) return this._boardGateUiPromise;
+        this._boardGateUiPromise = new Promise((resolve, reject) => {
+            const el = document.createElement('script');
+            el.src = 'js/board_gate_ui.js?v=20261112-gate';
+            el.onload = () => resolve();
+            el.onerror = () => reject(new Error('加载 board_gate_ui.js 失败'));
+            document.body.appendChild(el);
+        });
+        return this._boardGateUiPromise;
     },
 
     async loadSectorSlopeTrend(kind, boardCode, days = 60) {

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261007b">
     <link rel="stylesheet" href="css/ops-responsive.css?v=20260930-rv">
-    <link rel="stylesheet" href="css/analysis.css?v=20261109-lm-polish3">
+    <link rel="stylesheet" href="css/analysis.css?v=20261112-gate">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/recommend.css?v=20260930-rv">
     <script>
@@ -951,6 +951,71 @@
                                     </table>
                                 </div>
                                 <div class="ma-status" id="maSlopeStatus"></div>
+                            </div>
+                        </section>
+
+                        <!-- 板块入场闸门 -->
+                        <section class="ma-section" id="maGateSection" data-ma-block="gate">
+                            <div class="ma-section-header">
+                                <div class="ma-section-title-row">
+                                    <h3>板块入场闸门</h3>
+                                    <span class="ma-meta" id="maGateMeta"></span>
+                                </div>
+                                <div class="ma-toolbar">
+                                    <div class="ma-kind" role="group" aria-label="板块类型">
+                                        <label><input type="radio" name="maGateKind" value="industry" checked> 行业</label>
+                                        <label><input type="radio" name="maGateKind" value="concept"> 概念</label>
+                                        <label><input type="radio" name="maGateKind" value=""> 全部</label>
+                                    </div>
+                                    <div class="ma-period" role="group" aria-label="短线状态">
+                                        <span class="ma-toolbar-label">短线</span>
+                                        <select id="maGateShortState" class="ma-select" title="短线闸门">
+                                            <option value="">全部</option>
+                                            <option value="可配">可配</option>
+                                            <option value="观望">观望</option>
+                                            <option value="回避">回避</option>
+                                        </select>
+                                    </div>
+                                    <div class="ma-period" role="group" aria-label="中长线状态">
+                                        <span class="ma-toolbar-label">中长线</span>
+                                        <select id="maGateMidlongState" class="ma-select" title="中长线闸门（仅行业）">
+                                            <option value="">全部</option>
+                                            <option value="可配">可配</option>
+                                            <option value="观望">观望</option>
+                                            <option value="回避">回避</option>
+                                        </select>
+                                    </div>
+                                    <label class="ma-kind" title="仅 trade_observe 观察池">
+                                        <input type="checkbox" id="maGateObserveOnly"> 仅观察池
+                                    </label>
+                                    <button type="button" class="btn btn-secondary" id="maGateRefreshBtn" title="重新加载">刷新</button>
+                                    <button type="button" class="btn btn-secondary" id="maGateComputeBtn" title="后台触发当日闸门重算">重算</button>
+                                </div>
+                            </div>
+                            <div class="ma-body">
+                                <p class="ma-hint">三态：可配 / 观望 / 回避。默认 shadow（只展示）；硬过滤需策略配置 <code>board_gate.hard_filter_enabled</code>。点击行打开板块详情。</p>
+                                <div class="ma-table-wrap" id="maGateTableWrap">
+                                    <table class="ma-table" id="maGateTable">
+                                        <thead>
+                                            <tr>
+                                                <th>类型</th>
+                                                <th>代码</th>
+                                                <th>名称</th>
+                                                <th>短线</th>
+                                                <th>中长线</th>
+                                                <th>冲突</th>
+                                                <th>资金阶段</th>
+                                                <th>板RS</th>
+                                                <th>走势</th>
+                                                <th>Shadow</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="maGateTbody">
+                                            <tr><td colspan="10" class="ma-empty">加载中…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="ma-status" id="maGateStatus"></div>
                             </div>
                         </section>
                     </div>
@@ -1910,8 +1975,9 @@
     <script src="js/common.js"></script>
     <script src="js/board_roles_panel.js?v=20261107-lm-polish2"></script>
     <script src="js/board_picker_strong.js"></script>
+    <script src="js/board_gate_ui.js?v=20261112-gate"></script>
     <script src="js/board_analysis_pdf.js"></script>
-    <script src="js/board_analysis.js?v=20261107-board-picker"></script>
+    <script src="js/board_analysis.js?v=20261112-gate"></script>
     <script src="js/analysis.js?v=20261109-lm-polish3"></script>
 </body>
 

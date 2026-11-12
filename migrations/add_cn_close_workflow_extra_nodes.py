@@ -26,6 +26,7 @@ INSERTS = [
     ("ths_fund_flow_daily", "board_fund_flow_daily", "板块资金流向历史", "continue"),
     ("board_fund_flow_daily", "zt_pool_em_daily", "东财涨停股池历史", "continue"),
     ("zt_pool_em_daily", "market_daily_review", "每日复盘指标", "continue"),
+    ("market_daily_review", "board_gates_daily", "板块入场闸门日批", "continue"),
     ("urt_signals_cn", "csb_signals_cn", "CSB信号预计算(A股)", "continue"),
     ("csb_signals_cn", "sbbr_signals_cn", "SBBR信号预计算(A股)", "continue"),
     ("sbbr_signals_cn", "rpe_signals_cn", "RPE信号预计算(A股)", "continue"),

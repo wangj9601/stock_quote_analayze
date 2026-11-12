@@ -1073,3 +1073,22 @@ def enrich_results_with_board_resonance(
         item["score_detail"] = sd
 
         apply_board_weak_penalty_to_item(item, config=config)
+
+    # 板块入场闸门（默认 shadow：只标注；hard_filter 开启才拦截）
+    try:
+        from backend_core.board_gates.strategy_filter import enrich_items_with_board_gate
+
+        for item in results:
+            item["board_code"] = item.get("primary_board_code")
+        enriched = enrich_items_with_board_gate(
+            db,
+            results,
+            trade_date=end_date,
+            board_code_key="board_code",
+            board_kind="industry",
+            config=config,
+            drop_avoid_on_hard_filter=True,
+        )
+        results[:] = enriched
+    except Exception as e:
+        logger.debug("board_gate enrich skipped: %s", e)

@@ -1045,3 +1045,26 @@ def exec_cn_auction_final(ctx: WorkflowContext) -> NodeResult:
     finally:
         if db is not None:
             db.close()
+
+
+def exec_board_gates_daily(ctx: WorkflowContext) -> NodeResult:
+    """板块入场闸门日批（v1+v2）：资金特征/板RS/估值/三态落库。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过板块入场闸门")
+    try:
+        from backend_core.board_gates.compute_daily import run_board_gates_daily
+
+        trade_date = _resolve_node_trade_date(ctx)
+        result = run_board_gates_daily(trade_date=trade_date)
+        if isinstance(result, dict) and result.get("success") is False:
+            return NodeResult.fail(
+                result.get("error") or "板块入场闸门失败",
+                message="板块入场闸门失败",
+            )
+        return NodeResult.ok(
+            "板块入场闸门完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("板块入场闸门异常")
+        return NodeResult.fail(str(e), message="板块入场闸门失败")

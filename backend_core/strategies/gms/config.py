@@ -332,6 +332,14 @@ class GMSConfigManager:
                 "board_slope_strong_threshold": 0.001,
             },
         )
+        params.setdefault(
+            "board_gate",
+            {
+                # shadow：只标注 board_gate_*；true 时回避板新买入硬过滤
+                "hard_filter_enabled": False,
+                "v2_enabled": True,
+            },
+        )
         penalty_id = self.create_config(
             name=GMS_CANONICAL_PENALTY_NAME,
             config_params=params,
@@ -422,9 +430,12 @@ class GMSConfigManager:
             br.setdefault("board_prefer_db_slope", True)
             br.setdefault("enable_board_fund_flow", False)
             br.setdefault("fund_flow_weak_threshold", 0.0)
+            bg = dict(params.get("board_gate") or {})
+            bg.setdefault("hard_filter_enabled", False)
+            bg.setdefault("v2_enabled", True)
             self.update_config(
                 penalty_id,
-                {"scoring": scoring, "board_resonance": br},
+                {"scoring": scoring, "board_resonance": br, "board_gate": bg},
                 change_note="add_board_weak_penalty",
             )
         except Exception as e:

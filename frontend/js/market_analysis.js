@@ -24,6 +24,7 @@ const MarketAnalysis = {
     board: { items: [], meta: {}, trend: null },
     slope: { items: [], meta: {}, raw: [] },
     margin: { items: [], meta: {} },
+    gate: { items: [], meta: {} },
   },
   charts: { stock: null, board: null, slope: null, margin: null, boardConstituents: null },
   loadedOnce: false,
@@ -54,6 +55,15 @@ const MarketAnalysis = {
     document.querySelectorAll('input[name="maMarginMetric"]').forEach((el) => {
       el.addEventListener('change', () => this.loadMarginRank());
     });
+    document.querySelectorAll('input[name="maGateKind"]').forEach((el) => {
+      el.addEventListener('change', () => this.loadBoardGates());
+    });
+    const gateShort = document.getElementById('maGateShortState');
+    if (gateShort) gateShort.addEventListener('change', () => this.loadBoardGates());
+    const gateMid = document.getElementById('maGateMidlongState');
+    if (gateMid) gateMid.addEventListener('change', () => this.loadBoardGates());
+    const gateObs = document.getElementById('maGateObserveOnly');
+    if (gateObs) gateObs.addEventListener('change', () => this.loadBoardGates());
     const winSel = document.getElementById('maSlopeWindow');
     if (winSel) winSel.addEventListener('change', () => this.applySlopeWindowAndRender());
 
@@ -71,6 +81,8 @@ const MarketAnalysis = {
       ['maBoardRefreshBtn', () => this.loadBoardFlow()],
       ['maSlopeRefreshBtn', () => this.loadSlope()],
       ['maMarginRefreshBtn', () => this.loadMarginRank()],
+      ['maGateRefreshBtn', () => this.loadBoardGates()],
+      ['maGateComputeBtn', () => this.triggerBoardGateCompute()],
       ['maStockExportBtn', () => this.exportBlock('stock')],
       ['maBoardExportBtn', () => this.exportBlock('board')],
       ['maSlopeExportBtn', () => this.exportBlock('slope')],
@@ -140,6 +152,7 @@ const MarketAnalysis = {
     this.loadBoardFlow();
     this.loadSlope();
     this.loadMarginRank();
+    this.loadBoardGates();
     requestAnimationFrame(() => this.resizeCharts());
   },
 
@@ -2113,6 +2126,125 @@ const MarketAnalysis = {
       if (btn) {
         btn.disabled = false;
         btn.textContent = prev || '导出 Excel';
+      }
+    }
+  },
+
+  async loadBoardGates() {
+    const tbody = document.getElementById('maGateTbody');
+    const meta = document.getElementById('maGateMeta');
+    const status = document.getElementById('maGateStatus');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="ma-empty">加载中…</td></tr>';
+    if (status) {
+      status.className = 'ma-status';
+      status.textContent = '';
+    }
+    try {
+      if (!window.BoardGateUI) throw new Error('BoardGateUI 未加载');
+      const kind = this.radioValue('maGateKind', 'industry');
+      const shortState = (document.getElementById('maGateShortState') || {}).value || '';
+      const midState = (document.getElementById('maGateMidlongState') || {}).value || '';
+      const observeOnly = !!(document.getElementById('maGateObserveOnly') || {}).checked;
+      const json = await BoardGateUI.fetchGateList({
+        board_kind: kind || undefined,
+        short_state: shortState || undefined,
+        midlong_state: midState || undefined,
+        observe_only: observeOnly,
+        limit: 200,
+      });
+      const items = json.data || [];
+      this.cache.gate = { items, meta: { trade_date: json.trade_date, count: json.count } };
+      if (meta) meta.textContent = `截至 ${json.trade_date || '--'} · ${items.length} 条`;
+      this.renderBoardGates(items);
+    } catch (e) {
+      console.error(e);
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="10" class="ma-empty">${this.escapeHtml(e.message || '加载失败')}</td></tr>`;
+      }
+      if (status) {
+        status.className = 'ma-status ma-status--error';
+        status.textContent = e.message || '加载失败';
+      }
+    }
+  },
+
+  renderBoardGates(items) {
+    const tbody = document.getElementById('maGateTbody');
+    if (!tbody) return;
+    const ui = window.BoardGateUI;
+    if (!items || !items.length) {
+      tbody.innerHTML = '<tr><td colspan="10" class="ma-empty">暂无闸门数据（请先跑日终 board_gates_daily）</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items
+      .map((r) => {
+        const ev = ui.evidenceObj(r);
+        const kind = r.board_kind === 'concept' ? '概念' : '行业';
+        const mid =
+          r.board_kind === 'concept'
+            ? '<span class="bgate-muted">--</span>'
+            : ui.stateChip(r.midlong_state);
+        const stage = ui.stageLabel(ev.fund_stage);
+        const rs = ev.board_rs != null ? ev.board_rs : '--';
+        const trend = ev.board_trend_label || '--';
+        const code = this.escapeHtml(r.board_code || '');
+        const name = this.escapeHtml(r.board_name || '');
+        return `<tr class="ma-row-clickable" data-board-kind="${this.escapeHtml(r.board_kind || 'industry')}" data-board-code="${code}" data-board-name="${name}">
+          <td>${kind}</td>
+          <td>${code}</td>
+          <td>${name}</td>
+          <td>${ui.stateChip(r.short_state)}</td>
+          <td>${mid}</td>
+          <td>${this.escapeHtml(ui.conflictLabel(r.conflict_action))}</td>
+          <td>${this.escapeHtml(stage)}</td>
+          <td class="ma-num">${this.escapeHtml(String(rs))}</td>
+          <td>${this.escapeHtml(trend)}</td>
+          <td>${this.escapeHtml(r.shadow_hard_filter_hint || '--')}</td>
+        </tr>`;
+      })
+      .join('');
+
+    tbody.querySelectorAll('tr.ma-row-clickable').forEach((tr) => {
+      tr.addEventListener('click', () => {
+        const kind = tr.getAttribute('data-board-kind') || 'industry';
+        const code = tr.getAttribute('data-board-code') || '';
+        const name = tr.getAttribute('data-board-name') || '';
+        if (!code) return;
+        const q = new URLSearchParams({
+          board_kind: kind,
+          board_code: code,
+          board_name: name,
+          board_code_source: this.BOARD_CODE_SOURCE || 'tonghuashun',
+        });
+        window.open(`board_detail.html?${q.toString()}`, '_blank');
+      });
+    });
+  },
+
+  async triggerBoardGateCompute() {
+    const btn = document.getElementById('maGateComputeBtn');
+    const prev = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '重算中…';
+    }
+    try {
+      const resp = await fetch(`${this.API_BASE_URL}/api/board_gate/compute?sync=true`, {
+        method: 'POST',
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || !json.success) {
+        throw new Error((json && json.message) || `重算失败 HTTP ${resp.status}`);
+      }
+      if (window.CommonUtils) CommonUtils.showToast('闸门已重算', 'success');
+      await this.loadBoardGates();
+    } catch (e) {
+      if (window.CommonUtils) CommonUtils.showToast(e.message || '重算失败', 'error');
+      else console.error(e);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prev || '重算';
       }
     }
   },

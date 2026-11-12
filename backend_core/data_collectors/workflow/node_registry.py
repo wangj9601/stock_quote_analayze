@@ -45,6 +45,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_tushare_moneyflow_daily,
     exec_tushare_margin_daily,
     exec_board_fund_flow_daily,
+    exec_board_gates_daily,
     exec_zt_pool_em_daily,
     exec_market_daily_review,
     exec_hk_fund_flow_daily,
@@ -313,6 +314,17 @@ NODE_DEFS: List[CollectionNodeDef] = [
         exec_board_fund_flow_daily,
         param_schema=_TRADE_DATE_SCHEMA,
         description="同花顺行业/概念资金流 → board_fund_flow_daily（可指定交易日；需在个股资金流之后）",
+    ),
+    _n(
+        "board_gates_daily",
+        "板块入场闸门日批",
+        "strategy",
+        exec_board_gates_daily,
+        param_schema=_TRADE_DATE_SCHEMA,
+        description=(
+            "短线/中长线三态闸门 + v2 资金阶段/板RS/估值 → board_gate_daily"
+            "（建议在 board_fund_flow_daily 与 market_daily_review 之后）"
+        ),
     ),
     _n(
         "hk_fund_flow_daily",

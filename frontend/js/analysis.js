@@ -49,7 +49,8 @@ const AnalysisPage = {
             'js/echarts.min.js',
             'js/echarts_theme.js?v=20261030-theme',
             'js/margin_ui.js?v=20261031-margin-read',
-            'js/market_analysis.js?v=20261111-trend-dual-axis',
+            'js/board_gate_ui.js?v=20261112-gate',
+            'js/market_analysis.js?v=20261112-gate',
         ],
         'market-review': [
             'js/page_scroll_fab.js',
