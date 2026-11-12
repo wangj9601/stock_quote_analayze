@@ -59,11 +59,24 @@ if "!MODE!"=="all" goto :do_commit
 goto :before_push
 
 :do_commit
-echo [1/3] 正在暂存所有改动: git add .
+echo [1/3] 正在暂存改动: git add .
+echo       （reports/csv 下的文件不纳入提交）
 git add .
 if errorlevel 1 (
     echo [失败] git add 未成功。
     goto :end
+)
+
+REM 报告输出目录不提交：先 add，再从暂存区移除 reports/csv
+set "SKIP_CSV="
+for /f "delims=" %%f in ('git diff --cached --name-only -- "reports/csv" 2^>nul') do set "SKIP_CSV=1"
+if defined SKIP_CSV (
+    git reset -q -- "reports/csv"
+    if errorlevel 1 (
+        echo [失败] 无法从暂存区排除 reports/csv。
+        goto :end
+    )
+    echo [跳过] reports/csv 下的文件已从暂存区移除，本次不提交。
 )
 echo.
 
