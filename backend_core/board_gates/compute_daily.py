@@ -14,6 +14,7 @@ from backend_core.board_gates.config import (
     DEFAULT_BOARD_CODE_SOURCE,
     GATE_ALLOC,
     GATE_AVOID,
+    GATE_WATCH,
     MIDLONG_CONFIRM_DAYS,
     SHORT_CONFIRM_DAYS,
     hard_filter_enabled,
@@ -93,8 +94,8 @@ def _load_mainline_sentiment(
                 FROM market_daily_mainline_hits
                 WHERE hit = TRUE
                   AND board_type = 'concept'
-                  AND trade_date <= CAST(:td AS date)
-                  AND trade_date >= CAST(:td AS date) - INTERVAL '30 days'
+                  AND trade_date::date <= CAST(:td AS date)
+                  AND trade_date::date >= CAST(:td AS date) - INTERVAL '30 days'
                 """
             ),
             {"td": trade_date[:10]},

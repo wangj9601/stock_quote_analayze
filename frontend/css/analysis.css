@@ -319,51 +319,65 @@
     color: #64748b;
 }
 
-/* 板块入场闸门 */
+/* 板块入场闸门 — 浅色兜底；ops-map 见下方 body.ops-map 覆盖 */
 .bgate-chip {
     display: inline-block;
-    padding: 0.1rem 0.45rem;
-    border-radius: 4px;
+    padding: 0.12rem 0.5rem;
+    border-radius: 1px;
+    border: 1px solid transparent;
     font-size: 0.75rem;
     font-weight: 600;
-    line-height: 1.4;
+    line-height: 1.35;
+    letter-spacing: 0.04em;
     white-space: nowrap;
+    vertical-align: middle;
 }
 .bgate-alloc {
-    background: #fee2e2;
+    background: rgba(194, 59, 59, 0.14);
+    border-color: rgba(194, 59, 59, 0.45);
     color: #b91c1c;
 }
 .bgate-watch {
-    background: #f1f5f9;
-    color: #475569;
+    background: rgba(71, 85, 105, 0.1);
+    border-color: rgba(71, 85, 105, 0.28);
+    color: #334155;
 }
 .bgate-avoid {
-    background: #dcfce7;
+    background: rgba(47, 158, 107, 0.12);
+    border-color: rgba(47, 158, 107, 0.4);
     color: #15803d;
 }
 .bgate-muted {
-    background: #f8fafc;
-    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.12);
+    border-color: rgba(148, 163, 184, 0.28);
+    color: #64748b;
 }
+.bgate-tone-alloc { background: rgba(194, 59, 59, 0.12); border-color: rgba(194, 59, 59, 0.35); color: #b91c1c; }
+.bgate-tone-warn { background: rgba(201, 162, 39, 0.14); border-color: rgba(201, 162, 39, 0.4); color: #92400e; }
+.bgate-tone-avoid { background: rgba(47, 158, 107, 0.12); border-color: rgba(47, 158, 107, 0.35); color: #15803d; }
+.bgate-tone-muted { background: rgba(100, 116, 139, 0.1); border-color: rgba(100, 116, 139, 0.25); color: #475569; }
+.bgate-stage-up { background: rgba(194, 59, 59, 0.12); border-color: rgba(194, 59, 59, 0.35); color: #b91c1c; }
+.bgate-stage-acc { background: rgba(47, 111, 237, 0.12); border-color: rgba(47, 111, 237, 0.35); color: #1d4ed8; }
+.bgate-stage-dist { background: rgba(201, 162, 39, 0.14); border-color: rgba(201, 162, 39, 0.4); color: #92400e; }
+.bgate-stage-down { background: rgba(47, 158, 107, 0.12); border-color: rgba(47, 158, 107, 0.35); color: #15803d; }
+.bgate-stage-churn { background: rgba(100, 116, 139, 0.1); border-color: rgba(100, 116, 139, 0.25); color: #475569; }
 .bgate-inline {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
     flex-wrap: wrap;
 }
-.bgate-sep {
-    color: #cbd5e1;
-}
+.bgate-sep { color: #94a3b8; }
 .bgate-detail {
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
+    gap: 0.5rem;
 }
 .bgate-detail-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.55rem 0.85rem;
+    gap: 0.5rem 0.75rem;
 }
 .bgate-k {
     font-size: 0.75rem;
@@ -373,13 +387,130 @@
     font-size: 0.8rem;
     color: #475569;
 }
-.bgate-deg {
-    color: #b45309;
-}
+.bgate-deg { color: #b45309; }
 .bgate-empty {
     color: #94a3b8;
     font-size: 0.875rem;
     padding: 0.35rem 0;
+}
+
+.ma-gate-table-wrap { margin-top: 0.35rem; }
+.ma-gate-table th,
+.ma-gate-table td {
+    vertical-align: middle;
+}
+.ma-gate-col-name { min-width: 9.5rem; }
+.ma-gate-name {
+    font-weight: 600;
+    color: inherit;
+    line-height: 1.3;
+}
+.ma-gate-sub {
+    margin-top: 0.15rem;
+    font-size: 0.75rem;
+    color: #64748b;
+    display: flex;
+    gap: 0.45rem;
+    align-items: baseline;
+}
+.ma-gate-kind {
+    letter-spacing: 0.06em;
+    opacity: 0.9;
+}
+.ma-gate-code {
+    font-variant-numeric: tabular-nums;
+    opacity: 0.85;
+}
+.ma-gate-trend { font-size: 0.8125rem; }
+.ma-gate-shadow {
+    font-size: 0.8125rem;
+    color: #64748b;
+}
+/* 可配行靠芯片与排序扫读，不用色条描边 */
+
+/* 作战板：芯片用语义膜，禁止浅灰底浅字 */
+body.ops-map .bgate-chip {
+    border-radius: 1px;
+}
+body.ops-map .bgate-alloc {
+    background: rgba(194, 59, 59, 0.18);
+    border-color: rgba(194, 59, 59, 0.55);
+    color: #f0a8a8;
+}
+body.ops-map .bgate-watch {
+    background: rgba(217, 226, 236, 0.08);
+    border-color: rgba(217, 226, 236, 0.22);
+    color: var(--ops-ink, #d9e2ec);
+}
+body.ops-map .bgate-avoid {
+    background: rgba(47, 158, 107, 0.16);
+    border-color: rgba(47, 158, 107, 0.5);
+    color: #8fd4b0;
+}
+body.ops-map .bgate-muted {
+    background: rgba(0, 0, 0, 0.28);
+    border-color: rgba(217, 226, 236, 0.14);
+    color: var(--ops-ink-muted, #8b9aab);
+}
+body.ops-map .bgate-tone-alloc {
+    background: rgba(194, 59, 59, 0.16);
+    border-color: rgba(194, 59, 59, 0.45);
+    color: #f0a8a8;
+}
+body.ops-map .bgate-tone-warn {
+    background: var(--ops-overlay-film, rgba(201, 162, 39, 0.12));
+    border-color: rgba(201, 162, 39, 0.45);
+    color: var(--ops-gold, #c9a227);
+}
+body.ops-map .bgate-tone-avoid {
+    background: rgba(47, 158, 107, 0.14);
+    border-color: rgba(47, 158, 107, 0.4);
+    color: #8fd4b0;
+}
+body.ops-map .bgate-tone-muted {
+    background: rgba(0, 0, 0, 0.28);
+    border-color: rgba(217, 226, 236, 0.14);
+    color: var(--ops-ink-muted, #8b9aab);
+}
+body.ops-map .bgate-stage-up {
+    background: rgba(194, 59, 59, 0.16);
+    border-color: rgba(194, 59, 59, 0.45);
+    color: #f0a8a8;
+}
+body.ops-map .bgate-stage-acc {
+    background: rgba(47, 111, 237, 0.16);
+    border-color: rgba(47, 111, 237, 0.45);
+    color: #9bb8f5;
+}
+body.ops-map .bgate-stage-dist {
+    background: var(--ops-overlay-film, rgba(201, 162, 39, 0.12));
+    border-color: rgba(201, 162, 39, 0.45);
+    color: var(--ops-gold, #c9a227);
+}
+body.ops-map .bgate-stage-down {
+    background: rgba(47, 158, 107, 0.14);
+    border-color: rgba(47, 158, 107, 0.4);
+    color: #8fd4b0;
+}
+body.ops-map .bgate-stage-churn {
+    background: rgba(0, 0, 0, 0.28);
+    border-color: rgba(217, 226, 236, 0.14);
+    color: var(--ops-ink-muted, #8b9aab);
+}
+body.ops-map .bgate-k,
+body.ops-map .bgate-detail-meta,
+body.ops-map .bgate-empty,
+body.ops-map .ma-gate-sub,
+body.ops-map .ma-gate-shadow {
+    color: var(--ops-ink-muted, #8b9aab);
+}
+body.ops-map .bgate-deg { color: var(--ops-gold, #c9a227); }
+body.ops-map .ma-gate-table tbody tr.ma-row-clickable:hover {
+    background: rgba(201, 162, 39, 0.06);
+}
+body.ops-map #maGateHint.ma-hint {
+    color: var(--ops-ink-muted, #8b9aab);
+    margin-bottom: 0.65rem;
 }
 
 .ma-table tbody tr.ma-row-clickable {

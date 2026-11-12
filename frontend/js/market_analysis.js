@@ -2134,7 +2134,7 @@ const MarketAnalysis = {
     const tbody = document.getElementById('maGateTbody');
     const meta = document.getElementById('maGateMeta');
     const status = document.getElementById('maGateStatus');
-    if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="ma-empty">加载中…</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="ma-empty">加载中…</td></tr>';
     if (status) {
       status.className = 'ma-status';
       status.textContent = '';
@@ -2154,12 +2154,16 @@ const MarketAnalysis = {
       });
       const items = json.data || [];
       this.cache.gate = { items, meta: { trade_date: json.trade_date, count: json.count } };
-      if (meta) meta.textContent = `截至 ${json.trade_date || '--'} · ${items.length} 条`;
+      const shortAlloc = items.filter((r) => r.short_state === '可配').length;
+      const midAlloc = items.filter((r) => r.midlong_state === '可配').length;
+      if (meta) {
+        meta.textContent = `截至 ${json.trade_date || '—'} · ${items.length} 条 · 短线可配 ${shortAlloc} · 中长线可配 ${midAlloc}`;
+      }
       this.renderBoardGates(items);
     } catch (e) {
       console.error(e);
       if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="10" class="ma-empty">${this.escapeHtml(e.message || '加载失败')}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="ma-empty">${this.escapeHtml(e.message || '加载失败')}</td></tr>`;
       }
       if (status) {
         status.className = 'ma-status ma-status--error';
@@ -2172,34 +2176,51 @@ const MarketAnalysis = {
     const tbody = document.getElementById('maGateTbody');
     if (!tbody) return;
     const ui = window.BoardGateUI;
+    if (!ui) return;
     if (!items || !items.length) {
-      tbody.innerHTML = '<tr><td colspan="10" class="ma-empty">暂无闸门数据（请先跑日终 board_gates_daily）</td></tr>';
+      tbody.innerHTML =
+        '<tr><td colspan="8" class="ma-empty">暂无闸门数据。请先跑日终「板块入场闸门」，或点上方「重算」。</td></tr>';
       return;
     }
-    tbody.innerHTML = items
+    // 可配优先，便于扫读介入标的
+    const rank = { 可配: 0, 观望: 1, 回避: 2 };
+    const sorted = items.slice().sort((a, b) => {
+      const sa = rank[a.short_state] != null ? rank[a.short_state] : 3;
+      const sb = rank[b.short_state] != null ? rank[b.short_state] : 3;
+      if (sa !== sb) return sa - sb;
+      const ma = rank[a.midlong_state] != null ? rank[a.midlong_state] : 3;
+      const mb = rank[b.midlong_state] != null ? rank[b.midlong_state] : 3;
+      if (ma !== mb) return ma - mb;
+      return String(a.board_code || '').localeCompare(String(b.board_code || ''));
+    });
+
+    tbody.innerHTML = sorted
       .map((r) => {
         const ev = ui.evidenceObj(r);
         const kind = r.board_kind === 'concept' ? '概念' : '行业';
-        const mid =
-          r.board_kind === 'concept'
-            ? '<span class="bgate-muted">--</span>'
-            : ui.stateChip(r.midlong_state);
-        const stage = ui.stageLabel(ev.fund_stage);
-        const rs = ev.board_rs != null ? ev.board_rs : '--';
-        const trend = ev.board_trend_label || '--';
         const code = this.escapeHtml(r.board_code || '');
         const name = this.escapeHtml(r.board_name || '');
-        return `<tr class="ma-row-clickable" data-board-kind="${this.escapeHtml(r.board_kind || 'industry')}" data-board-code="${code}" data-board-name="${name}">
-          <td>${kind}</td>
-          <td>${code}</td>
-          <td>${name}</td>
+        const rs = ev.board_rs != null ? ev.board_rs : '—';
+        const trend = ev.board_trend_label || '—';
+        const shadow = ui.shadowLabel(r.shadow_hard_filter_hint);
+        const rowTone =
+          r.short_state === '可配' || r.midlong_state === '可配'
+            ? ' ma-gate-row--alloc'
+            : r.short_state === '回避'
+              ? ' ma-gate-row--avoid'
+              : '';
+        return `<tr class="ma-row-clickable${rowTone}" data-board-kind="${this.escapeHtml(r.board_kind || 'industry')}" data-board-code="${code}" data-board-name="${name}">
+          <td class="ma-gate-col-name">
+            <div class="ma-gate-name">${name}</div>
+            <div class="ma-gate-sub"><span class="ma-gate-kind">${kind}</span><span class="ma-gate-code">${code}</span></div>
+          </td>
           <td>${ui.stateChip(r.short_state)}</td>
-          <td>${mid}</td>
-          <td>${this.escapeHtml(ui.conflictLabel(r.conflict_action))}</td>
-          <td>${this.escapeHtml(stage)}</td>
+          <td>${ui.midlongChip(r)}</td>
+          <td>${ui.conflictChip(r.conflict_action)}</td>
+          <td>${ui.stageChip(ev.fund_stage)}</td>
           <td class="ma-num">${this.escapeHtml(String(rs))}</td>
-          <td>${this.escapeHtml(trend)}</td>
-          <td>${this.escapeHtml(r.shadow_hard_filter_hint || '--')}</td>
+          <td class="ma-gate-trend">${this.escapeHtml(trend)}</td>
+          <td class="ma-gate-shadow">${this.escapeHtml(shadow)}</td>
         </tr>`;
       })
       .join('');

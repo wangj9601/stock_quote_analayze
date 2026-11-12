@@ -11,12 +11,21 @@
   };
 
   const CONFLICT_LABEL = {
-    hold_no_new: '长可配·短回避：持有不新开',
-    ultrashort_only: '短可配·长回避：仅超短',
-    block_new_buy: '回避：不新开',
-    downweight: '观望：降权',
-    full: '可配：全量',
-    neutral: '中性',
+    hold_no_new: '持有不新开',
+    ultrashort_only: '仅超短',
+    block_new_buy: '禁新开',
+    downweight: '降权',
+    full: '全量',
+    neutral: '—',
+  };
+
+  const CONFLICT_CLASS = {
+    hold_no_new: 'bgate-tone-warn',
+    ultrashort_only: 'bgate-tone-warn',
+    block_new_buy: 'bgate-tone-avoid',
+    downweight: 'bgate-tone-muted',
+    full: 'bgate-tone-alloc',
+    neutral: 'bgate-tone-muted',
   };
 
   const STAGE_LABEL = {
@@ -25,6 +34,23 @@
     distribute: '分流',
     decline: '衰退',
     churn: '震荡',
+  };
+
+  const STAGE_CLASS = {
+    accumulate: 'bgate-stage-acc',
+    markup: 'bgate-stage-up',
+    distribute: 'bgate-stage-dist',
+    decline: 'bgate-stage-down',
+    churn: 'bgate-stage-churn',
+  };
+
+  const SHADOW_LABEL = {
+    would_block_new_buy: '将拦截新开',
+    would_ultrashort_only: '将限超短',
+    would_hold_no_new: '将禁加仓',
+    would_downweight: '将降权',
+    would_full: '将全量',
+    neutral: '—',
   };
 
   function esc(s) {
@@ -37,20 +63,54 @@
 
   function stateChip(state, opts) {
     const st = String(state || '').trim();
-    if (!st) return `<span class="bgate-chip bgate-muted">--</span>`;
+    if (!st) {
+      const empty = (opts && opts.emptyLabel) || '未评估';
+      return `<span class="bgate-chip bgate-muted" title="${esc(empty)}">${esc(empty)}</span>`;
+    }
     const cls = STATE_CLASS[st] || 'bgate-muted';
     const title = (opts && opts.title) || st;
     return `<span class="bgate-chip ${cls}" title="${esc(title)}">${esc(st)}</span>`;
   }
 
+  function midlongChip(row) {
+    if (!row) return stateChip(null);
+    if (row.board_kind === 'concept') {
+      return `<span class="bgate-chip bgate-muted" title="概念板不跑中长线可配">—</span>`;
+    }
+    if (!row.trade_observe_flag && !row.midlong_state) {
+      return `<span class="bgate-chip bgate-muted" title="非观察池行业，中长线不评估">未评估</span>`;
+    }
+    return stateChip(row.midlong_state);
+  }
+
   function conflictLabel(code) {
     const k = String(code || '').trim();
-    return CONFLICT_LABEL[k] || k || '--';
+    return CONFLICT_LABEL[k] || k || '—';
+  }
+
+  function conflictChip(code) {
+    const k = String(code || '').trim();
+    const label = conflictLabel(k);
+    const cls = CONFLICT_CLASS[k] || 'bgate-tone-muted';
+    return `<span class="bgate-chip ${cls}">${esc(label)}</span>`;
   }
 
   function stageLabel(code) {
     const k = String(code || '').trim();
-    return STAGE_LABEL[k] || k || '--';
+    return STAGE_LABEL[k] || k || '—';
+  }
+
+  function stageChip(code) {
+    const k = String(code || '').trim();
+    if (!k) return `<span class="bgate-chip bgate-muted">—</span>`;
+    const cls = STAGE_CLASS[k] || 'bgate-stage-churn';
+    return `<span class="bgate-chip ${cls}">${esc(stageLabel(k))}</span>`;
+  }
+
+  function shadowLabel(code) {
+    const k = String(code || '').trim();
+    if (!k) return '—';
+    return SHADOW_LABEL[k] || k;
   }
 
   function evidenceObj(row) {
@@ -108,59 +168,56 @@
 
   function detailCardHtml(row) {
     if (!row) {
-      return `<div class="bgate-empty">暂无闸门快照（需日终 board_gates_daily 跑过后才有）</div>`;
+      return `<div class="bgate-empty">暂无闸门快照。跑完日终「板块入场闸门」节点后再看。</div>`;
     }
     const ev = evidenceObj(row);
     const deg = degradedObj(row);
-    const fundStage = stageLabel(ev.fund_stage || (ev.short && ev.short.fund_stage));
-    const trend = ev.board_trend_label || '--';
-    const rs = ev.board_rs != null ? ev.board_rs : '--';
+    const fundStageCode = ev.fund_stage || '';
+    const trend = ev.board_trend_label || '—';
+    const rs = ev.board_rs != null ? ev.board_rs : '—';
     const val = ev.valuation || {};
-    const pe = val.pe_pct != null ? `${(Number(val.pe_pct) * 100).toFixed(0)}%` : '--';
-    const pb = val.pb_pct != null ? `${(Number(val.pb_pct) * 100).toFixed(0)}%` : '--';
+    const pe = val.pe_pct != null ? `${(Number(val.pe_pct) * 100).toFixed(0)}%` : '—';
+    const pb = val.pb_pct != null ? `${(Number(val.pb_pct) * 100).toFixed(0)}%` : '—';
     const degBits = [];
-    (deg.short || []).forEach((x) => degBits.push(`短:${x}`));
-    (deg.midlong || []).forEach((x) => degBits.push(`长:${x}`));
-    const midShow =
-      row.board_kind === 'concept'
-        ? '<span class="bgate-muted">概念不跑中长线可配</span>'
-        : stateChip(row.midlong_state);
+    (deg.short || []).forEach((x) => degBits.push(`短线 ${x}`));
+    (deg.midlong || []).forEach((x) => degBits.push(`中长线 ${x}`));
 
     return `
       <div class="bgate-detail">
         <div class="bgate-detail-row">
           <span class="bgate-k">短线</span>${stateChip(row.short_state)}
-          <span class="bgate-k">中长线</span>${midShow}
+          <span class="bgate-k">中长线</span>${midlongChip(row)}
+          ${conflictChip(row.conflict_action)}
+          ${stageChip(fundStageCode)}
         </div>
         <div class="bgate-detail-row bgate-detail-meta">
-          <span>冲突：${esc(conflictLabel(row.conflict_action))}</span>
-          <span>阶段：${esc(fundStage)}</span>
-          <span>走势：${esc(trend)}</span>
-          <span>板RS：${esc(String(rs))}</span>
-          <span>估值分位 PE/PB：${esc(pe)} / ${esc(pb)}</span>
+          <span>走势 ${esc(trend)}</span>
+          <span>板 RS ${esc(String(rs))}</span>
+          <span>估值分位 PE/PB ${esc(pe)} / ${esc(pb)}</span>
+          <span title="硬过滤开启后的预判动作">硬开预判 ${esc(shadowLabel(row.shadow_hard_filter_hint))}</span>
         </div>
-        <div class="bgate-detail-row bgate-detail-meta">
-          <span>Shadow：${esc(row.shadow_hard_filter_hint || '--')}</span>
-          <span>v2：${row.v2_enabled ? '开' : '关'}</span>
-          ${degBits.length ? `<span class="bgate-deg">降级：${esc(degBits.join('；'))}</span>` : ''}
-        </div>
+        ${
+          degBits.length
+            ? `<div class="bgate-detail-row"><span class="bgate-deg">数据降级：${esc(degBits.join('；'))}</span></div>`
+            : ''
+        }
       </div>`;
   }
 
   function metaInlineHtml(row) {
-    if (!row) return `<span class="bgate-inline bgate-muted">闸门 --</span>`;
-    const mid =
-      row.board_kind === 'concept'
-        ? ''
-        : ` <span class="bgate-sep">·</span> 中长线 ${stateChip(row.midlong_state)}`;
-    return `<span class="bgate-inline">短线 ${stateChip(row.short_state)}${mid}</span>`;
+    if (!row) return `<span class="bgate-inline"><span class="bgate-chip bgate-muted">闸门未评估</span></span>`;
+    return `<span class="bgate-inline">短线 ${stateChip(row.short_state)}<span class="bgate-sep">·</span>中长线 ${midlongChip(row)}</span>`;
   }
 
   global.BoardGateUI = {
     esc,
     stateChip,
+    midlongChip,
     conflictLabel,
+    conflictChip,
     stageLabel,
+    stageChip,
+    shadowLabel,
     evidenceObj,
     degradedObj,
     fetchGateDaily,

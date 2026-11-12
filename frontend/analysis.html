@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261007b">
     <link rel="stylesheet" href="css/ops-responsive.css?v=20260930-rv">
-    <link rel="stylesheet" href="css/analysis.css?v=20261112-gate">
+    <link rel="stylesheet" href="css/analysis.css?v=20261112-gate-polish">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/recommend.css?v=20260930-rv">
     <script>
@@ -985,33 +985,31 @@
                                             <option value="回避">回避</option>
                                         </select>
                                     </div>
-                                    <label class="ma-kind" title="仅 trade_observe 观察池">
+                                    <label class="ma-kind" title="仅观察池行业（中长线闸门范围）">
                                         <input type="checkbox" id="maGateObserveOnly"> 仅观察池
                                     </label>
                                     <button type="button" class="btn btn-secondary" id="maGateRefreshBtn" title="重新加载">刷新</button>
-                                    <button type="button" class="btn btn-secondary" id="maGateComputeBtn" title="后台触发当日闸门重算">重算</button>
+                                    <button type="button" class="btn btn-secondary" id="maGateComputeBtn" title="同步重算当日闸门">重算</button>
                                 </div>
                             </div>
                             <div class="ma-body">
-                                <p class="ma-hint">三态：可配 / 观望 / 回避。默认 shadow（只展示）；硬过滤需策略配置 <code>board_gate.hard_filter_enabled</code>。点击行打开板块详情。</p>
-                                <div class="ma-table-wrap" id="maGateTableWrap">
-                                    <table class="ma-table" id="maGateTable">
+                                <p class="ma-hint" id="maGateHint">三态：可配 / 观望 / 回避。当前只展示（shadow）；点行打开详情。首日粘性未确认时多为观望。</p>
+                                <div class="ma-table-wrap ma-gate-table-wrap" id="maGateTableWrap">
+                                    <table class="ma-table ma-gate-table" id="maGateTable">
                                         <thead>
                                             <tr>
-                                                <th>类型</th>
-                                                <th>代码</th>
-                                                <th>名称</th>
+                                                <th class="ma-gate-col-name">板块</th>
                                                 <th>短线</th>
                                                 <th>中长线</th>
-                                                <th>冲突</th>
-                                                <th>资金阶段</th>
-                                                <th>板RS</th>
+                                                <th>动作</th>
+                                                <th>资金</th>
+                                                <th class="ma-num">板 RS</th>
                                                 <th>走势</th>
-                                                <th>Shadow</th>
+                                                <th>硬开预判</th>
                                             </tr>
                                         </thead>
                                         <tbody id="maGateTbody">
-                                            <tr><td colspan="10" class="ma-empty">加载中…</td></tr>
+                                            <tr><td colspan="8" class="ma-empty">加载中…</td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -1975,9 +1973,9 @@
     <script src="js/common.js"></script>
     <script src="js/board_roles_panel.js?v=20261107-lm-polish2"></script>
     <script src="js/board_picker_strong.js"></script>
-    <script src="js/board_gate_ui.js?v=20261112-gate"></script>
+    <script src="js/board_gate_ui.js?v=20261112-gate-polish"></script>
     <script src="js/board_analysis_pdf.js"></script>
-    <script src="js/board_analysis.js?v=20261112-gate"></script>
+    <script src="js/board_analysis.js?v=20261112-gate-polish"></script>
     <script src="js/analysis.js?v=20261109-lm-polish3"></script>
 </body>
 
