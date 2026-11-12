@@ -64,6 +64,10 @@ const MarketAnalysis = {
     if (gateMid) gateMid.addEventListener('change', () => this.loadBoardGates());
     const gateObs = document.getElementById('maGateObserveOnly');
     if (gateObs) gateObs.addEventListener('change', () => this.loadBoardGates());
+    const obsAct = document.getElementById('maObserveCandAction');
+    if (obsAct) obsAct.addEventListener('change', () => this.loadObserveCandidates());
+    const obsAdoptable = document.getElementById('maObserveCandAdoptableOnly');
+    if (obsAdoptable) obsAdoptable.addEventListener('change', () => this.loadObserveCandidates());
     const winSel = document.getElementById('maSlopeWindow');
     if (winSel) winSel.addEventListener('change', () => this.applySlopeWindowAndRender());
 
@@ -83,6 +87,9 @@ const MarketAnalysis = {
       ['maMarginRefreshBtn', () => this.loadMarginRank()],
       ['maGateRefreshBtn', () => this.loadBoardGates()],
       ['maGateComputeBtn', () => this.triggerBoardGateCompute()],
+      ['maObserveCandRefreshBtn', () => this.loadObserveCandidates()],
+      ['maObserveCandComputeBtn', () => this.triggerObserveCandCompute()],
+      ['maObserveCandAdoptBtn', () => this.adoptObserveCandidates()],
       ['maStockExportBtn', () => this.exportBlock('stock')],
       ['maBoardExportBtn', () => this.exportBlock('board')],
       ['maSlopeExportBtn', () => this.exportBlock('slope')],
@@ -153,6 +160,7 @@ const MarketAnalysis = {
     this.loadSlope();
     this.loadMarginRank();
     this.loadBoardGates();
+    this.loadObserveCandidates();
     requestAnimationFrame(() => this.resizeCharts());
   },
 
@@ -2266,6 +2274,181 @@ const MarketAnalysis = {
       if (btn) {
         btn.disabled = false;
         btn.textContent = prev || '重算';
+      }
+    }
+  },
+
+  _observeActionLabel(act) {
+    const m = {
+      suggest_in: '建议纳入',
+      suggest_out: '建议移出',
+      in_pool: '已在池',
+      watch: '关注中',
+    };
+    return m[act] || act || '—';
+  },
+
+  async loadObserveCandidates() {
+    const tbody = document.getElementById('maObserveCandTbody');
+    const meta = document.getElementById('maObserveCandMeta');
+    const status = document.getElementById('maObserveCandStatus');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="ma-empty">加载中…</td></tr>';
+    if (status) {
+      status.className = 'ma-status';
+      status.textContent = '';
+    }
+    try {
+      const action = (document.getElementById('maObserveCandAction') || {}).value || '';
+      const adoptableOnly = !!(document.getElementById('maObserveCandAdoptableOnly') || {}).checked;
+      const q = new URLSearchParams({ limit: '100' });
+      if (action) q.set('action', action);
+      if (adoptableOnly) q.set('adoptable_only', 'true');
+      const resp = await fetch(`${this.API_BASE_URL}/api/board_observe/candidates?${q}`);
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || !json.success) {
+        throw new Error((json && json.message) || `加载失败 HTTP ${resp.status}`);
+      }
+      let items = json.data || [];
+      if (!action) {
+        items = items.filter((r) =>
+          ['suggest_in', 'suggest_out', 'in_pool'].includes(r.action)
+        );
+      }
+      this.cache.observeCand = { items, meta: { trade_date: json.trade_date } };
+      const nIn = items.filter((r) => r.action === 'suggest_in').length;
+      const nOut = items.filter((r) => r.action === 'suggest_out').length;
+      const nAd = items.filter((r) => r.adoptable).length;
+      if (meta) {
+        meta.textContent = `截至 ${json.trade_date || '—'} · 纳入 ${nIn} · 移出 ${nOut} · 可采纳 ${nAd}`;
+      }
+      this.renderObserveCandidates(items);
+    } catch (e) {
+      console.error(e);
+      if (tbody) {
+        tbody.innerHTML = `<tr><td colspan="8" class="ma-empty">${this.escapeHtml(e.message || '加载失败')}</td></tr>`;
+      }
+      if (status) {
+        status.className = 'ma-status ma-status--error';
+        status.textContent = e.message || '加载失败';
+      }
+    }
+  },
+
+  renderObserveCandidates(items) {
+    const tbody = document.getElementById('maObserveCandTbody');
+    if (!tbody) return;
+    if (!items || !items.length) {
+      tbody.innerHTML =
+        '<tr><td colspan="8" class="ma-empty">暂无候选。点「重算」生成；首日纳入多为粘性未满。</td></tr>';
+      return;
+    }
+    const lockLabel = { follow: '跟随', include: '锁入', exclude: '锁出' };
+    tbody.innerHTML = items
+      .map((r) => {
+        const code = this.escapeHtml(r.board_code || '');
+        const name = this.escapeHtml(r.board_name || '');
+        const act = this.escapeHtml(this._observeActionLabel(r.action));
+        const lock = lockLabel[r.observe_lock] || r.observe_lock || '跟随';
+        const adoptable = r.adoptable
+          ? '<span class="bgate-chip bgate-alloc">是</span>'
+          : '<span class="bgate-chip bgate-muted">否</span>';
+        const adoptBtn = r.adoptable
+          ? `<button type="button" class="btn btn-secondary btn-sm ma-obs-adopt-one" data-code="${code}" data-action="${this.escapeHtml(r.action || '')}">采纳</button>`
+          : '—';
+        return `<tr>
+          <td><div class="ma-gate-name">${name}</div><div class="ma-gate-sub"><span class="ma-gate-code">${code}</span></div></td>
+          <td>${act}</td>
+          <td class="ma-num">${this.escapeHtml(String(r.score != null ? r.score : '—'))}</td>
+          <td class="ma-num">${this.escapeHtml(String(r.sticky_count != null ? r.sticky_count : '—'))}</td>
+          <td>${adoptable}</td>
+          <td class="ma-num">${r.rank_in != null ? this.escapeHtml(String(r.rank_in)) : '—'}</td>
+          <td>${this.escapeHtml(lock)}</td>
+          <td>${adoptBtn}</td>
+        </tr>`;
+      })
+      .join('');
+
+    tbody.querySelectorAll('.ma-obs-adopt-one').forEach((btn) => {
+      btn.addEventListener('click', async (ev) => {
+        ev.preventDefault();
+        const code = btn.getAttribute('data-code');
+        const action = btn.getAttribute('data-action');
+        if (!code) return;
+        await this.adoptObserveCandidates({ boardCodes: [code], actions: action ? [action] : undefined, allowOverCap: true });
+      });
+    });
+  },
+
+  async triggerObserveCandCompute() {
+    const btn = document.getElementById('maObserveCandComputeBtn');
+    const prev = btn ? btn.textContent : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '重算中…';
+    }
+    try {
+      const resp = await fetch(
+        `${this.API_BASE_URL}/api/board_observe/compute?sync=true`,
+        { method: 'POST' }
+      );
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || !json.success) {
+        throw new Error((json && json.message) || `重算失败 HTTP ${resp.status}`);
+      }
+      if (window.CommonUtils) CommonUtils.showToast('观察池候选已重算', 'success');
+      await this.loadObserveCandidates();
+    } catch (e) {
+      if (window.CommonUtils) CommonUtils.showToast(e.message || '重算失败', 'error');
+      else console.error(e);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = prev || '重算';
+      }
+    }
+  },
+
+  async adoptObserveCandidates(opts) {
+    const o = opts || {};
+    const btn = document.getElementById('maObserveCandAdoptBtn');
+    const prev = btn ? btn.textContent : '';
+    if (btn && !o.boardCodes) {
+      btn.disabled = true;
+      btn.textContent = '采纳中…';
+    }
+    try {
+      const tradeDate =
+        (this.cache.observeCand && this.cache.observeCand.meta && this.cache.observeCand.meta.trade_date) ||
+        undefined;
+      const body = {
+        trade_date: tradeDate,
+        board_codes: o.boardCodes || undefined,
+        actions: o.actions || ['suggest_in', 'suggest_out'],
+        allow_over_cap: !!o.allowOverCap,
+      };
+      const resp = await fetch(`${this.API_BASE_URL}/api/board_observe/adopt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok || !json.success) {
+        throw new Error((json && json.message) || `采纳失败 HTTP ${resp.status}`);
+      }
+      const n = (json.adopted || []).length;
+      const skip = (json.skipped || []).length;
+      if (window.CommonUtils) {
+        CommonUtils.showToast(`已采纳 ${n} 条` + (skip ? `，跳过 ${skip}` : ''), 'success');
+      }
+      await this.loadObserveCandidates();
+      await this.loadBoardGates();
+    } catch (e) {
+      if (window.CommonUtils) CommonUtils.showToast(e.message || '采纳失败', 'error');
+      else console.error(e);
+    } finally {
+      if (btn && !o.boardCodes) {
+        btn.disabled = false;
+        btn.textContent = prev || '一键采纳';
       }
     }
   },

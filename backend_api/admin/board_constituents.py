@@ -107,7 +107,8 @@ def _board_basic_select_cols() -> str:
         board_code, board_name, create_date,
         COALESCE(trade_observe_flag, FALSE) AS trade_observe_flag,
         COALESCE(frontend_visible_flag, TRUE) AS frontend_visible_flag,
-        board_code_source
+        board_code_source,
+        COALESCE(observe_lock, 'follow') AS observe_lock
     """
 
 
@@ -133,7 +134,8 @@ def _industry_board_list_src_sql(t: dict[str, str]) -> str:
             orphan.create_date,
             orphan.trade_observe_flag,
             orphan.frontend_visible_flag,
-            orphan.board_code_source
+            orphan.board_code_source,
+            orphan.observe_lock
         FROM (
             SELECT DISTINCT ON (c.board_code)
                 c.board_code,
@@ -141,7 +143,8 @@ def _industry_board_list_src_sql(t: dict[str, str]) -> str:
                 NULL::timestamp AS create_date,
                 FALSE AS trade_observe_flag,
                 TRUE AS frontend_visible_flag,
-                NULL::varchar AS board_code_source
+                NULL::varchar AS board_code_source,
+                'follow'::varchar AS observe_lock
             FROM {t['constituents']} c
             WHERE c.board_code IS NOT NULL AND TRIM(c.board_code) <> ''
               AND NOT EXISTS (
@@ -171,7 +174,8 @@ def _board_list_filtered_cte(board_src_sql: str, kw_filter: str) -> str:
                 MAX(create_date) AS create_date,
                 BOOL_OR(trade_observe_flag) AS trade_observe_flag,
                 BOOL_OR(frontend_visible_flag) AS frontend_visible_flag,
-                MAX(board_code_source) AS board_code_source
+                MAX(board_code_source) AS board_code_source,
+                MAX(observe_lock) AS observe_lock
             FROM ({board_src_sql}) u
             WHERE board_code IS NOT NULL AND board_code <> ''
             GROUP BY board_code
@@ -593,12 +597,24 @@ class SetBoardTradeObserveBody(BaseModel):
     board_code: str
     trade_observe_flag: bool
 
+
+class SetBoardObserveLockBody(BaseModel):
+    board_type: BoardType = "industry"
+    board_code: str
+    observe_lock: str = Field(
+        "follow", description="follow | include | exclude"
+    )
+
     @model_validator(mode="after")
     def _validate(self):
         code = _normalize_board_code_for_type(self.board_type, self.board_code)
         if not code:
             raise ValueError("板块代码无效")
         self.board_code = code
+        lock = str(self.observe_lock or "follow").strip().lower()
+        if lock not in ("follow", "include", "exclude"):
+            raise ValueError("observe_lock 须为 follow / include / exclude")
+        self.observe_lock = lock
         return self
 
 
@@ -1318,6 +1334,46 @@ async def set_board_trade_observe_flag(
         "data": {
             "board_code": bcode,
             "trade_observe_flag": body.trade_observe_flag,
+        },
+    }
+
+
+@router.post("/boards/observe-lock")
+async def set_board_observe_lock(
+    body: SetBoardObserveLockBody,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_admin),
+):
+    """设置行业观察池锁死策略：follow / include / exclude。"""
+    _ = current_user
+    if body.board_type != "industry":
+        raise HTTPException(status_code=400, detail="观察池锁死目前仅支持行业板块")
+    try:
+        from backend_core.board_observe.storage import ensure_board_observe_tables
+
+        ensure_board_observe_tables(db)
+    except Exception:
+        pass
+    t = _tables(body.board_type)
+    n = db.execute(
+        text(
+            f"""
+            UPDATE {t['basic']}
+            SET observe_lock = :lock
+            WHERE board_code = :code
+            """
+        ),
+        {"lock": body.observe_lock, "code": body.board_code},
+    ).rowcount
+    if not n:
+        raise HTTPException(status_code=404, detail="板块不存在")
+    db.commit()
+    return {
+        "success": True,
+        "message": "观察池锁死已更新",
+        "data": {
+            "board_code": body.board_code,
+            "observe_lock": body.observe_lock,
         },
     }
 

@@ -1047,6 +1047,31 @@ def exec_cn_auction_final(ctx: WorkflowContext) -> NodeResult:
             db.close()
 
 
+def exec_board_observe_candidates_daily(ctx: WorkflowContext) -> NodeResult:
+    """行业观察池自动候选日批（不改 trade_observe_flag）。"""
+    if not _has_explicit_trade_date(ctx) and cn_session_closed_today():
+        return NodeResult.skip("A股休市，跳过观察池候选")
+    try:
+        from backend_core.board_observe.compute_daily import (
+            run_board_observe_candidates_daily,
+        )
+
+        trade_date = _resolve_node_trade_date(ctx)
+        result = run_board_observe_candidates_daily(trade_date=trade_date)
+        if isinstance(result, dict) and result.get("success") is False:
+            return NodeResult.fail(
+                result.get("error") or "观察池候选失败",
+                message="观察池候选失败",
+            )
+        return NodeResult.ok(
+            "观察池候选完成",
+            data={"result": _safe(result), "trade_date": trade_date},
+        )
+    except Exception as e:
+        logger.exception("观察池候选异常")
+        return NodeResult.fail(str(e), message="观察池候选失败")
+
+
 def exec_board_gates_daily(ctx: WorkflowContext) -> NodeResult:
     """板块入场闸门日批（v1+v2）：资金特征/板RS/估值/三态落库。"""
     if not _has_explicit_trade_date(ctx) and cn_session_closed_today():

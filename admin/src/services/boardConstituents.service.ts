@@ -11,6 +11,7 @@ export interface BoardSummary {
   frontend_visible_flag?: boolean
   board_code_source?: string
   board_code_source_label?: string
+  observe_lock?: 'follow' | 'include' | 'exclude' | string
 }
 
 export interface BoardCodeSourceOption {
@@ -206,6 +207,22 @@ class BoardConstituentsService {
       board_type: body.boardType,
       board_code: body.boardCode,
       trade_observe_flag: body.tradeObserveFlag,
+    })
+  }
+
+  async setBoardObserveLock(body: {
+    boardType: BoardType
+    boardCode: string
+    observeLock: 'follow' | 'include' | 'exclude' | string
+  }) {
+    return apiService.post<{
+      success: boolean
+      message?: string
+      data?: { board_code: string; observe_lock: string }
+    }>('/board-constituents/boards/observe-lock', {
+      board_type: body.boardType,
+      board_code: body.boardCode,
+      observe_lock: body.observeLock,
     })
   }
 

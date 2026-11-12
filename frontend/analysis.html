@@ -1016,6 +1016,56 @@
                                 <div class="ma-status" id="maGateStatus"></div>
                             </div>
                         </section>
+
+                        <!-- 行业观察池自动候选 -->
+                        <section class="ma-section" id="maObserveCandSection" data-ma-block="observe-cand">
+                            <div class="ma-section-header">
+                                <div class="ma-section-title-row">
+                                    <h3>行业观察池候选</h3>
+                                    <span class="ma-meta" id="maObserveCandMeta"></span>
+                                </div>
+                                <div class="ma-toolbar">
+                                    <div class="ma-period" role="group" aria-label="候选动作">
+                                        <span class="ma-toolbar-label">动作</span>
+                                        <select id="maObserveCandAction" class="ma-select" title="suggest_in / suggest_out">
+                                            <option value="">全部（入/出优先）</option>
+                                            <option value="suggest_in">建议纳入</option>
+                                            <option value="suggest_out">建议移出</option>
+                                            <option value="in_pool">已在池</option>
+                                        </select>
+                                    </div>
+                                    <label class="ma-kind" title="仅可一键采纳（粘性已满足）">
+                                        <input type="checkbox" id="maObserveCandAdoptableOnly"> 仅可采纳
+                                    </label>
+                                    <button type="button" class="btn btn-secondary" id="maObserveCandRefreshBtn">刷新</button>
+                                    <button type="button" class="btn btn-secondary" id="maObserveCandComputeBtn" title="同步重算候选">重算</button>
+                                    <button type="button" class="btn btn-primary" id="maObserveCandAdoptBtn" title="采纳当前列表中可采纳项（软上限内）">一键采纳</button>
+                                </div>
+                            </div>
+                            <div class="ma-body">
+                                <p class="ma-hint">候选≠正式池。纳入需连续 2 日达标、移出 3 日；一键采纳才改「交易观察」。软上限满时批量纳入会跳过，可点行后单独处理。</p>
+                                <div class="ma-table-wrap">
+                                    <table class="ma-table" id="maObserveCandTable">
+                                        <thead>
+                                            <tr>
+                                                <th>板块</th>
+                                                <th>动作</th>
+                                                <th class="ma-num">分</th>
+                                                <th class="ma-num">粘性</th>
+                                                <th>可采纳</th>
+                                                <th class="ma-num">排名</th>
+                                                <th>锁</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="maObserveCandTbody">
+                                            <tr><td colspan="8" class="ma-empty">加载中…</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="ma-status" id="maObserveCandStatus"></div>
+                            </div>
+                        </section>
                     </div>
                 </div>
 

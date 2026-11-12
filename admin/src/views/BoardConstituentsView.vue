@@ -230,6 +230,26 @@
                 />
               </template>
             </el-table-column>
+            <el-table-column
+              v-if="boardType === 'industry'"
+              label="观察锁"
+              width="110"
+              align="center"
+            >
+              <template #default="{ row }">
+                <el-select
+                  :model-value="row.observe_lock || 'follow'"
+                  size="small"
+                  style="width: 96px"
+                  @click.stop
+                  @change="(val: string) => changeBoardObserveLock(row, val)"
+                >
+                  <el-option label="跟随" value="follow" />
+                  <el-option label="锁入" value="include" />
+                  <el-option label="锁出" value="exclude" />
+                </el-select>
+              </template>
+            </el-table-column>
             <el-table-column label="前端显示" width="88" align="center">
               <template #default="{ row }">
                 <el-switch
@@ -1101,6 +1121,21 @@ async function toggleBoardTradeObserve(row: BoardSummary, val: boolean) {
     ElMessage.error(e instanceof Error ? e.message : '更新交易观察标志失败')
   } finally {
     togglingTradeObserve.value = null
+  }
+}
+
+async function changeBoardObserveLock(row: BoardSummary, val: string) {
+  const prev = row.observe_lock || 'follow'
+  row.observe_lock = val
+  try {
+    await boardConstituentsService.setBoardObserveLock({
+      boardType: boardType.value,
+      boardCode: row.board_code,
+      observeLock: val,
+    })
+  } catch (e: unknown) {
+    row.observe_lock = prev
+    ElMessage.error(e instanceof Error ? e.message : '更新观察锁失败')
   }
 }
 

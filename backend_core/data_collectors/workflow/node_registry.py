@@ -45,6 +45,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_tushare_moneyflow_daily,
     exec_tushare_margin_daily,
     exec_board_fund_flow_daily,
+    exec_board_observe_candidates_daily,
     exec_board_gates_daily,
     exec_zt_pool_em_daily,
     exec_market_daily_review,
@@ -314,6 +315,17 @@ NODE_DEFS: List[CollectionNodeDef] = [
         exec_board_fund_flow_daily,
         param_schema=_TRADE_DATE_SCHEMA,
         description="同花顺行业/概念资金流 → board_fund_flow_daily（可指定交易日；需在个股资金流之后）",
+    ),
+    _n(
+        "board_observe_candidates_daily",
+        "行业观察池自动候选",
+        "strategy",
+        exec_board_observe_candidates_daily,
+        param_schema=_TRADE_DATE_SCHEMA,
+        description=(
+            "全行业计分 → suggest_in/out 候选日表（不改正式 trade_observe_flag；"
+            "建议在资金流/板RS 之后、board_gates_daily 之前）"
+        ),
     ),
     _n(
         "board_gates_daily",
