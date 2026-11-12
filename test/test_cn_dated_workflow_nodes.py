@@ -35,6 +35,7 @@ def test_strategy_nodes_still_registered():
         ("csb_signals_cn", "CSB"),
         ("sbbr_signals_cn", "SBBR"),
         ("rpe_signals_cn", "RPE"),
+        ("sepa_signals_cn", "SEPA"),
         ("index_daily_cn", "指数日线"),
         ("stock_recommend_brief", "推荐简报"),
     ):

@@ -35,6 +35,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_market_news,
     exec_rpe_cn,
     exec_csb_cn,
+    exec_sepa_cn,
     exec_fina_indicator_cn,
     exec_index_daily_cn,
     exec_rs_rating_cn,
@@ -220,6 +221,17 @@ NODE_DEFS: List[CollectionNodeDef] = [
     _n("sbbr_signals_cn", "SBBR信号预计算(A股)", "strategy", exec_sbbr_cn),
     _n("rpe_signals_cn", "RPE信号预计算(A股)", "strategy", exec_rpe_cn),
     _n("csb_signals_cn", "CSB信号预计算(A股)", "strategy", exec_csb_cn),
+    _n(
+        "sepa_signals_cn",
+        "SEPA买点信号预计算(A股)",
+        "strategy",
+        exec_sepa_cn,
+        param_schema=_TRADE_DATE_SCHEMA,
+        description=(
+            "全市场流动性池扫描趋势模板 + VCP 买点，写入 sepa_signal_trace；"
+            "依赖日K与两融日明细。未指定 trade_date 时用库内最新行情日"
+        ),
+    ),
     _n(
         "stock_recommend_brief",
         "个股推荐简报(日/周/月)",

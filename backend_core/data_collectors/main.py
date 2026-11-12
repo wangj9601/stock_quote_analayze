@@ -1057,6 +1057,34 @@ if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
 else:
     logging.info('跳过 _register_csb_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
 
+
+def _register_sepa_signal_precompute_jobs():
+    """定时将 SEPA 买点信号写入 sepa_signal_trace。"""
+    if not _env_bool("ENABLE_SEPA_PRECOMPUTE", True):
+        logging.info("SEPA 信号预计算已禁用（ENABLE_SEPA_PRECOMPUTE=false）")
+        return
+    try:
+        from backend_core.analysis.sepa.scheduled_precompute import scheduled_sepa_signals_cn
+    except Exception as e:
+        logging.error("导入 SEPA 预计算任务失败，跳过注册: %s", e)
+        return
+
+    scheduler.add_job(
+        scheduled_sepa_signals_cn,
+        "cron",
+        day_of_week=_cron("SCHED_SEPA_SIGNALS_CN_DOW", "mon-fri"),
+        hour=_cron_int("SCHED_SEPA_SIGNALS_CN_HOUR", 20),
+        minute=_cron_int("SCHED_SEPA_SIGNALS_CN_MINUTE", 5),
+        id="sepa_signals_cn",
+    )
+    logging.info("已注册 SEPA 信号预计算任务（ENABLE_SEPA_PRECOMPUTE=true）20:05")
+
+
+if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
+    _register_sepa_signal_precompute_jobs()
+else:
+    logging.info('跳过 _register_sepa_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）')
+
 if _env_bool('ENABLE_LEGACY_COLLECTION_CRON', True):
     scheduler.add_job(collect_akshare_realtime, 'cron',
         day_of_week=_cron('SCHED_AKSHARE_REALTIME_DOW', 'mon-fri'),

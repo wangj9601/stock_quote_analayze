@@ -29,7 +29,8 @@ INSERTS = [
     ("urt_signals_cn", "csb_signals_cn", "CSB信号预计算(A股)", "continue"),
     ("csb_signals_cn", "sbbr_signals_cn", "SBBR信号预计算(A股)", "continue"),
     ("sbbr_signals_cn", "rpe_signals_cn", "RPE信号预计算(A股)", "continue"),
-    ("rpe_signals_cn", "stock_recommend_brief", "个股推荐简报(日/周/月)", "continue"),
+    ("rpe_signals_cn", "sepa_signals_cn", "SEPA买点信号预计算(A股)", "continue"),
+    ("sepa_signals_cn", "stock_recommend_brief", "个股推荐简报(日/周/月)", "continue"),
 ]
 
 # 确保基础节点也在（旧库可能缺）；先挂基础再挂资金流/复盘，使 ths 插在 board 与 rs 之间

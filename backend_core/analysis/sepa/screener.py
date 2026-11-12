@@ -190,6 +190,40 @@ def screen_universe(
     return out[: int(top or c.top)]
 
 
+def filter_table_rows(
+    rows: Sequence[Dict[str, Any]],
+    *,
+    top: Optional[int] = None,
+    include_forming: bool = False,
+    include_extended: bool = False,
+    statuses: Optional[Sequence[str]] = None,
+    tiers: Optional[Sequence[str]] = None,
+    prefer_ready: bool = True,
+) -> List[Dict[str, Any]]:
+    """按选股页条件过滤已压平的表格行。口径与 screen_universe 的准入、排序一致。"""
+    if statuses is None:
+        allowed = set(_DEFAULT_STATUSES)
+    else:
+        allowed = {str(s).strip() for s in statuses if str(s).strip()}
+    if include_forming:
+        allowed.add("forming")
+    if include_extended:
+        allowed.add("extended")
+    tier_wanted = {str(t).strip().upper() for t in (tiers or []) if str(t).strip()}
+    out = [
+        r for r in rows
+        if str(r.get("vcp_status") or "") in allowed
+        and (not tier_wanted or str(r.get("tier") or "").upper() in tier_wanted)
+    ]
+    rank = _rank_map(prefer_ready)
+    out.sort(
+        key=lambda r: (rank.get(str(r.get("vcp_status") or ""), 0), float(r.get("score") or 0.0)),
+        reverse=True,
+    )
+    limit = int(top) if top else int(SEPAConfig().top)
+    return out[:limit]
+
+
 def screen_report(
     bars_by_code: Mapping[str, Sequence[Dict[str, Any]]],
     **kwargs: Any,

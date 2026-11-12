@@ -85,7 +85,8 @@
     const pool = data.pool || {};
     const hint = document.getElementById('sepaPoolHint');
     if (hint) {
-      hint.textContent = `本次股票池 ${data.universe || 0} 只：排除 ST / 退市，近 20 日均成交额不低于 ${amountText(pool.min_avg_amount)}。`;
+      const src = data.source === 'trace' ? '结果来自每日预计算。' : '结果为本次实时计算。';
+      hint.textContent = `本次股票池 ${data.universe || 0} 只：排除 ST / 退市，近 20 日均成交额不低于 ${amountText(pool.min_avg_amount)}。${src}`;
     }
     const line = document.getElementById('sepaFunnel');
     if (line) {

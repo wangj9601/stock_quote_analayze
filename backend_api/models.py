@@ -3129,6 +3129,45 @@ class CSBBacktestTask(Base):
     __table_args__ = (Index("idx_csb_bt_status_created", "status", "created_at"),)
 
 
+# ========== SEPA 买点信号预计算 ==========
+
+class SEPASignalScan(Base):
+    """SEPA 某交易日的预计算覆盖：漏斗与股票池，供选股页判断能否只读缓存。"""
+
+    __tablename__ = "sepa_signal_scan"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trade_date = Column(Date, nullable=False, unique=True, index=True)
+    universe = Column(Integer, nullable=False, default=0)
+    hit_count = Column(Integer, nullable=False, default=0)
+    funnel = Column(JSON, nullable=False)
+    pool = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
+class SEPASignalTrace(Base):
+    """SEPA 日终形态信号。唯一键 code + trade_date。"""
+
+    __tablename__ = "sepa_signal_trace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(20), nullable=False, index=True)
+    trade_date = Column(Date, nullable=False, index=True)
+    name = Column(String(200), nullable=True)
+    tier = Column(String(8), nullable=True)
+    vcp_status = Column(String(32), nullable=False, index=True)
+    score = Column(Float, nullable=True)
+    row_data = Column(JSON, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("code", "trade_date", name="uq_sepa_signal_trace_code_date"),
+        Index("idx_sepa_signal_trace_date_status", "trade_date", "vcp_status"),
+    )
+
+
 # ========== 统一交易观察 / 正式交易 ==========
 
 class TradeObserveStock(Base):

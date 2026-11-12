@@ -92,15 +92,18 @@ ENABLE_LEGACY_COLLECTION_CRON=false
    - 输入：不复权日 K + 库内 `stock_adj_factor` → **前复权**现算 ROC  
    - 输出：截面百分位写入 `rs_ratings`  
    - 建议：**每个交易日收盘链路跑一次**；休市跳过；改算法/补因子后需重跑  
-6. `gms_signals_cn` → `urt_signals_cn` → `csb_signals_cn` → `sbbr_signals_cn` → `rpe_signals_cn`
+6. `gms_signals_cn` → `urt_signals_cn` → `csb_signals_cn` → `sbbr_signals_cn` → `rpe_signals_cn` → **`sepa_signals_cn`**
+   - SEPA 买点：日 K + 两融日明细 → `sepa_signal_scan` / `sepa_signal_trace`；选股页默认读这份预计算
+   - 未指定 `trade_date` 时用库内最新行情日。开关 `ENABLE_SEPA_PRECOMPUTE`，分散 cron 默认工作日 20:05
 7. **`stock_recommend_brief`**：个股推荐简报（日/周/月）
 
 已有库若流程缺少上述节点，执行：
 
 ```bash
 python migrations/add_cn_close_workflow_extra_nodes.py
-python scripts/db_migrate.py upgrade --yes   # 含 stock_fund_flow_em_daily（0002）
+python scripts/db_migrate.py upgrade --yes   # 含 stock_fund_flow_em_daily（0002）、sepa_signal_trace（0004）
 python migrations/add_em_fund_flow_workflow_node.py
+python migrations/add_sepa_signal_workflow_node.py
 ```
 
 新增 RS 节点迁移（更早环境）：

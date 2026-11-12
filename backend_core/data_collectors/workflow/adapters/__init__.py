@@ -506,6 +506,28 @@ def _csb_cn() -> Any:
     return True
 
 
+def exec_sepa_cn(ctx: WorkflowContext) -> NodeResult:
+    """SEPA 买点预计算。未指定 trade_date 时用库内最新行情日。"""
+    try:
+        from backend_core.analysis.sepa.scheduled_precompute import run_sepa_precompute
+
+        trade_date = None
+        if _has_explicit_trade_date(ctx):
+            trade_date = _resolve_node_trade_date(ctx)
+        result = run_sepa_precompute(trade_date=trade_date)
+        if isinstance(result, dict) and result.get("skipped"):
+            return NodeResult.skip(str(result.get("reason") or "SEPA 预计算已跳过"))
+        if isinstance(result, dict) and result.get("success") is False:
+            return NodeResult.fail(
+                str(result.get("error") or "SEPA 预计算失败"),
+                message="SEPA买点信号预计算失败",
+            )
+        return NodeResult.ok("SEPA买点信号预计算完成", data={"result": _safe(result)})
+    except Exception as e:
+        logger.exception("SEPA买点信号预计算 异常")
+        return NodeResult.fail(str(e), message="SEPA买点信号预计算失败")
+
+
 def _rs_rating_cn() -> Any:
     from backend_core.indicators.rs_rating.scheduled_precompute import scheduled_rs_rating_cn
 
