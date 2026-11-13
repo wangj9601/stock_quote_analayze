@@ -2,8 +2,8 @@
 # CentOS 与 Ubuntu 共用：发布 zip 到 /opt/stock_quote，切换 current，重启服务，健康检查失败则回滚 symlink。
 # 用法：
 #   sudo bash release.sh /path/to/stock_quote_release_xxx.zip [DEPLOY_ROOT]
-#   sudo bash release.sh                 # 自动取 /tmp 下最新 stock_quote_release_*.zip
-#   sudo bash release.sh /tmp            # 在指定目录取最新同名包
+#   sudo bash release.sh                 # 自动取 /tmp 下包名日期最新的 stock_quote_release_*.zip
+#   sudo bash release.sh /tmp            # 在指定目录按包名 YYYYMMDD_HHMMSS 取最新
 # 首次发布、服务尚未启动时：sudo SKIP_HEALTH=1 bash release.sh
 set -euo pipefail
 
@@ -17,7 +17,8 @@ HEALTH_URL="${HEALTH_URL:-http://127.0.0.1/health}"
 API_PROBE_URL="${API_PROBE_URL:-http://127.0.0.1:5000/api/admin/auth/verify}"
 PACKAGE_GLOB="${PACKAGE_GLOB:-stock_quote_release_*.zip}"
 
-# 未传 zip、或传入目录时：按修改时间取最新匹配包（默认搜 /tmp）
+# 未传 zip、或传入目录时：按包名中的日期时间取最新（stock_quote_release_YYYYMMDD_HHMMSS.zip）。
+# 不用 mtime：scp/解压后 mtime 可能被刷成「现在」，旧包反而排前面。
 resolve_package_path() {
   local hint="${1:-}"
   local dir=""
@@ -40,8 +41,8 @@ resolve_package_path() {
     echo "在 $dir 未找到 $PACKAGE_GLOB" >&2
     return 1
   fi
-  # ls -t：最新修改时间在前
-  ls -1t "${files[@]}" | head -n1
+  # 文件名含 YYYYMMDD_HHMMSS，字典序倒序即最新日期
+  printf '%s\n' "${files[@]}" | sort -r | head -n1
 }
 
 if [[ "$(id -u)" -ne 0 ]]; then

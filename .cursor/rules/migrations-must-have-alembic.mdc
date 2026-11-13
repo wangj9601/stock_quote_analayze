@@ -1,0 +1,21 @@
+---
+description: migrations/ 建表或改表必须同步写 Alembic revision
+alwaysApply: true
+---
+
+# Schema 变更：migrations 与 Alembic 必须同步
+
+凡在 `migrations/` 下新增或修改**建表 / 改表 / 加列 / 索引**等 schema 脚本，**必须同时**在 `alembic/versions/` 增加对应 revision，保证生产默认路径 `scripts/db_migrate.py upgrade`（含 `deploy_aliyun`）能落到库。
+
+## 要求
+
+1. **禁止只写 `migrations/*.py`**：阿里云等环境默认只跑 Alembic，不跑 mtime 旧脚本；只写 `migrations/` 会导致生产缺表（如 `board_gate_daily`）。
+2. **优先 / 必做 Alembic**：用 `python scripts/db_migrate.py revision -m "..."` 生成 revision，在 `upgrade()` / `downgrade()` 写清 DDL；能幂等则用 `IF NOT EXISTS` 等 PostgreSQL 安全写法。
+3. **`migrations/` 仅作可选补齐**：若仍保留手写脚本，须与 Alembic revision **同一次改动一并提交**，并在脚本或 PR 说明里写清对应 revision id。
+4. **部署默认认 Alembic**：`deploy_aliyun` 默认 `db_migrate.py upgrade`；`-RunRecentMigrations` 只是应急，不能代替 revision。
+
+## 自检
+
+- [ ] `alembic/versions/` 有新文件且 `upgrade()` 覆盖本次 schema
+- [ ] 本地或目标库可 `db_migrate.py upgrade --yes`
+- [ ] 未出现「只有 migrations/、没有 alembic revision」的提交

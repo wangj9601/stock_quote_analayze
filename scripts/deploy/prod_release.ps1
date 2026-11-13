@@ -53,9 +53,9 @@ try {
     }
 
     if ([string]::IsNullOrWhiteSpace($PackagePath)) {
-        Write-Step "Find latest package: $TmpDir\stock_quote_release_*.zip"
+        Write-Step "Find latest package by name date: $TmpDir\stock_quote_release_*.zip"
         $latest = Get-ChildItem -LiteralPath $TmpDir -Filter "stock_quote_release_*.zip" -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending |
+            Sort-Object Name -Descending |
             Select-Object -First 1
 
         if ($null -eq $latest) {
@@ -63,9 +63,9 @@ try {
         }
 
         $PackagePath = $latest.FullName
-        Write-Host ("Selected : {0}" -f $PackagePath) -ForegroundColor Green
-        Write-Host ("Modified : {0}" -f $latest.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"))
-        Write-Host ("Size     : {0:N2} MB" -f ($latest.Length / 1MB))
+        Write-Host ("Selected (by name date): {0}" -f $PackagePath) -ForegroundColor Green
+        Write-Host ("Modified               : {0}" -f $latest.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"))
+        Write-Host ("Size                   : {0:N2} MB" -f ($latest.Length / 1MB))
     }
     else {
         if (-not (Test-Path -LiteralPath $PackagePath)) {

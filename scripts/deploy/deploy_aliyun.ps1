@@ -194,16 +194,17 @@ try {
 
     $projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..\..\")
     $localDist = Join-Path $projectRoot "dist"
+    # 按包名日期 stock_quote_release_YYYYMMDD_HHMMSS.zip 取最新（不用 mtime）
     $latest = Get-ChildItem -LiteralPath $localDist -Filter "stock_quote_release_*.zip" -File -ErrorAction SilentlyContinue |
-        Sort-Object LastWriteTime -Descending |
+        Sort-Object Name -Descending |
         Select-Object -First 1
     if ($null -eq $latest) {
         throw "No zip found: $localDist\stock_quote_release_*.zip"
     }
 
-    Write-Host ("Selected zip: {0}" -f $latest.FullName) -ForegroundColor Green
-    Write-Host ("Modified   : {0}" -f $latest.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"))
-    Write-Host ("Size       : {0:N2} MB" -f ($latest.Length / 1MB))
+    Write-Host ("Selected zip (by name date): {0}" -f $latest.FullName) -ForegroundColor Green
+    Write-Host ("Modified                  : {0}" -f $latest.LastWriteTime.ToString("yyyy-MM-dd HH:mm:ss"))
+    Write-Host ("Size                      : {0:N2} MB" -f ($latest.Length / 1MB))
     Write-Host ""
 
     if ($PackOnly) {
