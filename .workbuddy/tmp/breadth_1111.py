@@ -11,7 +11,7 @@ conn=psycopg2.connect(host=env.get("DB_HOST","localhost"),port=env.get("DB_PORT"
 cur=conn.cursor()
 cur.execute("select column_name from information_schema.columns where table_name='historical_quotes' order by ordinal_position")
 print([r[0] for r in cur.fetchall()])
-for d in ("2026-11-06","2026-11-09","2026-11-10"):
+for d in ("2026-11-09","2026-11-10","2026-11-11"):
     cur.execute("""select sum(case when close>pre_close then 1 else 0 end),
                           sum(case when close<pre_close then 1 else 0 end),
                           count(*),

@@ -1,0 +1,150 @@
+数据库连接URL: 'postgresql+psycopg2://postgres:***@localhost:5446/stock_analysis'
+Creating industry_board_basic_info...
+Created industry_board_basic_info.
+Creating industry_board_realtime_quotes...
+Created industry_board_realtime_quotes.
+Creating realtime_collect_operation_logs...
+Created realtime_collect_operation_logs.
+2026-11-13 12:59:10,736 INFO backend_core.data_collectors.akshare.hk_weekly_collector: 港股周线数据表初始化成功
+2026-11-13 12:59:10,738 INFO backend_core.data_collectors.akshare.monthly_collector: A股月线数据表初始化成功
+2026-11-13 12:59:10,739 INFO backend_core.data_collectors.akshare.hk_monthly_collector: 港股月线数据表初始化成功
+2026-11-13 12:59:10,741 INFO backend_core.data_collectors.akshare.quarterly_collector: A股季线数据表初始化成功
+2026-11-13 12:59:10,743 INFO backend_core.data_collectors.akshare.hk_quarterly_collector: 港股季线数据表初始化成功
+2026-11-13 12:59:10,747 INFO backend_core.data_collectors.akshare.semiannual_collector: A股半年线数据表初始化成功
+2026-11-13 12:59:10,749 INFO backend_core.data_collectors.akshare.hk_semiannual_collector: 港股半年线数据表初始化成功
+2026-11-13 12:59:10,750 INFO backend_core.data_collectors.akshare.annual_collector: A股年线数据表初始化成功
+2026-11-13 12:59:10,752 INFO backend_core.data_collectors.akshare.hk_annual_collector: 港股年线数据表初始化成功
+2026-11-13 12:59:10,754 INFO backend_core.data_collectors.akshare.etf_collector: 基金相关表初始化完成
+2026-11-13 12:59:10,768 INFO root: 跳过 _register_gms_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）
+2026-11-13 12:59:10,768 INFO root: 跳过 _register_urt_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）
+2026-11-13 12:59:10,768 INFO root: 跳过 _register_sbbr_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）
+2026-11-13 12:59:10,768 INFO root: 跳过 _register_rpe_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）
+2026-11-13 12:59:10,768 INFO root: 跳过 _register_csb_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）
+2026-11-13 12:59:10,768 INFO root: 跳过 _register_sepa_signal_precompute_jobs()（ENABLE_LEGACY_COLLECTION_CRON=false）
+2026-11-13 12:59:10,769 INFO root: 已跳过 legacy 分散采集 cron 任务注册（ENABLE_LEGACY_COLLECTION_CRON=false）
+2026-11-13 12:59:10,880 INFO apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-11-13 12:59:10,880 INFO backend_core.data_collectors.workflow.cron_sync: 已注册采集流程 cron：id=1 name=A股收盘后标准流程 dow=mon-fri hour=15 minute=25
+2026-11-13 12:59:10,881 INFO apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-11-13 12:59:10,881 INFO backend_core.data_collectors.workflow.cron_sync: 已注册采集流程 cron：id=2 name=港股收盘后标准流程 dow=mon-fri hour=16 minute=25
+2026-11-13 12:59:10,881 INFO apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-11-13 12:59:10,882 INFO backend_core.data_collectors.workflow.cron_sync: 已注册采集流程 cron：id=7 name=A股集合竞价终态采集 dow=mon-fri hour=9 minute=26
+2026-11-13 12:59:10,882 INFO backend_core.data_collectors.workflow.cron_sync: 采集流程 cron 已热同步：removed=0 registered=3
+2026-11-13 12:59:10,884 INFO apscheduler.scheduler: Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-11-13 12:59:10,884 INFO root: 已启用采集流程 cron 热同步（每 5 分钟，仅空闲时重载）
+2026-11-13 12:59:11,177 INFO HistoricalQuoteCollector: 采集到 5573 条历史行情数据
+2026-11-13 12:59:11,658 INFO HistoricalQuoteCollector: 已处理 0 条记录，提交事务
+2026-11-13 12:59:12,275 INFO HistoricalQuoteCollector: 已处理 100 条记录，提交事务
+2026-11-13 12:59:12,874 INFO HistoricalQuoteCollector: 已处理 200 条记录，提交事务
+2026-11-13 12:59:13,458 INFO HistoricalQuoteCollector: 已处理 300 条记录，提交事务
+2026-11-13 12:59:14,002 INFO HistoricalQuoteCollector: 已处理 400 条记录，提交事务
+2026-11-13 12:59:14,571 INFO HistoricalQuoteCollector: 已处理 500 条记录，提交事务
+2026-11-13 12:59:15,124 INFO HistoricalQuoteCollector: 已处理 600 条记录，提交事务
+2026-11-13 12:59:15,660 INFO HistoricalQuoteCollector: 已处理 700 条记录，提交事务
+2026-11-13 12:59:16,225 INFO HistoricalQuoteCollector: 已处理 800 条记录，提交事务
+2026-11-13 12:59:16,791 INFO HistoricalQuoteCollector: 已处理 900 条记录，提交事务
+2026-11-13 12:59:17,351 INFO HistoricalQuoteCollector: 已处理 1000 条记录，提交事务
+2026-11-13 12:59:17,921 INFO HistoricalQuoteCollector: 已处理 1100 条记录，提交事务
+2026-11-13 12:59:18,519 INFO HistoricalQuoteCollector: 已处理 1200 条记录，提交事务
+2026-11-13 12:59:19,237 INFO HistoricalQuoteCollector: 已处理 1300 条记录，提交事务
+2026-11-13 12:59:19,849 INFO HistoricalQuoteCollector: 已处理 1400 条记录，提交事务
+2026-11-13 12:59:20,528 INFO HistoricalQuoteCollector: 已处理 1500 条记录，提交事务
+2026-11-13 12:59:21,114 INFO HistoricalQuoteCollector: 已处理 1600 条记录，提交事务
+2026-11-13 12:59:21,682 INFO HistoricalQuoteCollector: 已处理 1700 条记录，提交事务
+2026-11-13 12:59:22,277 INFO HistoricalQuoteCollector: 已处理 1800 条记录，提交事务
+2026-11-13 12:59:22,852 INFO HistoricalQuoteCollector: 已处理 1900 条记录，提交事务
+2026-11-13 12:59:23,432 INFO HistoricalQuoteCollector: 已处理 2000 条记录，提交事务
+2026-11-13 12:59:24,010 INFO HistoricalQuoteCollector: 已处理 2100 条记录，提交事务
+2026-11-13 12:59:24,591 INFO HistoricalQuoteCollector: 已处理 2200 条记录，提交事务
+2026-11-13 12:59:25,161 INFO HistoricalQuoteCollector: 已处理 2300 条记录，提交事务
+2026-11-13 12:59:25,732 INFO HistoricalQuoteCollector: 已处理 2400 条记录，提交事务
+2026-11-13 12:59:26,305 INFO HistoricalQuoteCollector: 已处理 2500 条记录，提交事务
+2026-11-13 12:59:26,889 INFO HistoricalQuoteCollector: 已处理 2600 条记录，提交事务
+2026-11-13 12:59:27,478 INFO HistoricalQuoteCollector: 已处理 2700 条记录，提交事务
+2026-11-13 12:59:28,052 INFO HistoricalQuoteCollector: 已处理 2800 条记录，提交事务
+2026-11-13 12:59:28,613 INFO HistoricalQuoteCollector: 已处理 2900 条记录，提交事务
+2026-11-13 12:59:29,189 INFO HistoricalQuoteCollector: 已处理 3000 条记录，提交事务
+2026-11-13 12:59:29,778 INFO HistoricalQuoteCollector: 已处理 3100 条记录，提交事务
+2026-11-13 12:59:30,377 INFO HistoricalQuoteCollector: 已处理 3200 条记录，提交事务
+2026-11-13 12:59:30,970 INFO HistoricalQuoteCollector: 已处理 3300 条记录，提交事务
+2026-11-13 12:59:31,566 INFO HistoricalQuoteCollector: 已处理 3400 条记录，提交事务
+2026-11-13 12:59:32,178 INFO HistoricalQuoteCollector: 已处理 3500 条记录，提交事务
+2026-11-13 12:59:32,749 INFO HistoricalQuoteCollector: 已处理 3600 条记录，提交事务
+2026-11-13 12:59:33,307 INFO HistoricalQuoteCollector: 已处理 3700 条记录，提交事务
+2026-11-13 12:59:33,868 INFO HistoricalQuoteCollector: 已处理 3800 条记录，提交事务
+2026-11-13 12:59:34,485 INFO HistoricalQuoteCollector: 已处理 3900 条记录，提交事务
+2026-11-13 12:59:35,352 INFO HistoricalQuoteCollector: 已处理 4000 条记录，提交事务
+2026-11-13 12:59:36,072 INFO HistoricalQuoteCollector: 已处理 4100 条记录，提交事务
+2026-11-13 12:59:36,655 INFO HistoricalQuoteCollector: 已处理 4200 条记录，提交事务
+2026-11-13 12:59:37,250 INFO HistoricalQuoteCollector: 已处理 4300 条记录，提交事务
+2026-11-13 12:59:37,871 INFO HistoricalQuoteCollector: 已处理 4400 条记录，提交事务
+2026-11-13 12:59:38,499 INFO HistoricalQuoteCollector: 已处理 4500 条记录，提交事务
+2026-11-13 12:59:39,089 INFO HistoricalQuoteCollector: 已处理 4600 条记录，提交事务
+2026-11-13 12:59:39,671 INFO HistoricalQuoteCollector: 已处理 4700 条记录，提交事务
+2026-11-13 12:59:40,250 INFO HistoricalQuoteCollector: 已处理 4800 条记录，提交事务
+2026-11-13 12:59:40,830 INFO HistoricalQuoteCollector: 已处理 4900 条记录，提交事务
+2026-11-13 12:59:41,415 INFO HistoricalQuoteCollector: 已处理 5000 条记录，提交事务
+2026-11-13 12:59:42,002 INFO HistoricalQuoteCollector: 已处理 5100 条记录，提交事务
+2026-11-13 12:59:42,571 INFO HistoricalQuoteCollector: 已处理 5200 条记录，提交事务
+2026-11-13 12:59:43,129 INFO HistoricalQuoteCollector: 已处理 5300 条记录，提交事务
+2026-11-13 12:59:43,656 INFO HistoricalQuoteCollector: 已处理 5400 条记录，提交事务
+2026-11-13 12:59:44,255 INFO HistoricalQuoteCollector: 已处理 5500 条记录，提交事务
+2026-11-13 12:59:44,673 INFO HistoricalQuoteCollector: 全部历史行情数据采集并入库完成，成功: 5573，失败: 0
+2026-11-13 12:59:44,673 INFO HistoricalQuoteCollector: 开始自动计算扩展涨跌幅（5日、10日、60日）...
+2026-11-13 12:59:44,674 INFO backend_core.data_collectors.tushare.extended_change_calculator: 开始为日期 2026-11-12 计算扩展涨跌幅（5日、10日、60日）
+2026-11-13 13:01:23,989 WARNING backend_core.data_collectors.tushare.extended_change_calculator: 股票 688827 在 2026-11-12 的扩展涨跌幅计算失败
+2026-11-13 13:01:24,519 WARNING backend_core.data_collectors.tushare.extended_change_calculator: 股票 920085 在 2026-11-12 的扩展涨跌幅计算失败
+2026-11-13 13:01:26,789 INFO backend_core.data_collectors.tushare.extended_change_calculator: 日期 2026-11-12 的扩展涨跌幅计算完成: 总计 5573, 成功 5571, 失败 2
+2026-11-13 13:01:26,790 INFO HistoricalQuoteCollector: 扩展涨跌幅计算完成: 总计 5573, 成功 5571, 失败 2
+2026-11-13 13:01:26,792 INFO HistoricalQuoteCollector: 开始自动计算30日涨跌幅...
+2026-11-13 13:01:26,792 INFO backend_core.data_collectors.tushare.thirty_day_change_calculator: 开始为日期 2026-11-12 计算30日涨跌幅
+2026-11-13 13:01:33,908 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 001246 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:01:34,687 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 001381 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:07,629 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 301569 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:07,962 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 301660 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:08,040 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 301716 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:08,044 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 301718 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:40,635 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 688827 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,080 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920085 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,332 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920157 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,352 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920162 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,506 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920196 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,524 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920201 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,526 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920202 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,765 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920285 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,770 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920296 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:41,796 WARNING backend_core.data_collectors.tushare.thirty_day_change_calculator: 股票 920306 在 2026-11-12 的30日涨跌幅计算失败
+2026-11-13 13:02:42,857 INFO backend_core.data_collectors.tushare.thirty_day_change_calculator: 日期 2026-11-12 的30日涨跌幅计算完成: 总计 5573, 成功 5557, 失败 16
+2026-11-13 13:02:42,857 INFO HistoricalQuoteCollector: 30日涨跌幅计算完成: 总计 5573, 成功 5557, 失败 16
+2026-11-13 13:02:42,861 INFO HistoricalQuoteCollector: 跳过日采内自选股技术指标批算（MA/MAVOL/KDJ/RSI/BOLL/MACD/PVFRS），改由全市场补充节点与独立指标工作流负责
+2026-11-13 13:02:42,862 INFO HistoricalQuoteCollector: 开始全市场 MA+MAVOL 指标计算...
+2026-11-13 13:03:03,770 INFO HistoricalQuoteCollector: MA/MAVOL 预加载完成 table=historical_quotes codes=5573 rows=1147119 elapsed=20.86s window=2025-12-27~2026-11-12
+2026-11-13 13:03:24,330 INFO HistoricalQuoteCollector: MA/MAVOL 并行计算完成 workers=4 codes=5573 elapsed=20.55s
+2026-11-13 13:03:34,927 INFO HistoricalQuoteCollector: MA/MAVOL 批量写入完成 ma=5572 mavol=5572 elapsed=10.58s
+2026-11-13 13:03:35,039 INFO HistoricalQuoteCollector: 全市场 MA+MAVOL 指标计算完成: 成功 5572, 失败 0
+2026-11-13 13:03:35,039 INFO HistoricalQuoteCollector: 开始全市场 PVFRS（GMS） 指标计算...
+2026-11-13 13:03:41,543 INFO HistoricalQuoteCollector: MA/MAVOL 预加载完成 table=historical_quotes codes=5573 rows=322014 elapsed=6.45s window=2026-08-14~2026-11-12
+2026-11-13 13:05:33,125 INFO HistoricalQuoteCollector: PVFRS 内存计算完成 codes=5573 ok=5564 skip=9 fail=0 elapsed=111.58s
+2026-11-13 13:05:41,035 INFO HistoricalQuoteCollector: PVFRS 批量写入完成 rows=5564 elapsed=5.41s
+2026-11-13 13:05:41,066 INFO HistoricalQuoteCollector: 全市场 PVFRS（GMS） 指标计算完成: 成功 5564, 失败 0
+2026-11-13 13:05:41,068 INFO root: 补采行情 20261112 -> {'success': True, 'elapsed_s': 390.2}
+2026-11-13 13:06:01,052 INFO backend_core.data_collectors.batch_ma_mavol: MA/MAVOL 预加载完成 table=historical_quotes codes=5573 rows=1147119 elapsed=19.93s window=2025-12-27~2026-11-12
+2026-11-13 13:06:19,998 INFO backend_core.data_collectors.batch_ma_mavol: MA/MAVOL 并行计算完成 workers=4 codes=5573 elapsed=18.94s
+2026-11-13 13:06:26,997 INFO backend_core.data_collectors.batch_ma_mavol: MA/MAVOL 批量写入完成 ma=5572 mavol=5572 elapsed=6.98s
+2026-11-13 13:06:27,104 INFO root: MA+MAVOL 20261112 -> {'success': True, 'result': "{'total': 5573, 'success': 5572, 'skipped': 1, 'failed': 0, 'ma_written': 5572, 'mavol_written': 5572, 'details': []}", 'elapsed_s': 46.0}
+===BACKFILL_JSON===
+{
+  "run_at": "2026-11-13T13:06:27",
+  "quotes": {
+    "20261112": {
+      "success": true,
+      "elapsed_s": 390.2
+    }
+  },
+  "indicators": {
+    "20261112": {
+      "success": true,
+      "result": "{'total': 5573, 'success': 5572, 'skipped': 1, 'failed': 0, 'ma_written': 5572, 'mavol_written': 5572, 'details': []}",
+      "elapsed_s": 46.0
+    }
+  }
+}

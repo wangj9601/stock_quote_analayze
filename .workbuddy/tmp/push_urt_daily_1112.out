@@ -1,0 +1,140 @@
+数据库连接URL: 'postgresql+psycopg2://postgres:***@localhost:5446/stock_analysis'
+2026-11-12 13:07:02,323 INFO backend_api.services.config_service: 配置服务初始化完成
+2026-11-12 13:07:02,822 INFO backend_api.services.email_service: 邮件服务初始化完成: smtp.qq.com:465
+2026-11-12 13:07:02,823 INFO backend_api.services.report_service: ReportService 初始化完成，报告目录: reports/csv
+2026-11-12 13:07:02,823 INFO backend_api.services.config_service: 配置服务初始化完成
+2026-11-12 13:07:02,823 INFO backend_api.services.push_service: PushService 初始化完成
+2026-11-12 13:07:02,846 INFO backend_api.services.push_service: 开始向用户 7 推送报告，推送时间: M13:07:02
+2026-11-12 13:07:02,846 INFO backend_api.services.logging_utils: [推送事件] 推送开始 | 用户ID=7 | 推送时间=M13:07:02 | JSON: {"event_type": "push_started", "timestamp": "2026-11-12T13:07:02.846300", "user_id": 7, "push_time": "M13:07:02"}
+2026-11-12 13:07:02,980 INFO backend_api.services.push_service: 用户 7 可用推送渠道: ['email', 'wechat']
+2026-11-12 13:07:02,980 INFO backend_api.services.push_service: 开始为用户 7 生成报告，类型: urt_daily
+2026-11-12 13:07:02,991 INFO backend_api.services.report_service: 获取用户 7 自选股 70 只
+2026-11-12 13:07:02,993 INFO backend_api.services.report_service: 获取用户 7 自选股 70 只
+2026-11-12 13:07:02,994 INFO backend_api.services.report_service: URT 日报 user_id=7 A股自选池=61 只 sample=['688114', '300223', '000558', '603667', '603933', '002364', '000983', '002557'] skipped_hk_like=['00981', '01810', '02269', '02565', '02899', '03690', '09988', '03750', '00700']
+2026-11-12 13:07:03,096 INFO backend_core.strategies.urt.strategy_engine: URT 全市场扫描 stocks=60 window=2023-06-20~2026-11-11 outer_batch_codes=13
+2026-11-12 13:07:13,981 INFO backend_core.strategies.urt.strategy_engine: URT 预计算进度：已完成 60/60
+2026-11-12 13:07:14,236 INFO backend_api.services.report_service: URT 日报 user_id=7 screen返回=60 池内=60 剔除非自选=0 leaked_sample=[]
+2026-11-12 13:07:15,277 INFO backend_api.services.report_service: 生成 URT 自选股报告成功: reports/csv\urt_7_20261111_130714.xlsx, 总行数=18, 买点=0, 阳线补充=18
+2026-11-12 13:07:15,281 INFO backend_api.services.push_service: 用户 7 报告生成成功: reports/csv\urt_7_20261111_130714.xlsx
+2026-11-12 13:07:15,283 INFO backend_api.services.logging_utils: [推送事件] 报告生成成功 | 用户ID=7 | JSON: {"event_type": "report_generated", "timestamp": "2026-11-12T13:07:15.282531", "user_id": 7, "details": {"report_type": "urt_daily", "file_path": "reports/csv\\urt_7_20261111_130714.xlsx", "stock_count": 18}}
+2026-11-12 13:07:15,315 INFO backend_api.services.push_service: 创建推送记录成功: record_id=221
+2026-11-12 13:07:15,333 INFO backend_api.services.push_service: 向用户 7 发送邮件: wangxuewu@sina.com
+2026-11-12 13:07:15,335 INFO backend_api.services.email_service: 正在连接SMTP服务器: smtp.qq.com:465
+2026-11-12 13:07:16,711 INFO backend_api.services.email_service: 邮件发送成功: wangxuewu@sina.com
+2026-11-12 13:07:16,727 INFO backend_api.services.logging_utils: [推送事件] 渠道发送成功 | 用户ID=7 | 渠道=email | JSON: {"event_type": "channel_send_success", "timestamp": "2026-11-12T13:07:16.727751", "user_id": 7, "channel": "email", "details": {"to_email": "wangxuewu@sina.com"}}
+2026-11-12 13:07:16,728 INFO backend_api.services.push_service: 用户 7 渠道 email 推送结果: True
+2026-11-12 13:07:16,734 INFO backend_api.services.push_service: 向用户 7 发送微信文本消息 -> ['WangXueWu']
+2026-11-12 13:07:18,711 INFO backend_api.services.push_service: 向用户 7 发送微信文件消息
+2026-11-12 13:07:20,484 INFO backend_api.services.push_service: 用户 7 微信推送成功
+2026-11-12 13:07:20,485 INFO backend_api.services.logging_utils: [推送事件] 渠道发送成功 | 用户ID=7 | 渠道=wechat | JSON: {"event_type": "channel_send_success", "timestamp": "2026-11-12T13:07:20.485736", "user_id": 7, "channel": "wechat"}
+2026-11-12 13:07:20,486 INFO backend_api.services.push_service: 用户 7 渠道 wechat 推送结果: True
+2026-11-12 13:07:20,499 INFO backend_api.services.push_service: 用户 7 推送完成，最终状态: success, 成功渠道: 2/2
+2026-11-12 13:07:20,499 INFO backend_api.services.logging_utils: [推送事件] 推送完成 | 用户ID=7 | 记录ID=221 | 推送时间=M13:07:02 | 状态=success | JSON: {"event_type": "push_completed", "timestamp": "2026-11-12T13:07:20.499740", "user_id": 7, "record_id": 221, "push_time": "M13:07:02", "status": "success", "details": {"success_channels": 2, "total_channels": 2, "channel_status": {"email": "success", "wechat": "success"}}}
+2026-11-12 13:07:20,505 INFO backend_api.services.push_service: 开始向用户 6 推送报告，推送时间: M13:07:20
+2026-11-12 13:07:20,505 INFO backend_api.services.logging_utils: [推送事件] 推送开始 | 用户ID=6 | 推送时间=M13:07:20 | JSON: {"event_type": "push_started", "timestamp": "2026-11-12T13:07:20.505745", "user_id": 6, "push_time": "M13:07:20"}
+2026-11-12 13:07:20,510 INFO backend_api.services.push_service: 用户 6 可用推送渠道: ['wechat']
+2026-11-12 13:07:20,511 INFO backend_api.services.push_service: 开始为用户 6 生成报告，类型: urt_daily
+2026-11-12 13:07:20,524 INFO backend_api.services.report_service: 获取用户 6 自选股 346 只
+2026-11-12 13:07:20,533 INFO backend_api.services.report_service: 获取用户 6 自选股 346 只
+2026-11-12 13:07:20,534 INFO backend_api.services.report_service: URT 日报 user_id=6 A股自选池=342 只 sample=['688114', '300223', '603667', '688795', '688981', '300750', '688256', '601138'] skipped_hk_like=['03396', '00700', '00100', '02565']
+2026-11-12 13:07:20,554 INFO backend_core.strategies.urt.strategy_engine: URT 全市场扫描 stocks=334 window=2023-06-20~2026-11-11 outer_batch_codes=13
+2026-11-12 13:07:45,072 INFO backend_core.strategies.urt.strategy_engine: URT 预计算进度：已完成 208/334
+2026-11-12 13:07:59,757 INFO backend_core.strategies.urt.strategy_engine: URT 预计算进度：已完成 334/334
+2026-11-12 13:07:59,939 INFO backend_api.services.report_service: URT 日报 user_id=6 screen返回=334 池内=334 剔除非自选=0 leaked_sample=[]
+2026-11-12 13:08:00,523 INFO backend_api.services.report_service: 生成 URT 自选股报告成功: reports/csv\urt_6_20261111_130759.xlsx, 总行数=151, 买点=0, 阳线补充=151
+2026-11-12 13:08:00,547 INFO backend_api.services.push_service: 用户 6 报告生成成功: reports/csv\urt_6_20261111_130759.xlsx
+2026-11-12 13:08:00,548 INFO backend_api.services.logging_utils: [推送事件] 报告生成成功 | 用户ID=6 | JSON: {"event_type": "report_generated", "timestamp": "2026-11-12T13:08:00.548190", "user_id": 6, "details": {"report_type": "urt_daily", "file_path": "reports/csv\\urt_6_20261111_130759.xlsx", "stock_count": 151}}
+2026-11-12 13:08:00,556 INFO backend_api.services.push_service: 创建推送记录成功: record_id=222
+2026-11-12 13:08:00,566 INFO backend_api.services.push_service: 向用户 6 发送微信文本消息 -> ['WangXueWu']
+2026-11-12 13:08:01,930 INFO backend_api.services.push_service: 向用户 6 发送微信文件消息
+2026-11-12 13:08:04,039 INFO backend_api.services.push_service: 用户 6 微信推送成功
+2026-11-12 13:08:04,040 INFO backend_api.services.logging_utils: [推送事件] 渠道发送成功 | 用户ID=6 | 渠道=wechat | JSON: {"event_type": "channel_send_success", "timestamp": "2026-11-12T13:08:04.040050", "user_id": 6, "channel": "wechat"}
+2026-11-12 13:08:04,040 INFO backend_api.services.push_service: 用户 6 渠道 wechat 推送结果: True
+2026-11-12 13:08:04,046 INFO backend_api.services.push_service: 用户 6 推送完成，最终状态: success, 成功渠道: 1/1
+2026-11-12 13:08:04,046 INFO backend_api.services.logging_utils: [推送事件] 推送完成 | 用户ID=6 | 记录ID=222 | 推送时间=M13:07:20 | 状态=success | JSON: {"event_type": "push_completed", "timestamp": "2026-11-12T13:08:04.046315", "user_id": 6, "record_id": 222, "push_time": "M13:07:20", "status": "success", "details": {"success_channels": 1, "total_channels": 1, "channel_status": {"wechat": "success"}}}
+===RESULT_JSON===
+{
+  "run_at": "2026-11-12T13:07:02",
+  "targets": [
+    {
+      "config_id": 13,
+      "user_id": 7,
+      "username": "wangxw1",
+      "wechat_userid": "WangXueWu",
+      "push_time": "M13:07:02",
+      "success": true,
+      "record_id": 221,
+      "error_message": null,
+      "channels": [
+        {
+          "channel": "email",
+          "success": true,
+          "error": null
+        },
+        {
+          "channel": "wechat",
+          "success": true,
+          "error": null
+        }
+      ],
+      "report_file_path": "reports/csv\\urt_7_20261111_130714.xlsx",
+      "record_status": "success",
+      "channel_status": {
+        "email": "success",
+        "wechat": "success"
+      }
+    },
+    {
+      "config_id": 14,
+      "user_id": 6,
+      "username": "wangxw",
+      "wechat_userid": "WangXueWu",
+      "push_time": "M13:07:20",
+      "success": true,
+      "record_id": 222,
+      "error_message": null,
+      "channels": [
+        {
+          "channel": "wechat",
+          "success": true,
+          "error": null
+        }
+      ],
+      "report_file_path": "reports/csv\\urt_6_20261111_130759.xlsx",
+      "record_status": "success",
+      "channel_status": {
+        "wechat": "success"
+      }
+    }
+  ],
+  "errors": [],
+  "configs_found": [
+    {
+      "id": 13,
+      "user_id": 7,
+      "enabled": true,
+      "channels": [
+        "email",
+        "wechat"
+      ],
+      "push_times": [
+        "17:30"
+      ],
+      "wechat_notify_userids": [],
+      "wechat_app_profile": null
+    },
+    {
+      "id": 14,
+      "user_id": 6,
+      "enabled": true,
+      "channels": [
+        "wechat"
+      ],
+      "push_times": [
+        "19:30"
+      ],
+      "wechat_notify_userids": null,
+      "wechat_app_profile": null
+    }
+  ]
+}
