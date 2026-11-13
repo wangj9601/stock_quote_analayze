@@ -2,7 +2,13 @@
  * 板块入场闸门展示工具（市场分析 / 板块详情 / 板块分析共用）
  */
 (function (global) {
-  const API = typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '';
+  function apiBase() {
+    if (typeof API_BASE_URL !== 'undefined' && API_BASE_URL) return String(API_BASE_URL).replace(/\/+$/, '');
+    if (typeof window !== 'undefined' && window.API_BASE_URL) {
+      return String(window.API_BASE_URL).replace(/\/+$/, '');
+    }
+    return '';
+  }
 
   const STATE_CLASS = {
     可配: 'bgate-alloc',
@@ -141,7 +147,7 @@
       board_kind: boardKind === 'concept' ? 'concept' : 'industry',
       board_code_source: boardCodeSource || 'tonghuashun',
     });
-    const resp = await fetch(`${API}/api/board_gate/daily?${q}`);
+    const resp = await fetch(`${apiBase()}/api/board_gate/daily?${q}`);
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok || !json.success) {
       throw new Error((json && json.message) || `闸门查询失败 HTTP ${resp.status}`);
@@ -158,7 +164,7 @@
     if (p.midlong_state) q.set('midlong_state', p.midlong_state);
     if (p.observe_only) q.set('observe_only', 'true');
     q.set('limit', String(p.limit || 200));
-    const resp = await fetch(`${API}/api/board_gate/list?${q}`);
+    const resp = await fetch(`${apiBase()}/api/board_gate/list?${q}`);
     const json = await resp.json().catch(() => ({}));
     if (!resp.ok || !json.success) {
       throw new Error((json && json.message) || `闸门列表失败 HTTP ${resp.status}`);

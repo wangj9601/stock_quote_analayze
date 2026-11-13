@@ -49,8 +49,8 @@ const AnalysisPage = {
             'js/echarts.min.js',
             'js/echarts_theme.js?v=20261030-theme',
             'js/margin_ui.js?v=20261031-margin-read',
-            'js/board_gate_ui.js?v=20261112-gate-polish',
-            'js/market_analysis.js?v=20261112-gate-polish',
+            'js/board_gate_ui.js?v=20261113-bgate1',
+            'js/market_analysis.js?v=20261113-bgate1',
         ],
         'market-review': [
             'js/page_scroll_fab.js',

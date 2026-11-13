@@ -2677,6 +2677,30 @@ const StockPage = {
         return n.toFixed(0) + ' 元';
     },
 
+    setAuctionHint(text, tone) {
+        const hint = document.getElementById('stockAuctionHint');
+        if (!hint) return;
+        hint.classList.remove('is-error', 'is-busy', 'is-warn');
+        if (!text) {
+            hint.hidden = true;
+            hint.textContent = '';
+            return;
+        }
+        if (tone) hint.classList.add(tone);
+        hint.hidden = false;
+        hint.textContent = text;
+    },
+
+    setAuctionBusy(on) {
+        ['stockAuctionRefreshBtn', 'stockAuctionCollectBtn'].forEach((id) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.disabled = !!on;
+            if (on) btn.setAttribute('aria-busy', 'true');
+            else btn.removeAttribute('aria-busy');
+        });
+    },
+
     renderAuctionDetail(data) {
         const map = {
             auction_price: (v) => this.formatAuctionNum(v),
@@ -2695,22 +2719,24 @@ const StockPage = {
             source_mode: (v) => (v == null || v === '' ? '-' : String(v)),
         };
         Object.keys(map).forEach((key) => {
-            const el = document.querySelector(`#stockAuctionDetail [data-auction="${key}"]`);
+            const el = document.querySelector(`#auction [data-auction="${key}"]`);
             if (!el) return;
             const raw = data ? data[key] : null;
             el.textContent = map[key](raw);
             if (key === 'auction_pct') {
-                el.className = '';
-                if (raw != null && Number.isFinite(Number(raw))) {
-                    el.classList.add(Number(raw) >= 0 ? 'positive' : 'negative');
+                el.classList.remove('positive', 'negative');
+                const n = Number(raw);
+                if (raw != null && Number.isFinite(n)) {
+                    if (n > 0) el.classList.add('positive');
+                    else if (n < 0) el.classList.add('negative');
                 }
             }
         });
     },
 
-    async loadAuctionData(live) {
+    async loadAuctionData(live, options) {
+        const manageBusy = !(options && options.manageBusy === false);
         const meta = document.getElementById('stockAuctionMeta');
-        const hint = document.getElementById('stockAuctionHint');
         const dateInput = document.getElementById('stockAuctionDate');
         const stageInput = document.getElementById('stockAuctionStage');
         const day = dateInput && dateInput.value ? String(dateInput.value).trim() : '';
@@ -2719,17 +2745,16 @@ const StockPage = {
         if (day) params.set('date', day);
         params.set('stage', stage);
         if (live) params.set('live', '1');
+        if (manageBusy) this.setAuctionBusy(true);
+        if (live) this.setAuctionHint('正在刷新集合竞价…', 'is-busy');
         try {
             const resp = await fetch(`${API_BASE_URL}/api/market/auction/stock/${encodeURIComponent(this.stockCode)}?${params.toString()}`);
             const result = await resp.json();
             if (!result || !result.success || !result.data) {
                 this.renderAuctionDetail(null);
-                if (hint) {
-                    hint.style.display = 'block';
-                    hint.textContent = (result && result.message) || '暂无集合竞价数据';
-                }
+                this.setAuctionHint((result && result.message) || '暂无集合竞价数据', 'is-warn');
                 if (meta) meta.textContent = '';
-                return;
+                return false;
             }
             const data = result.data;
             if (dateInput && data.trade_date && !dateInput.value) {
@@ -2744,40 +2769,33 @@ const StockPage = {
                     data.data_status ? `状态 ${data.data_status}` : '',
                 ].filter(Boolean).join(' · ');
             }
-            if (hint) {
-                if (data.live_error) {
-                    hint.style.display = 'block';
-                    hint.textContent = '实时拉取失败，已展示本地缓存：' + data.live_error;
-                } else {
-                    hint.style.display = 'none';
-                    hint.textContent = '';
-                }
+            if (data.live_error) {
+                this.setAuctionHint('实时拉取失败，已展示本地缓存：' + data.live_error, 'is-warn');
+                return false;
             }
+            this.setAuctionHint('');
+            return true;
         } catch (error) {
             console.error('[loadAuctionData] 失败:', error);
             this.renderAuctionDetail(null);
-            if (hint) {
-                hint.style.display = 'block';
-                hint.textContent = '集合竞价请求异常';
-            }
+            this.setAuctionHint('集合竞价请求异常。请稍后点「刷新」重试。', 'is-error');
+            return false;
+        } finally {
+            if (manageBusy) this.setAuctionBusy(false);
         }
     },
 
     async collectAuctionData() {
         const btn = document.getElementById('stockAuctionCollectBtn');
-        const hint = document.getElementById('stockAuctionHint');
         const dateInput = document.getElementById('stockAuctionDate');
         const stageInput = document.getElementById('stockAuctionStage');
         const day = dateInput && dateInput.value ? String(dateInput.value).trim() : '';
         const stage = stageInput && stageInput.value ? String(stageInput.value).trim() : 'final';
         if (btn) {
-            btn.disabled = true;
             btn.textContent = '采集中...';
         }
-        if (hint) {
-            hint.style.display = 'block';
-            hint.textContent = '正在采集当前股票集合竞价...';
-        }
+        this.setAuctionBusy(true);
+        this.setAuctionHint('正在采集当前股票集合竞价...', 'is-busy');
         try {
             const resp = await fetch(`${API_BASE_URL}/api/market/auction/collect`, {
                 method: 'POST',
@@ -2804,22 +2822,14 @@ const StockPage = {
                     break;
                 }
             }
-            await this.loadAuctionData(false);
-            if (hint) {
-                hint.style.display = 'block';
-                hint.textContent = '采集完成。';
-            }
+            const loaded = await this.loadAuctionData(false, { manageBusy: false });
+            if (loaded) this.setAuctionHint('采集完成。');
         } catch (error) {
             console.error('[collectAuctionData] 失败:', error);
-            if (hint) {
-                hint.style.display = 'block';
-                hint.textContent = '采集失败：' + (error.message || error);
-            }
+            this.setAuctionHint('采集失败：' + (error.message || error), 'is-error');
         } finally {
-            if (btn) {
-                btn.disabled = false;
-                btn.textContent = '采集并保存';
-            }
+            this.setAuctionBusy(false);
+            if (btn) btn.textContent = '采集并保存';
         }
     },
 

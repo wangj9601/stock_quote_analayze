@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>集合竞价预览</title>
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20261017-w400-600">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
+    <link rel="stylesheet" href="css/stock.css?v=20261031-margin-read">
+    <link rel="stylesheet" href="css/analysis.css?v=20260919a">
+    <link rel="stylesheet" href="css/stock-ops.css?v=20261113-auction-polish">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261031-margin-read">
+</head>
+<body class="ops-map" data-channel="quotes">
+<main class="main-content">
+<section class="content-tabs">
+<div class="container">
+<div class="tab-nav">
+    <button class="content-tab" type="button">交易分析</button>
+    <button class="content-tab" type="button">财务数据</button>
+    <button class="content-tab" type="button">新闻公告</button>
+    <button class="content-tab" type="button">研报</button>
+    <button class="content-tab" type="button">资金流向</button>
+    <button class="content-tab active" type="button">集合竞价</button>
+</div>
+<div class="tab-panel active" id="auction">
+    <div class="auction-stock-toolbar">
+        <label for="stockAuctionDate">日期</label>
+        <input type="date" id="stockAuctionDate" value="2026-11-13" title="留空为最新交易日">
+        <label for="stockAuctionStage">阶段</label>
+        <select id="stockAuctionStage">
+            <option value="final" selected>终态 final</option>
+            <option value="live">实时 live</option>
+        </select>
+        <button type="button" id="stockAuctionRefreshBtn" class="btn btn-sm btn-primary">刷新</button>
+        <button type="button" id="stockAuctionCollectBtn" class="btn btn-sm btn-secondary">采集并保存</button>
+        <span id="stockAuctionMeta" class="auction-meta">2026-11-13 · 阶段 final · 来源 db · 状态 final</span>
+    </div>
+    <div id="stockAuctionHint" class="auction-hint" role="status" hidden>暂无集合竞价数据</div>
+    <dl class="auction-detail-grid" id="stockAuctionDetail">
+        <div class="is-lead"><dt>竞价价格</dt><dd data-auction="auction_price">34.97</dd></div>
+        <div class="is-lead"><dt>竞价涨幅</dt><dd class="positive" data-auction="auction_pct">+8.91%</dd></div>
+        <div><dt>竞价成交量</dt><dd>2.88万手</dd></div>
+        <div><dt>竞价成交额</dt><dd>1.01 亿</dd></div>
+        <div><dt>未匹配量</dt><dd>-64手</dd></div>
+        <div><dt>竞价换手率</dt><dd>+2.08%</dd></div>
+        <div><dt>相对昨成交%</dt><dd>+233.08%</dd></div>
+        <div><dt>竞价量比</dt><dd>12.66</dd></div>
+        <div><dt>前收盘价</dt><dd>32.11</dd></div>
+        <div><dt>开盘价</dt><dd>34.97</dd></div>
+        <div><dt>最新价</dt><dd>34.97</dd></div>
+        <div><dt>流通市值</dt><dd>48.44 亿</dd></div>
+    </dl>
+    <p class="auction-provenance">
+        <span>数据状态<strong data-auction="data_status">final</strong></span>
+        <span>数据来源<strong data-auction="source_mode">db</strong></span>
+    </p>
+</div>
+</div>
+</section>
+</main>
+</body>
+</html>

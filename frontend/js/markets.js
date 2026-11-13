@@ -1914,7 +1914,7 @@ const MarketsPage = {
         if (this._boardGateUiPromise) return this._boardGateUiPromise;
         this._boardGateUiPromise = new Promise((resolve, reject) => {
             const el = document.createElement('script');
-            el.src = 'js/board_gate_ui.js?v=20261112-gate-polish';
+            el.src = 'js/board_gate_ui.js?v=20261113-bgate1';
             el.onload = () => resolve();
             el.onerror = () => reject(new Error('加载 board_gate_ui.js 失败'));
             document.body.appendChild(el);

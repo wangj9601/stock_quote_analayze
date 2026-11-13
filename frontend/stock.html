@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="css/stock.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/analysis.css?v=20260919a">
-    <link rel="stylesheet" href="css/stock-ops.css?v=20260925polish">
+    <link rel="stylesheet" href="css/stock-ops.css?v=20261113-auction-polish">
     <script>
         (function () {
             try {
@@ -381,10 +381,10 @@
                             <button type="button" id="stockAuctionCollectBtn" class="btn btn-sm btn-secondary">采集并保存</button>
                             <span id="stockAuctionMeta" class="auction-meta"></span>
                         </div>
-                        <div id="stockAuctionHint" class="auction-hint" style="display:none;"></div>
+                        <div id="stockAuctionHint" class="auction-hint" role="status" aria-live="polite" hidden></div>
                         <dl class="auction-detail-grid" id="stockAuctionDetail">
-                            <div><dt>竞价价格</dt><dd data-auction="auction_price">-</dd></div>
-                            <div><dt>竞价涨幅</dt><dd data-auction="auction_pct">-</dd></div>
+                            <div class="is-lead"><dt>竞价价格</dt><dd data-auction="auction_price">-</dd></div>
+                            <div class="is-lead"><dt>竞价涨幅</dt><dd data-auction="auction_pct">-</dd></div>
                             <div><dt>竞价成交量</dt><dd data-auction="auction_volume">-</dd></div>
                             <div><dt>竞价成交额</dt><dd data-auction="auction_amount">-</dd></div>
                             <div><dt>未匹配量</dt><dd data-auction="auction_unmatched">-</dd></div>
@@ -395,9 +395,11 @@
                             <div><dt>开盘价</dt><dd data-auction="open_price">-</dd></div>
                             <div><dt>最新价</dt><dd data-auction="last_price">-</dd></div>
                             <div><dt>流通市值</dt><dd data-auction="float_market_cap">-</dd></div>
-                            <div><dt>数据状态</dt><dd data-auction="data_status">-</dd></div>
-                            <div><dt>数据来源</dt><dd data-auction="source_mode">-</dd></div>
                         </dl>
+                        <p class="auction-provenance">
+                            <span>数据状态<strong data-auction="data_status">-</strong></span>
+                            <span>数据来源<strong data-auction="source_mode">-</strong></span>
+                        </p>
                     </div>
                 </div>
             </div>
@@ -500,7 +502,7 @@
 
                     // 动态加载JS文件
                     const script = document.createElement('script');
-                    script.src = jsFile + '?v=20261023-flowtip';
+                    script.src = jsFile + '?v=20261113-auction-polish';
                     script.onload = function () {
                         console.log(`${jsFile} 加载完成`);
                         // JS文件加载完成后，初始化StockPage
@@ -517,7 +519,7 @@
                     console.error('判断股票类型失败:', result.message);
                     // 默认加载A股JS
                     const script = document.createElement('script');
-                    script.src = 'js/stock.js?v=20261031-margin-read';
+                    script.src = 'js/stock.js?v=20261113-auction-polish';
                     script.onload = function () {
                         if (typeof StockPage !== 'undefined' && StockPage.init) {
                             StockPage.init();
