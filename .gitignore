@@ -37,6 +37,9 @@ env/
 # 日志文件
 logs/
 *.log
+
+# 本地/运行时 shared（env_sync 等），不进仓库；生产用 /opt/stock_quote/shared
+/shared/
 auth.log
 sync.log
 quotes.log

@@ -187,11 +187,16 @@ class ProjectPackager:
             "**/tests/**",
 
             # 与 deploy.ps1 一致：整类目录不入包
+            "**/.impeccable/**",
+            "**/.superpowers/**",
+            "**/.workbuddy/**",
             "**/database/**",
             "**/demo/**",
             "**/docs/**",
+            "**/exported_docs/**",
             "**/image/**",
             "**/manual_scripts/**",
+            "**/shared/**",
             "**/test-results/**",
         ]
     

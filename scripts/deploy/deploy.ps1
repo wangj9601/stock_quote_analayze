@@ -134,8 +134,10 @@ if (Test-Path -LiteralPath $localPackage) {
 }
 
 # Top-level excludes for zip; subtree rules also in robocopy /XD and /XF (log, Excel, PPT).
-$zipExcludePart1 = '.agent', '.auth', '.cursor', '.gemini', '.git', '.github', '.hypothesis', '.idea', '.kiro', '.pytest_cache', '.qoder', '.vs', '.venv', '.vscode', 'demo', 'dist'
-$zipExcludePart2 = 'docs', 'env', 'image', 'logs', 'manual_scripts', 'node_modules', 'test', 'test-results', 'venv'
+$zipExcludePart1 = '.agent', '.auth', '.cursor', '.gemini', '.git', '.github', '.hypothesis', '.idea', '.impeccable', '.kiro', '.pytest_cache', '.qoder', '.superpowers', '.vs', '.venv', '.vscode', '.workbuddy', 'demo', 'dist'
+# shared: 运行时目录（env_sync 异步产物等），生产在 /opt/stock_quote/shared，勿打进发布包
+# exported_docs: 本地导出的 word/ppt 等，不进发布包
+$zipExcludePart2 = 'docs', 'env', 'exported_docs', 'image', 'logs', 'manual_scripts', 'node_modules', 'shared', 'test', 'test-results', 'venv'
 $zipExcludeTopLevel = $zipExcludePart1 + $zipExcludePart2
 $rootPath = $projectRoot.Path
 $zipEntries = [array](Get-ChildItem -LiteralPath $rootPath -Force | Where-Object {
