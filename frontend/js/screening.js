@@ -4506,8 +4506,8 @@ const ScreeningPage = {
             return scope.contains(el) ? el : null;
         };
         // 绑定所有刷新按钮（仅带 data-strategy 的真正「刷新筛选」）
-        // rpe / sbbr / csb 由独立脚本自行处理，勿走通用 loadScreeningResults
-        const externalRefreshStrategies = new Set(['rpe', 'sbbr', 'csb', 'sepa']);
+        // rpe / sbbr / csb / sepa / cupb 由独立脚本自行处理，勿走通用 loadScreeningResults
+        const externalRefreshStrategies = new Set(['rpe', 'sbbr', 'csb', 'sepa', 'cupb']);
         scope.querySelectorAll('.refresh-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const strategy = btn.dataset.strategy;
@@ -5420,8 +5420,8 @@ const ScreeningPage = {
         if (!strategy) {
             strategy = this.currentStrategy;
         }
-        // 比价效应 / 做小做底 / CSB 由独立模块刷新，避免落入「未知的策略类型」
-        if (strategy === 'rpe' || strategy === 'sbbr' || strategy === 'csb' || strategy === 'sepa') {
+        // 比价效应 / 做小做底 / CSB / SEPA / CUPB 由独立模块刷新，避免落入「未知的策略类型」
+        if (strategy === 'rpe' || strategy === 'sbbr' || strategy === 'csb' || strategy === 'sepa' || strategy === 'cupb') {
             return;
         }
         if (strategy === 'gms' && resetGmsPage) {

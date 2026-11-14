@@ -1113,16 +1113,26 @@ body.ops-map .csb-detail-panel .csb-detail-hero-meta {
     color: var(--ops-ink-muted);
 }
 
-/* —— SEPA 买点 —— */
-body.ops-map #sepa-content .sepa-params {
+/* —— SEPA 买点 / CUPB 杯底（共用筛选条与状态标签样式） —— */
+body.ops-map #sepa-content .sepa-params,
+body.ops-map #cupb-content .sepa-params,
+body.ops-map #cupb-content .cupb-params {
     display: flex;
     flex-wrap: wrap;
     gap: 12px 20px;
     align-items: flex-end;
 }
 
-body.ops-map #sepa-content .sepa-params .param-input {
+body.ops-map #sepa-content .sepa-params .param-input,
+body.ops-map #cupb-content .sepa-params .param-input,
+body.ops-map #cupb-content .cupb-params .param-input {
     width: 148px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+body.ops-map #cupb-content #cupbStatus {
+    width: 200px;
 }
 
 body.ops-map #sepa-content .sepa-check {
@@ -1134,12 +1144,14 @@ body.ops-map #sepa-content .sepa-check {
     cursor: pointer;
 }
 
-body.ops-map #sepa-content .sepa-num {
+body.ops-map #sepa-content .sepa-num,
+body.ops-map #cupb-content .sepa-num {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum";
 }
 
-body.ops-map #sepa-content .sepa-tag {
+body.ops-map #sepa-content .sepa-tag,
+body.ops-map #cupb-content .sepa-tag {
     display: inline-block;
     font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
     font-size: 0.8125rem;
@@ -1170,17 +1182,25 @@ body.ops-map #sepa-content td.is-up {
     color: var(--color-rise) !important;
 }
 
-body.ops-map #sepa-content .sepa-tag--breakout {
+body.ops-map #sepa-content .sepa-tag--breakout,
+body.ops-map #cupb-content .sepa-tag--breakout {
     color: var(--color-rise);
     border-color: rgba(194, 59, 59, 0.45);
     background: rgba(194, 59, 59, 0.12);
+}
+
+body.ops-map #cupb-content .sepa-tag--forming {
+    color: var(--ops-route);
+    border-color: rgba(47, 111, 237, 0.45);
+    background: rgba(47, 111, 237, 0.1);
 }
 
 body.ops-map #sepa-content td.is-down {
     color: var(--color-fall) !important;
 }
 
-body.ops-map #sepa-content .sepa-actions {
+body.ops-map #sepa-content .sepa-actions,
+body.ops-map #cupb-content .sepa-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
