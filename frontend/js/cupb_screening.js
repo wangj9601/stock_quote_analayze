@@ -7,6 +7,13 @@
   let lastMeta = null;
   let pageOffset = 0;
 
+  const VOLUME_FLAG_LABELS = {
+    bottom_shrink: '杯底缩量',
+    right_expand: '右侧放量',
+    handle_shrink: '柄部缩量',
+    breakout_expand: '突破放量',
+  };
+
   function apiBase() {
     if (typeof window.API_BASE_URL === 'string' && window.API_BASE_URL) {
       return window.API_BASE_URL.replace(/\/+$/, '');
@@ -35,8 +42,14 @@
   function num(v, digits) {
     if (v == null || v === '') return '—';
     const x = Number(v);
-    if (!Number.isFinite(x)) return '—';
-    return x.toFixed(digits == null ? 2 : digits);
+    if (!Number.isFinite(x)) return String(v);
+    if (digits == null) return String(v);
+    return x.toFixed(digits);
+  }
+
+  function fmtVal(v) {
+    if (v == null || v === '') return '—';
+    return String(v);
   }
 
   function statusLabel(s) {
@@ -44,6 +57,42 @@
     if (k === 'confirmed') return '已确认';
     if (k === 'forming') return '形成中';
     return s || '—';
+  }
+
+  function priceAdjustLabel(raw) {
+    const p = String(raw || '');
+    if (p === 'qfq') return '前复权';
+    if (p === 'none' || p === 'raw') return '不复权';
+    return p || '—';
+  }
+
+  function formatBoardLabels(raw) {
+    if (raw == null || raw === '') return '—';
+    if (Array.isArray(raw)) return raw.map((x) => String(x)).filter(Boolean).join('、') || '—';
+    return String(raw);
+  }
+
+  function volumeFlagRows(row) {
+    const flags = (row && row.detail && row.detail.volume_flags) || (row && row.volume_flags);
+    if (!flags || typeof flags !== 'object') return [];
+    return Object.keys(VOLUME_FLAG_LABELS).map((key) => ({
+      key,
+      label: VOLUME_FLAG_LABELS[key],
+      ok: Boolean(flags[key]),
+    }));
+  }
+
+  function qualityFlagText(row) {
+    const qf = (row && row.detail && row.detail.quality_flags) || (row && row.quality_flags);
+    if (!qf) return '';
+    if (Array.isArray(qf)) return qf.map((x) => String(x)).filter(Boolean).join('、');
+    if (typeof qf === 'object') {
+      return Object.entries(qf)
+        .filter(([, v]) => Boolean(v))
+        .map(([k]) => String(k))
+        .join('、');
+    }
+    return String(qf);
   }
 
   function setError(msg) {
@@ -71,13 +120,80 @@
     return params.toString();
   }
 
+  function descRows(pairs) {
+    return pairs.map(([label, value]) => (
+      `<tr><th>${esc(label)}</th><td>${value}</td></tr>`
+    )).join('');
+  }
+
+  function tag(kind, label) {
+    const key = String(kind || 'none').toLowerCase();
+    return `<span class="sepa-tag sepa-tag--${esc(key)}">${esc(label || key)}</span>`;
+  }
+
+  function detailHtml(row) {
+    const st = String(row.status || '').toLowerCase();
+    const stCls = st === 'confirmed' ? 'breakout' : 'forming';
+    const volRows = volumeFlagRows(row);
+    const volBody = volRows.length
+      ? descRows(volRows.map((item) => [
+        item.label,
+        tag(item.ok ? 'breakout' : 'quiet', item.ok ? '通过' : '未过'),
+      ]))
+      : descRows([['—', '暂无量价明细']]);
+    const quality = qualityFlagText(row);
+    const qualityBlock = quality
+      ? `<h4>质量标记</h4><p class="cupb-detail-quality">${esc(quality)}</p>`
+      : '';
+    return `
+      <div class="cupb-detail-panel">
+        <h4>基本信息</h4>
+        <table class="cupb-desc-table"><tbody>${descRows([
+          ['代码', esc(row.code || '—')],
+          ['名称', esc(row.name || '—')],
+          ['状态', tag(stCls, statusLabel(row.status))],
+          ['曾确认', row.ever_confirmed ? '是' : '否'],
+          ['历史确认日', esc(fmtVal(row.first_confirm_date))],
+          ['等级', esc(fmtVal(row.grade))],
+          ['量价得分', esc(fmtVal(row.volume_score))],
+          ['所属板块', esc(formatBoardLabels(row.board_labels))],
+          ['复权方式', esc(priceAdjustLabel(row.price_adjust))],
+        ])}</tbody></table>
+
+        <h4>量价检查</h4>
+        <table class="cupb-desc-table"><tbody>${volBody}</tbody></table>
+
+        <h4>形态价位</h4>
+        <table class="cupb-desc-table"><tbody>${descRows([
+          ['收盘', `<span class="sepa-num">${esc(fmtVal(row.last_close))}</span>`],
+          ['左沿', `<span class="sepa-num">${esc(fmtVal(row.left_rim_price))}</span>`],
+          ['杯底', `<span class="sepa-num">${esc(fmtVal(row.cup_bottom_price))}</span>`],
+          ['右沿', `<span class="sepa-num">${esc(fmtVal(row.right_rim_price))}</span>`],
+          ['柄低', `<span class="sepa-num">${esc(fmtVal(row.handle_low_price))}</span>`],
+          ['杯口', `<span class="sepa-num">${esc(fmtVal(row.rim))}</span>`],
+          ['杯深%', `<span class="sepa-num">${esc(fmtVal(row.cup_depth_pct))}</span>`],
+          ['柄回撤%', `<span class="sepa-num">${esc(fmtVal(row.handle_retrace_pct))}</span>`],
+        ])}</tbody></table>
+
+        <h4>关键日期</h4>
+        <table class="cupb-desc-table"><tbody>${descRows([
+          ['左沿日', esc(fmtVal(row.left_rim_date))],
+          ['杯底日', esc(fmtVal(row.cup_bottom_date))],
+          ['右沿日', esc(fmtVal(row.right_rim_date))],
+          ['柄低日', esc(fmtVal(row.handle_low_date))],
+          ['确认日', esc(fmtVal(row.confirm_date))],
+        ])}</tbody></table>
+        ${qualityBlock}
+      </div>`;
+  }
+
   function renderMeta(data) {
     const total = data.total || 0;
     const limit = data.limit || pageSize();
     const offset = data.offset || 0;
     const count = document.getElementById('cupbCount');
     if (count) {
-      count.textContent = `共 ${total} 条 · 本页 ${(data.items || []).length} 条`;
+      count.textContent = `共 ${total} 条 · 本页 ${(data.items || []).length} 条 · 列表为摘要，点「明细」看完整字段`;
     }
     const dateEl = document.getElementById('cupbTradeDate');
     if (dateEl) {
@@ -106,36 +222,51 @@
       body.innerHTML = '<tr><td colspan="9" class="empty-state">没有符合条件的杯底信号</td></tr>';
       return;
     }
-    body.innerHTML = rows.map((row) => {
+    body.innerHTML = rows.map((row, index) => {
       const code = esc(row.code);
       const name = esc(row.name || '');
       const href = `stock.html?code=${encodeURIComponent(row.code || '')}&name=${encodeURIComponent(row.name || '')}`;
       const st = String(row.status || '').toLowerCase();
       const stCls = st === 'confirmed' ? 'sepa-tag--breakout' : 'sepa-tag--forming';
-      return `<tr>
-        <td><a href="${href}" target="_blank" rel="noopener noreferrer">${code}</a></td>
-        <td>${name}</td>
-        <td><span class="sepa-tag ${stCls}">${esc(statusLabel(row.status))}</span></td>
-        <td>${esc(row.grade || '—')}</td>
-        <td class="sepa-num">${row.volume_score == null ? '—' : esc(row.volume_score)}</td>
-        <td class="sepa-num">${num(row.cup_depth_pct, 1)}</td>
-        <td>${esc(row.confirm_date || '—')}</td>
-        <td class="sepa-num">${num(row.last_close)}</td>
-        <td class="sepa-actions">
-          <a class="gms-op-btn" href="${href}" target="_blank" rel="noopener noreferrer">详情</a>
-        </td>
-      </tr>`;
+      return `
+        <tr class="cupb-row" data-index="${index}">
+          <td><a href="${href}" target="_blank" rel="noopener noreferrer">${code}</a></td>
+          <td>${name}</td>
+          <td><span class="sepa-tag ${stCls}">${esc(statusLabel(row.status))}</span></td>
+          <td>${esc(row.grade || '—')}</td>
+          <td class="sepa-num">${row.volume_score == null ? '—' : esc(row.volume_score)}</td>
+          <td class="sepa-num">${num(row.cup_depth_pct, 1)}</td>
+          <td>${esc(row.confirm_date || '—')}</td>
+          <td class="sepa-num">${num(row.last_close)}</td>
+          <td class="sepa-actions">
+            <button type="button" class="gms-op-btn cupb-detail-btn" data-index="${index}" aria-expanded="false">明细</button>
+            <a class="gms-op-btn" href="${href}" target="_blank" rel="noopener noreferrer">详情</a>
+          </td>
+        </tr>
+        <tr class="cupb-detail-row" hidden>
+          <td colspan="9">${detailHtml(row)}</td>
+        </tr>`;
     }).join('');
   }
 
   function exportCsv() {
     if (!lastRows.length) return;
-    const header = ['代码', '名称', '状态', '等级', '量价', '杯深%', '确认日', '收盘'];
+    const header = [
+      '代码', '名称', '状态', '曾确认', '历史确认日', '等级', '量价',
+      '所属板块', '复权', '收盘', '左沿', '杯底', '右沿', '柄低', '杯口',
+      '杯深%', '柄回撤%', '左沿日', '杯底日', '右沿日', '柄低日', '确认日', '质量标记',
+    ];
     const lines = [header.join(',')];
     lastRows.forEach((row) => {
       const cells = [
-        row.code, row.name, statusLabel(row.status), row.grade, row.volume_score,
-        row.cup_depth_pct, row.confirm_date, row.last_close,
+        row.code, row.name, statusLabel(row.status),
+        row.ever_confirmed ? '是' : '否', row.first_confirm_date,
+        row.grade, row.volume_score, formatBoardLabels(row.board_labels),
+        priceAdjustLabel(row.price_adjust), row.last_close,
+        row.left_rim_price, row.cup_bottom_price, row.right_rim_price,
+        row.handle_low_price, row.rim, row.cup_depth_pct, row.handle_retrace_pct,
+        row.left_rim_date, row.cup_bottom_date, row.right_rim_date,
+        row.handle_low_date, row.confirm_date, qualityFlagText(row),
       ].map((v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`);
       lines.push(cells.join(','));
     });
@@ -188,6 +319,18 @@
     }
   }
 
+  function onTableClick(event) {
+    const btn = event.target.closest('.cupb-detail-btn');
+    if (!btn) return;
+    const row = btn.closest('tr');
+    const detail = row && row.nextElementSibling;
+    if (!detail || !detail.classList.contains('cupb-detail-row')) return;
+    const open = detail.hasAttribute('hidden');
+    detail.toggleAttribute('hidden', !open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.classList.toggle('active', open);
+  }
+
   function init() {
     if (bound) return;
     const refresh = document.getElementById('refreshBtn-cupb');
@@ -200,6 +343,7 @@
     });
     const exportBtn = document.getElementById('cupbExportBtn');
     if (exportBtn) exportBtn.addEventListener('click', exportCsv);
+    body.addEventListener('click', onTableClick);
     const prev = document.getElementById('cupbPrevPage');
     const next = document.getElementById('cupbNextPage');
     if (prev) {

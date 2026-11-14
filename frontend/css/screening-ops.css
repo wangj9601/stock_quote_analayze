@@ -1207,21 +1207,64 @@ body.ops-map #cupb-content .sepa-actions {
     justify-content: flex-end;
 }
 
-body.ops-map #sepa-content .sepa-detail-btn.active {
+body.ops-map #sepa-content .sepa-detail-btn.active,
+body.ops-map #cupb-content .cupb-detail-btn.active {
     color: var(--ops-gold);
     border-color: var(--ops-gold);
     background: var(--ops-overlay-film);
 }
 
-body.ops-map #sepa-content .sepa-detail-row td {
+body.ops-map #sepa-content .sepa-detail-row td,
+body.ops-map #cupb-content .cupb-detail-row td {
     padding: 0 !important;
     background: var(--ops-ground-elevated) !important;
 }
 
-body.ops-map #sepa-content .sepa-detail-panel {
+body.ops-map #sepa-content .sepa-detail-panel,
+body.ops-map #cupb-content .cupb-detail-panel {
     padding: 14px 16px 16px;
     border-top: 1px solid rgba(201, 162, 39, 0.35);
     color: var(--ops-ink);
+}
+
+body.ops-map #cupb-content .cupb-detail-panel h4 {
+    margin: 14px 0 8px;
+    font-family: "Barlow Condensed", "Noto Sans SC", sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 0.04em;
+    color: var(--ops-gold);
+}
+
+body.ops-map #cupb-content .cupb-detail-panel h4:first-child {
+    margin-top: 0;
+}
+
+body.ops-map #cupb-content .cupb-desc-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+body.ops-map #cupb-content .cupb-desc-table th,
+body.ops-map #cupb-content .cupb-desc-table td {
+    border: 1px solid rgba(217, 226, 236, 0.16);
+    padding: 6px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+
+body.ops-map #cupb-content .cupb-desc-table th {
+    width: 7.5rem;
+    color: var(--ops-ink-muted);
+    font-weight: 500;
+    background: rgba(0, 0, 0, 0.18);
+    white-space: nowrap;
+}
+
+body.ops-map #cupb-content .cupb-detail-quality {
+    margin: 0;
+    color: var(--ops-ink-muted);
+    line-height: 1.5;
 }
 
 body.ops-map #sepa-content .sepa-metrics {
