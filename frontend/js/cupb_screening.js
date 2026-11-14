@@ -82,17 +82,33 @@
     }));
   }
 
-  function qualityFlagText(row) {
+  const QUALITY_FLAG_LABELS = {
+    extended_base: '杯体偏长',
+    prior_trend_ok: '前置上升趋势成立',
+    prior_trend_fail: '前置上升趋势不足',
+    u_shape_ok: '杯底偏圆',
+    handle_upward: '柄部上飘',
+    volume_weak: '量价偏弱',
+  };
+
+  function qualityFlagLabels(row) {
     const qf = (row && row.detail && row.detail.quality_flags) || (row && row.quality_flags);
-    if (!qf) return '';
-    if (Array.isArray(qf)) return qf.map((x) => String(x)).filter(Boolean).join('、');
-    if (typeof qf === 'object') {
-      return Object.entries(qf)
+    if (!qf) return [];
+    let keys = [];
+    if (Array.isArray(qf)) {
+      keys = qf.map((x) => String(x)).filter(Boolean);
+    } else if (typeof qf === 'object') {
+      keys = Object.entries(qf)
         .filter(([, v]) => Boolean(v))
-        .map(([k]) => String(k))
-        .join('、');
+        .map(([k]) => String(k));
+    } else {
+      keys = [String(qf)];
     }
-    return String(qf);
+    return keys.map((k) => QUALITY_FLAG_LABELS[k] || k);
+  }
+
+  function qualityFlagText(row) {
+    return qualityFlagLabels(row).join('、');
   }
 
   function setError(msg) {
@@ -107,6 +123,15 @@
     return [50, 100, 200].includes(n) ? n : 50;
   }
 
+  function selectedBoardSegments() {
+    const out = [];
+    document.querySelectorAll('input[name="cupbCnBoardSegment"]:checked').forEach((el) => {
+      const v = String(el.value || '').trim().toUpperCase();
+      if (v && !out.includes(v)) out.push(v);
+    });
+    return out;
+  }
+
   function buildQuery() {
     const params = new URLSearchParams();
     const date = (document.getElementById('cupbDate') || {}).value || '';
@@ -115,16 +140,10 @@
     if (status && status !== 'both') params.set('status', status);
     const code = String((document.getElementById('cupbCode') || {}).value || '').trim();
     if (code) params.set('code', code);
+    selectedBoardSegments().forEach((seg) => params.append('cn_board_segment', seg));
     params.set('limit', String(pageSize()));
     params.set('offset', String(Math.max(0, pageOffset)));
     return params.toString();
-  }
-
-  function fieldItems(pairs) {
-    return pairs.map(([label, value]) => (
-      `<div class="cupb-field"><span class="cupb-field-label">${esc(label)}</span>`
-      + `<span class="cupb-field-value">${value}</span></div>`
-    )).join('');
   }
 
   function tag(kind, label) {
@@ -136,59 +155,57 @@
     const st = String(row.status || '').toLowerCase();
     const stCls = st === 'confirmed' ? 'breakout' : 'forming';
     const volRows = volumeFlagRows(row);
-    const volList = volRows.length
-      ? `<ul class="cupb-check-list">${volRows.map((item) => (
+    const checks = volRows.length
+      ? volRows.map((item) => (
         `<li class="${item.ok ? 'is-ok' : 'is-fail'}"><span>${item.ok ? '通过' : '未过'}</span>${esc(item.label)}</li>`
-      )).join('')}</ul>`
-      : '<p class="cupb-detail-quality">暂无量价明细</p>';
-    const quality = qualityFlagText(row);
-    const qualityBlock = quality
-      ? `<h4>质量标记</h4><p class="cupb-detail-quality">${esc(quality)}</p>`
+      )).join('')
+      : '<li>暂无量价明细</li>';
+    const pivots = [
+      ['左沿', row.left_rim_price, row.left_rim_date],
+      ['杯底', row.cup_bottom_price, row.cup_bottom_date],
+      ['右沿', row.right_rim_price, row.right_rim_date],
+      ['柄低', row.handle_low_price, row.handle_low_date],
+      ['杯口', row.rim, null],
+    ].map(([name, price, date]) => (
+      `<tr><td>${esc(name)}</td><td class="sepa-num">${esc(fmtVal(price))}</td><td>${esc(fmtVal(date))}</td></tr>`
+    )).join('');
+    const qualityLabels = qualityFlagLabels(row);
+    const flags = qualityLabels.length
+      ? `<p class="sepa-flags">${esc(qualityLabels.join(' · '))}</p>`
       : '';
+    const ever = row.ever_confirmed
+      ? `曾确认 · 历史确认日 ${fmtVal(row.first_confirm_date)}`
+      : '尚未确认过';
     return `
-      <div class="cupb-detail-panel">
-        <h4>基本信息</h4>
-        <div class="cupb-field-grid">${fieldItems([
-          ['代码', esc(row.code || '—')],
-          ['名称', esc(row.name || '—')],
-          ['状态', tag(stCls, statusLabel(row.status))],
-          ['曾确认', row.ever_confirmed ? '是' : '否'],
-          ['历史确认日', esc(fmtVal(row.first_confirm_date))],
-          ['等级', esc(fmtVal(row.grade))],
-          ['量价得分', esc(fmtVal(row.volume_score))],
-          ['所属板块', esc(formatBoardLabels(row.board_labels))],
-          ['复权方式', esc(priceAdjustLabel(row.price_adjust))],
-        ])}</div>
-
-        <h4>量价检查</h4>
-        ${volList}
-
-        <div class="cupb-detail-split">
+      <div class="cupb-detail-panel sepa-detail-panel">
+        <div class="sepa-metrics">
+          <span>状态 <b>${tag(stCls, statusLabel(row.status))}</b></span>
+          <span>等级 <b>${esc(fmtVal(row.grade))}</b></span>
+          <span>量价 <b class="sepa-num">${esc(fmtVal(row.volume_score))}</b></span>
+          <span>收盘 <b class="sepa-num">${esc(fmtVal(row.last_close))}</b></span>
+          <span>杯口 <b class="sepa-num">${esc(fmtVal(row.rim))}</b></span>
+          <span>杯深 <b class="sepa-num">${esc(fmtVal(row.cup_depth_pct))}%</b></span>
+          <span>柄回撤 <b class="sepa-num">${esc(fmtVal(row.handle_retrace_pct))}%</b></span>
+          <span>确认日 <b>${esc(fmtVal(row.confirm_date))}</b></span>
+          <span>板块 <b>${esc(formatBoardLabels(row.board_labels))}</b></span>
+          <span>复权 <b>${esc(priceAdjustLabel(row.price_adjust))}</b></span>
+        </div>
+        ${flags}
+        <p class="param-hint">${esc(ever)}。列表「详情」打开个股页；此处只读预计算字段。</p>
+        <div class="sepa-detail-grid cupb-detail-grid">
           <section>
-            <h4>形态价位</h4>
-            <div class="cupb-field-grid cupb-field-grid--dense">${fieldItems([
-              ['收盘', `<span class="sepa-num">${esc(fmtVal(row.last_close))}</span>`],
-              ['左沿', `<span class="sepa-num">${esc(fmtVal(row.left_rim_price))}</span>`],
-              ['杯底', `<span class="sepa-num">${esc(fmtVal(row.cup_bottom_price))}</span>`],
-              ['右沿', `<span class="sepa-num">${esc(fmtVal(row.right_rim_price))}</span>`],
-              ['柄低', `<span class="sepa-num">${esc(fmtVal(row.handle_low_price))}</span>`],
-              ['杯口', `<span class="sepa-num">${esc(fmtVal(row.rim))}</span>`],
-              ['杯深%', `<span class="sepa-num">${esc(fmtVal(row.cup_depth_pct))}</span>`],
-              ['柄回撤%', `<span class="sepa-num">${esc(fmtVal(row.handle_retrace_pct))}</span>`],
-            ])}</div>
+            <h4>量价检查</h4>
+            <ul class="sepa-checks">${checks}</ul>
           </section>
           <section>
-            <h4>关键日期</h4>
-            <div class="cupb-field-grid cupb-field-grid--dense">${fieldItems([
-              ['左沿日', esc(fmtVal(row.left_rim_date))],
-              ['杯底日', esc(fmtVal(row.cup_bottom_date))],
-              ['右沿日', esc(fmtVal(row.right_rim_date))],
-              ['柄低日', esc(fmtVal(row.handle_low_date))],
-              ['确认日', esc(fmtVal(row.confirm_date))],
-            ])}</div>
+            <h4>形态枢轴</h4>
+            <table class="sepa-legs cupb-pivot-table">
+              <thead><tr><th>点位</th><th>价格</th><th>日期</th></tr></thead>
+              <tbody>${pivots}</tbody>
+            </table>
+            <p class="param-hint">杯口通常取左右沿较高者；收盘站稳杯口（含缓冲）即确认。</p>
           </section>
         </div>
-        ${qualityBlock}
       </div>`;
   }
 
@@ -208,7 +225,8 @@
     }
     const hint = document.getElementById('cupbPoolHint');
     if (hint) {
-      hint.textContent = '结果来自每日收盘流程节点 cupb_signals_cn（A股全市场、不复权、forming+confirmed）。';
+      const boardLabel = data.cn_board_segment_label || '不限板型';
+      hint.textContent = `结果来自每日收盘流程节点 cupb_signals_cn（A股全市场、不复权、forming+confirmed）。当前板型：${boardLabel}。`;
     }
     const pageInfo = document.getElementById('cupbPageInfo');
     const page = Math.floor(offset / limit) + 1;
@@ -370,6 +388,12 @@
         void load();
       });
     }
+    document.querySelectorAll('input[name="cupbCnBoardSegment"]').forEach((el) => {
+      el.addEventListener('change', () => {
+        pageOffset = 0;
+        void load();
+      });
+    });
   }
 
   window.CupbScreening = { init, load };

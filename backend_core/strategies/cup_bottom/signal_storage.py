@@ -246,10 +246,15 @@ def load_traces(
     config_id: Optional[int] = None,
     status: Optional[str] = None,
     code: Optional[str] = None,
+    cn_board_segments: Optional[List[str]] = None,
     limit: int = 500,
     offset: int = 0,
 ) -> Dict[str, Any]:
     from backend_api.models import CupbSignalTrace
+    from backend_api.utils.cn_listed_board_filter import (
+        board_keys_to_code_prefix_or,
+        normalize_multi_board_segments,
+    )
 
     d = datetime.strptime(trade_date[:10], "%Y-%m-%d").date()
     q = db.query(CupbSignalTrace).filter(CupbSignalTrace.trade_date == d)
@@ -259,6 +264,11 @@ def load_traces(
         q = q.filter(CupbSignalTrace.status == status.strip().lower())
     if code:
         q = q.filter(CupbSignalTrace.code == str(code).strip().zfill(6))
+    board_keys = normalize_multi_board_segments(list(cn_board_segments or []))
+    if board_keys:
+        crit = board_keys_to_code_prefix_or(CupbSignalTrace.code, board_keys)
+        if crit is not None:
+            q = q.filter(crit)
     total = q.count()
     from sqlalchemy import case, desc, nulls_last
 

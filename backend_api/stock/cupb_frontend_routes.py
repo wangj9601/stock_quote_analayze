@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -22,6 +22,11 @@ router = APIRouter(prefix="/api/stock/cupb", tags=["cupb"])
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _PAGE_SIZES = (50, 100, 200)
+_BOARD_LABELS = {
+    "CYB": "创业板",
+    "KCB": "科创板",
+    "BJ": "北证",
+}
 
 
 @router.get("/signals")
@@ -31,6 +36,10 @@ def get_cupb_signals(
         None, description="forming / confirmed；空或 both 表示全部"
     ),
     code: Optional[str] = Query(None, description="股票代码过滤"),
+    cn_board_segment: Optional[List[str]] = Query(
+        None,
+        description="A股板型多选：CYB/KCB/BJ；可重复传参；不传=不限",
+    ),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
@@ -55,6 +64,11 @@ def get_cupb_signals(
             load_traces,
             resolve_screening_trade_date,
         )
+        from backend_core.strategies.cup_bottom.universe import normalize_cn_board_segments
+
+        board_segs = normalize_cn_board_segments(cn_board_segment)
+        # 选股页仅暴露创业板/科创板/北证；其它键忽略
+        board_segs = [s for s in board_segs if s in ("CYB", "KCB", "BJ")]
 
         cid = CupbConfigManager().get_default_config_id()
         date_s = resolve_screening_trade_date(
@@ -70,6 +84,7 @@ def get_cupb_signals(
             config_id=cid,
             status=status_norm,
             code=code,
+            cn_board_segments=board_segs or None,
             limit=page_size,
             offset=offset,
         )
@@ -79,6 +94,11 @@ def get_cupb_signals(
                 "trade_date": date_s,
                 "config_id": cid,
                 "status": status_norm or "both",
+                "cn_board_segments": board_segs,
+                "cn_board_segment_label": "、".join(
+                    _BOARD_LABELS.get(s, s) for s in board_segs
+                )
+                or "不限板型",
                 "total": payload.get("total") or 0,
                 "limit": page_size,
                 "offset": int(offset),
