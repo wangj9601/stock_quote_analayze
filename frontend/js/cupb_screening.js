@@ -120,9 +120,10 @@
     return params.toString();
   }
 
-  function descRows(pairs) {
+  function fieldItems(pairs) {
     return pairs.map(([label, value]) => (
-      `<tr><th>${esc(label)}</th><td>${value}</td></tr>`
+      `<div class="cupb-field"><span class="cupb-field-label">${esc(label)}</span>`
+      + `<span class="cupb-field-value">${value}</span></div>`
     )).join('');
   }
 
@@ -135,12 +136,11 @@
     const st = String(row.status || '').toLowerCase();
     const stCls = st === 'confirmed' ? 'breakout' : 'forming';
     const volRows = volumeFlagRows(row);
-    const volBody = volRows.length
-      ? descRows(volRows.map((item) => [
-        item.label,
-        tag(item.ok ? 'breakout' : 'quiet', item.ok ? '通过' : '未过'),
-      ]))
-      : descRows([['—', '暂无量价明细']]);
+    const volList = volRows.length
+      ? `<ul class="cupb-check-list">${volRows.map((item) => (
+        `<li class="${item.ok ? 'is-ok' : 'is-fail'}"><span>${item.ok ? '通过' : '未过'}</span>${esc(item.label)}</li>`
+      )).join('')}</ul>`
+      : '<p class="cupb-detail-quality">暂无量价明细</p>';
     const quality = qualityFlagText(row);
     const qualityBlock = quality
       ? `<h4>质量标记</h4><p class="cupb-detail-quality">${esc(quality)}</p>`
@@ -148,7 +148,7 @@
     return `
       <div class="cupb-detail-panel">
         <h4>基本信息</h4>
-        <table class="cupb-desc-table"><tbody>${descRows([
+        <div class="cupb-field-grid">${fieldItems([
           ['代码', esc(row.code || '—')],
           ['名称', esc(row.name || '—')],
           ['状态', tag(stCls, statusLabel(row.status))],
@@ -158,31 +158,36 @@
           ['量价得分', esc(fmtVal(row.volume_score))],
           ['所属板块', esc(formatBoardLabels(row.board_labels))],
           ['复权方式', esc(priceAdjustLabel(row.price_adjust))],
-        ])}</tbody></table>
+        ])}</div>
 
         <h4>量价检查</h4>
-        <table class="cupb-desc-table"><tbody>${volBody}</tbody></table>
+        ${volList}
 
-        <h4>形态价位</h4>
-        <table class="cupb-desc-table"><tbody>${descRows([
-          ['收盘', `<span class="sepa-num">${esc(fmtVal(row.last_close))}</span>`],
-          ['左沿', `<span class="sepa-num">${esc(fmtVal(row.left_rim_price))}</span>`],
-          ['杯底', `<span class="sepa-num">${esc(fmtVal(row.cup_bottom_price))}</span>`],
-          ['右沿', `<span class="sepa-num">${esc(fmtVal(row.right_rim_price))}</span>`],
-          ['柄低', `<span class="sepa-num">${esc(fmtVal(row.handle_low_price))}</span>`],
-          ['杯口', `<span class="sepa-num">${esc(fmtVal(row.rim))}</span>`],
-          ['杯深%', `<span class="sepa-num">${esc(fmtVal(row.cup_depth_pct))}</span>`],
-          ['柄回撤%', `<span class="sepa-num">${esc(fmtVal(row.handle_retrace_pct))}</span>`],
-        ])}</tbody></table>
-
-        <h4>关键日期</h4>
-        <table class="cupb-desc-table"><tbody>${descRows([
-          ['左沿日', esc(fmtVal(row.left_rim_date))],
-          ['杯底日', esc(fmtVal(row.cup_bottom_date))],
-          ['右沿日', esc(fmtVal(row.right_rim_date))],
-          ['柄低日', esc(fmtVal(row.handle_low_date))],
-          ['确认日', esc(fmtVal(row.confirm_date))],
-        ])}</tbody></table>
+        <div class="cupb-detail-split">
+          <section>
+            <h4>形态价位</h4>
+            <div class="cupb-field-grid cupb-field-grid--dense">${fieldItems([
+              ['收盘', `<span class="sepa-num">${esc(fmtVal(row.last_close))}</span>`],
+              ['左沿', `<span class="sepa-num">${esc(fmtVal(row.left_rim_price))}</span>`],
+              ['杯底', `<span class="sepa-num">${esc(fmtVal(row.cup_bottom_price))}</span>`],
+              ['右沿', `<span class="sepa-num">${esc(fmtVal(row.right_rim_price))}</span>`],
+              ['柄低', `<span class="sepa-num">${esc(fmtVal(row.handle_low_price))}</span>`],
+              ['杯口', `<span class="sepa-num">${esc(fmtVal(row.rim))}</span>`],
+              ['杯深%', `<span class="sepa-num">${esc(fmtVal(row.cup_depth_pct))}</span>`],
+              ['柄回撤%', `<span class="sepa-num">${esc(fmtVal(row.handle_retrace_pct))}</span>`],
+            ])}</div>
+          </section>
+          <section>
+            <h4>关键日期</h4>
+            <div class="cupb-field-grid cupb-field-grid--dense">${fieldItems([
+              ['左沿日', esc(fmtVal(row.left_rim_date))],
+              ['杯底日', esc(fmtVal(row.cup_bottom_date))],
+              ['右沿日', esc(fmtVal(row.right_rim_date))],
+              ['柄低日', esc(fmtVal(row.handle_low_date))],
+              ['确认日', esc(fmtVal(row.confirm_date))],
+            ])}</div>
+          </section>
+        </div>
         ${qualityBlock}
       </div>`;
   }
