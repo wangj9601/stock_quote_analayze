@@ -1,0 +1,88 @@
+<div id="cupb-content" class="strategy-content" data-perm="channel.screening.tab.cupb">
+    <div class="strategy-info-card">
+        <h2>杯底 CUPB</h2>
+        <ul class="strategy-conditions">
+            <li><strong>数据来源：</strong>日终预计算写入的 <code>cupb_signal_trace</code>（默认配置、A股全市场、不复权）。</li>
+            <li class="condition-item">形成中：杯+柄已成立，收盘尚未站稳杯口。</li>
+            <li class="condition-item">已确认：收盘突破杯口（含缓冲）；曾突破又跌回杯口下会回到形成中。</li>
+            <li class="condition-item">失效形态默认不入库。本页只读预计算结果，不触发全市场重算。</li>
+        </ul>
+    </div>
+
+    <div class="strategy-params-card">
+        <h3>筛选范围</h3>
+        <div class="sepa-params">
+            <div class="parameter-group">
+                <label for="cupbDate">基准日</label>
+                <input type="date" id="cupbDate" class="param-input" title="留空则用默认配置最新有信号日">
+            </div>
+            <div class="parameter-group">
+                <label for="cupbStatus">状态</label>
+                <select id="cupbStatus" class="param-input">
+                    <option value="both">全部（形成中+已确认）</option>
+                    <option value="forming">仅形成中</option>
+                    <option value="confirmed">仅已确认</option>
+                </select>
+            </div>
+            <div class="parameter-group">
+                <label for="cupbCode">代码</label>
+                <input type="text" id="cupbCode" class="param-input" placeholder="可选" maxlength="6">
+            </div>
+            <div class="parameter-group">
+                <label for="cupbPageSize">每页</label>
+                <select id="cupbPageSize" class="param-input">
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                </select>
+            </div>
+        </div>
+        <p class="param-hint" id="cupbPoolHint">结果来自每日收盘流程节点 cupb_signals_cn。若当日尚无预计算，列表为空。</p>
+    </div>
+
+    <div class="screening-actions">
+        <button type="button" id="refreshBtn-cupb" class="refresh-btn" data-strategy="cupb"
+            data-perm="channel.screening.tab.cupb.btn.refresh">刷新筛选</button>
+        <button type="button" id="cupbExportBtn" class="export-btn" style="display:none;">导出CSV</button>
+        <span id="cupbTradeDate" class="search-date"></span>
+    </div>
+
+    <div id="cupbLoading" class="loading-indicator" style="display:none;">
+        <div class="spinner"></div>
+        <span>正在读取杯底信号…</span>
+    </div>
+    <div id="cupbError" class="error-message" style="display:none;" role="alert"></div>
+
+    <div class="results-container">
+        <div class="results-header">
+            <span id="cupbCount" class="results-count">尚未筛选</span>
+        </div>
+        <div class="results-table-wrapper">
+            <table class="results-table">
+                <thead>
+                    <tr>
+                        <th>代码</th>
+                        <th>名称</th>
+                        <th>状态</th>
+                        <th>等级</th>
+                        <th>量价</th>
+                        <th>杯深%</th>
+                        <th>确认日</th>
+                        <th>收盘</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="cupbTableBody">
+                    <tr>
+                        <td colspan="9" class="empty-state">点击「刷新筛选」加载信号</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="results-header" style="margin-top:8px;gap:8px;display:flex;align-items:center;flex-wrap:wrap;">
+            <button type="button" id="cupbPrevPage" class="gms-op-btn" disabled>上一页</button>
+            <span id="cupbPageInfo" class="gms-meta-text"></span>
+            <button type="button" id="cupbNextPage" class="gms-op-btn" disabled>下一页</button>
+        </div>
+    </div>
+</div>

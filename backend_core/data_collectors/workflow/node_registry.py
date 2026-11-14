@@ -35,6 +35,7 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_market_news,
     exec_rpe_cn,
     exec_csb_cn,
+    exec_cupb_cn,
     exec_sepa_cn,
     exec_fina_indicator_cn,
     exec_index_daily_cn,
@@ -232,6 +233,16 @@ NODE_DEFS: List[CollectionNodeDef] = [
         description=(
             "全市场流动性池扫描趋势模板 + VCP 买点，写入 sepa_signal_trace；"
             "依赖日K与两融日明细。未指定 trade_date 时用库内最新行情日"
+        ),
+    ),
+    _n(
+        "cupb_signals_cn",
+        "CUPB杯底信号预计算(A股)",
+        "strategy",
+        exec_cupb_cn,
+        description=(
+            "全市场 A 股杯底形态扫描（forming+confirmed），写入 cupb_signal_trace；"
+            "仅 CN、不复权、默认配置；开关 ENABLE_CUPB_PRECOMPUTE"
         ),
     ),
     _n(

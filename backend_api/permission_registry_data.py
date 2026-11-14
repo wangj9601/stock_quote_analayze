@@ -30,6 +30,7 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.screening.tab.csb", "name": "通道突破", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 115},
     {"code": "channel.screening.tab.canslim", "name": "CAN SLIM", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 120},
     {"code": "channel.screening.tab.sepa", "name": "SEPA买点", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 130},
+    {"code": "channel.screening.tab.cupb", "name": "杯底CUPB", "level": 2, "parent_code": "channel.screening", "channel_code": "screening", "sort_order": 140},
 
     # ── 三级：选股按钮 ──
     {"code": "channel.screening.tab.cyb_midline.btn.refresh", "name": "刷新筛选", "level": 3, "parent_code": "channel.screening.tab.cyb_midline", "channel_code": "screening", "sort_order": 10},
@@ -48,6 +49,7 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.screening.tab.csb.btn.refresh", "name": "CSB刷新", "level": 3, "parent_code": "channel.screening.tab.csb", "channel_code": "screening", "sort_order": 10},
     {"code": "channel.screening.tab.canslim.btn.refresh", "name": "CAN SLIM刷新", "level": 3, "parent_code": "channel.screening.tab.canslim", "channel_code": "screening", "sort_order": 10},
     {"code": "channel.screening.tab.sepa.btn.refresh", "name": "SEPA刷新", "level": 3, "parent_code": "channel.screening.tab.sepa", "channel_code": "screening", "sort_order": 10},
+    {"code": "channel.screening.tab.cupb.btn.refresh", "name": "CUPB刷新", "level": 3, "parent_code": "channel.screening.tab.cupb", "channel_code": "screening", "sort_order": 10},
     {"code": "channel.screening.tab.sbbr.btn.add_observe", "name": "加入观察", "level": 3, "parent_code": "channel.screening.tab.sbbr", "channel_code": "screening", "sort_order": 20},
     {"code": "channel.screening.tab.sbbr.btn.add_reserve", "name": "加入储备", "level": 3, "parent_code": "channel.screening.tab.sbbr", "channel_code": "screening", "sort_order": 30},
 

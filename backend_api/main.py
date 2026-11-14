@@ -200,6 +200,13 @@ except ImportError as e:
     sepa_router = None
 
 try:
+    from .stock.cupb_frontend_routes import router as cupb_frontend_router
+    print("cupb_frontend_router 导入成功")
+except ImportError as e:
+    print(f"cupb_frontend_router 导入失败: {e}")
+    cupb_frontend_router = None
+
+try:
     from .stock.stock_fund_flow import router as stock_fund_flow_router
     print("stock_fund_flow_router 导入成功")
 except ImportError as e:
@@ -771,6 +778,7 @@ else:
 _include_router(app, watchlist_router, "watchlist")
 _include_router(app, market_router, "market")
 _include_router(app, sepa_router, "sepa")
+_include_router(app, cupb_frontend_router, "cupb")
 _include_router(app, stock_router, "stock")
 _include_router(app, stock_fund_flow_router, "stock_fund_flow")
 _include_router(app, market_review_router, "market_review")

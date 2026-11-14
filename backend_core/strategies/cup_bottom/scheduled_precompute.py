@@ -1,12 +1,21 @@
 # -*- coding: utf-8 -*-
-"""CUPB 手动预计算（强制重算并入库；暂不挂 cron）。"""
+"""CUPB 预计算：管理端手动触发 + 收盘流程日终节点。"""
 
 from __future__ import annotations
 
 import logging
+import os
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 logger = logging.getLogger(__name__)
+
+
+def _env_bool(key: str, default: bool = True) -> bool:
+    raw = (os.getenv(key) or "").strip().lower()
+    if not raw:
+        return default
+    return raw in ("1", "true", "yes", "y", "on")
 
 
 def run_cupb_precompute(
@@ -94,3 +103,35 @@ def run_cupb_precompute(
         raise
     finally:
         db.close()
+
+
+def scheduled_cupb_signals_cn() -> None:
+    """A股收盘流程入口：全市场 CN、不复权、forming+confirmed 入库。
+
+    失败向上抛，便于 `_wrap_plain` 将节点标红。周末直接返回。
+    """
+    if datetime.now().weekday() >= 5:
+        return
+    if not _env_bool("ENABLE_CUPB_PRECOMPUTE", True):
+        logger.info("CUPB 信号预计算已禁用（ENABLE_CUPB_PRECOMPUTE=false）")
+        return
+    started = datetime.now()
+    out = run_cupb_precompute(
+        stock_pool_mode="market",
+        market_scopes=["CN"],
+        status_filter="both",
+        force_recompute=True,
+        price_adjust="none",
+        universe_limit=0,
+        max_results=0,
+    )
+    elapsed = (datetime.now() - started).total_seconds()
+    logger.info(
+        "CUPB 日终预计算完成 date=%s config_id=%s hit=%s saved=%s deleted=%s elapsed=%.1fs",
+        out.get("trade_date"),
+        out.get("config_id"),
+        out.get("hit_count"),
+        out.get("saved"),
+        out.get("deleted_stale"),
+        elapsed,
+    )

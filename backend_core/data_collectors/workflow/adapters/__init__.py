@@ -506,6 +506,13 @@ def _csb_cn() -> Any:
     return True
 
 
+def _cupb_cn() -> Any:
+    from backend_core.strategies.cup_bottom.scheduled_precompute import scheduled_cupb_signals_cn
+
+    scheduled_cupb_signals_cn()
+    return True
+
+
 def exec_sepa_cn(ctx: WorkflowContext) -> NodeResult:
     """SEPA 买点预计算。未指定 trade_date 时用库内最新行情日。"""
     try:
@@ -651,6 +658,7 @@ exec_urt_hk = _wrap_plain(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
 exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
 exec_csb_cn = _wrap_plain(_csb_cn, "CSB信号预计算")
+exec_cupb_cn = _wrap_plain(_cupb_cn, "CUPB信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
 exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")

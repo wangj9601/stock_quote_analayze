@@ -94,6 +94,7 @@ const ScreeningPage = {
         sbbr: ['js/sbbr_score_detail.js', 'js/sbbr_screening.js?v=20260918a', 'js/board_roles_panel.js'],
         csb: ['js/csb_score_detail.js?v=20261007-csb', 'js/csb_screening.js?v=20261017-lazy-panels', 'js/board_roles_panel.js'],
         sepa: ['js/sepa_screening.js?v=20261031-sepa'],
+        cupb: ['js/cupb_screening.js?v=20261114-cupb'],
     },
 
     // 初始化
@@ -126,7 +127,7 @@ const ScreeningPage = {
             return 'volume-shrink-breakout';
         }
         const allowed = new Set([
-            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim', 'sepa',
+            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim', 'sepa', 'cupb',
             'volume-shrink-breakout', 'one-yang-three-lines',
             'cyb-midline', 'high-tight-flag'
         ]);
@@ -223,6 +224,9 @@ const ScreeningPage = {
         }
         if (strategy === 'sepa' && window.SepaScreening && typeof window.SepaScreening.init === 'function') {
             window.SepaScreening.init();
+        }
+        if (strategy === 'cupb' && window.CupbScreening && typeof window.CupbScreening.init === 'function') {
+            window.CupbScreening.init();
         }
         if (strategy === 'one-yang-three-lines' && !this._oneYangWidgetsReady) {
             this._oneYangWidgetsReady = true;
@@ -390,7 +394,7 @@ const ScreeningPage = {
             return;
         }
         const allowed = new Set([
-            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim', 'sepa',
+            'gms', 'rpe', 'urt', 'sbbr', 'csb', 'canslim', 'sepa', 'cupb',
             'volume-shrink-breakout', 'one-yang-three-lines',
             'cyb-midline', 'high-tight-flag'
         ]);

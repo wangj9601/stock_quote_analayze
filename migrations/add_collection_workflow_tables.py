@@ -42,7 +42,8 @@ CN_CLOSE_TEMPLATE_NODES = [
     (22, "sbbr_signals_cn", "SBBR信号预计算(A股)"),
     (23, "rpe_signals_cn", "RPE信号预计算(A股)"),
     (24, "sepa_signals_cn", "SEPA买点信号预计算(A股)"),
-    (25, "stock_recommend_brief", "个股推荐简报(日/周/月)"),
+    (25, "cupb_signals_cn", "CUPB杯底信号预计算(A股)"),
+    (26, "stock_recommend_brief", "个股推荐简报(日/周/月)"),
 ]
 
 

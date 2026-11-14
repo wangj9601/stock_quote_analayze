@@ -197,6 +197,48 @@ def delete_traces_not_in_codes(
     return int(deleted or 0)
 
 
+def latest_signal_trade_date(
+    db,
+    *,
+    config_id: Optional[int] = None,
+) -> Optional[str]:
+    """返回指定配置（或任意配置）下 cupb_signal_trace 最新有信号的交易日。"""
+    from backend_api.models import CupbSignalTrace
+    from sqlalchemy import desc
+
+    q = db.query(CupbSignalTrace.trade_date)
+    if config_id is not None:
+        q = q.filter(CupbSignalTrace.config_id == int(config_id))
+    row = q.order_by(desc(CupbSignalTrace.trade_date)).first()
+    if not row or row[0] is None:
+        return None
+    d = row[0]
+    return d.isoformat() if hasattr(d, "isoformat") else str(d)[:10]
+
+
+def resolve_screening_trade_date(
+    db,
+    *,
+    trade_date: Optional[str] = None,
+    config_id: Optional[int] = None,
+) -> str:
+    """选股默认日：显式传入 > 该 config 最新有信号日 > 库内最新 A 股行情日。"""
+    if trade_date and str(trade_date).strip():
+        return str(trade_date).strip()[:10]
+    latest = latest_signal_trade_date(db, config_id=config_id)
+    if latest:
+        return latest
+    from sqlalchemy import text
+
+    row = db.execute(
+        text("SELECT MAX(trade_date) FROM historical_quotes")
+    ).fetchone()
+    if row and row[0] is not None:
+        d = row[0]
+        return d.isoformat() if hasattr(d, "isoformat") else str(d)[:10]
+    raise ValueError("库内无 CUPB 信号且无 A 股行情日")
+
+
 def load_traces(
     db,
     *,

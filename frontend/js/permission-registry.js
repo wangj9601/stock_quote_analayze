@@ -24,6 +24,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.screening.tab.csb', name: '通道突破', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 115 },
   { code: 'channel.screening.tab.canslim', name: 'CAN SLIM', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 120 },
   { code: 'channel.screening.tab.sepa', name: 'SEPA买点', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 130 },
+  { code: 'channel.screening.tab.cupb', name: '杯底CUPB', level: 2, parent_code: 'channel.screening', channel_code: 'screening', sort_order: 140 },
 
   { code: 'channel.screening.tab.cyb_midline.btn.refresh', name: '刷新筛选', level: 3, parent_code: 'channel.screening.tab.cyb_midline', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.gms.btn.refresh', name: 'GMS刷新', level: 3, parent_code: 'channel.screening.tab.gms', channel_code: 'screening', sort_order: 10 },
@@ -45,6 +46,7 @@ window.PERMISSION_REGISTRY = [
   { code: 'channel.screening.tab.csb.btn.refresh', name: 'CSB刷新', level: 3, parent_code: 'channel.screening.tab.csb', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.canslim.btn.refresh', name: 'CAN SLIM刷新', level: 3, parent_code: 'channel.screening.tab.canslim', channel_code: 'screening', sort_order: 10 },
   { code: 'channel.screening.tab.sepa.btn.refresh', name: 'SEPA刷新', level: 3, parent_code: 'channel.screening.tab.sepa', channel_code: 'screening', sort_order: 10 },
+  { code: 'channel.screening.tab.cupb.btn.refresh', name: 'CUPB刷新', level: 3, parent_code: 'channel.screening.tab.cupb', channel_code: 'screening', sort_order: 10 },
 
   { code: 'channel.analyze.tab.board', name: '板块分析', level: 2, parent_code: 'channel.analyze', channel_code: 'analyze', sort_order: 5 },
   { code: 'channel.analyze.tab.board.btn.run', name: '开始板块分析', level: 3, parent_code: 'channel.analyze.tab.board', channel_code: 'analyze', sort_order: 10 },
@@ -107,5 +109,6 @@ window.PERMISSION_TAB_MAP = {
   rpe: 'channel.screening.tab.rpe',
   csb: 'channel.screening.tab.csb',
   canslim: 'channel.screening.tab.canslim',
-  sepa: 'channel.screening.tab.sepa'
+  sepa: 'channel.screening.tab.sepa',
+  cupb: 'channel.screening.tab.cupb'
 };
