@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/markets.css?v=20261113-bgate1">
+    <link rel="stylesheet" href="css/markets.css?v=20261115-board-kind">
     <link rel="stylesheet" href="css/markets-ops.css?v=20260930-bd">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261030-margin">
     <link rel="stylesheet" href="css/ops-surfaces.css?v=20261030-echarts-tip">
@@ -131,6 +131,9 @@
                 <div class="tab-nav">
                     <button class="content-tab active" data-tab="rankings">涨跌排行</button>
                     <button class="content-tab" data-tab="sectors">行业板块</button>
+                    <button class="content-tab" data-tab="heatmap">热力图</button>
+                    <button class="content-tab" data-tab="fund-bubbles">资金气泡</button>
+                    <button class="content-tab" data-tab="rotation">相对轮动</button>
                     <button class="content-tab" data-tab="concepts">概念板块</button>
                     <button class="content-tab" data-tab="dragon-tiger">龙虎榜</button>
                     <button class="content-tab" data-tab="auction">集合竞价</button>
@@ -253,6 +256,84 @@
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+
+                    <!-- 同花顺行业热力图 -->
+                    <div class="tab-panel" id="heatmap">
+                        <div class="heatmap-toolbar">
+                            <div class="board-kind-switch" role="group" aria-label="热力图板块维度">
+                                <button type="button" class="board-kind-btn active" data-board-view-kind="industry" aria-pressed="true">行业</button>
+                                <button type="button" class="board-kind-btn" data-board-view-kind="concept" aria-pressed="false">概念</button>
+                            </div>
+                            <div class="heatmap-crumb" aria-label="热力图层级">
+                                <button type="button" class="heatmap-crumb-btn" id="heatmapRootBtn">全市场</button>
+                                <span id="heatmapCrumbSep" hidden>/</span>
+                                <span id="heatmapCrumbName"></span>
+                            </div>
+                            <div class="heatmap-toolbar-right">
+                                <span class="heatmap-meta" id="heatmapMeta"></span>
+                                <button type="button" class="btn btn-secondary" id="heatmapFullscreenBtn" aria-pressed="false" title="全屏查看，按 Esc 退出">全屏</button>
+                                <button type="button" class="btn btn-secondary" id="heatmapRefreshBtn">刷新</button>
+                            </div>
+                        </div>
+                        <div id="heatmapChart" class="heatmap-chart" role="img" aria-label="同花顺行业热力图"></div>
+                        <p class="heatmap-status" id="heatmapStatus">打开后加载最新交易日行情。</p>
+                    </div>
+
+                    <!-- 收盘后的行业资金气泡 -->
+                    <div class="tab-panel" id="fund-bubbles">
+                        <div class="heatmap-toolbar">
+                            <div class="board-kind-switch" role="group" aria-label="资金气泡板块维度">
+                                <button type="button" class="board-kind-btn active" data-board-view-kind="industry" aria-pressed="true">行业</button>
+                                <button type="button" class="board-kind-btn" data-board-view-kind="concept" aria-pressed="false">概念</button>
+                            </div>
+                            <span class="heatmap-meta" id="fundBubbleHint">横轴涨跌幅，纵轴主力净流入。气泡大小看净流入绝对值。白边是上涨但资金流出。</span>
+                            <div class="heatmap-toolbar-right">
+                                <span class="heatmap-meta" id="fundBubbleMeta"></span>
+                                <button type="button" class="btn btn-secondary" id="fundBubbleRefreshBtn">刷新</button>
+                            </div>
+                        </div>
+                        <div id="fundBubbleChart" class="heatmap-chart" role="img" aria-label="行业资金气泡"></div>
+                        <p class="heatmap-status" id="fundBubbleStatus">打开后加载最新交易日的行业资金流。</p>
+                    </div>
+
+                    <!-- 行业相对轮动 -->
+                    <div class="tab-panel" id="rotation">
+                        <div class="heatmap-toolbar">
+                            <div class="rotation-controls">
+                                <div class="board-kind-switch" role="group" aria-label="相对轮动板块维度">
+                                    <button type="button" class="board-kind-btn active" data-board-view-kind="industry" aria-pressed="true">行业</button>
+                                    <button type="button" class="board-kind-btn" data-board-view-kind="concept" aria-pressed="false">概念</button>
+                                </div>
+                                <label for="rotationTrail">拖尾</label>
+                                <select id="rotationTrail" class="filter-select">
+                                    <option value="3">3日</option>
+                                    <option value="5" selected>5日</option>
+                                    <option value="8">8日</option>
+                                    <option value="12">12日</option>
+                                </select>
+                                <label for="rotationSpeed">倍速</label>
+                                <select id="rotationSpeed" class="filter-select">
+                                    <option value="0.5">0.5×</option>
+                                    <option value="1" selected>1×</option>
+                                    <option value="2">2×</option>
+                                </select>
+                                <button type="button" class="btn btn-secondary" id="rotationPlayBtn">回放</button>
+                            </div>
+                            <div class="heatmap-toolbar-right">
+                                <span class="heatmap-meta" id="rotationMeta"></span>
+                                <button type="button" class="btn btn-secondary" id="rotationRefreshBtn">刷新</button>
+                            </div>
+                        </div>
+                        <div class="rotation-legend" aria-hidden="true">
+                            <span><i class="rot-dot rot-leading"></i>领先</span>
+                            <span><i class="rot-dot rot-weakening"></i>转弱</span>
+                            <span><i class="rot-dot rot-lagging"></i>落后</span>
+                            <span><i class="rot-dot rot-improving"></i>改善</span>
+                        </div>
+                        <input type="range" id="rotationSlider" min="0" max="0" value="0" aria-label="相对轮动回放进度">
+                        <div id="rotationChart" class="heatmap-chart" role="img" aria-label="行业相对轮动"></div>
+                        <p class="heatmap-status" id="rotationStatus">打开后按行业日 K 相对沪深300计算。右上领先，左上改善。</p>
                     </div>
 
                     <!-- 概念板块（布局/功能与行业板块一致） -->
@@ -763,7 +844,8 @@
     <script src="js/margin_ui.js?v=20261031-margin-read"></script>
     <script src="js/stock_trade_link.js"></script>
     <script src="js/board_gate_ui.js?v=20261113-bgate1"></script>
-    <script src="js/markets.js?v=20261112-gate"></script>
+    <script src="js/markets.js?v=20261115-board-kind"></script>
+    <script src="js/board_flow_rotation.js?v=20261115-bubble-zoom"></script>
     <script src="js/hk_markets.js"></script>
     <script>
         // 市场标签页切换逻辑

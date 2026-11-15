@@ -2250,3 +2250,177 @@ body.ops-map .bgate-empty {
     font-size: 0.8rem;
 }
 body.ops-map .bgate-deg { color: var(--ops-gold, #c9a227); }
+
+.heatmap-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.heatmap-crumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--ops-ink, #d9e2ec);
+    font-size: 14px;
+    min-width: 0;
+}
+
+.heatmap-crumb-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--ops-route, #2f6fed);
+    font: inherit;
+    cursor: pointer;
+}
+
+.heatmap-crumb-btn:hover {
+    text-decoration: underline;
+}
+
+#heatmapCrumbName {
+    color: var(--ops-ink, #d9e2ec);
+    font-weight: 600;
+}
+
+.heatmap-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.heatmap-meta {
+    color: var(--ops-ink-muted, #8b9aab);
+    font-size: 13px;
+}
+
+.heatmap-chart {
+    width: 100%;
+    height: calc(100vh - 340px);
+    min-height: 560px;
+    background: #10161c;
+    border: 1px solid rgba(217, 226, 236, 0.14);
+}
+
+.heatmap-status {
+    margin: 8px 0 0;
+    color: var(--ops-ink-muted, #8b9aab);
+    font-size: 12px;
+}
+
+body.heatmap-fs-lock {
+    overflow: hidden;
+}
+
+/* 全屏：浏览器 Fullscreen API，或固定铺满视口的回退 */
+body.ops-map #heatmap:fullscreen,
+body.ops-map #heatmap:-webkit-full-screen,
+body.ops-map #heatmap.heatmap--fs {
+    display: flex !important;
+    flex-direction: column;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 12px 16px 10px;
+    background: #0e141b !important;
+    border: none !important;
+    border-radius: 0 !important;
+    color: var(--ops-ink, #d9e2ec) !important;
+}
+
+body.ops-map #heatmap.heatmap--fs {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+}
+
+body.ops-map #heatmap:fullscreen .heatmap-toolbar,
+body.ops-map #heatmap:-webkit-full-screen .heatmap-toolbar,
+body.ops-map #heatmap.heatmap--fs .heatmap-toolbar,
+body.ops-map #heatmap:fullscreen .heatmap-status,
+body.ops-map #heatmap:-webkit-full-screen .heatmap-status,
+body.ops-map #heatmap.heatmap--fs .heatmap-status {
+    flex: 0 0 auto;
+}
+
+body.ops-map #heatmap:fullscreen .heatmap-chart,
+body.ops-map #heatmap:-webkit-full-screen .heatmap-chart,
+body.ops-map #heatmap.heatmap--fs .heatmap-chart {
+    flex: 1 1 auto;
+    width: 100%;
+    height: auto !important;
+    min-height: 0 !important;
+    border: none;
+}
+
+.board-kind-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    border: 1px solid rgba(217, 226, 236, 0.22);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.board-kind-btn {
+    background: transparent;
+    color: var(--ops-ink-muted, #8b9aab);
+    border: none;
+    border-right: 1px solid rgba(217, 226, 236, 0.22);
+    padding: 4px 12px;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+}
+
+.board-kind-btn:last-child {
+    border-right: none;
+}
+
+.board-kind-btn.active {
+    color: var(--ops-gold, #c9a227);
+    background: rgba(201, 162, 39, 0.14);
+}
+
+.rotation-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    color: var(--ops-ink-muted, #8b9aab);
+    font-size: 13px;
+}
+
+.rotation-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin: 0 0 8px;
+    color: var(--ops-ink-muted, #8b9aab);
+    font-size: 12px;
+}
+
+.rot-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-radius: 50%;
+    vertical-align: baseline;
+}
+
+.rot-leading { background: #d61f28; }
+.rot-weakening { background: #c9a227; }
+.rot-lagging { background: #0f9d5c; }
+.rot-improving { background: #6f8cff; }
+
+#rotationSlider {
+    width: 100%;
+    margin: 0 0 8px;
+    accent-color: #6f8cff;
+}

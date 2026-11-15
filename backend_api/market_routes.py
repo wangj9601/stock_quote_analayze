@@ -23,6 +23,9 @@ from backend_api.utils.board_code_source import (
     DEFAULT_BOARD_CODE_SOURCE,
     normalize_board_code_source,
 )
+from backend_api.utils.board_flow_bubbles import fetch_industry_fund_bubbles
+from backend_api.utils.board_rotation import fetch_industry_rotation
+from backend_api.utils.market_heatmap import fetch_market_heatmap
 from backend_api.utils.industry_board_query import (
     fetch_board_recent_limit_up_stocks,
     fetch_concept_board_detail,
@@ -533,6 +536,103 @@ def get_market_index_kline(
     except Exception as e:
         return JSONResponse(
             {"success": False, "message": str(e), "traceback": traceback.format_exc()}
+        )
+
+
+def _board_kind_or_400(raw: Optional[str]):
+    kind = (raw or "industry").strip().lower()
+    if kind not in ("industry", "concept"):
+        return None
+    return kind
+
+
+@router.get("/fund-bubbles")
+def get_industry_fund_bubbles(
+    board_kind: str = Query("industry", description="industry 行业 | concept 概念"),
+    db: Session = Depends(get_db),
+):
+    """收盘后的同花顺行业或概念资金气泡。"""
+    kind = _board_kind_or_400(board_kind)
+    if kind is None:
+        return JSONResponse(
+            {"success": False, "message": "board_kind 应为 industry 或 concept"},
+            status_code=400,
+        )
+    try:
+        data = fetch_industry_fund_bubbles(db, board_kind=kind)
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取行业资金气泡失败",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            status_code=500,
+        )
+
+
+@router.get("/rotation")
+def get_industry_rotation(
+    benchmark: str = Query("000300", description="基准指数，默认沪深300"),
+    window: int = Query(10, ge=5, le=30, description="RS 与 RS-Ratio 的平滑窗口"),
+    lookback: int = Query(120, ge=40, le=250, description="基准交易日根数"),
+    board_kind: str = Query("industry", description="industry 行业 | concept 概念"),
+    db: Session = Depends(get_db),
+):
+    """行业或概念相对轮动。返回可回放的日序列，拖尾由前端截取。"""
+    kind = _board_kind_or_400(board_kind)
+    if kind is None:
+        return JSONResponse(
+            {"success": False, "message": "board_kind 应为 industry 或 concept"},
+            status_code=400,
+        )
+    try:
+        data = fetch_industry_rotation(
+            db,
+            benchmark=benchmark,
+            window=window,
+            lookback=lookback,
+            board_kind=kind,
+        )
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取相对轮动失败",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            status_code=500,
+        )
+
+
+@router.get("/heatmap")
+def get_market_heatmap(
+    board_kind: str = Query("industry", description="industry 行业 | concept 概念"),
+    db: Session = Depends(get_db),
+):
+    """A 股同花顺热力图。行业一票一块，概念按所属概念重叠。"""
+    kind = _board_kind_or_400(board_kind)
+    if kind is None:
+        return JSONResponse(
+            {"success": False, "message": "board_kind 应为 industry 或 concept"},
+            status_code=400,
+        )
+    try:
+        data = fetch_market_heatmap(db, board_kind=kind)
+        return JSONResponse({"success": True, "data": data})
+    except Exception as e:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "获取热力图失败",
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            },
+            status_code=500,
         )
 
 
