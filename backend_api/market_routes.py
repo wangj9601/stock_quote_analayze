@@ -549,6 +549,7 @@ def _board_kind_or_400(raw: Optional[str]):
 @router.get("/fund-bubbles")
 def get_industry_fund_bubbles(
     board_kind: str = Query("industry", description="industry 行业 | concept 概念"),
+    include_rotation: bool = Query(True, description="是否叠加相对轮动象限与交叉信号"),
     db: Session = Depends(get_db),
 ):
     """收盘后的同花顺行业或概念资金气泡。"""
@@ -559,7 +560,9 @@ def get_industry_fund_bubbles(
             status_code=400,
         )
     try:
-        data = fetch_industry_fund_bubbles(db, board_kind=kind)
+        data = fetch_industry_fund_bubbles(
+            db, board_kind=kind, include_rotation=include_rotation
+        )
         return JSONResponse({"success": True, "data": data})
     except Exception as e:
         return JSONResponse(

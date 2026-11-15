@@ -2419,6 +2419,48 @@ body.ops-map #heatmap.heatmap--fs .heatmap-chart {
 .rot-lagging { background: #0f9d5c; }
 .rot-improving { background: #6f8cff; }
 
+/* 资金气泡叠加轮动象限：图例用空心圈，和图上"外环"一一对应 */
+.bubble-overlay-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin: 0 0 8px;
+}
+
+.bubble-overlay-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--ops-ink-muted, #8b9aab);
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.bubble-overlay-toggle input {
+    margin: 0;
+    accent-color: #6f8cff;
+    cursor: pointer;
+}
+
+.bubble-overlay-legend {
+    margin: 0;
+    gap: 12px;
+}
+
+.bubble-overlay-legend .rot-dot {
+    width: 9px;
+    height: 9px;
+    background: transparent;
+    border: 2px solid #8b9aab;
+}
+
+.bubble-overlay-legend .rot-leading { border-color: #d61f28; }
+.bubble-overlay-legend .rot-weakening { border-color: #c9a227; }
+.bubble-overlay-legend .rot-lagging { border-color: #0f9d5c; }
+.bubble-overlay-legend .rot-improving { border-color: #6f8cff; }
+
 #rotationSlider {
     width: 100%;
     margin: 0 0 8px;

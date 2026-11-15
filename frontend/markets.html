@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/markets.css?v=20261115-board-kind">
+    <link rel="stylesheet" href="css/markets.css?v=20261115-bubble-rotation">
     <link rel="stylesheet" href="css/markets-ops.css?v=20260930-bd">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261030-margin">
     <link rel="stylesheet" href="css/ops-surfaces.css?v=20261030-echarts-tip">
@@ -292,6 +292,19 @@
                                 <span class="heatmap-meta" id="fundBubbleMeta"></span>
                                 <button type="button" class="btn btn-secondary" id="fundBubbleRefreshBtn">刷新</button>
                             </div>
+                        </div>
+                        <div class="bubble-overlay-bar">
+                            <label class="bubble-overlay-toggle" title="外环颜色取自相对轮动页的象限配色：领先/转弱/落后/改善">
+                                <input type="checkbox" id="fundBubbleOverlay" checked>
+                                <span>叠加轮动象限</span>
+                            </label>
+                            <div class="rotation-legend bubble-overlay-legend" aria-hidden="true">
+                                <span><i class="rot-dot rot-leading"></i>领先</span>
+                                <span><i class="rot-dot rot-weakening"></i>转弱</span>
+                                <span><i class="rot-dot rot-lagging"></i>落后</span>
+                                <span><i class="rot-dot rot-improving"></i>改善</span>
+                            </div>
+                            <span class="heatmap-meta" id="fundBubbleQuadrantMeta"></span>
                         </div>
                         <div id="fundBubbleChart" class="heatmap-chart" role="img" aria-label="行业资金气泡"></div>
                         <p class="heatmap-status" id="fundBubbleStatus">打开后加载最新交易日的行业资金流。</p>
@@ -845,7 +858,7 @@
     <script src="js/stock_trade_link.js"></script>
     <script src="js/board_gate_ui.js?v=20261113-bgate1"></script>
     <script src="js/markets.js?v=20261115-board-kind"></script>
-    <script src="js/board_flow_rotation.js?v=20261115-bubble-zoom"></script>
+    <script src="js/board_flow_rotation.js?v=20261115-bubble-rotation"></script>
     <script src="js/hk_markets.js"></script>
     <script>
         // 市场标签页切换逻辑

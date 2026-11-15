@@ -50,6 +50,7 @@
         _rotationPlaying: false,
         _rotationTimer: null,
         _flowBound: false,
+        _bubbleOverlay: true,
 
         bindFlowRotation() {
             if (this._flowBound) return;
@@ -57,6 +58,14 @@
             const refreshBubbles = document.getElementById('fundBubbleRefreshBtn');
             if (refreshBubbles) {
                 refreshBubbles.addEventListener('click', () => this.loadFundBubbles());
+            }
+            const overlay = document.getElementById('fundBubbleOverlay');
+            if (overlay) {
+                overlay.checked = this._bubbleOverlay;
+                overlay.addEventListener('change', () => {
+                    this._bubbleOverlay = overlay.checked;
+                    this.renderFundBubbles();
+                });
             }
             const refreshRotation = document.getElementById('rotationRefreshBtn');
             if (refreshRotation) {
@@ -88,12 +97,12 @@
         async loadFundBubbles() {
             const status = document.getElementById('fundBubbleStatus');
             const meta = document.getElementById('fundBubbleMeta');
-            if (status) status.textContent = '正在加载最新交易日的行业资金流…';
+            if (status) status.textContent = '正在加载最新交易日的行业资金流与轮动象限…';
             if (meta) meta.textContent = '';
             try {
                 if (typeof ensureEchartsLoaded === 'function') await ensureEchartsLoaded();
                 if (typeof echarts === 'undefined') throw new Error('图表组件未加载');
-                const response = await fetch(`${this.API_BASE_URL}/api/market/fund-bubbles?board_kind=${this._boardKindQuery()}`);
+                const response = await fetch(`${this.API_BASE_URL}/api/market/fund-bubbles?board_kind=${this._boardKindQuery()}&include_rotation=1`);
                 const result = await response.json();
                 if (!response.ok || !result.success) {
                     throw new Error(result.message || '获取行业资金气泡失败');
@@ -106,17 +115,44 @@
             }
         },
 
+        _bubbleOverlayOn() {
+            const box = document.getElementById('fundBubbleOverlay');
+            if (box) this._bubbleOverlay = !!box.checked;
+            const payload = this.fundBubblePayload || {};
+            const rotation = payload.rotation || {};
+            return this._bubbleOverlay && rotation.enabled !== false;
+        },
+
+        _bubbleQuadrantMeta(payload) {
+            const summary = payload.flow_rotation || {};
+            const counts = summary.quadrant_counts || {};
+            const name = (key) => (QUADRANTS[key] || QUADRANTS.neutral).name;
+            const parts = ['leading', 'weakening', 'lagging', 'improving'].map(
+                (key) => `${name(key)} ${counts[key] || 0}`
+            );
+            if (summary.uncovered) parts.push(`无轮动 ${summary.uncovered}`);
+            return parts.join(' · ');
+        },
+
         renderFundBubbles() {
             const el = document.getElementById('fundBubbleChart');
             const status = document.getElementById('fundBubbleStatus');
             const meta = document.getElementById('fundBubbleMeta');
+            const quadrantMeta = document.getElementById('fundBubbleQuadrantMeta');
             const payload = this.fundBubblePayload || { items: [] };
             if (!el || typeof echarts === 'undefined') return;
             const items = payload.items || [];
+            const overlay = this._bubbleOverlayOn();
             if (meta) {
                 const date = payload.trade_date || '无数据';
                 const label = this._boardKindLabel(payload.board_kind);
                 meta.textContent = `${date} · ${payload.board_count || 0} 个${label} · 流入 ${payload.in_count || 0} · 流出 ${payload.out_count || 0}`;
+            }
+            if (quadrantMeta) {
+                const rotation = payload.rotation || {};
+                quadrantMeta.textContent = overlay && rotation.enabled !== false
+                    ? this._bubbleQuadrantMeta(payload)
+                    : '';
             }
             if (!items.length) {
                 if (this.fundBubbleChart) this.fundBubbleChart.clear();
@@ -146,6 +182,77 @@
                 axisLine: { lineStyle: { color: 'rgba(217,226,236,0.25)' } },
                 splitLine: { lineStyle: { color: 'rgba(217,226,236,0.08)' } },
             };
+            const ringSeries = overlay ? [{
+                id: 'rotation-rings',
+                type: 'scatter',
+                silent: true,
+                z: 1,
+                tooltip: { show: false },
+                emphasis: { disabled: true },
+                symbolSize: (value) => bubbleSize(value[1]) + 7,
+                data: ordered
+                    .filter((item) => item.rotation_quadrant)
+                    .map((item) => ({
+                        name: item.board_name,
+                        board_code: item.board_code,
+                        value: [item.change_percent, item.main_net_yi],
+                        itemStyle: {
+                            color: 'transparent',
+                            borderColor: (QUADRANTS[item.rotation_quadrant] || QUADRANTS.neutral).color,
+                            borderWidth: 1.8,
+                            opacity: 0.9,
+                        },
+                    })),
+            }] : [];
+            const bubbleSeries = {
+                id: 'fund-bubbles',
+                type: 'scatter',
+                z: 3,
+                data: ordered.map((item) => {
+                    const trap = item.change_percent > 0 && item.main_net_yi < 0;
+                    const color = item.direction === 'in'
+                        ? '#d61f28'
+                        : (item.direction === 'out' ? '#0f9d5c' : '#8b9aab');
+                    return {
+                        name: item.board_name,
+                        board_code: item.board_code,
+                        value: [item.change_percent, item.main_net_yi],
+                        rotation_quadrant: item.rotation_quadrant,
+                        rotation_label: item.rotation_label,
+                        rs_ratio: item.rs_ratio,
+                        rs_momentum: item.rs_momentum,
+                        signal_label: item.signal_label,
+                        signal_note: item.signal_note,
+                        itemStyle: {
+                            color,
+                            borderColor: trap ? '#f7fafc' : 'transparent',
+                            borderWidth: trap ? 1.5 : 0,
+                            opacity: 0.78,
+                        },
+                    };
+                }),
+                symbolSize: (value) => bubbleSize(value[1]),
+                emphasis: { focus: 'self', scale: 1.2 },
+                label: {
+                    show: true,
+                    color: '#f7fafc',
+                    fontSize: 11,
+                    formatter: (params) => {
+                        const data = params.data || {};
+                        if (!labeled.has(data.board_code)) return '';
+                        const tag = overlay && data.rotation_label ? ` ${data.rotation_label}` : '';
+                        return `${data.name}${tag}\n${formatYi((params.value || [])[1])}`;
+                    },
+                },
+                labelLayout: { hideOverlap: true },
+                markLine: {
+                    silent: true,
+                    symbol: 'none',
+                    label: { show: false },
+                    lineStyle: { color: 'rgba(217,226,236,0.35)', type: 'dashed' },
+                    data: [{ xAxis: 0 }, { yAxis: 0 }],
+                },
+            };
             this.fundBubbleChart.setOption({
                 ...chartTheme,
                 grid: { left: 58, right: 28, top: 36, bottom: 46 },
@@ -156,12 +263,19 @@
                         const data = params.data || {};
                         const yi = (params.value || [])[1];
                         const change = (params.value || [])[0];
-                        const trap = change > 0 && yi < 0 ? '<br/>上涨但主力净流出' : '';
-                        return [
+                        const lines = [
                             data.name,
                             `涨跌幅 ${formatPercent(change)}`,
                             `主力净流入 ${formatYi(yi)}`,
-                        ].join('<br/>') + trap;
+                        ];
+                        if (overlay && data.rotation_label) {
+                            lines.push(`轮动 ${data.rotation_label} · 相对强弱 ${data.rs_ratio} / 动量 ${data.rs_momentum}`);
+                        }
+                        if (change > 0 && yi < 0) lines.push('上涨但主力净流出');
+                        if (overlay && data.signal_label) {
+                            lines.push(`${data.signal_label}｜${data.signal_note || ''}`);
+                        }
+                        return lines.join('<br/>');
                     },
                 },
                 dataZoom: [
@@ -198,51 +312,23 @@
                     nameGap: 10,
                     scale: true,
                 },
-                series: [{
-                    type: 'scatter',
-                    data: ordered.map((item) => {
-                        const trap = item.change_percent > 0 && item.main_net_yi < 0;
-                        const color = item.direction === 'in'
-                            ? '#d61f28'
-                            : (item.direction === 'out' ? '#0f9d5c' : '#8b9aab');
-                        return {
-                            name: item.board_name,
-                            board_code: item.board_code,
-                            value: [item.change_percent, item.main_net_yi],
-                            itemStyle: {
-                                color,
-                                borderColor: trap ? '#f7fafc' : 'transparent',
-                                borderWidth: trap ? 1.5 : 0,
-                                opacity: 0.78,
-                            },
-                        };
-                    }),
-                    symbolSize: (value) => bubbleSize(value[1]),
-                    emphasis: { focus: 'self', scale: 1.2 },
-                    label: {
-                        show: true,
-                        color: '#f7fafc',
-                        fontSize: 11,
-                        formatter: (params) => {
-                            const data = params.data || {};
-                            if (!labeled.has(data.board_code)) return '';
-                            return `${data.name}\n${formatYi((params.value || [])[1])}`;
-                        },
-                    },
-                    labelLayout: { hideOverlap: true },
-                    markLine: {
-                        silent: true,
-                        symbol: 'none',
-                        label: { show: false },
-                        lineStyle: { color: 'rgba(217,226,236,0.35)', type: 'dashed' },
-                        data: [{ xAxis: 0 }, { yAxis: 0 }],
-                    },
-                }],
+                series: [...ringSeries, bubbleSeries],
             }, true);
             this.fundBubbleChart.resize();
             if (status) {
                 const label = this._boardKindLabel(payload.board_kind);
-                status.textContent = `红为净流入，绿为净流出。白边是上涨但资金流出。同一天多数${label}的涨跌和资金流接近，会挤在一起；滚轮放大，拖动平移。点击气泡看详情。`;
+                const rotation = payload.rotation || {};
+                const summary = payload.flow_rotation || {};
+                const lines = [];
+                if (overlay && rotation.enabled !== false) {
+                    lines.push('外环=相对轮动象限（领先/转弱/落后/改善），填充色=主力资金方向。');
+                    const alerts = (summary.alerts || []).filter((item) => item.signal_key === 'reversal_alert' || item.signal_key === 'ebb_exit');
+                    if (alerts.length) {
+                        lines.push(`预警：${alerts.slice(0, 4).map((item) => `${item.board_name}（${item.signal_label}）`).join('、')}。`);
+                    }
+                }
+                lines.push(`红为净流入，绿为净流出，白边是上涨但资金流出。同一天多数${label}的涨跌和资金流接近，会挤在一起；滚轮放大，拖动平移。点击气泡看详情。`);
+                status.textContent = lines.join('');
             }
         },
 
