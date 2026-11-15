@@ -30,7 +30,7 @@
       <template #header>大盘环境</template>
       <p>{{ envSummary }}</p>
       <h4>近 {{ breadthSeriesDays }} 日宽广度 / 阿姆士</h4>
-      <p class="muted">TRIN 用成交额口径；小于1偏多，大于1偏空</p>
+      <p class="muted">TRIN 为成交额口径。人均倍数 = 1/TRIN，与上涨占比、额价差一起看。</p>
       <el-table :data="breadthSeriesRows" size="small" stripe border empty-text="暂无序列（可重算）">
         <el-table-column prop="trade_date" label="日期" width="120" />
         <el-table-column label="上涨" width="90">
@@ -41,6 +41,12 @@
         </el-table-column>
         <el-table-column label="上涨占比" width="100">
           <template #default="{ row }">{{ pctRatio(row.up_ratio) }}</template>
+        </el-table-column>
+        <el-table-column label="涨额占比" width="100">
+          <template #default="{ row }">{{ pctRatio(row.up_amount_ratio) }}</template>
+        </el-table-column>
+        <el-table-column label="额价差" width="100">
+          <template #default="{ row }">{{ spreadPp(row.amount_spread) }}</template>
         </el-table-column>
         <el-table-column label="TRIN" width="90">
           <template #default="{ row }">{{ fmt(row.trin) }}</template>
@@ -445,12 +451,8 @@ const envSummary = computed(() => {
   }
   if (env.above_2t) line += '，站上 2 万亿'
   line += `。上涨 ${b.up_count ?? '—'}，下跌 ${b.down_count ?? '—'}，平盘 ${b.flat_count ?? '—'}；涨停 ${d.limit_up_count ?? '—'}，跌停 ${b.limit_down_count ?? '—'}。`
-  if (b.up_ratio != null || b.trin != null) {
-    line += ` 上涨占比 ${pctRatio(b.up_ratio)}，阿姆士TRIN ${fmt(b.trin)}`
-    const th = trinHint(b.trin)
-    if (th) line += `（${th}）`
-    line += '。'
-  }
+  const clause = breadthClause(b)
+  if (clause) line += ` ${clause}`
   return line
 })
 
@@ -508,6 +510,8 @@ const metricCards = computed(() => {
     { label: '平盘', value: flatText(d) },
     { label: '上涨/下跌', value: breadthText(d) },
     { label: '上涨占比', value: pctRatio(d?.rules_json?.market_env?.breadth?.up_ratio) },
+    { label: '涨额占比', value: pctRatio(d?.rules_json?.market_env?.breadth?.up_amount_ratio) },
+    { label: '额价差', value: spreadPp(d?.rules_json?.market_env?.breadth?.amount_spread) },
     { label: '阿姆士TRIN', value: trinCard(d) },
     { label: 'CB', value: fmt(d.cb_count, 0) },
     { label: '高度', value: fmt(d.height, 0) },
@@ -532,19 +536,43 @@ function pctRatio(v: any): string {
   return `${(n * 100).toFixed(1)}%`
 }
 
-function trinHint(trin: any): string {
+function spreadPp(v: any): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return '—'
+  const pp = n * 100
+  const text = pp.toFixed(1)
+  return pp > 0 ? `+${text}` : text
+}
+
+function perCapita(trin: any): string {
   const n = Number(trin)
-  if (!Number.isFinite(n)) return ''
-  if (n < 1) return '偏多'
-  if (n > 1) return '偏空'
-  return '均衡'
+  if (!Number.isFinite(n) || n <= 0) return ''
+  return (1 / n).toFixed(1)
+}
+
+function breadthClause(b: any): string {
+  if (!b || (b.up_ratio == null && b.trin == null && b.up_amount_ratio == null)) return ''
+  const bits = [`上涨占比 ${pctRatio(b.up_ratio)}`]
+  if (b.up_amount_ratio != null) bits.push(`涨额占比 ${pctRatio(b.up_amount_ratio)}`)
+  if (b.amount_spread != null) bits.push(`额价差 ${spreadPp(b.amount_spread)} 个百分点`)
+  let line = `市场宽广度：${bits.join('；')}。`
+  if (b.trin != null) {
+    line += `阿姆士(TRIN，成交额口径) ${fmt(b.trin)}`
+    const mult = perCapita(b.trin)
+    if (mult) line += `，上涨股人均成交额约为下跌股的 ${mult} 倍`
+    line += '。'
+  }
+  if (b.index_rebound) line += '量集中在少数上涨股。'
+  else if (b.amount_aligned) line += '上涨家数与成交额同向。'
+  return line
 }
 
 function trinCard(d: any): string {
   const b = d?.rules_json?.market_env?.breadth
   const t = fmt(b?.trin)
-  const h = trinHint(b?.trin)
-  return h ? `${t}（${h}）` : t
+  const mult = perCapita(b?.trin)
+  return mult ? `${t}（人均${mult}倍）` : t
 }
 
 function limitDownText(d: any): string {

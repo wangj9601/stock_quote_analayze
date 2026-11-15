@@ -54,7 +54,8 @@ DDL = [
         detail JSONB,
         created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
-        CONSTRAINT uq_rpe_signal_trace_code_date_mkt_cfg UNIQUE (code, trade_date, market_type, config_id)
+        CONSTRAINT uq_rpe_signal_trace_code_date_mkt_cfg_sector
+            UNIQUE (code, trade_date, market_type, config_id, sector_id)
     )
     """,
     """

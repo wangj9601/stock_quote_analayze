@@ -28,6 +28,45 @@ def delete_traces_for_code_config(db, *, code: str, config_id: int, market_type:
     return int(n or 0)
 
 
+def delete_traces_for_date(
+    db,
+    *,
+    config_id: int,
+    trade_date: str,
+    market_type: str = "CN",
+    sector_ids: Optional[List[str]] = None,
+) -> int:
+    """删除某配置某日的预计算行。
+
+    sector_ids 为空表示清整日（全量概念重算）；传入时只清这些概念板块。
+    """
+    from backend_api.models import RPESignalTrace
+
+    date_s = str(trade_date or "")[:10]
+    try:
+        d = datetime.strptime(date_s, "%Y-%m-%d").date()
+    except ValueError:
+        return 0
+    q = db.query(RPESignalTrace).filter(
+        RPESignalTrace.trade_date == d,
+        RPESignalTrace.config_id == int(config_id),
+        RPESignalTrace.market_type == (market_type or "CN"),
+    )
+    if sector_ids is not None:
+        ids = [str(s).strip() for s in sector_ids if str(s or "").strip()]
+        if not ids:
+            return 0
+        q = q.filter(RPESignalTrace.sector_id.in_(ids))
+    n = q.delete(synchronize_session=False)
+    db.commit()
+    return int(n or 0)
+
+
+def _trace_sector_id(row: Dict[str, Any]) -> Optional[str]:
+    sector_id = str(row.get("sector_id") or "").strip()
+    return sector_id or None
+
+
 def upsert_signal_traces(
     db,
     rows: List[Dict[str, Any]],
@@ -47,19 +86,21 @@ def upsert_signal_traces(
             d = datetime.strptime(date_s, "%Y-%m-%d").date()
         except ValueError:
             continue
-        existing = (
-            db.query(RPESignalTrace)
-            .filter(
-                RPESignalTrace.code == code,
-                RPESignalTrace.trade_date == d,
-                RPESignalTrace.config_id == int(config_id),
-                RPESignalTrace.market_type == (r.get("market_type") or "CN"),
-            )
-            .first()
+        sector_id = _trace_sector_id(r)
+        existing_q = db.query(RPESignalTrace).filter(
+            RPESignalTrace.code == code,
+            RPESignalTrace.trade_date == d,
+            RPESignalTrace.config_id == int(config_id),
+            RPESignalTrace.market_type == (r.get("market_type") or "CN"),
         )
+        if sector_id is None:
+            existing_q = existing_q.filter(RPESignalTrace.sector_id.is_(None))
+        else:
+            existing_q = existing_q.filter(RPESignalTrace.sector_id == sector_id)
+        existing = existing_q.first()
         payload = dict(
             name=r.get("name"),
-            sector_id=r.get("sector_id"),
+            sector_id=sector_id,
             sector_name=r.get("sector_name"),
             z_score=r.get("z_score"),
             ratio=r.get("ratio"),

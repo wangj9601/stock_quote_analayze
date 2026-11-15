@@ -90,11 +90,11 @@ const ScreeningPage = {
     _strategyScripts: {
         gms: ['js/gms_score_detail.js', 'js/board_roles_panel.js'],
         urt: ['js/urt_score_detail.js', 'js/board_roles_panel.js'],
-        rpe: ['js/rpe_score_detail.js', 'js/rpe_screening.js?v=20260917a', 'js/board_roles_panel.js'],
+        rpe: ['js/rpe_score_detail.js', 'js/rpe_screening.js?v=20261115a', 'js/board_roles_panel.js'],
         sbbr: ['js/sbbr_score_detail.js', 'js/sbbr_screening.js?v=20260918a', 'js/board_roles_panel.js'],
         csb: ['js/csb_score_detail.js?v=20261007-csb', 'js/csb_screening.js?v=20261017-lazy-panels', 'js/board_roles_panel.js'],
         sepa: ['js/sepa_screening.js?v=20261031-sepa'],
-        cupb: ['js/cupb_screening.js?v=20261114-cupb-sepa'],
+        cupb: ['js/cupb_screening.js?v=20261115-cupb-nolimit'],
     },
 
     // 初始化

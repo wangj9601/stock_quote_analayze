@@ -2535,7 +2535,14 @@ class RPESignalTrace(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
     __table_args__ = (
-        UniqueConstraint("code", "trade_date", "market_type", "config_id", name="uq_rpe_signal_trace_code_date_mkt_cfg"),
+        UniqueConstraint(
+            "code",
+            "trade_date",
+            "market_type",
+            "config_id",
+            "sector_id",
+            name="uq_rpe_signal_trace_code_date_mkt_cfg_sector",
+        ),
     )
 
 

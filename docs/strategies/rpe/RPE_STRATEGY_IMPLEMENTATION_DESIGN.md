@@ -369,7 +369,7 @@ PostgreSQL 表（迁移：`migrations/add_rpe_tables.py` 等）：
 - 调度：`backend_core/data_collectors/main.py` 任务 `rpe_signals_cn`  
 - 默认工作日约 **19:40**（避开 GMS/SBBR 高峰）  
 - 开关：环境变量 `ENABLE_RPE_PRECOMPUTE`  
-- 流程：`run_rpe_precompute` → `engine.screen` → `upsert_signal_traces` → 写 `rpe_precompute_runs`
+- 流程：`run_rpe_precompute` → 逐个同花顺概念板块 `engine.screen_board(board_kind=concept)` → `upsert_signal_traces`（同一股票可多概念各一行）→ 写 `rpe_precompute_runs`
 
 选股勾选「优先读预计算」时走 `trace_only`，全市场浏览更快。
 

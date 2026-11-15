@@ -141,7 +141,7 @@ def admin_get_backtest(task_id: str, _user: Admin = Depends(_require_admin)):
 def admin_trigger_precompute(
     config_id: Optional[int] = None,
     trade_date: Optional[str] = None,
-    max_boards: Optional[int] = 20,
+    max_boards: Optional[int] = None,
     _user: Admin = Depends(_require_admin),
 ):
     return run_rpe_precompute(config_id=config_id, trade_date=trade_date, max_boards=max_boards)

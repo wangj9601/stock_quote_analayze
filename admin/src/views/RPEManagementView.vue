@@ -255,13 +255,13 @@ async function onSetDefault(id: number) {
 
 async function onPrecompute() {
   try {
-    await confirmStrategyJob('RPE', '比价效应将按当前参数写入预计算。旧命中不一定删除。')
+    await confirmStrategyJob('RPE', '比价效应将按同花顺概念板块逐板写入预计算，并替换该日已有信号。')
   } catch {
     return
   }
   precomputing.value = true
   try {
-    const data: any = await rpeApi.triggerPrecompute({ max_boards: 20 })
+    const data: any = await rpeApi.triggerPrecompute()
     ElMessage.success(`预计算完成 screened=${data.screened ?? '-'} entry=${data.entry_count ?? '-'}`)
   } catch (e: any) {
     ElMessage.error(e?.response?.data?.detail || e.message)

@@ -222,7 +222,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
     _n("urt_signals_cn", "URT信号预计算(A股)", "strategy", exec_urt_cn),
     _n("urt_signals_hk", "URT信号预计算(港股)", "strategy", exec_urt_hk),
     _n("sbbr_signals_cn", "SBBR信号预计算(A股)", "strategy", exec_sbbr_cn),
-    _n("rpe_signals_cn", "RPE信号预计算(A股)", "strategy", exec_rpe_cn),
+    _n(
+        "rpe_signals_cn",
+        "RPE信号预计算(A股)",
+        "strategy",
+        exec_rpe_cn,
+        description="按同花顺概念板块逐板量权比价，写入 rpe_signal_trace；同一股票可对应多个概念",
+    ),
     _n("csb_signals_cn", "CSB信号预计算(A股)", "strategy", exec_csb_cn),
     _n(
         "sepa_signals_cn",

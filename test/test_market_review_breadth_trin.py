@@ -44,7 +44,9 @@ def test_summarize_breadth_rows_counts_and_trin():
     assert out["up_amount"] == 1_000_000.0
     assert out["down_amount"] == 800_000.0
     assert out["trin_basis"] == "amount"
-    assert out["up_ratio"] == round(1 / 3, 4)  # up/(up+down)
+    assert out["up_ratio"] == round(1 / 3, 4)  # up/(up+down)，平盘不进分母
+    assert out["up_amount_ratio"] == 0.5  # 100万 / (100+80+20)万，平盘进成交额分母
+    assert out["amount_spread"] == round(0.5 - round(1 / 3, 4), 4)
     assert out["trin"] == calc_arms_trin(1, 2, 1_000_000.0, 800_000.0)
 
 
@@ -111,3 +113,58 @@ def test_render_includes_trin_and_series():
     assert "宽广" in md or "上涨占比" in md
     assert BREADTH_SERIES_DAYS >= 5
     assert "近" in md and "日" in md
+    assert "小于1偏多" not in md
+    assert "人均" in md
+    assert "上涨家数与成交额同向" in md
+
+
+def test_index_rebound_sentence_needs_all_five_conditions():
+    from backend_core.market_review.rules import (
+        INDEX_REBOUND_SENTENCE,
+        apply_breadth_reading,
+        build_trend_rules,
+        draft_viewpoint,
+        format_daily_breadth_clause,
+        is_index_rebound,
+    )
+
+    breadth = {
+        "up_count": 800,
+        "down_count": 2200,
+        "up_ratio": 0.2667,
+        "up_amount_ratio": 0.65,
+        "amount_spread": 0.3833,
+        "trin": 0.34,
+    }
+    assert is_index_rebound(breadth, 0.31)
+    assert not is_index_rebound(breadth, -0.2)
+    assert not is_index_rebound({**breadth, "up_ratio": 0.62}, 0.31)
+    assert not is_index_rebound({**breadth, "up_amount_ratio": 0.42, "amount_spread": 0.15}, 0.31)
+    assert not is_index_rebound({**breadth, "amount_spread": 0.14}, 0.31)
+    assert not is_index_rebound({**breadth, "trin": 1.2}, 0.31)
+    apply_breadth_reading(breadth, 0.31)
+    clause = format_daily_breadth_clause(breadth)
+    assert "量集中在少数上涨股" in clause
+    assert "2.9" in clause
+    assert "小于1偏多" not in clause
+    text = draft_viewpoint(
+        {"vol_trillion": 2.0, "cb_count": 8, "height": 4, "limit_up_count": 40},
+        build_trend_rules(
+            {"vol_trillion": 2.2, "cb_count": 8, "height": 4},
+            {"vol_trillion": 2.0, "cb_count": 8, "height": 4},
+        ),
+        {"season": "秋"},
+        {"label": "放量震荡", "volume": "expand"},
+        {
+            "breadth": breadth,
+            "indexes": [{"name": "上证指数", "ts_code": "000001.SH", "pct_chg": 0.31}],
+        },
+        {},
+    )
+    assert "放量震荡" in text
+    assert INDEX_REBOUND_SENTENCE in text
+    rules = build_trend_rules(
+        {"vol_trillion": 2.2, "cb_count": 8, "height": 4},
+        {"vol_trillion": 2.0, "cb_count": 8, "height": 4},
+    )
+    assert "额价差" in rules["summary"]

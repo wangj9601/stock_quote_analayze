@@ -176,7 +176,144 @@ def classify_season(
 VOLUME_EXPAND_YI = 1500.0
 VOLUME_EXPAND_TRILLION = VOLUME_EXPAND_YI / 10000.0
 BREADTH_RATIO = 1.5
+# 指数型反弹：上证收涨，且上涨占比低于该值（未过半、弱于普涨）。
+WEAK_UP_RATIO = 0.45
+# 涨额占比过半，钱的多数在上涨股上。
+UP_AMOUNT_RATIO_MIN = 0.5
+# 额价差不低于 15 个百分点。存的是比值，0.15 = 15pp。
+AMOUNT_SPREAD_MIN = 0.15
 PERCENTILE_MIN_SAMPLE = 20
+INDEX_REBOUND_SENTENCE = (
+    "上证收涨，但上涨占比未过半、成交额集中在少数上涨股，属于指数型反弹。"
+)
+BREADTH_CALIBER_NOTE = (
+    "成交额口径。上涨股人均成交额约为下跌股的 1/TRIN 倍，不单独当成多空。"
+    "区间合成 TRIN 按各日涨跌家数与成交额加总。额价差按每日先算再平均。"
+    "上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。"
+)
+
+
+def per_capita_multiple(trin: Any) -> Optional[float]:
+    """上涨股人均成交额 / 下跌股人均成交额 = 1/TRIN。"""
+    n = _f(trin)
+    if n is None or n <= 0:
+        return None
+    return round(1.0 / n, 1)
+
+
+def format_pct_ratio(v: Any) -> str:
+    n = _f(v)
+    if n is None:
+        return "--"
+    return f"{round(n * 100, 1)}%"
+
+
+def format_spread_pp(v: Any) -> str:
+    n = _f(v)
+    if n is None:
+        return "--"
+    return f"{n * 100:+.1f}"
+
+
+def shanghai_pct(indexes: Any) -> Optional[float]:
+    if not isinstance(indexes, list):
+        return None
+    for idx in indexes:
+        if not isinstance(idx, dict):
+            continue
+        code = str(idx.get("ts_code") or "")
+        name = str(idx.get("name") or "")
+        if code == "000001.SH" or "上证" in name:
+            return _f(idx.get("pct_chg"))
+    return None
+
+
+def _broad_up(breadth: Dict[str, Any]) -> bool:
+    try:
+        up = int(breadth["up_count"]) if breadth.get("up_count") is not None else None
+        down = int(breadth["down_count"]) if breadth.get("down_count") is not None else None
+    except (TypeError, ValueError, KeyError):
+        return False
+    if up is None or down is None:
+        return False
+    return up > down and up >= down * BREADTH_RATIO
+
+
+def is_index_rebound(breadth: Optional[Dict[str, Any]], sh_pct: Any) -> bool:
+    """上证收涨、上涨占比 < 45%、涨额占比过半、额价差 ≥ 15pp、TRIN < 1。"""
+    br = breadth or {}
+    sh = _f(sh_pct)
+    up_ratio = _f(br.get("up_ratio"))
+    amt_ratio = _f(br.get("up_amount_ratio"))
+    spread = _f(br.get("amount_spread"))
+    trin = _f(br.get("trin"))
+    if None in (sh, up_ratio, amt_ratio, spread, trin):
+        return False
+    return bool(
+        sh > 0
+        and up_ratio < WEAK_UP_RATIO
+        and amt_ratio > UP_AMOUNT_RATIO_MIN
+        and spread >= AMOUNT_SPREAD_MIN
+        and trin < 1
+    )
+
+
+def apply_breadth_reading(breadth: Dict[str, Any], sh_pct: Any = None) -> Dict[str, Any]:
+    """把人均倍数、指数型反弹、金额与家数同向写回广度字典。"""
+    if not isinstance(breadth, dict):
+        return breadth
+    mult = per_capita_multiple(breadth.get("trin"))
+    if mult is not None:
+        breadth["per_capita_multiple"] = mult
+    sh = _f(sh_pct)
+    if sh is None:
+        sh = _f(breadth.get("sh_pct"))
+    if sh is not None:
+        breadth["sh_pct"] = sh
+    breadth["index_rebound"] = is_index_rebound(breadth, sh)
+    breadth["amount_aligned"] = (not breadth["index_rebound"]) and _amount_aligned(breadth)
+    return breadth
+
+
+def _amount_aligned(breadth: Dict[str, Any]) -> bool:
+    trin = _f(breadth.get("trin"))
+    if trin is None or trin >= 1:
+        return False
+    return _broad_up(breadth)
+
+
+def format_daily_breadth_clause(breadth: Optional[Dict[str, Any]], sh_pct: Any = None) -> str:
+    """大盘环境里的宽广度 / 额价差 / TRIN 一句。不把 TRIN 单独说成偏多或偏空。"""
+    br = breadth or {}
+    if not br or (
+        br.get("up_ratio") is None
+        and br.get("trin") is None
+        and br.get("up_amount_ratio") is None
+    ):
+        return ""
+    bits = [f"上涨占比 {format_pct_ratio(br.get('up_ratio'))}"]
+    if br.get("up_amount_ratio") is not None:
+        bits.append(f"涨额占比 {format_pct_ratio(br.get('up_amount_ratio'))}")
+    if br.get("amount_spread") is not None:
+        bits.append(f"额价差 {format_spread_pp(br.get('amount_spread'))} 个百分点")
+    sentence = f"市场宽广度：{'；'.join(bits)}。"
+    trin = br.get("trin")
+    if trin is not None:
+        sentence += f"阿姆士(TRIN，成交额口径) {_fmt2(trin)}"
+        mult = per_capita_multiple(trin)
+        if mult is not None:
+            sentence += f"，上涨股人均成交额约为下跌股的 {mult} 倍"
+        sentence += "。"
+    sh = _f(sh_pct)
+    if sh is None:
+        sh = _f(br.get("sh_pct"))
+    rebound = bool(br.get("index_rebound")) or is_index_rebound(br, sh)
+    aligned = bool(br.get("amount_aligned")) or _amount_aligned(br)
+    if rebound:
+        sentence += "量集中在少数上涨股。"
+    elif aligned:
+        sentence += "上涨家数与成交额同向。"
+    return sentence
 
 
 def _fmt2(v: Any, digits: int = 2) -> str:
@@ -448,7 +585,7 @@ def build_trend_rules(
         delta_yi = (vol - y_vol) * 10000.0
         summary = (
             f"成交额较昨日增加约 {delta_yi:.0f} 亿。"
-            "放量是否有效，看上涨家数是否明显多于下跌家数。"
+            "放量是否有效，看上涨家数是否明显多于下跌家数，以及额价差是否把量堆在少数股票上。"
         )
     elif vol_change_small and not neg_signals:
         summary = "核心指标相对平稳，等待量能与连板确认。"
@@ -544,10 +681,16 @@ def draft_viewpoint(
         eco = "连板生态仍偏冷，但指数与广度已改善。"
     cb = today.get("cb_count")
     h = today.get("height")
+    sh = _f(br.get("sh_pct"))
+    if sh is None:
+        sh = shanghai_pct(env.get("indexes"))
+    rebound = ""
+    if br.get("index_rebound") or is_index_rebound(br, sh):
+        rebound = INDEX_REBOUND_SENTENCE
     body = "。".join(parts)
     return (
         f"{body}。连板 {cb} 家，高度 {h} 板，情绪周期「{season_name}」，"
-        f"盘面状态「{label}」。{eco}{tails.get(label, tails['平量观察'])}"
+        f"盘面状态「{label}」。{rebound}{eco}{tails.get(label, tails['平量观察'])}"
     )
 
 

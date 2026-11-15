@@ -32,22 +32,28 @@
             {{ fmt(data.breadth?.avg_limit_down) }} 家。
           </p>
           <p>
-            阿姆士(TRIN，成交额口径) 日均 {{ fmt(data.breadth?.avg_trin) }}{{ trinHint(data.breadth?.avg_trin) }}，小于1共
+            日均涨额占比 {{ pctRatio(data.breadth?.avg_up_amount_ratio) }}，日均额价差
+            {{ spreadPp(data.breadth?.avg_amount_spread) }} 个百分点。指数型反弹
+            {{ data.breadth?.index_rebound_days || 0 }} 天。
+          </p>
+          <p>
+            阿姆士(TRIN，成交额口径) 日均 {{ fmt(data.breadth?.avg_trin) }}{{ perCapitaText(data.breadth?.avg_trin) }}，小于1共
             {{ data.breadth?.trin_lt1_days || 0 }} 天，大于1共 {{ data.breadth?.trin_gt1_days || 0 }} 天，等于1共
-            {{ data.breadth?.trin_eq1_days || 0 }} 天。区间合成 TRIN {{ fmt(data.breadth?.period_trin)
-            }}{{ trinHint(data.breadth?.period_trin) }}。
+            {{ data.breadth?.trin_eq1_days || 0 }} 天。区间合成 TRIN {{ fmt(data.breadth?.period_trin) }}。
           </p>
           <p>
             期初 {{ data.breadth?.start?.trade_date || '—' }} 上涨占比 {{ pctRatio(data.breadth?.start?.up_ratio) }}、TRIN
             {{ fmt(data.breadth?.start?.trin) }} → 期末 {{ data.breadth?.end?.trade_date || '—' }} 上涨占比
             {{ pctRatio(data.breadth?.end?.up_ratio) }}、TRIN {{ fmt(data.breadth?.end?.trin) }}。
           </p>
-          <p class="dr-desc">小于1偏多，大于1偏空，等于1大致均衡。成交额口径；区间合成按各日涨跌家数与成交额加总。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>
+          <p class="dr-desc">成交额口径。上涨股人均成交额约为下跌股的 1/TRIN 倍，不单独当成多空。区间合成 TRIN 按各日涨跌家数与成交额加总。额价差按每日先算再平均。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>
           <el-table :data="breadthSeries" size="small" border empty-text="暂无">
             <el-table-column prop="trade_date" label="日期" />
             <el-table-column label="上涨"><template #default="{ row }">{{ intText(row.up_count) }}</template></el-table-column>
             <el-table-column label="下跌"><template #default="{ row }">{{ intText(row.down_count) }}</template></el-table-column>
             <el-table-column label="上涨占比"><template #default="{ row }">{{ pctRatio(row.up_ratio) }}</template></el-table-column>
+            <el-table-column label="涨额占比"><template #default="{ row }">{{ pctRatio(row.up_amount_ratio) }}</template></el-table-column>
+            <el-table-column label="额价差"><template #default="{ row }">{{ spreadPp(row.amount_spread) }}</template></el-table-column>
             <el-table-column label="TRIN"><template #default="{ row }">{{ fmt(row.trin) }}</template></el-table-column>
             <el-table-column prop="breadth_label" label="结构" />
           </el-table>
@@ -173,12 +179,19 @@ function pctRatio(v: any) {
   return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : String(v)
 }
 
-function trinHint(v: any) {
+function spreadPp(v: any) {
+  if (v == null || v === '') return '—'
   const n = Number(v)
-  if (!Number.isFinite(n)) return ''
-  if (n < 1) return '（偏多）'
-  if (n > 1) return '（偏空）'
-  return '（均衡）'
+  if (!Number.isFinite(n)) return '—'
+  const pp = n * 100
+  const text = pp.toFixed(1)
+  return pp > 0 ? `+${text}` : text
+}
+
+function perCapitaText(trin: any) {
+  const n = Number(trin)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  return `，上涨股人均成交额约为下跌股的 ${(1 / n).toFixed(1)} 倍`
 }
 
 function fmt(v: any) {

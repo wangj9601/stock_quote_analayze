@@ -14,6 +14,12 @@ from backend_core.market_review.pdf_export import (
     _table,
     register_cjk_font,
 )
+from backend_core.market_review.rules import (
+    BREADTH_CALIBER_NOTE,
+    format_pct_ratio,
+    format_spread_pp,
+    per_capita_multiple,
+)
 
 
 def clean_industry_name(name: Any) -> str:
@@ -171,16 +177,11 @@ def _pct_ratio(v: Any) -> str:
         return "—"
 
 
-def _trin_bias(v: Any) -> str:
-    try:
-        n = float(v)
-    except (TypeError, ValueError):
+def _mult_text(trin: Any) -> str:
+    mult = per_capita_multiple(trin)
+    if mult is None:
         return ""
-    if n < 1:
-        return "偏多"
-    if n > 1:
-        return "偏空"
-    return "均衡"
+    return f"，上涨股人均成交额约为下跌股的 {mult} 倍"
 
 
 def _breadth_md(snap: Dict[str, Any]) -> List[str]:
@@ -195,9 +196,7 @@ def _breadth_md(snap: Dict[str, Any]) -> List[str]:
         lines.append(str(breadth.get("gap_note")))
         lines.append("")
     avg_trin = breadth.get("avg_trin")
-    avg_hint = _trin_bias(avg_trin)
     period_trin = breadth.get("period_trin")
-    period_hint = _trin_bias(period_trin)
     lines.append(
         f"日均上涨占比 {_pct_ratio(breadth.get('avg_up_ratio'))}，"
         f"普涨 {int(breadth.get('broad_up_days') or 0)} 天、"
@@ -206,13 +205,16 @@ def _breadth_md(snap: Dict[str, Any]) -> List[str]:
         f"日均跌停 {_num(breadth.get('avg_limit_down'), 1)} 家。"
     )
     lines.append(
-        f"阿姆士(TRIN，成交额口径) 日均 {_fmt(avg_trin)}"
-        f"{('（' + avg_hint + '）') if avg_hint else ''}，"
+        f"日均涨额占比 {format_pct_ratio(breadth.get('avg_up_amount_ratio'))}，"
+        f"日均额价差 {format_spread_pp(breadth.get('avg_amount_spread'))} 个百分点。"
+        f"指数型反弹 {int(breadth.get('index_rebound_days') or 0)} 天。"
+    )
+    lines.append(
+        f"阿姆士(TRIN，成交额口径) 日均 {_fmt(avg_trin)}{_mult_text(avg_trin)}，"
         f"小于1共 {int(breadth.get('trin_lt1_days') or 0)} 天，"
         f"大于1共 {int(breadth.get('trin_gt1_days') or 0)} 天，"
         f"等于1共 {int(breadth.get('trin_eq1_days') or 0)} 天。"
-        f"区间合成 TRIN {_fmt(period_trin)}"
-        f"{('（' + period_hint + '）') if period_hint else ''}。"
+        f"区间合成 TRIN {_fmt(period_trin)}。"
     )
     start = breadth.get("start") or {}
     end = breadth.get("end") or {}
@@ -224,14 +226,16 @@ def _breadth_md(snap: Dict[str, Any]) -> List[str]:
             f"TRIN {_fmt(end.get('trin'))}。"
         )
     lines.append("")
-    lines.append("小于1偏多，大于1偏空，等于1大致均衡。区间合成按各日涨跌家数与成交额加总。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。")
+    lines.append(BREADTH_CALIBER_NOTE)
     lines.append("")
-    lines.append("| 日期 | 上涨 | 下跌 | 上涨占比 | TRIN | 结构 |")
-    lines.append("| --- | ---: | ---: | ---: | ---: | --- |")
+    lines.append("| 日期 | 上涨 | 下跌 | 上涨占比 | 涨额占比 | 额价差(百分点) | TRIN | 结构 |")
+    lines.append("| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
     for row in series:
         lines.append(
             f"| {row.get('trade_date') or '—'} | {_num(row.get('up_count'), 0)} | "
             f"{_num(row.get('down_count'), 0)} | {_pct_ratio(row.get('up_ratio'))} | "
+            f"{format_pct_ratio(row.get('up_amount_ratio'))} | "
+            f"{format_spread_pp(row.get('amount_spread'))} | "
             f"{_fmt(row.get('trin'))} | {row.get('breadth_label') or '—'} |"
         )
     lines.append("")
@@ -249,13 +253,13 @@ def _breadth_html(snap: Dict[str, Any]) -> str:
             _num(row.get("up_count"), 0),
             _num(row.get("down_count"), 0),
             _pct_ratio(row.get("up_ratio")),
+            format_pct_ratio(row.get("up_amount_ratio")),
+            format_spread_pp(row.get("amount_spread")),
             _fmt(row.get("trin")),
             row.get("breadth_label") or "—",
         ]
         for row in series
     ]
-    avg_hint = _trin_bias(breadth.get("avg_trin"))
-    period_hint = _trin_bias(breadth.get("period_trin"))
     start = breadth.get("start") or {}
     end = breadth.get("end") or {}
     summary = (
@@ -263,10 +267,12 @@ def _breadth_html(snap: Dict[str, Any]) -> str:
         f"普涨 {int(breadth.get('broad_up_days') or 0)} 天、"
         f"分歧 {int(breadth.get('mixed_days') or 0)} 天、"
         f"普跌 {int(breadth.get('broad_down_days') or 0)} 天。"
+        f"日均涨额占比 {_esc(format_pct_ratio(breadth.get('avg_up_amount_ratio')))}，"
+        f"日均额价差 {_esc(format_spread_pp(breadth.get('avg_amount_spread')))} 个百分点。"
+        f"指数型反弹 {int(breadth.get('index_rebound_days') or 0)} 天。"
         f"阿姆士日均 TRIN {_esc(_fmt(breadth.get('avg_trin')))}"
-        f"{_esc(('（' + avg_hint + '）') if avg_hint else '')}，"
-        f"区间合成 TRIN {_esc(_fmt(breadth.get('period_trin')))}"
-        f"{_esc(('（' + period_hint + '）') if period_hint else '')}。"
+        f"{_esc(_mult_text(breadth.get('avg_trin')))}，"
+        f"区间合成 TRIN {_esc(_fmt(breadth.get('period_trin')))}。"
         f"期初 {_esc(start.get('trade_date') or '—')} {_esc(_pct_ratio(start.get('up_ratio')))} / "
         f"TRIN {_esc(_fmt(start.get('trin')))} → "
         f"期末 {_esc(end.get('trade_date') or '—')} {_esc(_pct_ratio(end.get('up_ratio')))} / "
@@ -277,9 +283,12 @@ def _breadth_html(snap: Dict[str, Any]) -> str:
         "<h2>宽广度 / 阿姆士</h2>"
         f"<p>{summary}</p>"
         f"{note}"
-        "<p class='muted'>小于1偏多，大于1偏空，等于1大致均衡。成交额口径；区间合成按各日涨跌家数与成交额加总。"
-        "上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>"
-        + _table(["日期", "上涨", "下跌", "上涨占比", "TRIN", "结构"], body, ["18%", "14%", "14%", "18%", "16%", "20%"])
+        f"<p class='muted'>{_esc(BREADTH_CALIBER_NOTE)}</p>"
+        + _table(
+            ["日期", "上涨", "下跌", "上涨占比", "涨额占比", "额价差", "TRIN", "结构"],
+            body,
+            ["14%", "10%", "10%", "12%", "12%", "12%", "12%", "18%"],
+        )
     )
 
 

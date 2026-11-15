@@ -52,8 +52,25 @@ export const cupbApi = {
       [k: string]: unknown
     }>(`${PREFIX}/precompute/trigger`, body)
   },
+  stockHistory(params: {
+    code: string
+    start_date?: string
+    end_date?: string
+    config_id?: number
+  }) {
+    return apiService.get<{
+      code?: string
+      name?: string
+      items: any[]
+      total?: number
+      start_date?: string
+      end_date?: string
+    }>(`${PREFIX}/signal-history`, { params })
+  },
   listSignals(params: {
-    trade_date: string
+    trade_date?: string
+    start_date?: string
+    end_date?: string
     config_id?: number
     status?: string
     code?: string

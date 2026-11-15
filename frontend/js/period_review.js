@@ -280,19 +280,18 @@ function breadthSection(breadth) {
     if (!series.length) {
         return '<p class="dr-summary">区间内暂无宽广度 / 阿姆士数据。请先完成日复盘，再重算本区间。</p>';
     }
-    const hint = trinHint(b.avg_trin);
-    const periodHint = trinHint(b.period_trin);
     const start = b.start || {};
     const end = b.end || {};
     const gap = b.gap_note ? `<p class="dr-summary">${esc(b.gap_note)}</p>` : '';
     return `
         ${gap}
         <p class="dr-summary">日均上涨占比 ${pctRatio(b.avg_up_ratio)}，普涨 ${b.broad_up_days || 0} 天、分歧 ${b.mixed_days || 0} 天、普跌 ${b.broad_down_days || 0} 天。日均跌停 ${fmt(b.avg_limit_down)} 家。</p>
-        <p class="dr-summary">阿姆士(TRIN，成交额口径) 日均 ${fmt(b.avg_trin)}${hint ? '（' + esc(hint) + '）' : ''}，小于1共 ${b.trin_lt1_days || 0} 天，大于1共 ${b.trin_gt1_days || 0} 天，等于1共 ${b.trin_eq1_days || 0} 天。区间合成 TRIN ${fmt(b.period_trin)}${periodHint ? '（' + esc(periodHint) + '）' : ''}。</p>
+        <p class="dr-summary">日均涨额占比 ${pctRatio(b.avg_up_amount_ratio)}，日均额价差 ${spreadPp(b.avg_amount_spread)} 个百分点。指数型反弹 ${b.index_rebound_days || 0} 天。</p>
+        <p class="dr-summary">阿姆士(TRIN，成交额口径) 日均 ${fmt(b.avg_trin)}${perCapitaText(b.avg_trin)}，小于1共 ${b.trin_lt1_days || 0} 天，大于1共 ${b.trin_gt1_days || 0} 天，等于1共 ${b.trin_eq1_days || 0} 天。区间合成 TRIN ${fmt(b.period_trin)}。</p>
         <p class="dr-summary">期初 ${esc(start.trade_date || '—')} 上涨占比 ${pctRatio(start.up_ratio)}、TRIN ${fmt(start.trin)} → 期末 ${esc(end.trade_date || '—')} 上涨占比 ${pctRatio(end.up_ratio)}、TRIN ${fmt(end.trin)}。</p>
-        <p class="dr-summary">小于1偏多，大于1偏空，等于1大致均衡。区间合成按各日涨跌家数与成交额加总。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>
-        ${table(['日期', '上涨', '下跌', '上涨占比', 'TRIN', '结构'], series.map(r => [
-            esc(r.trade_date), intText(r.up_count), intText(r.down_count), pctRatio(r.up_ratio), fmt(r.trin), esc(r.breadth_label || '—')
+        <p class="dr-summary">成交额口径。上涨股人均成交额约为下跌股的 1/TRIN 倍，不单独当成多空。区间合成 TRIN 按各日涨跌家数与成交额加总。额价差按每日先算再平均。上涨家数不少于下跌家数的 1.5 倍记普涨，反之为普跌，其余为分歧。</p>
+        ${table(['日期', '上涨', '下跌', '上涨占比', '涨额占比', '额价差', 'TRIN', '结构'], series.map(r => [
+            esc(r.trade_date), intText(r.up_count), intText(r.down_count), pctRatio(r.up_ratio), pctRatio(r.up_amount_ratio), spreadPp(r.amount_spread), fmt(r.trin), esc(r.breadth_label || '—')
         ]))}
     `;
 }
@@ -304,12 +303,19 @@ function pctRatio(v) {
     return `${(n * 100).toFixed(1)}%`;
 }
 
-function trinHint(v) {
+function spreadPp(v) {
+    if (v == null || v === '') return '—';
     const n = Number(v);
-    if (!Number.isFinite(n)) return '';
-    if (n < 1) return '偏多';
-    if (n > 1) return '偏空';
-    return '均衡';
+    if (!Number.isFinite(n)) return '—';
+    const pp = n * 100;
+    const text = pp.toFixed(1);
+    return pp > 0 ? `+${text}` : text;
+}
+
+function perCapitaText(trin) {
+    const n = Number(trin);
+    if (!Number.isFinite(n) || n <= 0) return '';
+    return `，上涨股人均成交额约为下跌股的 ${(1 / n).toFixed(1)} 倍`;
 }
 
 function industryText(v) {
@@ -377,7 +383,7 @@ function stock(row) {
     return `<span class="dr-stock"><a class="dr-stock-link" href="${esc(href)}" target="_blank" rel="noopener noreferrer">${esc(name)}</a><span class="dr-code">${esc(code)}</span></span>`;
 }
 
-const NUM_HEADERS = ['期初收盘', '期末收盘', '区间涨跌%', '高度', '连板', '成交(万亿)', '达标天数', '上榜天数', '封单(亿)', '上涨', '下跌', '上涨占比', 'TRIN'];
+const NUM_HEADERS = ['期初收盘', '期末收盘', '区间涨跌%', '高度', '连板', '成交(万亿)', '达标天数', '上榜天数', '封单(亿)', '上涨', '下跌', '上涨占比', '涨额占比', '额价差', 'TRIN'];
 
 function table(headers, rows) {
     const numAt = headers.map((h) => NUM_HEADERS.indexOf(h) >= 0);

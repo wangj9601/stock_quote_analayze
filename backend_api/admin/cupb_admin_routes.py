@@ -16,6 +16,7 @@ from backend_core.strategies.cup_bottom.config import CupbConfigManager
 from backend_core.strategies.cup_bottom.scheduled_precompute import run_cupb_precompute
 from backend_core.strategies.cup_bottom.signal_storage import (
     delete_traces_not_in_codes,
+    load_stock_signal_history,
     load_traces,
     upsert_signal_traces,
 )
@@ -237,7 +238,9 @@ def admin_trigger_precompute(
 
 @router.get("/signals")
 def admin_list_signals(
-    trade_date: str = Query(..., description="YYYY-MM-DD"),
+    trade_date: Optional[str] = Query(None, description="YYYY-MM-DD；单日"),
+    start_date: Optional[str] = Query(None, description="历史区间起 YYYY-MM-DD（含）"),
+    end_date: Optional[str] = Query(None, description="历史区间止 YYYY-MM-DD（含）"),
     config_id: Optional[int] = None,
     status: Optional[str] = None,
     code: Optional[str] = None,
@@ -250,11 +253,35 @@ def admin_list_signals(
         return load_traces(
             db,
             trade_date=trade_date,
+            start_date=start_date,
+            end_date=end_date,
             config_id=config_id,
             status=status,
             code=code,
             limit=limit,
             offset=offset,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/signal-history")
+def admin_stock_signal_history(
+    code: str = Query(..., description="股票代码"),
+    start_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    end_date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    config_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    _user: Admin = Depends(_require_admin),
+):
+    """个股杯底历史。config_id 为空时含全部参数版本。"""
+    try:
+        return load_stock_signal_history(
+            db,
+            code=code,
+            start_date=start_date,
+            end_date=end_date,
+            config_id=config_id,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

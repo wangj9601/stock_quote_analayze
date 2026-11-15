@@ -533,6 +533,8 @@ function bindEvents() {
             switchMarketTab(tabId);
         });
     });
+
+    bindIndexCatalog();
     
     // 点击指数卡片跳转指数详情分析
     document.querySelectorAll('.index-card').forEach(function(card) {
@@ -583,6 +585,171 @@ function switchMarketTab(tabId) {
         loadMarketIndices();
     } else if (tabId === 'hk-stock') {
         loadHKMarketIndices();
+    }
+
+    if (indexCatalogState.open) {
+        const search = document.getElementById('indexCatalogSearch');
+        indexCatalogState.keyword = '';
+        if (search) search.value = '';
+        loadIndexCatalog(true);
+    }
+}
+
+const indexCatalogState = {
+    open: false,
+    keyword: '',
+    page: 1,
+    pageSize: 40,
+    total: 0,
+    loaded: 0,
+    loading: false,
+    timer: null,
+    seq: 0,
+};
+
+function bindIndexCatalog() {
+    const entry = document.getElementById('indexCatalogEntry');
+    const closeBtn = document.getElementById('indexCatalogClose');
+    const search = document.getElementById('indexCatalogSearch');
+    const more = document.getElementById('indexCatalogMore');
+    if (!entry || entry.dataset.bound) return;
+    entry.dataset.bound = '1';
+
+    entry.addEventListener('click', function() {
+        setIndexCatalogOpen(!indexCatalogState.open);
+    });
+    if (closeBtn) {
+        closeBtn.addEventListener('click', function() {
+            setIndexCatalogOpen(false);
+        });
+    }
+    if (search) {
+        search.addEventListener('input', function() {
+            indexCatalogState.keyword = search.value || '';
+            if (indexCatalogState.timer) clearTimeout(indexCatalogState.timer);
+            indexCatalogState.timer = setTimeout(function() {
+                loadIndexCatalog(true);
+            }, 200);
+        });
+    }
+    if (more) {
+        more.addEventListener('click', function() {
+            if (indexCatalogState.loading) return;
+            if (indexCatalogState.loaded >= indexCatalogState.total) return;
+            indexCatalogState.page += 1;
+            loadIndexCatalog(false);
+        });
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && indexCatalogState.open) {
+            setIndexCatalogOpen(false);
+        }
+    });
+}
+
+function setIndexCatalogOpen(open) {
+    const panel = document.getElementById('indexCatalogPanel');
+    const entry = document.getElementById('indexCatalogEntry');
+    const search = document.getElementById('indexCatalogSearch');
+    indexCatalogState.open = !!open;
+    if (panel) panel.hidden = !open;
+    if (entry) entry.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) {
+        if (search) search.focus();
+        loadIndexCatalog(true);
+    }
+}
+
+function currentCatalogMarket() {
+    const active = document.querySelector('.market-tab.active');
+    return active && active.dataset.tab === 'hk-stock' ? 'hk' : 'a';
+}
+
+function escapeCatalogText(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function catalogHref(item) {
+    const code = item && item.code ? String(item.code) : '';
+    if (!code) return 'index_detail.html';
+    return 'index_detail.html?index=' + encodeURIComponent(code);
+}
+
+function renderCatalogRows(items, append) {
+    const list = document.getElementById('indexCatalogList');
+    if (!list) return;
+    const html = (items || []).map(function(item) {
+        const pct = typeof item.change_percent === 'number' ? item.change_percent : null;
+        const cls = pct > 0 ? 'positive' : pct < 0 ? 'negative' : '';
+        const pctText = pct == null ? '--' : (pct > 0 ? '+' : '') + pct.toFixed(2) + '%';
+        const price = typeof item.current === 'number' ? item.current.toFixed(2) : '--';
+        return '<li><a class="index-catalog-row" href="' + catalogHref(item) + '">'
+            + '<span><span class="index-catalog-name">' + escapeCatalogText(item.name || item.code) + '</span>'
+            + '<span class="index-catalog-code">' + escapeCatalogText(item.code) + '</span></span>'
+            + '<span class="index-catalog-price">' + price + '</span>'
+            + '<span class="index-catalog-pct ' + cls + '">' + pctText + '</span>'
+            + '</a></li>';
+    }).join('');
+    if (append) list.insertAdjacentHTML('beforeend', html);
+    else list.innerHTML = html;
+}
+
+async function loadIndexCatalog(reset) {
+    const status = document.getElementById('indexCatalogStatus');
+    const more = document.getElementById('indexCatalogMore');
+    if (!indexCatalogState.open) return;
+    if (!reset && indexCatalogState.loading) return;
+    if (reset) {
+        indexCatalogState.page = 1;
+        indexCatalogState.loaded = 0;
+        indexCatalogState.total = 0;
+    }
+    const seq = ++indexCatalogState.seq;
+    const append = !reset;
+    indexCatalogState.loading = true;
+    if (more) more.hidden = true;
+    if (status && reset) status.textContent = '正在读取指数…';
+    const params = new URLSearchParams({
+        market: currentCatalogMarket(),
+        keyword: indexCatalogState.keyword.trim(),
+        page: String(indexCatalogState.page),
+        page_size: String(indexCatalogState.pageSize),
+    });
+    try {
+        const response = await authFetch(API_BASE_URL + '/api/market/index-catalog?' + params.toString());
+        const result = await response.json();
+        if (seq !== indexCatalogState.seq) return;
+        if (!response.ok || !result.success) {
+            throw new Error((result && result.message) || '加载失败');
+        }
+        const rows = result.data || [];
+        renderCatalogRows(rows, append);
+        indexCatalogState.loaded += rows.length;
+        indexCatalogState.total = typeof result.total === 'number' ? result.total : indexCatalogState.loaded;
+        if (status) {
+            if (!indexCatalogState.total) {
+                status.textContent = indexCatalogState.keyword.trim()
+                    ? '没有匹配的指数'
+                    : '暂无其他指数';
+            } else if (indexCatalogState.keyword.trim()) {
+                status.textContent = '匹配 ' + indexCatalogState.total + ' 个';
+            } else {
+                status.textContent = '首页四只之外，还有 ' + indexCatalogState.total + ' 个';
+            }
+        }
+        if (more) more.hidden = indexCatalogState.loaded >= indexCatalogState.total;
+    } catch (error) {
+        if (seq !== indexCatalogState.seq) return;
+        console.error('指数目录加载失败:', error);
+        if (reset) renderCatalogRows([], false);
+        if (status) status.textContent = '指数列表加载失败，请稍后再试';
+        if (more) more.hidden = true;
+    } finally {
+        if (seq === indexCatalogState.seq) indexCatalogState.loading = false;
     }
 }
 

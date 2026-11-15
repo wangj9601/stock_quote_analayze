@@ -212,10 +212,12 @@
       <el-tab-pane label="信号结果" name="signals">
         <div class="toolbar">
           <el-date-picker
-            v-model="signalQuery.trade_date"
-            type="date"
+            v-model="signalRange"
+            type="daterange"
             value-format="YYYY-MM-DD"
-            placeholder="交易日"
+            start-placeholder="开始日"
+            end-placeholder="结束日"
+            range-separator="至"
           />
           <el-select v-model="signalQuery.config_id" clearable placeholder="配置" style="width: 200px">
             <el-option
@@ -231,9 +233,14 @@
           </el-select>
           <el-input v-model="signalQuery.code" clearable placeholder="代码" style="width: 120px" />
           <el-button type="primary" :loading="loadingSignals" @click="loadSignals">查询</el-button>
+          <el-button @click="openStockHistory()">个股历史</el-button>
           <el-button :disabled="!signalItems.length" @click="exportSignalsCsv">导出信号表</el-button>
         </div>
-        <div class="meta-line">共 {{ signalTotal }} 条 · 列表为摘要，点「明细」查看完整字段</div>
+        <div class="meta-line">
+          共 {{ signalTotal }} 条
+          <template v-if="signalItems.length && signalItems.length < signalTotal">，当前展示前 {{ signalItems.length }} 条</template>
+          · 同一天查当日，跨天查已入库历史 · 点「明细」查看完整字段
+        </div>
         <CupbGradeVolumeRulesPanel />
         <div class="cupb-table-wrap">
           <el-table
@@ -246,6 +253,7 @@
             style="width: 100%"
             table-layout="fixed"
           >
+            <el-table-column prop="date" label="信号日" width="112" />
             <el-table-column prop="code" label="代码" width="88" />
             <el-table-column prop="name" label="名称" min-width="100" show-overflow-tooltip />
             <el-table-column prop="status" label="状态" width="100">
@@ -292,15 +300,57 @@
             <el-table-column prop="last_close" label="收盘" width="80" align="right" />
             <el-table-column prop="cup_depth_pct" label="杯深%" width="80" align="right" />
             <el-table-column prop="confirm_date" label="确认日" width="112" />
-            <el-table-column label="操作" width="80" fixed="right" align="center">
+            <el-table-column label="操作" width="120" fixed="right" align="center">
               <template #default="{ row }">
                 <el-button link type="primary" @click="openSignalDetail(row)">明细</el-button>
+                <el-button link type="primary" @click="openStockHistory(row)">历史</el-button>
               </template>
             </el-table-column>
           </el-table>
         </div>
       </el-tab-pane>
     </el-tabs>
+
+    <el-dialog v-model="stockHistoryVisible" :title="stockHistoryTitle" width="920px">
+      <div class="toolbar">
+        <el-input v-model="stockHistoryForm.code" placeholder="股票代码" style="width: 140px" maxlength="6" />
+        <el-date-picker
+          v-model="stockHistoryForm.range"
+          type="daterange"
+          value-format="YYYY-MM-DD"
+          start-placeholder="开始日"
+          end-placeholder="结束日"
+          range-separator="至"
+        />
+        <el-button type="primary" :loading="loadingStockHistory" @click="loadStockHistory">查询</el-button>
+      </div>
+      <div class="meta-line">
+        {{ stockHistoryName }}共 {{ stockHistoryTotal }} 条
+        <template v-if="stockHistorySpan"> · {{ stockHistorySpan }}</template>
+        · 只读已入库信号，未填日期时查询该股全部历史
+      </div>
+      <el-table :data="stockHistoryItems" stripe border v-loading="loadingStockHistory" max-height="420">
+        <el-table-column prop="date" label="信号日" width="112" />
+        <el-table-column prop="status" label="状态" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'confirmed' ? 'success' : 'warning'" size="small">
+              {{ statusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="grade" label="等级" width="72" align="center" />
+        <el-table-column prop="volume_score" label="量价" width="72" align="center" />
+        <el-table-column prop="last_close" label="收盘" width="88" align="right" />
+        <el-table-column prop="rim" label="杯口" width="88" align="right" />
+        <el-table-column prop="cup_depth_pct" label="杯深%" width="88" align="right" />
+        <el-table-column prop="confirm_date" label="确认日" width="112" />
+        <el-table-column label="操作" width="80" align="center">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openSignalDetail(row)">明细</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
 
     <el-drawer
       v-model="detailVisible"
@@ -312,6 +362,7 @@
       <template v-if="detailRow">
         <h4 class="detail-section-title">基本信息</h4>
         <el-descriptions :column="1" border size="small" class="detail-desc">
+          <el-descriptions-item label="信号日">{{ detailRow.date || '—' }}</el-descriptions-item>
           <el-descriptions-item label="代码">{{ detailRow.code || '—' }}</el-descriptions-item>
           <el-descriptions-item label="名称">{{ detailRow.name || '—' }}</el-descriptions-item>
           <el-descriptions-item label="状态">
@@ -517,8 +568,9 @@ const precomputing = ref(false)
 const trialItems = ref<any[]>([])
 const trialMeta = ref<any>(null)
 
+const today = new Date().toISOString().slice(0, 10)
+const signalRange = ref<[string, string]>([today, today])
 const signalQuery = reactive({
-  trade_date: new Date().toISOString().slice(0, 10),
   config_id: undefined as number | undefined,
   status: '' as string,
   code: '',
@@ -526,6 +578,54 @@ const signalQuery = reactive({
 const signalItems = ref<any[]>([])
 const signalTotal = ref(0)
 const loadingSignals = ref(false)
+const stockHistoryVisible = ref(false)
+const loadingStockHistory = ref(false)
+const stockHistoryItems = ref<any[]>([])
+const stockHistoryTotal = ref(0)
+const stockHistoryName = ref('')
+const stockHistorySpan = ref('')
+const stockHistoryForm = reactive({
+  code: '',
+  range: null as [string, string] | null,
+})
+const stockHistoryTitle = computed(() => `${stockHistoryForm.code || '个股'} 杯底历史`)
+
+function openStockHistory(row?: any) {
+  const code = String(row?.code || signalQuery.code || '').trim()
+  stockHistoryForm.code = code
+  stockHistoryForm.range = null
+  stockHistoryVisible.value = true
+  if (code) void loadStockHistory()
+}
+
+async function loadStockHistory() {
+  const code = stockHistoryForm.code.trim()
+  if (!code) {
+    ElMessage.warning('请填写股票代码')
+    return
+  }
+  loadingStockHistory.value = true
+  try {
+    const range = stockHistoryForm.range
+    const data = await cupbApi.stockHistory({
+      code,
+      start_date: range?.[0],
+      end_date: range?.[1],
+      config_id: signalQuery.config_id,
+    })
+    stockHistoryItems.value = data.items || []
+    stockHistoryTotal.value = data.total ?? stockHistoryItems.value.length
+    stockHistoryName.value = data.name ? `${data.name} · ` : ''
+    stockHistorySpan.value = data.start_date && data.end_date ? `${data.start_date} 至 ${data.end_date}` : ''
+    if (data.start_date && data.end_date) {
+      stockHistoryForm.range = [data.start_date, data.end_date]
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.detail || e?.message || '个股历史查询失败')
+  } finally {
+    loadingStockHistory.value = false
+  }
+}
 
 function parseStockCodes(text: string): string[] {
   return text
@@ -536,6 +636,9 @@ function parseStockCodes(text: string): string[] {
 
 function sortByConfirmDateDesc(rows: any[]): any[] {
   return [...rows].sort((a, b) => {
+    const ta = String(a?.date || '')
+    const tb = String(b?.date || '')
+    if (ta !== tb) return tb.localeCompare(ta)
     const sa = a?.status === 'confirmed' ? 0 : 1
     const sb = b?.status === 'confirmed' ? 0 : 1
     if (sa !== sb) return sa - sb
@@ -671,7 +774,7 @@ async function onPrecompute() {
     ElMessage.success(
       `预计算完成 date=${data.trade_date ?? '-'} screened=${data.screened ?? '-'} hit=${data.hit_count ?? '-'} saved=${data.saved ?? '-'}`
     )
-    if (data.trade_date) signalQuery.trade_date = data.trade_date
+    if (data.trade_date) signalRange.value = [data.trade_date, data.trade_date]
     activeTab.value = 'signals'
     await loadSignals()
   } catch (e: any) {
@@ -682,18 +785,20 @@ async function onPrecompute() {
 }
 
 async function loadSignals() {
-  if (!signalQuery.trade_date) {
-    ElMessage.warning('请选择交易日')
+  const range = signalRange.value
+  if (!range || !range[0] || !range[1]) {
+    ElMessage.warning('请选择开始日和结束日')
     return
   }
   loadingSignals.value = true
   try {
     const data = await cupbApi.listSignals({
-      trade_date: signalQuery.trade_date,
+      start_date: range[0],
+      end_date: range[1],
       config_id: signalQuery.config_id,
       status: signalQuery.status || undefined,
       code: signalQuery.code || undefined,
-      limit: 500,
+      limit: 2000,
     })
     signalItems.value = sortByConfirmDateDesc(data.items || [])
     signalTotal.value = data.total ?? signalItems.value.length
@@ -706,6 +811,7 @@ async function loadSignals() {
 
 /** 试算/信号导出列：中文表头 + Excel 列宽（字符宽度） */
 const EXPORT_COLS: { key: string; title: string; width: number }[] = [
+  { key: 'date', title: '信号日', width: 12 },
   { key: 'code', title: '代码', width: 10 },
   { key: 'name', title: '名称', width: 14 },
   { key: 'status', title: '状态', width: 10 },
@@ -796,7 +902,10 @@ function exportTrialCsv() {
 }
 
 function exportSignalsCsv() {
-  exportCsv(`cupb_signals_${signalQuery.trade_date || 'export'}`, signalItems.value)
+  exportCsv(
+    `cupb_signals_${signalRange.value ? `${signalRange.value[0]}_${signalRange.value[1]}` : 'export'}`,
+    signalItems.value
+  )
   ElMessage.success('已导出信号表：Excel（含列宽）+ CSV（中文列名）')
 }
 

@@ -13,8 +13,12 @@
         <h3>筛选范围</h3>
         <div class="cupb-params">
             <div class="parameter-group">
-                <label for="cupbDate">基准日</label>
-                <input type="date" id="cupbDate" class="param-input" title="留空则用默认配置最新有信号日">
+                <label for="cupbDate">开始日</label>
+                <input type="date" id="cupbDate" class="param-input" title="留空则用最新有信号日；只填开始日则查该日">
+            </div>
+            <div class="parameter-group">
+                <label for="cupbEndDate">结束日</label>
+                <input type="date" id="cupbEndDate" class="param-input" title="与开始日组成闭区间；留空则只查开始日">
             </div>
             <div class="parameter-group">
                 <label for="cupbStatus">状态</label>
@@ -38,14 +42,16 @@
             </div>
         </div>
         <div id="cupbCnBoardWrap" class="cupb-cn-board-wrap"
-            title="可多选；不勾选表示不限 A 股板型（含主板等）。">
+            title="可多选；不勾选表示不限 A 股板型。">
             <span class="cupb-cn-board-label">板型筛选</span>
+            <label class="cupb-cn-board-opt"><input type="checkbox" name="cupbCnBoardSegment" value="MAIN">主板</label>
+            <label class="cupb-cn-board-opt"><input type="checkbox" name="cupbCnBoardSegment" value="SZ_SME">中小板</label>
             <label class="cupb-cn-board-opt"><input type="checkbox" name="cupbCnBoardSegment" value="CYB">创业板</label>
             <label class="cupb-cn-board-opt"><input type="checkbox" name="cupbCnBoardSegment" value="KCB">科创板</label>
             <label class="cupb-cn-board-opt"><input type="checkbox" name="cupbCnBoardSegment" value="BJ">北证</label>
             <span class="cupb-cn-board-hint">不选=不限板型</span>
         </div>
-        <p class="param-hint" id="cupbPoolHint">结果来自每日收盘流程节点 cupb_signals_cn。若当日尚无预计算，列表为空。</p>
+        <p class="param-hint" id="cupbPoolHint">只填开始日查该日；开始日和结束日都填则查已入库历史，区间含首尾、不限天数。都留空则用最新有信号日。</p>
     </div>
 
     <div class="screening-actions">
@@ -69,6 +75,7 @@
             <table class="results-table">
                 <thead>
                     <tr>
+                        <th>信号日</th>
                         <th>代码</th>
                         <th>名称</th>
                         <th>状态</th>
@@ -82,7 +89,7 @@
                 </thead>
                 <tbody id="cupbTableBody">
                     <tr>
-                        <td colspan="9" class="empty-state">点击「刷新筛选」加载信号</td>
+                        <td colspan="10" class="empty-state">点击「刷新筛选」加载信号</td>
                     </tr>
                 </tbody>
             </table>

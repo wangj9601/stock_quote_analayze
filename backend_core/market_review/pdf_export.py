@@ -9,6 +9,13 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence, Tuple
 
+from backend_core.market_review.rules import (
+    format_daily_breadth_clause,
+    format_pct_ratio,
+    format_spread_pp,
+    shanghai_pct,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -263,27 +270,20 @@ def build_daily_review_html(snapshot: Dict[str, Any]) -> str:
             f"上涨 {breadth.get('up_count', '—')} / 下跌 {breadth.get('down_count', '—')} / "
             f"跌停 {breadth.get('limit_down_count', '—')}"
         )
-        if breadth.get("up_ratio") is not None:
-            try:
-                env_bits.append(f"上涨占比 {round(float(breadth['up_ratio']) * 100, 1)}%")
-            except (TypeError, ValueError):
-                pass
-        if breadth.get("trin") is not None:
-            env_bits.append(f"阿姆士TRIN {_fmt(breadth.get('trin'))}")
+        clause = format_daily_breadth_clause(breadth, shanghai_pct(env.get("indexes")))
+        if clause:
+            env_bits.append(clause)
     series = env.get("breadth_series") or []
     series_rows = []
     for pt in series:
-        ur = pt.get("up_ratio")
-        try:
-            ur_txt = f"{round(float(ur) * 100, 1)}%" if ur is not None else "—"
-        except (TypeError, ValueError):
-            ur_txt = "—"
         series_rows.append(
             [
                 pt.get("trade_date") or "—",
                 pt.get("up_count", "—"),
                 pt.get("down_count", "—"),
-                ur_txt,
+                format_pct_ratio(pt.get("up_ratio")),
+                format_pct_ratio(pt.get("up_amount_ratio")),
+                format_spread_pp(pt.get("amount_spread")),
                 _fmt(pt.get("trin")),
             ]
         )
@@ -307,9 +307,9 @@ def build_daily_review_html(snapshot: Dict[str, Any]) -> str:
             n = env.get("breadth_series_days") or len(series_rows)
             env_html += f"<h3>近{n}日宽广度 / 阿姆士</h3>"
             env_html += _table(
-                ["日期", "上涨", "下跌", "上涨占比", "TRIN"],
+                ["日期", "上涨", "下跌", "上涨占比", "涨额占比", "额价差", "TRIN"],
                 series_rows,
-                ["22%", "16%", "16%", "20%", "26%"],
+                ["16%", "12%", "12%", "14%", "14%", "16%", "16%"],
             )
         if idx_body:
             env_html += _table(

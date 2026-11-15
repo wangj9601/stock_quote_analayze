@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>杯底 CUPB — 个股历史</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <link rel="stylesheet" href="css/common.css">
+    <link rel="stylesheet" href="css/design-tokens.css?v=20261017-w400-600">
+    <link rel="stylesheet" href="css/ops-shell.css">
+    <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
+    <link rel="stylesheet" href="css/ops-responsive.css">
+    <link rel="stylesheet" href="css/workbench-ops.css">
+    <link rel="stylesheet" href="css/screening.css">
+    <link rel="stylesheet" href="css/stock_gms_trace.css">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261021-trace-hl">
+</head>
+<body class="ops-map">
+    <script src="components/header.js"></script>
+    <script>loadHeader('screening');</script>
+    <main class="container">
+        <section class="gms-trace-card" aria-labelledby="cupbTraceTitle">
+            <h1 id="cupbTraceTitle" class="gms-trace-title">杯底 CUPB · 个股历史</h1>
+            <p class="gms-backtest-hint">
+                按代码查看已入库的杯底信号。只读 <code>cupb_signal_trace</code>，不在此重算。
+                未填日期时，查询该股全部已入库信号。
+            </p>
+            <form class="toolbar" id="cupbTraceForm">
+                <div class="toolbar-row">
+                    <label for="stockCode">股票代码
+                        <input type="text" id="stockCode" name="code" placeholder="600519" autocomplete="off" inputmode="numeric" maxlength="6" spellcheck="false">
+                    </label>
+                    <p class="csb-trace-name-line">名称 <strong id="stockDisplay">--</strong></p>
+                    <label for="startDate">开始日期
+                        <input type="date" id="startDate" name="start">
+                    </label>
+                    <label for="endDate">结束日期
+                        <input type="date" id="endDate" name="end">
+                    </label>
+                    <button id="searchBtn" type="submit">查询</button>
+                    <a id="stockLink" class="gms-op-btn" href="screening.html" hidden>个股详情</a>
+                </div>
+            </form>
+            <p id="metaMsg" class="gms-meta-text" aria-live="polite"></p>
+            <p id="loadingMsg" class="loading-msg" role="status" hidden>正在读取该股杯底信号…</p>
+            <p id="emptyMsg" class="empty-msg" role="status" hidden>这个区间没有该股的杯底信号</p>
+            <div class="table-wrapper">
+                <table class="trace-table" id="traceTable">
+                    <caption class="csb-trace-caption">杯底个股历史信号</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">信号日</th>
+                            <th scope="col">状态</th>
+                            <th scope="col">等级</th>
+                            <th scope="col">量价</th>
+                            <th scope="col">收盘</th>
+                            <th scope="col">杯口</th>
+                            <th scope="col">杯深%</th>
+                            <th scope="col">确认日</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+    <footer class="icp-footer">
+        <div class="icp-container">
+            <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">京ICP备18061239号-1</a>
+        </div>
+    </footer>
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/stock_cupb_trace.js?v=20261115-cupb-stock"></script>
+</body>
+</html>

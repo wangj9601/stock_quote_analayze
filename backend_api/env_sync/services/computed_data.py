@@ -725,7 +725,7 @@ def import_computed_results(
         _upsert_orm(
             db,
             RPESignalTrace,
-            pk_fields=("code", "trade_date", "market_type", "config_id"),
+            pk_fields=("code", "trade_date", "market_type", "config_id", "sector_id"),
             rows=prepared,
             result=result,
             skip_fields={"id"},

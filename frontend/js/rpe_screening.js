@@ -430,10 +430,7 @@
     const q = new URLSearchParams({
       scope,
       entry_only: String(entryOnly),
-      max_results:
-        scope === 'industry_board' || scope === 'concept_board' || scope === 'index_board'
-          ? '2000'
-          : '200',
+      max_results: '2000',
       adjust: adjustN,
     });
     if (date) q.set('date', date);
@@ -472,8 +469,8 @@
     const countEl = document.getElementById('rpeResultsCount');
     if (countEl) {
       countEl.textContent = filteredN > 0
-        ? `共 ${rows.length} 只（已过滤 ${filteredN}）`
-        : `共 ${rows.length} 只`;
+        ? `共 ${rows.length} 条（已过滤 ${filteredN}）`
+        : `共 ${rows.length} 条`;
     }
     const metaParts = [
       `日期 ${data.search_date || '-'}`,

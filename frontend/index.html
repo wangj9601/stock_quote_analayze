@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/design-tokens.css?v=20261110-font400">
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/home.css">
-    <link rel="stylesheet" href="css/home-ops.css?v=20260925a">
+    <link rel="stylesheet" href="css/home-ops.css?v=20261115-idx">
     <!-- 次要样式延后加载，缩短首屏阻塞链 -->
     <link rel="stylesheet" href="css/ops-data.css?v=20261008b" media="print" onload="this.media='all'">
     <link rel="stylesheet" href="css/ops-responsive.css" media="print" onload="this.media='all'">
@@ -37,6 +37,10 @@
                 <div class="market-tabs ops-territory-tabs">
                     <button class="market-tab active" data-tab="a-stock">A股</button>
                     <button class="market-tab" data-tab="hk-stock">港股</button>
+                    <button type="button" class="index-catalog-entry" id="indexCatalogEntry" aria-expanded="false" aria-controls="indexCatalogPanel">
+                        其他指数
+                        <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M6 3.5L10.5 8 6 12.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+                    </button>
                 </div>
                 
                 <!-- A股标签页内容 -->
@@ -122,6 +126,17 @@
                         </div>
                     </div>
                 </div>
+
+                <div id="indexCatalogPanel" class="index-catalog" hidden>
+                    <div class="index-catalog-head">
+                        <label for="indexCatalogSearch">搜索指数</label>
+                        <input id="indexCatalogSearch" class="index-catalog-search" type="search" placeholder="搜索代码或名称" autocomplete="off" enterkeyhint="search">
+                        <button type="button" class="index-catalog-close" id="indexCatalogClose">收起</button>
+                    </div>
+                    <p id="indexCatalogStatus" class="index-catalog-status" role="status"></p>
+                    <ul id="indexCatalogList" class="index-catalog-list"></ul>
+                    <button type="button" class="index-catalog-more" id="indexCatalogMore" hidden>继续加载</button>
+                </div>
             </div>
         </section>
 
@@ -199,6 +214,6 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/home.js"></script>
+    <script src="js/home.js?v=20261115-idx"></script>
 </body>
 </html> 

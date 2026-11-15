@@ -58,6 +58,7 @@ def resolve_index_identity(db: Session, raw: str) -> Dict[str, Any]:
     ts_code = to_index_ts_code(display or raw)
     code = display or normalize_index_display_code(ts_code) or str(raw).strip()
     name = KNOWN_INDEX_NAMES.get(code) or ""
+    has_rt = False
 
     if not name:
         try:
@@ -77,6 +78,7 @@ def resolve_index_identity(db: Session, raw: str) -> Dict[str, Any]:
             ).fetchone()
             if row and row[0]:
                 name = str(row[0])
+                has_rt = True
         except Exception:
             try:
                 db.rollback()
@@ -123,7 +125,8 @@ def resolve_index_identity(db: Session, raw: str) -> Dict[str, Any]:
         except Exception:
             pass
 
-    if not has_hist and code not in KNOWN_INDEX_NAMES:
+    # 实时表已有行情即可进入详情；日线可能尚未归档。
+    if not has_hist and not has_rt and code not in KNOWN_INDEX_NAMES:
         return {
             "ok": False,
             "message": f"未找到指数 {code}",

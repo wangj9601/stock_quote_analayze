@@ -232,9 +232,10 @@ D = P - S,\quad U = R_{res} - P,\quad
 
 ## 8. 主板块与去重
 
+- **日终预计算**：以同花顺**概念板块**为处理单位。逐个概念用其成分股做量权基准 \(I_t\)，只落库该概念上的 `catch_up` / `lead`。同一股票属于多个概念时各写一行（唯一键含 `sector_id`），不跨概念去重，也不按 `scan.max_results` 截成 200 条。全量重跑会先清掉该日该配置的旧 trace。`max_boards` 有值时只重写被扫到的概念。  
 - **单股 / 自选 / 强制重算**：每只股票固定**一个主板块**——优先同花顺行业成分（`board_code_source=tonghuashun`）；同 kind 取成分最多，并列 `board_code` 升序；无同花顺行业则回退同花顺概念。追溯全历史同一板块。  
 - **列表「板块」列**：与建簇/选板一致；无同花顺行业映射时回退 `stock_basic_info.industry` 并标注「（基础信息）」，再无则 `--`。  
-- **显式多选板块**撞车：保留 `|Z|` 最大的一条，再截断 `max_results`。
+- **选股页显式多选板块**撞车：仍走 `screen()`，保留 `|Z|` 最大的一条，再截断 `max_results`。这与日终概念预计算不是同一条路径。
 
 排序（降序）：`entry_signal` → `catch_up` → `|z_score|`。
 
@@ -271,7 +272,7 @@ D = P - S,\quad U = R_{res} - P,\quad
 | 行情 | `historical_quotes` |
 | 成分 | `industry_board_constituents` / 概念成分 |
 | 信号表 | `rpe_signal_trace`（按 `config_id`） |
-| 日终 | `rpe_signals_cn`，约 19:40，`ENABLE_RPE_PRECOMPUTE` |
+| 日终 | `rpe_signals_cn`，约 19:40，`ENABLE_RPE_PRECOMPUTE`；按同花顺概念板块逐板预计算 |
 | 强制重算 | 追溯页 → 按主板块逐日回写；每日 Z/KDE 仍截断为 `lookback_days` |
 | `signal_hit_rate` | N 日内是否触及目标相对涨幅且未先破位 |
 | `trade_simulation` | T+1 开盘入；离场：破位 / 触及阻力 / horizon |

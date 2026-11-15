@@ -14,9 +14,16 @@ from sqlalchemy.orm import Session
 from backend_core.market_review.compute import (
     calc_arms_trin,
     concept_matches_focus,
+    ensure_breadth_reading,
     summarize_breadth_rows,
 )
-from backend_core.market_review.rules import BREADTH_RATIO
+from backend_core.market_review.rules import (
+    BREADTH_RATIO,
+    format_spread_pp,
+    is_index_rebound,
+    per_capita_multiple,
+    shanghai_pct,
+)
 from backend_core.market_review.period_picks import (
     apply_period_triggers,
     assemble_period_picks,
@@ -177,15 +184,19 @@ def _breadth_tag(up: Any, down: Any) -> str:
     return "mixed"
 
 
-def _trin_bias(trin: Any) -> str:
-    n = _f(trin)
-    if n is None:
-        return ""
-    if n < 1:
-        return "偏多"
-    if n > 1:
-        return "偏空"
-    return "均衡"
+def _row_market_env(row: Dict[str, Any]) -> Dict[str, Any]:
+    return _as_dict(_as_dict(row.get("rules_json")).get("market_env"))
+
+
+def _row_index_rebound(row: Dict[str, Any]) -> bool:
+    breadth = _breadth_of_row(row)
+    flag = breadth.get("index_rebound")
+    if flag is True or flag is False:
+        return bool(flag)
+    sh = _f(breadth.get("sh_pct"))
+    if sh is None:
+        sh = shanghai_pct(_row_market_env(row).get("indexes"))
+    return is_index_rebound(breadth, sh)
 
 
 def _pct_text(ratio: Any) -> str:
@@ -196,12 +207,13 @@ def _pct_text(ratio: Any) -> str:
 
 
 def breadth_blurb(breadth: Dict[str, Any]) -> str:
-    """周/月观点里的一句宽广度与阿姆士结论。"""
+    """周/月观点里的一句宽广度、额价差与阿姆士结论。"""
     if not breadth or not int(breadth.get("covered_days") or 0):
         return ""
     trin = breadth.get("avg_trin")
-    hint = _trin_bias(trin)
     trin_txt = "—" if trin is None else f"{float(trin):.2f}"
+    mult = per_capita_multiple(trin)
+    mult_txt = f"，上涨股人均成交额约为下跌股的 {mult} 倍" if mult is not None else ""
     parts = [
         (
             f"宽广度日均上涨占比 {_pct_text(breadth.get('avg_up_ratio'))}，"
@@ -210,18 +222,18 @@ def breadth_blurb(breadth: Dict[str, Any]) -> str:
             f"普跌 {int(breadth.get('broad_down_days') or 0)} 天。"
         ),
         (
-            f"阿姆士日均 TRIN {trin_txt}"
-            f"{('（' + hint + '）') if hint else ''}，"
+            f"日均涨额占比 {_pct_text(breadth.get('avg_up_amount_ratio'))}，"
+            f"日均额价差 {format_spread_pp(breadth.get('avg_amount_spread'))} 个百分点，"
+            f"指数型反弹 {int(breadth.get('index_rebound_days') or 0)} 天。"
+        ),
+        (
+            f"阿姆士日均 TRIN {trin_txt}{mult_txt}，"
             f"小于1共 {int(breadth.get('trin_lt1_days') or 0)} 天，"
             f"大于1共 {int(breadth.get('trin_gt1_days') or 0)} 天。"
         ),
     ]
     if breadth.get("period_trin") is not None:
-        period_hint = _trin_bias(breadth.get("period_trin"))
-        parts.append(
-            f"区间合成 TRIN {float(breadth['period_trin']):.2f}"
-            f"{('（' + period_hint + '）') if period_hint else ''}。"
-        )
+        parts.append(f"区间合成 TRIN {float(breadth['period_trin']):.2f}。")
     return "".join(parts)
 
 
@@ -250,14 +262,19 @@ def summarize_period_breadth(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
                 "up_amount": breadth.get("up_amount"),
                 "down_amount": breadth.get("down_amount"),
                 "up_ratio": breadth.get("up_ratio"),
+                "up_amount_ratio": breadth.get("up_amount_ratio"),
+                "amount_spread": breadth.get("amount_spread"),
                 "trin": breadth.get("trin"),
                 "trin_basis": breadth.get("trin_basis") or "amount",
+                "index_rebound": _row_index_rebound(row),
                 "breadth_tag": tag,
                 "breadth_label": _BREADTH_LABEL.get(tag, "—"),
             }
         )
 
     ratios = [p.get("up_ratio") for p in series]
+    amount_ratios = [p.get("up_amount_ratio") for p in series]
+    spreads = [p.get("amount_spread") for p in series]
     trins = [p.get("trin") for p in series if _f(p.get("trin")) is not None]
     limit_downs = [p.get("limit_down_count") for p in series]
     sum_up = sum_down = 0
@@ -279,6 +296,8 @@ def summarize_period_breadth(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         amount_days += 1
     period_trin = calc_arms_trin(sum_up, sum_down, sum_up_amt, sum_down_amt) if amount_days else None
     avg_ratio = _avg(ratios)
+    avg_amount_ratio = _avg(amount_ratios)
+    avg_spread = _avg(spreads)
     avg_trin = _avg(trins)
     avg_ld = _avg(limit_downs)
     trin_nums = [float(t) for t in trins]
@@ -303,6 +322,9 @@ def summarize_period_breadth(rows: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
         "series": series,
         "covered_days": covered,
         "avg_up_ratio": None if avg_ratio is None else round(avg_ratio, 4),
+        "avg_up_amount_ratio": None if avg_amount_ratio is None else round(avg_amount_ratio, 4),
+        "avg_amount_spread": None if avg_spread is None else round(avg_spread, 4),
+        "index_rebound_days": sum(1 for p in series if p.get("index_rebound")),
         "avg_trin": None if avg_trin is None else round(avg_trin, 4),
         "avg_limit_down": None if avg_ld is None else round(avg_ld, 1),
         "period_trin": period_trin,
@@ -340,30 +362,33 @@ def fill_missing_breadth(db: Session, rows: List[Dict[str, Any]]) -> None:
         day = _d(row.get("trade_date"))
         if not day:
             continue
-        if breadth.get("trin") is None or breadth.get("up_ratio") is None:
+        if (
+            breadth.get("trin") is None
+            or breadth.get("up_ratio") is None
+            or "up_amount_ratio" not in breadth
+        ):
             missing.append(day)
-    if not missing:
-        return
     by_date: Dict[str, List[Any]] = {day: [] for day in missing}
-    try:
-        fetched = db.execute(
-            text(
-                """
-                SELECT date, code, name, change_percent, amount
-                FROM historical_quotes
-                WHERE date = ANY(:dates) AND change_percent IS NOT NULL
-                """
-            ),
-            {"dates": missing},
-        ).fetchall()
-        for item in fetched:
-            key = str(item[0])[:10]
-            if key in by_date:
-                by_date[key].append((item[1], item[2], item[3], item[4]))
-    except Exception:
-        logger.exception("周期宽广度补齐失败")
-        db.rollback()
-        return
+    if missing:
+        try:
+            fetched = db.execute(
+                text(
+                    """
+                    SELECT date, code, name, change_percent, amount
+                    FROM historical_quotes
+                    WHERE date = ANY(:dates) AND change_percent IS NOT NULL
+                    """
+                ),
+                {"dates": missing},
+            ).fetchall()
+            for item in fetched:
+                key = str(item[0])[:10]
+                if key in by_date:
+                    by_date[key].append((item[1], item[2], item[3], item[4]))
+        except Exception:
+            logger.exception("周期宽广度补齐失败")
+            db.rollback()
+            by_date = {}
     for row in rows:
         day = _d(row.get("trade_date"))
         if day not in by_date:
@@ -375,6 +400,23 @@ def fill_missing_breadth(db: Session, rows: List[Dict[str, Any]]) -> None:
         env = _as_dict(rules.get("market_env"))
         old = env.get("breadth") if isinstance(env.get("breadth"), dict) else {}
         env["breadth"] = {**old, **computed}
+        rules["market_env"] = env
+        row["rules_json"] = rules
+    for row in rows:
+        day = _d(row.get("trade_date"))
+        if not day:
+            continue
+        rules = _as_dict(row.get("rules_json"))
+        env = _as_dict(rules.get("market_env"))
+        breadth = env.get("breadth")
+        if not isinstance(breadth, dict) or not breadth:
+            continue
+        try:
+            ensure_breadth_reading(db, day, env)
+        except Exception:
+            logger.exception("周期指数型反弹补齐失败 %s", day)
+            db.rollback()
+            continue
         rules["market_env"] = env
         row["rules_json"] = rules
 

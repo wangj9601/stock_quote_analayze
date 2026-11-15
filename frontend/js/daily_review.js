@@ -241,7 +241,7 @@ const DailyReviewPage = {
         const indSum = document.getElementById('drIndustryConfirmSummary');
         if (indSum) indSum.textContent = '';
         this.fillBody('drIndexBody', 6, []);
-        this.fillBody('drBreadthSeriesBody', 5, []);
+        this.fillBody('drBreadthSeriesBody', 7, []);
         this.renderBreadthSpark([]);
         const breadthHint = document.getElementById('drBreadthHint');
         if (breadthHint) breadthHint.textContent = '宽广度 / 阿姆士：暂无数据';
@@ -306,12 +306,37 @@ const DailyReviewPage = {
         return `${this.fmt(n * 100, 1)}%`;
     },
 
-    trinHint(trin) {
+    spreadPp(v) {
+        if (v == null || v === '') return '--';
+        const n = Number(v);
+        if (!Number.isFinite(n)) return '--';
+        const pp = n * 100;
+        const text = pp.toFixed(1);
+        return pp > 0 ? `+${text}` : text;
+    },
+
+    perCapita(trin) {
         const n = Number(trin);
-        if (!Number.isFinite(n)) return '';
-        if (n < 1) return '偏多';
-        if (n > 1) return '偏空';
-        return '均衡';
+        if (!Number.isFinite(n) || n <= 0) return '';
+        return (1 / n).toFixed(1);
+    },
+
+    breadthClause(breadth) {
+        const b = breadth || {};
+        if (b.up_ratio == null && b.trin == null && b.up_amount_ratio == null) return '';
+        const bits = [`上涨占比 ${this.pctRatio(b.up_ratio)}`];
+        if (b.up_amount_ratio != null) bits.push(`涨额占比 ${this.pctRatio(b.up_amount_ratio)}`);
+        if (b.amount_spread != null) bits.push(`额价差 ${this.spreadPp(b.amount_spread)} 个百分点`);
+        let line = `市场宽广度：${bits.join('；')}。`;
+        if (b.trin != null) {
+            line += `阿姆士(TRIN，成交额口径) ${this.fmt(b.trin)}`;
+            const mult = this.perCapita(b.trin);
+            if (mult) line += `，上涨股人均成交额约为下跌股的 ${mult} 倍`;
+            line += '。';
+        }
+        if (b.index_rebound) line += '量集中在少数上涨股。';
+        else if (b.amount_aligned) line += '上涨家数与成交额同向。';
+        return line;
     },
 
     renderBreadthSpark(series) {
@@ -618,7 +643,7 @@ const DailyReviewPage = {
                 const n = Number(delta);
                 deltaTxt = `${n > 0 ? '+' : ''}${this.fmt(n, 0)}`;
             }
-            const trinHint = this.trinHint(breadth.trin);
+            const perCapita = this.perCapita(breadth.trin);
             metrics.innerHTML = `
               <div class="dr-metric"><span>Vol(万亿)</span><strong>${this.fmt(data.vol_trillion)}</strong></div>
               <div class="dr-metric"><span>较昨日(亿)</span><strong>${deltaTxt}</strong></div>
@@ -627,7 +652,9 @@ const DailyReviewPage = {
               <div class="dr-metric"><span>平盘</span><strong>${breadth.flat_count == null ? '--' : breadth.flat_count}</strong></div>
               <div class="dr-metric"><span>上涨/下跌</span><strong>${this.breadthText(data)}</strong></div>
               <div class="dr-metric"><span>上涨占比</span><strong>${this.pctRatio(breadth.up_ratio)}</strong></div>
-              <div class="dr-metric"><span>阿姆士TRIN</span><strong>${this.fmt(breadth.trin)}</strong>${trinHint ? `<em>${this.escapeHtml(trinHint)}</em>` : ''}</div>
+              <div class="dr-metric"><span>涨额占比</span><strong>${this.pctRatio(breadth.up_amount_ratio)}</strong></div>
+              <div class="dr-metric"><span>额价差</span><strong>${this.spreadPp(breadth.amount_spread)}</strong></div>
+              <div class="dr-metric"><span>阿姆士TRIN</span><strong>${this.fmt(breadth.trin)}</strong>${perCapita ? `<em>人均${this.escapeHtml(perCapita)}倍</em>` : ''}</div>
               <div class="dr-metric"><span>CB连板</span><strong>${this.fmt(data.cb_count, 0)}</strong></div>
               <div class="dr-metric"><span>高度H</span><strong>${this.fmt(data.height, 0)}</strong></div>
               <div class="dr-metric"><span>昨连板收益%</span><strong>${this.fmt(data.prev_cb_return)}</strong></div>
@@ -650,12 +677,8 @@ const DailyReviewPage = {
             }
             if (env.above_2t) line += '，站上 2 万亿';
             line += `。上涨 ${breadth.up_count == null ? '--' : breadth.up_count} 家，下跌 ${breadth.down_count == null ? '--' : breadth.down_count} 家，平盘 ${breadth.flat_count == null ? '--' : breadth.flat_count} 家；涨停 ${data.limit_up_count == null ? '--' : data.limit_up_count}，跌停 ${breadth.limit_down_count == null ? '--' : breadth.limit_down_count}。`;
-            if (breadth.up_ratio != null || breadth.trin != null) {
-                line += ` 宽广度上涨占比 ${this.pctRatio(breadth.up_ratio)}，阿姆士TRIN ${this.fmt(breadth.trin)}`;
-                const th = this.trinHint(breadth.trin);
-                if (th) line += `（${th}）`;
-                line += '。';
-            }
+            const clause = this.breadthClause(breadth);
+            if (clause) line += ` ${clause}`;
             envSum.textContent = line;
         }
         const marginSum = document.getElementById('drMarginSummary');
@@ -704,13 +727,15 @@ const DailyReviewPage = {
         this.renderBreadthSpark(series);
         this.fillBody(
             'drBreadthSeriesBody',
-            5,
+            7,
             series.map(
                 (pt) => `<tr>
                     <td>${this.escapeHtml(pt.trade_date || '--')}</td>
                     <td class="num">${pt.up_count == null ? '--' : this.escapeHtml(pt.up_count)}</td>
                     <td class="num">${pt.down_count == null ? '--' : this.escapeHtml(pt.down_count)}</td>
                     <td class="num">${this.pctRatio(pt.up_ratio)}</td>
+                    <td class="num">${this.pctRatio(pt.up_amount_ratio)}</td>
+                    <td class="num">${this.spreadPp(pt.amount_spread)}</td>
                     <td class="num">${this.fmt(pt.trin)}</td>
                 </tr>`
             )

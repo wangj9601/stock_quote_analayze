@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 # 板块/代码段：与前端 checkbox value 一致（大写）
 VSB_BOARD_PREFIX_GROUPS: Dict[str, Tuple[str, ...]] = {
-    "CYB": ("300",),  # 创业板
-    "KCB": ("688",),  # 科创板
+    "CYB": ("300", "301"),  # 创业板
+    "KCB": ("688", "689"),  # 科创板
     "SH_MAIN": ("600", "601", "602", "603", "605"),  # 沪市主板（不含 688）
     "SZ_MAIN": ("000", "001"),  # 深市主板
     "SZ_SME": ("002",),  # 深圳中小板

@@ -6,6 +6,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from backend_core.market_review.rules import (
+    format_daily_breadth_clause,
+    format_pct_ratio,
+    format_spread_pp,
+    shanghai_pct,
+)
+
 
 def _fmt(v: Any, digits: int = 2) -> str:
     if v is None:
@@ -215,19 +222,10 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
                 f"平盘 {breadth.get('flat_count', '--')} 家；涨停 {zt if zt is not None else '--'}，"
                 f"跌停 {breadth.get('limit_down_count', '--')}。"
             )
-            up_ratio = breadth.get("up_ratio")
-            trin = breadth.get("trin")
-            ratio_txt = (
-                f"{round(float(up_ratio) * 100, 1)}%"
-                if up_ratio is not None
-                else "--"
-            )
-            trin_txt = _fmt(trin)
-            lines.append(
-                f"市场宽广度：上涨占比 {ratio_txt}；阿姆士(TRIN，成交额口径) {trin_txt}"
-                f"（小于1偏多，大于1偏空，等于1大致均衡）。"
-            )
-            lines.append("")
+            clause = format_daily_breadth_clause(breadth, shanghai_pct(indexes))
+            if clause:
+                lines.append(clause)
+                lines.append("")
         series = env.get("breadth_series") or []
         series_n = env.get("breadth_series_days") or len(series)
         if series:
@@ -235,20 +233,16 @@ def render_markdown(snapshot: Dict[str, Any]) -> str:
             lines.append("")
             lines.extend(
                 [
-                    "| 日期 | 上涨 | 下跌 | 上涨占比 | TRIN |",
-                    "| :--- | :--- | :--- | :--- | :--- |",
+                    "| 日期 | 上涨 | 下跌 | 上涨占比 | 涨额占比 | 额价差(百分点) | TRIN |",
+                    "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
                 ]
             )
             for pt in series:
-                ur = pt.get("up_ratio")
-                ur_txt = (
-                    f"{round(float(ur) * 100, 1)}%"
-                    if ur is not None
-                    else "--"
-                )
                 lines.append(
                     f"| {pt.get('trade_date') or '--'} | {pt.get('up_count', '--')} | "
-                    f"{pt.get('down_count', '--')} | {ur_txt} | {_fmt(pt.get('trin'))} |"
+                    f"{pt.get('down_count', '--')} | {format_pct_ratio(pt.get('up_ratio'))} | "
+                    f"{format_pct_ratio(pt.get('up_amount_ratio'))} | "
+                    f"{format_spread_pp(pt.get('amount_spread'))} | {_fmt(pt.get('trin'))} |"
                 )
             lines.append("")
         if indexes:

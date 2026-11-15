@@ -21,6 +21,7 @@ from backend_core.market_review.picks import build_review_picks
 from backend_core.market_review.render import export_markdown_file, render_markdown
 from backend_core.market_review.rules import (
     PERCENTILE_MIN_SAMPLE,
+    apply_breadth_reading,
     build_sentiment,
     build_trend_rules,
     classify_season,
@@ -29,6 +30,7 @@ from backend_core.market_review.rules import (
     draft_advice,
     draft_viewpoint,
     evaluate_hard_gates,
+    shanghai_pct,
     yuan_to_yi,
 )
 
@@ -353,6 +355,117 @@ def _safe(v: Any) -> Optional[float]:
         return float(v) if v is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _pct_change(close: Any, prev: Any) -> Optional[float]:
+    current = _safe(close)
+    previous = _safe(prev)
+    if current is None or previous is None or previous == 0:
+        return None
+    return round((current - previous) / previous * 100.0, 4)
+
+
+def _previous_index_close(db: Session, ts_code: str, trade_date: str) -> Optional[float]:
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT close
+                FROM index_historical_quotes
+                WHERE ts_code = :ts
+                  AND trade_date < CAST(:d AS date)
+                  AND close IS NOT NULL
+                ORDER BY trade_date DESC
+                LIMIT 1
+                """
+            ),
+            {"ts": ts_code, "d": trade_date[:10]},
+        ).scalar()
+    except Exception:
+        logger.exception("指数前收查询失败 ts=%s", ts_code)
+        db.rollback()
+        return None
+    return _safe(row)
+
+
+def resolve_index_pct(
+    db: Session,
+    ts_code: str,
+    trade_date: str,
+    close: Any = None,
+    pre_close: Any = None,
+    pct_chg: Any = None,
+) -> Optional[float]:
+    """pct_chg 为空时用前收或上一交易日收盘补涨跌幅。"""
+    pct = _safe(pct_chg)
+    if pct is not None:
+        return pct
+    current = _safe(close)
+    previous = _safe(pre_close)
+    if current is None:
+        try:
+            row = db.execute(
+                text(
+                    """
+                    SELECT close, pre_close, pct_chg
+                    FROM index_historical_quotes
+                    WHERE ts_code = :ts AND trade_date = CAST(:d AS date)
+                    """
+                ),
+                {"ts": ts_code, "d": trade_date[:10]},
+            ).mappings().first()
+        except Exception:
+            logger.exception("指数涨跌幅查询失败 ts=%s", ts_code)
+            db.rollback()
+            row = None
+        if row:
+            pct = _safe(row.get("pct_chg"))
+            if pct is not None:
+                return pct
+            current = _safe(row.get("close"))
+            if previous is None:
+                previous = _safe(row.get("pre_close"))
+    got = _pct_change(current, previous)
+    if got is not None:
+        return got
+    if current is None:
+        return None
+    return _pct_change(current, _previous_index_close(db, ts_code, trade_date))
+
+
+def _index_code(idx: Dict[str, Any]) -> str:
+    code = str(idx.get("ts_code") or "").strip()
+    if code:
+        return code
+    if "上证" in str(idx.get("name") or ""):
+        return "000001.SH"
+    return ""
+
+
+def fill_missing_index_pct(db: Session, trade_date: str, indexes: Sequence[Any]) -> None:
+    for idx in indexes:
+        if not isinstance(idx, dict) or _safe(idx.get("pct_chg")) is not None:
+            continue
+        code = _index_code(idx)
+        if not code:
+            continue
+        pct = resolve_index_pct(db, code, trade_date, idx.get("close"))
+        if pct is not None:
+            idx["pct_chg"] = pct
+
+
+def ensure_breadth_reading(db: Session, trade_date: str, env: Dict[str, Any]) -> None:
+    """补上证涨跌幅，并把指数型反弹写进当次广度。不回写库。"""
+    indexes = env.get("indexes")
+    if isinstance(indexes, list):
+        fill_missing_index_pct(db, trade_date, indexes)
+    breadth = env.get("breadth")
+    if not isinstance(breadth, dict) or not breadth:
+        return
+    sh = shanghai_pct(indexes if isinstance(indexes, list) else None)
+    if sh is None:
+        sh = resolve_index_pct(db, "000001.SH", trade_date)
+    apply_breadth_reading(breadth, sh)
 
 
 def _merge_board_hit(
@@ -1168,6 +1281,7 @@ def summarize_breadth_rows(rows: Sequence[Any]) -> Dict[str, Any]:
     up = down = flat = limit_down = 0
     up_amount = 0.0
     down_amount = 0.0
+    flat_amount = 0.0
     for row in rows:
         if row is None:
             continue
@@ -1197,12 +1311,18 @@ def summarize_breadth_rows(rows: Sequence[Any]) -> Dict[str, Any]:
             down_amount += amt_f
         else:
             flat += 1
+            flat_amount += amt_f
         if chg_f <= -limit_up_threshold_for_code(code):
             limit_down += 1
     if up == 0 and down == 0 and flat == 0:
         return {}
     traded = up + down
     up_ratio = round(up / traded, 4) if traded > 0 else None
+    total_amount = up_amount + down_amount + flat_amount
+    up_amount_ratio = round(up_amount / total_amount, 4) if total_amount > 0 else None
+    amount_spread = None
+    if up_amount_ratio is not None and up_ratio is not None:
+        amount_spread = round(up_amount_ratio - up_ratio, 4)
     trin = calc_arms_trin(up, down, up_amount, down_amount)
     return {
         "up_count": up,
@@ -1211,7 +1331,11 @@ def summarize_breadth_rows(rows: Sequence[Any]) -> Dict[str, Any]:
         "limit_down_count": limit_down,
         "up_amount": round(up_amount, 2),
         "down_amount": round(down_amount, 2),
+        "flat_amount": round(flat_amount, 2),
+        "total_amount": round(total_amount, 2),
         "up_ratio": up_ratio,
+        "up_amount_ratio": up_amount_ratio,
+        "amount_spread": amount_spread,
         "trin": trin,
         "trin_basis": "amount",
     }
@@ -1247,6 +1371,8 @@ def _breadth_series_point(trade_date: str, breadth: Dict[str, Any]) -> Dict[str,
         "flat_count": breadth.get("flat_count"),
         "limit_down_count": breadth.get("limit_down_count"),
         "up_ratio": breadth.get("up_ratio"),
+        "up_amount_ratio": breadth.get("up_amount_ratio"),
+        "amount_spread": breadth.get("amount_spread"),
         "trin": breadth.get("trin"),
         "trin_basis": breadth.get("trin_basis") or "amount",
     }
@@ -1367,7 +1493,9 @@ def compute_market_env(
                 "ts_code": ts_code,
                 "name": str(row.get("name") or fallback),
                 "close": close,
-                "pct_chg": _safe(row.get("pct_chg")),
+                "pct_chg": resolve_index_pct(
+                    db, ts_code, d, close, row.get("pre_close"), row.get("pct_chg")
+                ),
                 "amount_yi": _index_amount_yi(row.get("amount")),
                 "gap_to_high20": gap,
                 "note": note,
@@ -1401,6 +1529,8 @@ def compute_market_env(
             "trade_date": d,
             "error": "两融汇总失败",
         }
+    if isinstance(breadth, dict) and breadth:
+        apply_breadth_reading(breadth, shanghai_pct(indexes))
     return {
         "indexes": indexes,
         "vol_trillion": vol,
@@ -1742,8 +1872,17 @@ def _hydrate_legacy_sector_lists(
     return data
 
 
+def _series_needs_amount(series: Any) -> bool:
+    if not series:
+        return True
+    for point in series:
+        if not isinstance(point, dict) or "up_amount_ratio" not in point:
+            return True
+    return False
+
+
 def _enrich_breadth_fields(db: Session, trade_date: str, data: Dict[str, Any]) -> Dict[str, Any]:
-    """旧快照缺 TRIN/序列时按日行情补齐（只丰富读出结果，不回写库）。"""
+    """旧快照缺 TRIN、涨额占比或序列时按日行情补齐（只丰富读出结果，不回写库）。"""
     d = trade_date[:10]
     rules = data.get("rules_json")
     if not isinstance(rules, dict):
@@ -1754,20 +1893,23 @@ def _enrich_breadth_fields(db: Session, trade_date: str, data: Dict[str, Any]) -
         env = {}
         rules["market_env"] = env
     breadth = env.get("breadth") if isinstance(env.get("breadth"), dict) else {}
-    need_today = breadth.get("trin") is None or breadth.get("up_ratio") is None
-    need_series = not (env.get("breadth_series") or [])
-    if not need_today and not need_series:
-        env.setdefault("breadth_series_days", BREADTH_SERIES_DAYS)
-        return data
-    today_b = _compute_breadth(db, d) if need_today else breadth
-    if need_today and today_b:
-        env["breadth"] = {**breadth, **today_b}
-        breadth = env["breadth"]
-    if need_series:
-        env["breadth_series"] = _compute_breadth_series(
-            db, d, BREADTH_SERIES_DAYS, today_breadth=breadth or None
-        )
-    env["breadth_series_days"] = BREADTH_SERIES_DAYS
+    need_today = (
+        breadth.get("trin") is None
+        or breadth.get("up_ratio") is None
+        or "up_amount_ratio" not in breadth
+    )
+    need_series = _series_needs_amount(env.get("breadth_series") or [])
+    if need_today or need_series:
+        today_b = _compute_breadth(db, d) if need_today else breadth
+        if need_today and today_b:
+            env["breadth"] = {**breadth, **today_b}
+            breadth = env["breadth"]
+        if need_series:
+            env["breadth_series"] = _compute_breadth_series(
+                db, d, BREADTH_SERIES_DAYS, today_breadth=breadth or None
+            )
+    env.setdefault("breadth_series_days", BREADTH_SERIES_DAYS)
+    ensure_breadth_reading(db, d, env)
     return data
 
 

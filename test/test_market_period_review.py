@@ -253,6 +253,32 @@ def test_period_breadth_aggregates_trin_and_structure():
     assert "区间合成 TRIN" in md
     assert "| 2026-09-14 |" in md
     assert "普跌" in md
+    assert "小于1偏多" not in md
+
+
+def test_period_breadth_averages_spread_and_counts_index_rebound():
+    weak = _breadth(800, 2200, 8e8, 4e8, 0.2667)
+    weak["up_amount_ratio"] = 0.65
+    weak["amount_spread"] = 0.38
+    weak["sh_pct"] = 0.31
+    healthy = _breadth(3000, 1000, 9e8, 3e8, 0.75)
+    healthy["up_amount_ratio"] = 0.70
+    healthy["amount_spread"] = -0.05
+    healthy["sh_pct"] = 1.2
+    rows = [
+        {"trade_date": "2026-09-14", "rules_json": {"market_env": {"breadth": weak}}},
+        {"trade_date": "2026-09-15", "rules_json": {"market_env": {"breadth": healthy}}},
+    ]
+    out = summarize_period_breadth(rows)
+    assert out["index_rebound_days"] == 1
+    assert out["series"][0]["index_rebound"] is True
+    assert out["series"][1]["index_rebound"] is False
+    assert out["avg_up_amount_ratio"] == round((0.65 + 0.70) / 2, 4)
+    assert out["avg_amount_spread"] == round((0.38 - 0.05) / 2, 4)
+    blurb = breadth_blurb(out)
+    assert "指数型反弹 1 天" in blurb
+    assert "偏多" not in blurb
+    assert "偏空" not in blurb
 
 
 def test_markdown_height_integer_and_pdf_smoke():

@@ -181,6 +181,268 @@ def get_market_indices(db: Session = Depends(get_db)):
         })
 
 
+# 首页四张卡片已展示，目录默认把它们留在卡片上，搜索时仍可命中。
+_HOME_PINNED_A = ("000001", "399001", "399006", "000300")
+_HOME_PINNED_HK = ("HSI", "HSTECH", "HSCI", "HSCEI")
+
+_A_INDEX_CATALOG_CTE = """
+WITH normalized AS (
+    SELECT
+        CASE
+            WHEN btrim(code) ~* '^(sh|sz)[0-9]+$'
+                THEN lpad(right(substring(btrim(code) from 3), 6), 6, '0')
+            WHEN btrim(code) ~ '^[0-9]+$'
+                THEN lpad(right(btrim(code), 6), 6, '0')
+            WHEN btrim(code) ~* '^[0-9]+\\.(sh|sz)$'
+                THEN lpad(right(regexp_replace(btrim(code), '\\D', '', 'g'), 6), 6, '0')
+            ELSE upper(btrim(code))
+        END AS display_code,
+        name,
+        price,
+        change,
+        pct_chg,
+        update_time
+    FROM index_realtime_quotes
+    WHERE code IS NOT NULL AND btrim(code) <> ''
+),
+latest AS (
+    SELECT DISTINCT ON (display_code)
+        display_code AS code,
+        name,
+        price,
+        change,
+        pct_chg,
+        update_time
+    FROM normalized
+    WHERE display_code <> '' AND display_code <> '000000'
+    ORDER BY display_code, update_time DESC NULLS LAST
+)
+"""
+
+_HK_INDEX_CATALOG_CTE = """
+WITH latest AS (
+    SELECT
+        upper(btrim(code)) AS code,
+        name,
+        price,
+        change,
+        pct_chg,
+        update_time
+    FROM hk_index_realtime_quotes
+    WHERE trade_date = (SELECT MAX(trade_date) FROM hk_index_realtime_quotes)
+      AND code IS NOT NULL
+      AND btrim(code) <> ''
+)
+"""
+
+
+def normalize_catalog_market(market: str) -> str:
+    m = str(market or "").strip().lower()
+    if m in ("hk", "hk-stock", "h"):
+        return "hk"
+    return "a"
+
+
+def catalog_like_pattern(keyword: str) -> str:
+    """去掉 LIKE 通配符后包成包含匹配；空关键词返回空串。"""
+    raw = "".join(ch for ch in str(keyword or "").strip() if ch not in "%_\\")
+    if not raw:
+        return ""
+    return f"%{raw}%"
+
+
+def _catalog_item(row, market: str) -> dict:
+    code = str(row[0] or "").strip()
+    return {
+        "code": code,
+        "name": row[1] or code,
+        "current": safe_float(row[2]),
+        "change": safe_float(row[3]),
+        "change_percent": safe_float(row[4]),
+        "timestamp": row[5],
+        "market": market,
+    }
+
+
+@router.get("/index-catalog")
+def get_index_catalog(
+    market: str = Query("a", description="a 或 hk"),
+    keyword: str = Query("", description="代码或名称"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(40, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """首页「其他指数」目录：实时表全量，默认不含首页四张卡片。"""
+    mkt = normalize_catalog_market(market)
+    like = catalog_like_pattern(keyword)
+    kw = keyword.strip() if like else ""
+    pinned = _HOME_PINNED_HK if mkt == "hk" else _HOME_PINNED_A
+    cte = _HK_INDEX_CATALOG_CTE if mkt == "hk" else _A_INDEX_CATALOG_CTE
+    where = """
+    WHERE (
+        CAST(:kw AS text) = ''
+        OR COALESCE(name, '') ILIKE :like
+        OR code ILIKE :like
+    )
+    """
+    if not kw:
+        where += " AND code NOT IN :pinned"
+    order = """
+    ORDER BY
+        CASE WHEN CAST(:kw AS text) = '' THEN pct_chg END DESC NULLS LAST,
+        name ASC NULLS LAST,
+        code ASC
+    """
+    params = {
+        "kw": kw,
+        "like": like or "%",
+        "lim": page_size,
+        "off": (page - 1) * page_size,
+    }
+    if not kw:
+        params["pinned"] = list(pinned)
+    try:
+        from sqlalchemy import bindparam
+
+        def _bind(stmt):
+            if not kw:
+                return stmt.bindparams(bindparam("pinned", expanding=True))
+            return stmt
+
+        count_params = {"kw": kw, "like": params["like"]}
+        if not kw:
+            count_params["pinned"] = params["pinned"]
+        count_stmt = _bind(text(cte + " SELECT COUNT(*) FROM latest " + where))
+        total = int(db.execute(count_stmt, count_params).scalar() or 0)
+        list_stmt = _bind(
+            text(
+                cte
+                + """
+            SELECT code, name, price, change, pct_chg, update_time
+            FROM latest
+            """
+                + where
+                + order
+                + " LIMIT :lim OFFSET :off"
+            )
+        )
+        rows = db.execute(list_stmt, params).fetchall()
+        return JSONResponse(
+            {
+                "success": True,
+                "data": [_catalog_item(row, mkt) for row in rows],
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "market": mkt,
+            }
+        )
+    except Exception as e:
+        logger.exception("index catalog failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "指数列表读取失败",
+                "error": str(e),
+                "data": [],
+                "total": 0,
+            },
+            status_code=500,
+        )
+
+
+def _fetch_hk_index_header(db: Session, code: str):
+    raw = str(code or "").strip()
+    if not raw:
+        return None
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT code, name, price, change, pct_chg, volume, amount,
+                       open, high, low, pre_close, update_time
+                FROM hk_index_realtime_quotes
+                WHERE upper(btrim(code)) = upper(btrim(:c))
+                ORDER BY trade_date DESC NULLS LAST
+                LIMIT 1
+                """
+            ),
+            {"c": raw},
+        ).fetchone()
+    except Exception:
+        logger.exception("hk index header failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None
+    if not row:
+        return None
+    display = str(row[0] or raw).strip().upper()
+    return {
+        "code": display,
+        "ts_code": display,
+        "name": row[1] or display,
+        "current": safe_float(row[2]),
+        "change": safe_float(row[3]),
+        "change_percent": safe_float(row[4]),
+        "volume": safe_float(row[5]),
+        "amount": safe_float(row[6]),
+        "open": safe_float(row[7]),
+        "high": safe_float(row[8]),
+        "low": safe_float(row[9]),
+        "pre_close": safe_float(row[10]),
+        "update_time": row[11],
+        "asset_type": "hk_index",
+    }
+
+
+def _fetch_hk_index_bars(db: Session, code: str, limit: int):
+    raw = str(code or "").strip()
+    if not raw:
+        return []
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT date, open, high, low, close, volume, amount
+                FROM hk_index_historical_quotes
+                WHERE upper(btrim(code)) = upper(btrim(:c))
+                ORDER BY date DESC
+                LIMIT :lim
+                """
+            ),
+            {"c": raw, "lim": int(limit)},
+        ).fetchall()
+    except Exception:
+        logger.exception("hk index bars failed")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return []
+    bars = []
+    for r in reversed(rows or []):
+        d = r[0]
+        ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d or "")[:10]
+        bars.append(
+            {
+                "date": ds,
+                "open": safe_float(r[1]) or 0,
+                "high": safe_float(r[2]) or 0,
+                "low": safe_float(r[3]) or 0,
+                "close": safe_float(r[4]) or 0,
+                "volume": safe_float(r[5]) or 0,
+                "amount": safe_float(r[6]) or 0,
+            }
+        )
+    return bars
+
+
 @router.get("/index/{code}")
 def get_market_index_detail(code: str, db: Session = Depends(get_db)):
     """单指数详情抬头（实时表 + 身份解析）。"""
@@ -192,6 +454,9 @@ def get_market_index_detail(code: str, db: Session = Depends(get_db)):
 
         ident = resolve_index_identity(db, code)
         if not ident.get("ok"):
+            hk = _fetch_hk_index_header(db, code)
+            if hk:
+                return JSONResponse({"success": True, "data": hk})
             return JSONResponse(
                 {"success": False, "message": ident.get("message") or "未找到指数"},
                 status_code=int(ident.get("http_status") or 404),
@@ -235,6 +500,20 @@ def get_market_index_kline(
 
         ident = resolve_index_identity(db, code)
         if not ident.get("ok"):
+            hk = _fetch_hk_index_header(db, code)
+            bars = _fetch_hk_index_bars(db, code, int(limit))
+            if hk or bars:
+                return JSONResponse(
+                    {
+                        "success": True,
+                        "data": {
+                            "code": (hk or {}).get("code") or str(code).strip().upper(),
+                            "ts_code": (hk or {}).get("ts_code") or str(code).strip().upper(),
+                            "name": (hk or {}).get("name") or str(code).strip(),
+                            "bars": bars,
+                        },
+                    }
+                )
             return JSONResponse(
                 {"success": False, "message": ident.get("message") or "未找到指数"},
                 status_code=int(ident.get("http_status") or 404),

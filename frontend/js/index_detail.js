@@ -179,6 +179,14 @@
         },
 
         async loadAnalysis() {
+            if (!/^\d{6}$/.test(this.code)) {
+                const empty = document.getElementById('isaEmpty');
+                if (empty) {
+                    empty.hidden = false;
+                    empty.textContent = '环境研判目前覆盖 A 股指数。当前标的可查看行情与日线。';
+                }
+                return;
+            }
             if (typeof IndexAnalysisPanel === 'undefined') {
                 await this._loadScript('js/index_analysis_panel.js');
             }
@@ -191,6 +199,9 @@
         },
 
         async reloadAnalysis(useRealtime) {
+            if (!/^\d{6}$/.test(this.code)) {
+                return this.loadAnalysis();
+            }
             if (typeof IndexAnalysis === 'undefined') {
                 await this.loadAnalysis();
                 return;

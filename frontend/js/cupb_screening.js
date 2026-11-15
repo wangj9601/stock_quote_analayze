@@ -123,26 +123,69 @@
     return [50, 100, 200].includes(n) ? n : 50;
   }
 
+  // 与后端 VSB / CUPB 板型前缀一致（创业板含 301）
+  const BOARD_PREFIXES = {
+    MAIN: ['600', '601', '602', '603', '605', '000', '001'],
+    SZ_SME: ['002'],
+    CYB: ['300', '301'],
+    KCB: ['688', '689'],
+    BJ: ['43', '83', '87', '88', '92'],
+  };
+
+  const BOARD_LABELS = {
+    MAIN: '主板',
+    SZ_SME: '中小板',
+    CYB: '创业板',
+    KCB: '科创板',
+    BJ: '北证',
+  };
+
   function selectedBoardSegments() {
+    const root = document.getElementById('cupb-content') || document;
     const out = [];
-    document.querySelectorAll('input[name="cupbCnBoardSegment"]:checked').forEach((el) => {
+    root.querySelectorAll('input[name="cupbCnBoardSegment"]:checked').forEach((el) => {
       const v = String(el.value || '').trim().toUpperCase();
-      if (v && !out.includes(v)) out.push(v);
+      if (v && BOARD_PREFIXES[v] && !out.includes(v)) out.push(v);
     });
     return out;
   }
 
-  function buildQuery() {
+  function codeMatchesBoards(code, segs) {
+    if (!segs || !segs.length) return true;
+    const c = String(code || '').trim().replace(/\D/g, '').padStart(6, '0').slice(-6);
+    if (c.length !== 6) return false;
+    return segs.some((seg) => (BOARD_PREFIXES[seg] || []).some((p) => c.startsWith(p)));
+  }
+
+  function buildQuery(opts) {
+    const options = opts || {};
+    const boards = selectedBoardSegments();
     const params = new URLSearchParams();
-    const date = (document.getElementById('cupbDate') || {}).value || '';
-    if (date) params.set('trade_date', date);
+    let start = (document.getElementById('cupbDate') || {}).value || '';
+    let end = (document.getElementById('cupbEndDate') || {}).value || '';
+    if (start && end && end < start) {
+      const swapped = start;
+      start = end;
+      end = swapped;
+      const startEl = document.getElementById('cupbDate');
+      const endEl = document.getElementById('cupbEndDate');
+      if (startEl) startEl.value = start;
+      if (endEl) endEl.value = end;
+    }
+    if (start && end) {
+      params.set('start_date', start);
+      params.set('end_date', end);
+    } else if (start || end) {
+      params.set('trade_date', start || end);
+    }
     const status = (document.getElementById('cupbStatus') || {}).value || 'both';
     if (status && status !== 'both') params.set('status', status);
     const code = String((document.getElementById('cupbCode') || {}).value || '').trim();
     if (code) params.set('code', code);
-    selectedBoardSegments().forEach((seg) => params.append('cn_board_segment', seg));
-    params.set('limit', String(pageSize()));
-    params.set('offset', String(Math.max(0, pageOffset)));
+    boards.forEach((seg) => params.append('cn_board_segment', seg));
+    if (boards.length) params.set('cn_board_segments', boards.join(','));
+    params.set('limit', String(options.wide ? 500 : pageSize()));
+    params.set('offset', String(options.wide ? 0 : Math.max(0, pageOffset)));
     return params.toString();
   }
 
@@ -151,60 +194,75 @@
     return `<span class="sepa-tag sepa-tag--${esc(key)}">${esc(label || key)}</span>`;
   }
 
+  function statusOneLiner(row) {
+    const st = String(row.status || '').toLowerCase();
+    if (st === 'confirmed') {
+      return `已确认突破杯口：收盘 ${fmtVal(row.last_close)} 站上杯口 ${fmtVal(row.rim)}（确认日 ${fmtVal(row.confirm_date)}）。`;
+    }
+    if (row.ever_confirmed) {
+      return `曾于 ${fmtVal(row.first_confirm_date)} 确认过，现又跌回杯口下方，回到形成中。`;
+    }
+    return `杯+柄已成型，收盘 ${fmtVal(row.last_close)} 尚未站稳杯口 ${fmtVal(row.rim)}。`;
+  }
+
   function detailHtml(row) {
     const st = String(row.status || '').toLowerCase();
     const stCls = st === 'confirmed' ? 'breakout' : 'forming';
     const volRows = volumeFlagRows(row);
-    const checks = volRows.length
+    const volPass = volRows.filter((x) => x.ok).length;
+    const volTotal = volRows.length || 4;
+    const volChips = volRows.length
       ? volRows.map((item) => (
-        `<li class="${item.ok ? 'is-ok' : 'is-fail'}"><span>${item.ok ? '通过' : '未过'}</span>${esc(item.label)}</li>`
+        `<span class="cupb-vol-chip ${item.ok ? 'is-ok' : 'is-fail'}">`
+        + `<i>${item.ok ? '✓' : '✗'}</i>${esc(item.label)}</span>`
       )).join('')
-      : '<li>暂无量价明细</li>';
-    const pivots = [
-      ['左沿', row.left_rim_price, row.left_rim_date],
-      ['杯底', row.cup_bottom_price, row.cup_bottom_date],
-      ['右沿', row.right_rim_price, row.right_rim_date],
-      ['柄低', row.handle_low_price, row.handle_low_date],
-      ['杯口', row.rim, null],
-    ].map(([name, price, date]) => (
-      `<tr><td>${esc(name)}</td><td class="sepa-num">${esc(fmtVal(price))}</td><td>${esc(fmtVal(date))}</td></tr>`
+      : '<span class="cupb-vol-chip is-fail">暂无量价数据</span>';
+    const stages = [
+      { key: 'left', title: '① 左沿', hint: '左侧杯沿', price: row.left_rim_price, date: row.left_rim_date },
+      { key: 'bottom', title: '② 杯底', hint: '回撤最低', price: row.cup_bottom_price, date: row.cup_bottom_date, accent: true },
+      { key: 'right', title: '③ 右沿', hint: '右侧回升', price: row.right_rim_price, date: row.right_rim_date },
+      { key: 'handle', title: '④ 柄低', hint: '柄部低点', price: row.handle_low_price, date: row.handle_low_date },
+      { key: 'rim', title: '⑤ 杯口', hint: '突破参考价', price: row.rim, date: null, accent: true },
+    ].map((s) => (
+      `<li class="cupb-stage${s.accent ? ' is-accent' : ''}">`
+      + `<div class="cupb-stage-title">${esc(s.title)}<small>${esc(s.hint)}</small></div>`
+      + `<div class="cupb-stage-price sepa-num">${esc(fmtVal(s.price))}</div>`
+      + `<div class="cupb-stage-date">${esc(fmtVal(s.date))}</div>`
+      + `</li>`
     )).join('');
-    const qualityLabels = qualityFlagLabels(row);
-    const flags = qualityLabels.length
-      ? `<p class="sepa-flags">${esc(qualityLabels.join(' · '))}</p>`
-      : '';
-    const ever = row.ever_confirmed
-      ? `曾确认 · 历史确认日 ${fmtVal(row.first_confirm_date)}`
-      : '尚未确认过';
+    const quality = qualityFlagLabels(row)
+      .map((t) => `<span class="cupb-qtag">${esc(t)}</span>`)
+      .join('');
     return `
-      <div class="cupb-detail-panel sepa-detail-panel">
-        <div class="sepa-metrics">
-          <span>状态 <b>${tag(stCls, statusLabel(row.status))}</b></span>
-          <span>等级 <b>${esc(fmtVal(row.grade))}</b></span>
-          <span>量价 <b class="sepa-num">${esc(fmtVal(row.volume_score))}</b></span>
-          <span>收盘 <b class="sepa-num">${esc(fmtVal(row.last_close))}</b></span>
-          <span>杯口 <b class="sepa-num">${esc(fmtVal(row.rim))}</b></span>
-          <span>杯深 <b class="sepa-num">${esc(fmtVal(row.cup_depth_pct))}%</b></span>
-          <span>柄回撤 <b class="sepa-num">${esc(fmtVal(row.handle_retrace_pct))}%</b></span>
-          <span>确认日 <b>${esc(fmtVal(row.confirm_date))}</b></span>
-          <span>板块 <b>${esc(formatBoardLabels(row.board_labels))}</b></span>
-          <span>复权 <b>${esc(priceAdjustLabel(row.price_adjust))}</b></span>
+      <div class="cupb-detail-panel">
+        <div class="cupb-detail-head">
+          <div class="cupb-detail-headline">
+            ${tag(stCls, statusLabel(row.status))}
+            <span class="cupb-grade">等级 ${esc(fmtVal(row.grade))}</span>
+            <span class="cupb-kv">量价 <b>${esc(String(row.volume_score == null ? '—' : row.volume_score))}/${volTotal}</b></span>
+            <span class="cupb-kv">杯深 <b class="sepa-num">${esc(fmtVal(row.cup_depth_pct))}%</b></span>
+            <span class="cupb-kv">柄回撤 <b class="sepa-num">${esc(fmtVal(row.handle_retrace_pct))}%</b></span>
+          </div>
+          <p class="cupb-detail-story">${esc(statusOneLiner(row))}</p>
         </div>
-        ${flags}
-        <p class="param-hint">${esc(ever)}。列表「详情」打开个股页；此处只读预计算字段。</p>
-        <div class="sepa-detail-grid cupb-detail-grid">
-          <section>
-            <h4>量价检查</h4>
-            <ul class="sepa-checks">${checks}</ul>
-          </section>
-          <section>
-            <h4>形态枢轴</h4>
-            <table class="sepa-legs cupb-pivot-table">
-              <thead><tr><th>点位</th><th>价格</th><th>日期</th></tr></thead>
-              <tbody>${pivots}</tbody>
-            </table>
-            <p class="param-hint">杯口通常取左右沿较高者；收盘站稳杯口（含缓冲）即确认。</p>
-          </section>
+
+        <div class="cupb-detail-block">
+          <div class="cupb-block-label">形态怎么走下来的</div>
+          <ol class="cupb-stage-rail">${stages}</ol>
+          <p class="cupb-rail-note">按时间从左到右：先做杯，再做柄；收盘站稳「杯口」才算确认。</p>
+        </div>
+
+        <div class="cupb-detail-block">
+          <div class="cupb-block-label">量价是否配合（${volPass}/${volTotal}）</div>
+          <div class="cupb-vol-row">${volChips}</div>
+        </div>
+
+        ${quality ? `<div class="cupb-detail-block"><div class="cupb-block-label">形态备注</div><div class="cupb-qtags">${quality}</div></div>` : ''}
+
+        <div class="cupb-detail-foot">
+          <span>板块 ${esc(formatBoardLabels(row.board_labels))}</span>
+          <span>复权 ${esc(priceAdjustLabel(row.price_adjust))}</span>
+          <span>${row.ever_confirmed ? `历史确认 ${esc(fmtVal(row.first_confirm_date))}` : '尚无历史确认'}</span>
         </div>
       </div>`;
   }
@@ -219,14 +277,25 @@
     }
     const dateEl = document.getElementById('cupbTradeDate');
     if (dateEl) {
-      dateEl.textContent = data.trade_date
-        ? `基准日 ${data.trade_date} · 配置 #${data.config_id || '—'}`
-        : '';
+      const start = data.start_date || '';
+      const end = data.end_date || '';
+      const code = String((document.getElementById('cupbCode') || {}).value || '').trim();
+      let span = '';
+      if (data.mode === 'stock' && code) {
+        span = start && end ? `个股 ${code} 历史 ${start} 至 ${end}` : `个股 ${code} 历史`;
+      } else if (start && end && start !== end) {
+        span = `区间 ${start} 至 ${end}`;
+      } else if (data.trade_date) {
+        span = `基准日 ${data.trade_date}`;
+      } else if (start) {
+        span = `基准日 ${start}`;
+      }
+      dateEl.textContent = span ? `${span} · 配置 #${data.config_id || '—'}` : '';
     }
     const hint = document.getElementById('cupbPoolHint');
     if (hint) {
       const boardLabel = data.cn_board_segment_label || '不限板型';
-      hint.textContent = `结果来自每日收盘流程节点 cupb_signals_cn（A股全市场、不复权、forming+confirmed）。当前板型：${boardLabel}。`;
+      hint.textContent = `已入库信号（cupb_signals_cn，不复权）。只填开始日查该日；两端都填查历史区间，不限天数。当前板型：${boardLabel}。`;
     }
     const pageInfo = document.getElementById('cupbPageInfo');
     const page = Math.floor(offset / limit) + 1;
@@ -242,17 +311,23 @@
     const body = document.getElementById('cupbTableBody');
     if (!body) return;
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="9" class="empty-state">没有符合条件的杯底信号</td></tr>';
+      const code = String((document.getElementById('cupbCode') || {}).value || '').trim();
+      const empty = code
+        ? `代码 ${esc(code)} 没有已入库的杯底信号`
+        : '没有符合条件的杯底信号';
+      body.innerHTML = `<tr><td colspan="10" class="empty-state">${empty}</td></tr>`;
       return;
     }
     body.innerHTML = rows.map((row, index) => {
       const code = esc(row.code);
       const name = esc(row.name || '');
       const href = `stock.html?code=${encodeURIComponent(row.code || '')}&name=${encodeURIComponent(row.name || '')}`;
+      const hist = `stock_cupb_trace.html?code=${encodeURIComponent(row.code || '')}&name=${encodeURIComponent(row.name || '')}`;
       const st = String(row.status || '').toLowerCase();
       const stCls = st === 'confirmed' ? 'sepa-tag--breakout' : 'sepa-tag--forming';
       return `
         <tr class="cupb-row" data-index="${index}">
+          <td class="sepa-num">${esc(row.date || '—')}</td>
           <td><a href="${href}" target="_blank" rel="noopener noreferrer">${code}</a></td>
           <td>${name}</td>
           <td><span class="sepa-tag ${stCls}">${esc(statusLabel(row.status))}</span></td>
@@ -263,11 +338,12 @@
           <td class="sepa-num">${num(row.last_close)}</td>
           <td class="sepa-actions">
             <button type="button" class="gms-op-btn cupb-detail-btn" data-index="${index}" aria-expanded="false">明细</button>
+            <a class="gms-op-btn" href="${hist}" target="_blank" rel="noopener noreferrer" title="该股杯底历史信号">历史</a>
             <a class="gms-op-btn" href="${href}" target="_blank" rel="noopener noreferrer">详情</a>
           </td>
         </tr>
         <tr class="cupb-detail-row" hidden>
-          <td colspan="9">${detailHtml(row)}</td>
+          <td colspan="10">${detailHtml(row)}</td>
         </tr>`;
     }).join('');
   }
@@ -275,14 +351,14 @@
   function exportCsv() {
     if (!lastRows.length) return;
     const header = [
-      '代码', '名称', '状态', '曾确认', '历史确认日', '等级', '量价',
+      '信号日', '代码', '名称', '状态', '曾确认', '历史确认日', '等级', '量价',
       '所属板块', '复权', '收盘', '左沿', '杯底', '右沿', '柄低', '杯口',
       '杯深%', '柄回撤%', '左沿日', '杯底日', '右沿日', '柄低日', '确认日', '质量标记',
     ];
     const lines = [header.join(',')];
     lastRows.forEach((row) => {
       const cells = [
-        row.code, row.name, statusLabel(row.status),
+        row.date, row.code, row.name, statusLabel(row.status),
         row.ever_confirmed ? '是' : '否', row.first_confirm_date,
         row.grade, row.volume_score, formatBoardLabels(row.board_labels),
         priceAdjustLabel(row.price_adjust), row.last_close,
@@ -295,7 +371,9 @@
     });
     const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
-    const day = (lastMeta && lastMeta.trade_date) || 'cupb';
+    const day = (lastMeta && (lastMeta.start_date && lastMeta.end_date && lastMeta.start_date !== lastMeta.end_date
+      ? `${lastMeta.start_date}_${lastMeta.end_date}`
+      : lastMeta.trade_date)) || 'cupb';
     a.href = URL.createObjectURL(blob);
     a.download = `cupb-${day}.csv`;
     a.click();
@@ -310,6 +388,7 @@
     if (refresh) refresh.disabled = true;
     if (exportBtn) exportBtn.style.display = 'none';
     setError('');
+    const boards = selectedBoardSegments();
     try {
       const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
       const res = await fetchFn(`${apiBase()}/api/stock/cupb/signals?${buildQuery()}`, {
@@ -321,13 +400,31 @@
         throw new Error(typeof msg === 'string' ? msg : '筛选失败');
       }
       const payload = data.data || {};
-      lastRows = payload.items || [];
-      lastMeta = payload;
+      let items = payload.items || [];
+      const total = payload.total || 0;
+      const limit = payload.limit || pageSize();
+      const offset = payload.offset || 0;
+      const boardLabel = boards.length
+        ? boards.map((s) => BOARD_LABELS[s] || s).join('、')
+        : '不限板型';
+      if (boards.length) {
+        items = items.filter((row) => codeMatchesBoards(row.code, boards));
+      }
+
+      lastRows = items;
+      lastMeta = Object.assign({}, payload, {
+        total,
+        limit,
+        offset,
+        cn_board_segments: boards,
+        cn_board_segment_label: boardLabel,
+        items,
+      });
       if (payload.trade_date && !(document.getElementById('cupbDate') || {}).value) {
         const dateInput = document.getElementById('cupbDate');
         if (dateInput) dateInput.value = payload.trade_date;
       }
-      renderMeta(payload);
+      renderMeta(lastMeta);
       renderRows(lastRows);
       if (exportBtn && lastRows.length) exportBtn.style.display = '';
     } catch (err) {
