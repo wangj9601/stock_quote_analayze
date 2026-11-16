@@ -29,6 +29,12 @@ _SECTOR_DISCLAIMER = "行业贡献按成分成交额加权近似，非官方指�
 _LEADERS_TOP_N = 10
 
 
+def _series_label(asset_type: Optional[str]) -> str:
+    if str(asset_type or "") == "industry_index":
+        return "行业指数"
+    return "指数"
+
+
 def _err_section(msg: str) -> Dict[str, Any]:
     return {"ok": False, "error": msg, "data": None}
 
@@ -263,6 +269,7 @@ def _compute_pattern_from_bars(
     asof: Optional[str],
     use_realtime: bool,
     realtime_meta: Optional[Dict[str, Any]],
+    asset_type: str = "index",
 ) -> Dict[str, Any]:
     from backend_api.stock.pattern_routes import _parse_types, _tactical_enrichment
     from backend_core.analysis.chart_patterns.engine import detect_all_counted
@@ -290,7 +297,7 @@ def _compute_pattern_from_bars(
             "asof": asof or "",
             "price_adjust": "none",
             "tactical": None,
-            "error": "指数日线不足，无法识别形态",
+            "error": f"{_series_label(asset_type)}日线不足，无法识别形态",
             "payload": None,
         }
 
@@ -340,7 +347,7 @@ def _compute_pattern_from_bars(
         "items": hits,
         "tactical": tactical,
         "use_realtime": bool(use_realtime),
-        "asset_type": "index",
+        "asset_type": asset_type or "index",
     }
     if realtime_meta:
         payload["realtime"] = realtime_meta
@@ -367,6 +374,7 @@ def _compute_swing_from_bars(
     use_realtime: bool,
     realtime_meta: Optional[Dict[str, Any]],
     pattern_short_bias: Optional[str],
+    asset_type: str = "index",
 ) -> Dict[str, Any]:
     from backend_core.analysis.market_structure import (
         aggregate_daily_to_weekly,
@@ -388,7 +396,7 @@ def _compute_swing_from_bars(
             "code": code,
             "name": name,
             "asof": asof or "",
-            "error": "指数日线不足，无法分析波段",
+            "error": f"{_series_label(asset_type)}日线不足，无法分析波段",
             "payload": None,
         }
     daily_bars = bars[-int(lookback) :] if len(bars) > int(lookback) else bars
@@ -444,7 +452,7 @@ def _compute_swing_from_bars(
         "counter_trend_caution": bool(caution),
         "counter_trend_note": (caution or {}).get("text") if caution else None,
         "use_realtime": bool(use_realtime),
-        "asset_type": "index",
+        "asset_type": asset_type or "index",
     }
     if realtime_meta:
         out["realtime"] = realtime_meta
@@ -467,6 +475,7 @@ def _compute_gann_from_bars(
     asof: Optional[str],
     use_realtime: bool,
     realtime_meta: Optional[Dict[str, Any]],
+    asset_type: str = "index",
 ) -> Dict[str, Any]:
     from backend_core.analysis.gann_trend import analyze_gann_trend
     from backend_core.analysis.swing_zigzag import (
@@ -476,7 +485,7 @@ def _compute_gann_from_bars(
 
     lookback = 180
     if len(bars) < 30:
-        return _err_section("指数日线不足，无法做江恩分析")
+        return _err_section(f"{_series_label(asset_type)}日线不足，无法做江恩分析")
     daily_bars = bars[-int(lookback) :] if len(bars) > int(lookback) else bars
     gann = analyze_gann_trend(
         daily_bars,
@@ -495,7 +504,7 @@ def _compute_gann_from_bars(
         "price_adjust": {"mode": "none", "applied": False},
         "gann_trend": gann,
         "use_realtime": bool(use_realtime),
-        "asset_type": "index",
+        "asset_type": asset_type or "index",
     }
     if realtime_meta:
         out["realtime"] = realtime_meta
@@ -758,8 +767,9 @@ def _build_market_view(
     swing: Dict[str, Any],
     gann: Dict[str, Any],
     breadth: Dict[str, Any],
+    title: str = "指数环境研判",
 ) -> Dict[str, Any]:
-    """指数环境研判：偏多/中性/偏空，无买卖/仓位字段。"""
+    """环境研判：偏多/中性/偏空，无买卖/仓位字段。"""
     scores = []  # +1 bull, -1 bear
     bullets: List[str] = []
 
@@ -835,7 +845,7 @@ def _build_market_view(
 
     return {
         "ok": True,
-        "title": "指数环境研判",
+        "title": title or "指数环境研判",
         "bias": env_bias,
         "bias_label": label,
         "summary": f"{name or code} 当前环境：{label}",

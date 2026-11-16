@@ -34,10 +34,11 @@
    */
   async function exportFromHost(host) {
     if (!host || typeof host.hasExportableResult !== 'function' || !host.hasExportableResult()) {
-      throw new Error('请先完成指数分析再导出');
+      throw new Error('请先完成分析再导出');
     }
     const data = host.lastBundle || {};
     const idx = data.index || {};
+    const isIndustry = String(idx.asset_type || '') === 'industry_index';
     const api = core();
     const FONT_NAME = api.FONT_NAME || 'NotoSansSC';
     const doc = await api.createDoc({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -113,11 +114,14 @@
     }
 
     // —— 抬头 ——
-    drawTitle('指数分析报告', 16, [15, 23, 42]);
+    drawTitle(isIndustry ? '行业指数分析报告' : '指数分析报告', 16, [15, 23, 42]);
+    const rtNote = data.use_realtime
+      ? ((data.realtime && data.realtime.merged === false) ? '（实时未改写当日K）' : '（含实时叠 K）')
+      : '';
     const metaLines = [
-      `指数：${cell(idx.code)}${idx.name ? ` ${idx.name}` : ''}${idx.ts_code ? `（${idx.ts_code}）` : ''}`,
+      `${isIndustry ? '行业' : '指数'}：${cell(idx.code)}${idx.name ? ` ${idx.name}` : ''}${idx.ts_code ? `（${idx.ts_code}）` : ''}`,
       `点位：${fmtNum(idx.current != null ? idx.current : idx.last_close)}  涨跌幅：${fmtPct(idx.change_percent)}`,
-      `基准日：${cell(data.trade_date)}${data.use_realtime ? '（含实时叠 K）' : ''}`,
+      `基准日：${cell(data.trade_date)}${rtNote}`,
       `日线根数：${cell(data.bar_count)}`,
     ];
     metaLines.forEach((line) => drawWrapped(line, 9, 4.2));
@@ -126,7 +130,7 @@
     y += 3;
 
     // —— 市场环境 ——
-    drawTitle('一、指数环境研判', 12, [30, 64, 175]);
+    drawTitle(isIndustry ? '一、行业环境研判' : '一、指数环境研判', 12, [30, 64, 175]);
     const mv = data.market_view || {};
     if (!mv.ok) {
       drawWrapped(mv.error || '环境研判暂不可用', 9, 4.2);
@@ -140,7 +144,7 @@
     y += 2;
 
     // —— 广度 / 贡献 ——
-    drawTitle('二、成分广度与行业贡献', 12, [30, 64, 175]);
+    drawTitle(isIndustry ? '二、成分广度与领涨领跌' : '二、成分广度与行业贡献', 12, [30, 64, 175]);
     const br = data.breadth || {};
     if (!br.available) {
       drawWrapped(br.reason || '暂无成分数据，广度与贡献章节从略。', 9, 4.2);
@@ -182,33 +186,35 @@
       );
     }
 
-    const sector = data.sector_contrib || {};
-    drawWrapped(
-      sector.disclaimer || '行业贡献按成分成交额加权近似，非官方指数权重。',
-      8,
-      3.8
-    );
-    y += 1;
-    if (!sector.available) {
-      drawWrapped(sector.reason || '暂无行业贡献数据', 9, 4.2);
-    } else {
-      drawTable(
-        [['行业', '家数', '额权涨跌', '近似贡献']],
-        (sector.items || []).slice(0, 15).map((it) => [
-          cell(it.board_name || it.board_code),
-          cell(it.member_count),
-          fmtPct(it.weighted_change_percent),
-          it.approx_contribution != null ? Number(it.approx_contribution).toFixed(3) : '--',
-        ]),
-        {
-          0: { cellWidth: 40 },
-          1: { cellWidth: 16 },
-          2: { cellWidth: 24 },
-          3: { cellWidth: 24 },
-        }
+    if (data.sector_contrib) {
+      const sector = data.sector_contrib;
+      drawWrapped(
+        sector.disclaimer || '行业贡献按成分成交额加权近似，非官方指数权重。',
+        8,
+        3.8
       );
+      y += 1;
+      if (!sector.available) {
+        drawWrapped(sector.reason || '暂无行业贡献数据', 9, 4.2);
+      } else {
+        drawTable(
+          [['行业', '家数', '额权涨跌', '近似贡献']],
+          (sector.items || []).slice(0, 15).map((it) => [
+            cell(it.board_name || it.board_code),
+            cell(it.member_count),
+            fmtPct(it.weighted_change_percent),
+            it.approx_contribution != null ? Number(it.approx_contribution).toFixed(3) : '--',
+          ]),
+          {
+            0: { cellWidth: 40 },
+            1: { cellWidth: 16 },
+            2: { cellWidth: 24 },
+            3: { cellWidth: 24 },
+          }
+        );
+      }
+      y += 2;
     }
-    y += 2;
 
     // —— 波段 ——
     drawTitle('三、价格行为 · 波段与趋势', 12, [30, 64, 175]);

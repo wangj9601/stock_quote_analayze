@@ -4389,14 +4389,15 @@ body.ssa-png-capturing .ms-zigzag-svg,
 /* 观察列表 */
 .uto-table--observe {
   --uto-w-check: 36px;
-  --uto-w-code: 8%;
-  --uto-w-name: 17%;
-  --uto-w-market: 6%;
-  --uto-w-source: 10%;
-  --uto-w-price: 9%;
-  --uto-w-date: 10%;
-  --uto-w-datetime: 15%;
-  --uto-w-ops: 20%;
+  --uto-w-code: 7%;
+  --uto-w-name: 14%;
+  --uto-w-market: 5%;
+  --uto-w-source: 9%;
+  --uto-w-risk: 96px;
+  --uto-w-price: 8%;
+  --uto-w-date: 9%;
+  --uto-w-datetime: 13%;
+  --uto-w-ops: 18%;
   min-width: 0;
 }
 
@@ -4405,6 +4406,7 @@ body.ssa-png-capturing .ms-zigzag-svg,
 .uto-table--observe .uto-cg-name { width: var(--uto-w-name); }
 .uto-table--observe .uto-cg-market { width: var(--uto-w-market); }
 .uto-table--observe .uto-cg-source { width: var(--uto-w-source); }
+.uto-table--observe .uto-cg-risk { width: var(--uto-w-risk); }
 .uto-table--observe .uto-cg-price { width: var(--uto-w-price); }
 .uto-table--observe .uto-cg-date { width: var(--uto-w-date); }
 .uto-table--observe .uto-cg-datetime { width: var(--uto-w-datetime); }
@@ -4519,6 +4521,13 @@ body.ssa-png-capturing .ms-zigzag-svg,
   text-align: center;
 }
 
+.uto-table th.uto-col-risk,
+.uto-table td.uto-col-risk {
+  white-space: nowrap;
+  text-align: center;
+  overflow: visible;
+}
+
 .uto-table .uto-col-num {
   white-space: nowrap;
   text-align: right;
@@ -4623,13 +4632,14 @@ body.ssa-png-capturing .ms-zigzag-svg,
 /* Ã¨Â§ÂÃ¥Â¯ÂÃ¥ÂÂÃ¨Â¡Â¨Ã¯Â¼ÂÃ©ÂÂÃ§ÂºÂ§Ã©ÂÂÃ¨ÂÂÃ¦Â¬Â¡Ã¨Â¦ÂÃ¥ÂÂÃ¥Â¹Â¶Ã©ÂÂÃ¥ÂÂÃ©ÂÂÃ¥Â®Â½Ã¥ÂºÂ¦ */
 @media (max-width: 1280px) {
   .uto-table--observe {
-    --uto-w-code: 9%;
-    --uto-w-name: 22%;
-    --uto-w-source: 13%;
-    --uto-w-price: 10%;
-    --uto-w-date: 13%;
-    --uto-w-datetime: 18%;
-    --uto-w-ops: 15%;
+    --uto-w-code: 8%;
+    --uto-w-name: 16%;
+    --uto-w-source: 11%;
+    --uto-w-risk: 96px;
+    --uto-w-price: 9%;
+    --uto-w-date: 11%;
+    --uto-w-datetime: 16%;
+    --uto-w-ops: 16%;
   }
 
   .uto-table--observe .uto-col-market,
@@ -4640,12 +4650,13 @@ body.ssa-png-capturing .ms-zigzag-svg,
 
 @media (max-width: 1024px) {
   .uto-table--observe {
-    --uto-w-code: 10%;
-    --uto-w-name: 26%;
-    --uto-w-source: 15%;
-    --uto-w-price: 11%;
-    --uto-w-date: 15%;
-    --uto-w-ops: 23%;
+    --uto-w-code: 9%;
+    --uto-w-name: 18%;
+    --uto-w-source: 13%;
+    --uto-w-risk: 96px;
+    --uto-w-price: 10%;
+    --uto-w-date: 13%;
+    --uto-w-ops: 20%;
   }
 
   .uto-table--observe .uto-col-datetime,
@@ -5085,3 +5096,32 @@ html.analysis-popup-window .analysis-tabs {
   .rsa-table th.rsa-col-ops,
   .rsa-table td.rsa-col-ops { position: static; box-shadow: none; }
 }
+
+#iiaBoardPick {
+  width: 100%;
+  min-width: 220px;
+  margin-top: 0.35rem;
+}
+
+.isa-market-view {
+  padding: 0.85rem 1rem;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--color-border, #e2e8f0);
+  margin-bottom: 0.5rem;
+}
+.isa-bias-label { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.35rem; }
+.isa-bias-bull .isa-bias-label { color: var(--color-rise, #dc2626); }
+.isa-bias-bear .isa-bias-label { color: var(--color-fall, #16a34a); }
+.isa-bias-neu .isa-bias-label { color: var(--ops-gold, #a16207); }
+.isa-breadth-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+.isa-breadth-grid strong { display: block; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.isa-table { width: 100%; border-collapse: collapse; margin: 0.5rem 0 1rem; font-size: 0.9rem; }
+.isa-table th, .isa-table td { padding: 0.4rem 0.55rem; border-bottom: 1px solid var(--color-border, #e2e8f0); text-align: left; }
+.isa-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.isa-meta-row { display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; align-items: baseline; }

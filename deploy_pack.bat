@@ -22,7 +22,8 @@ echo   - 正式发布请只用: dist\stock_quote_release_*.zip
 echo   - 默认不再生成 stock_quote_analyze_v*.zip（旧 package.py 分发包）
 echo   - 若仍需要旧包: deploy_pack.bat -IncludePackagePy
 echo   - 跳过 admin 构建: deploy_pack.bat -SkipAdminBuild
-echo   - 远程部署需额外参数，例如:
+echo   - 百度云 Windows 一键打包上传发布: deploy_baidu.bat
+echo   - 其他 Windows 主机远程部署需额外参数，例如:
 echo     deploy_pack.bat -RemoteDeploy -ServerHost host -ServerUser user
 echo.
 echo 开始打包，请稍候（admin 构建可能需数分钟）...

@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261007b">
     <link rel="stylesheet" href="css/ops-responsive.css?v=20260930-rv">
-    <link rel="stylesheet" href="css/analysis.css?v=20261113-bgate1">
+    <link rel="stylesheet" href="css/analysis.css?v=20261116-uto-risk">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/recommend.css?v=20260930-rv">
     <script>
@@ -44,6 +44,7 @@
                     <button class="analysis-tab" data-tab="leader-mid" data-perm="channel.analyze.tab.leader_mid">龙头中军</button>
                     <button class="analysis-tab" data-tab="stock-ai" data-perm="channel.analyze.tab.stock_ai">个股分析</button>
                     <button class="analysis-tab" data-tab="index-ai" data-perm="channel.analyze.tab.index">指数分析</button>
+                    <button class="analysis-tab" data-tab="industry-index-ai" data-perm="channel.analyze.tab.industry_index">行业指数分析</button>
                     <button class="analysis-tab" data-tab="rs-rating" data-perm="channel.analyze.tab.rs">个股相对强度分析</button>
                     <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
                     <button type="button" class="analysis-tab" data-tab="recommend" data-perm="channel.analyze.tab.recommend">策略推荐</button>
@@ -451,6 +452,93 @@
                                     <summary class="ssa-block-title">江恩趋势预测</summary>
                                     <div class="ssa-block-status" id="isaGannStatus"></div>
                                     <div class="ssa-gann-host" id="isaGannHost"></div>
+                                </details>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 行业指数分析：行业环境 + 成分广度 + 价格行为 -->
+                <div class="tab-panel" id="industry-index-ai">
+                    <div class="ssa-section isa-workbench" data-perm="channel.analyze.tab.industry_index">
+                        <div class="ssa-header">
+                            <h3>行业指数分析</h3>
+                            <p class="ssa-hint">
+                                针对同花顺行业板块指数，一次给出<strong>行业环境研判</strong>与<strong>价格行为</strong>（波段 → 形态 → 关位 → 江恩）。
+                                成分涨跌来自板块成分与个股实时行情。实时分析只刷新现价和广度锚点，不改写当日 K（行业实时行情没有开高低）。
+                            </p>
+                        </div>
+                        <div class="ssa-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="iiaBoardQuery">行业板块</label>
+                                    <input type="search" id="iiaBoardQuery" placeholder="搜索名称或代码" autocomplete="off">
+                                    <select id="iiaBoardPick" size="6" aria-label="行业板块列表"></select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="iiaTradeDate">基准日（可选）</label>
+                                    <input type="date" id="iiaTradeDate">
+                                </div>
+                                <div class="form-group ssa-actions">
+                                    <label>&nbsp;</label>
+                                    <div class="ssa-action-btns">
+                                        <button type="button" class="btn btn-primary" id="iiaAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.industry_index.btn.analyze">分析</button>
+                                        <button type="button" class="btn btn-secondary" id="iiaRealtimeAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.industry_index.btn.analyze"
+                                            title="刷新现价与广度，不改写当日K">实时分析</button>
+                                        <button type="button" class="btn btn-secondary" id="iiaExportPdfBtn"
+                                            data-perm="channel.analyze.tab.industry_index.btn.analyze"
+                                            title="导出结构化 PDF 报告" disabled>导出 PDF</button>
+                                        <button type="button" class="btn btn-secondary" id="iiaExportPngBtn"
+                                            data-perm="channel.analyze.tab.industry_index.btn.analyze"
+                                            title="导出页面长图 PNG" disabled>导出 PNG</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="iiaEmpty" class="ssa-empty">搜索并选中行业后点击「分析」</div>
+                        <div id="iiaExportRoot" class="ssa-export-root" hidden>
+                            <div class="ssa-meta" id="iiaMeta" hidden></div>
+                            <section class="ssa-block" id="iiaMarketViewBlock" hidden>
+                                <h4 class="ssa-block-title">行业环境研判</h4>
+                                <div class="ssa-block-status" id="iiaMarketViewStatus"></div>
+                                <div id="iiaMarketViewHost"></div>
+                            </section>
+                            <section class="ssa-block" id="iiaBreadthBlock" hidden>
+                                <h4 class="ssa-block-title">成分广度与领涨领跌</h4>
+                                <div id="iiaBreadthHost"></div>
+                            </section>
+                            <section class="ssa-pa-section" id="iiaPaSection" hidden>
+                                <div class="ssa-pa-section__head">
+                                    <h4 class="ssa-pa-section__title">价格行为</h4>
+                                    <p class="ssa-pa-section__hint">阅读顺序：波段定方向 → 形态看短线结构 → 关位定攻防。行业指数日线、不复权；实时分析不改写当日 K。</p>
+                                </div>
+                                <section class="ssa-block ssa-block--collapsible" id="iiaSwingBlock" hidden>
+                                    <details class="ssa-details" open>
+                                        <summary class="ssa-block-title">1. 波段与趋势（含 SMC）</summary>
+                                        <div class="ssa-block-status" id="iiaSwingStatus"></div>
+                                        <div class="ssa-swing-host" id="iiaSwingHost"></div>
+                                    </details>
+                                </section>
+                                <section class="ssa-block ssa-block--collapsible" id="iiaPatternBlock" hidden>
+                                    <details class="ssa-details" open>
+                                        <summary class="ssa-block-title">2. 形态识别</summary>
+                                        <div class="ssa-block-status" id="iiaPatternStatus"></div>
+                                        <div class="ssa-pattern-host" id="iiaPatternHost"></div>
+                                    </details>
+                                </section>
+                                <section class="ssa-block" id="iiaLevelsBlock" hidden>
+                                    <h4 class="ssa-block-title">3. 阻力支撑位</h4>
+                                    <div class="ssa-block-status" id="iiaLevelsStatus"></div>
+                                    <div class="ssa-levels-host" id="iiaLevelsHost"></div>
+                                </section>
+                            </section>
+                            <section class="ssa-block ssa-block--collapsible" id="iiaGannBlock" hidden>
+                                <details class="ssa-details">
+                                    <summary class="ssa-block-title">江恩趋势预测</summary>
+                                    <div class="ssa-block-status" id="iiaGannStatus"></div>
+                                    <div class="ssa-gann-host" id="iiaGannHost"></div>
                                 </details>
                             </section>
                         </div>

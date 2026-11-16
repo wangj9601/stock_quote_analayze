@@ -11,6 +11,7 @@
         'js/index_analysis_pdf.js',
         'js/vendor/html2canvas.min.js',
         'js/stock_analysis_png.js',
+        'js/pa_analysis_view.js',
         'js/index_analysis.js',
     ];
 

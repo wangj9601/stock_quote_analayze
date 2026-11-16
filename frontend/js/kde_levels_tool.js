@@ -164,6 +164,15 @@ const KdeLevelsTool = {
      */
     async fetchLevels(query, options = {}) {
         const assetType = String(options.asset_type || options.assetType || '').toLowerCase();
+        if (assetType === 'industry_index') {
+            return {
+                ok: false,
+                data: {},
+                message: '行业指数关位随分析一并计算，不单独重算',
+                candidates: [],
+                httpOk: false,
+            };
+        }
         const isIndex = assetType === 'index';
         const adjust = isIndex
             ? 'none'
@@ -303,9 +312,11 @@ const KdeLevelsTool = {
         const host = container.querySelector('.kde-levels-boards');
         if (!host) return;
         // 指数无个股行业/概念归属；避免 000001 误显示「银行」等个股板块
-        if (this._isIndexAsset(ctx, container)) {
+        const assetType = String((ctx && (ctx.asset_type || ctx.assetType)) || container.dataset.assetType || '').toLowerCase();
+        if (this._isIndexAsset(ctx, container) || assetType === 'industry_index') {
+            const label = assetType === 'industry_index' ? '行业指数' : '指数';
             host.innerHTML =
-                `<div class="kde-levels-board-line"><span class="kde-levels-board-label">标的类型</span><span>指数</span></div>` +
+                `<div class="kde-levels-board-line"><span class="kde-levels-board-label">标的类型</span><span>${label}</span></div>` +
                 `<div class="kde-levels-board-line"><span class="kde-levels-board-label">行业/概念</span><span class="muted">不适用</span></div>`;
             return;
         }
@@ -408,8 +419,8 @@ const KdeLevelsTool = {
         const assetType = String(
             options.asset_type || options.assetType || d.asset_type || ''
         ).toLowerCase();
-        if (assetType === 'index') {
-            container.dataset.assetType = 'index';
+        if (assetType === 'index' || assetType === 'industry_index') {
+            container.dataset.assetType = assetType;
         } else {
             delete container.dataset.assetType;
         }
@@ -417,7 +428,9 @@ const KdeLevelsTool = {
         const title = name ? `${code} ${name}` : (code || '结果');
         const adjustBrief = assetType === 'index'
             ? '指数日线'
-            : (d.price_adjust === 'qfq' ? '前复权' : '不复权');
+            : assetType === 'industry_index'
+                ? '行业指数日线'
+                : (d.price_adjust === 'qfq' ? '前复权' : '不复权');
         const summary = ok
             ? `${title} · ${adjustBrief}`
             : `${title} · ${adjustBrief}${message ? `（${message}）` : ''}`;
@@ -824,10 +837,17 @@ const KdeLevelsTool = {
             });
         }
 
+        if (assetType === 'industry_index') {
+            container.querySelectorAll('.kde-vp-lookback-ctrl, .ssa-kde-vp-sync-lookback').forEach((node) => {
+                node.remove();
+            });
+        }
         const bindCtx = {
             code,
-            asset_type: assetType === 'index' ? 'index' : 'stock',
-            adjust: assetType === 'index'
+            asset_type: assetType === 'index'
+                ? 'index'
+                : (assetType === 'industry_index' ? 'industry_index' : 'stock'),
+            adjust: (assetType === 'index' || assetType === 'industry_index')
                 ? 'none'
                 : (options.adjust != null
                     ? (options.adjust === 'qfq' ? 'qfq' : 'none')
@@ -836,9 +856,11 @@ const KdeLevelsTool = {
             max_levels: options.max_levels != null ? options.max_levels : 8,
             onUpdated: typeof options.onUpdated === 'function' ? options.onUpdated : null,
         };
-        this._bindEmbeddedVpControls(container, bindCtx);
-        this._bindEmbeddedKdeControls(container, bindCtx);
-        this._bindEmbeddedSyncLookback(container, bindCtx);
+        if (assetType !== 'industry_index') {
+            this._bindEmbeddedVpControls(container, bindCtx);
+            this._bindEmbeddedKdeControls(container, bindCtx);
+            this._bindEmbeddedSyncLookback(container, bindCtx);
+        }
         void this._fillEmbeddedBoards(container, code, bindCtx);
     },
 
@@ -855,6 +877,17 @@ const KdeLevelsTool = {
             || ''
         ).trim();
         if (code) container.dataset.stockCode = code;
+        const assetType = String(
+            (ctx && (ctx.asset_type || ctx.assetType)) || container.dataset.assetType || ''
+        ).toLowerCase();
+        if (assetType === 'industry_index') {
+            container.dataset.assetType = 'industry_index';
+            container.querySelectorAll('.kde-vp-lookback-ctrl, .ssa-kde-vp-sync-lookback').forEach((node) => {
+                node.remove();
+            });
+            void this._fillEmbeddedBoards(container, code, Object.assign({}, ctx, { asset_type: 'industry_index' }));
+            return;
+        }
         const isIndex = this._isIndexAsset(ctx, container);
         if (isIndex) container.dataset.assetType = 'index';
         // 克隆替换，避免重复 addEventListener（会话恢复或多次 rebind）

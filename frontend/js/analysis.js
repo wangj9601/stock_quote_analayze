@@ -32,8 +32,19 @@ const AnalysisPage = {
             'js/gann_trend_tool.js?v=20260917c',
             'js/stock_trade_plan.js?v=20260929-rr',
             'js/stock_analysis_png.js',
-            'js/index_analysis_pdf.js?v=20261015-idxpdf',
-            'js/index_analysis.js?v=20261015-idxlv',
+            'js/index_analysis_pdf.js?v=20261116-iia',
+            'js/pa_analysis_view.js?v=20261116-iia',
+            'js/index_analysis.js?v=20261116-iia',
+        ],
+        'industry-index-ai': [
+            'js/kde_levels_tool.js?v=20261116-iia',
+            'js/pattern_tool.js?v=20260921d',
+            'js/market_structure_tool.js?v=20260930-smcfold',
+            'js/gann_trend_tool.js?v=20260917c',
+            'js/stock_analysis_png.js',
+            'js/index_analysis_pdf.js?v=20261116-iia',
+            'js/pa_analysis_view.js?v=20261116-iia',
+            'js/industry_index_analysis.js?v=20261116-iia',
         ],
         'rs-rating': [
             'js/rs_rating_analysis.js?v=20261007-rsa',
@@ -113,7 +124,7 @@ const AnalysisPage = {
                 this._booted[key] = false;
             }
         };
-        const needsTools = tabId === 'stock-ai' || tabId === 'technical-tools' || tabId === 'index-ai';
+        const needsTools = tabId === 'stock-ai' || tabId === 'technical-tools' || tabId === 'index-ai' || tabId === 'industry-index-ai';
         if (needsTools) {
             once('kde', () => {
                 if (window.KdeLevelsTool) KdeLevelsTool.init();
@@ -142,6 +153,11 @@ const AnalysisPage = {
                 } finally {
                     IndexAnalysis.redirectDeepLinkIfNeeded = orig;
                 }
+            });
+        }
+        if (tabId === 'industry-index-ai') {
+            once('industry-index', () => {
+                if (window.IndustryIndexAnalysis) IndustryIndexAnalysis.init();
             });
         }
         if (tabId === 'market-analysis') {
@@ -190,6 +206,18 @@ const AnalysisPage = {
             if (tab === 'index-ai' && index) {
                 const popup = params.get('popup') === '1' ? '&popup=1' : '';
                 window.location.replace(`index_detail.html?index=${encodeURIComponent(index)}${popup}`);
+                return true;
+            }
+            const boardCode = (params.get('board_code') || '').trim();
+            if (tab === 'industry-index-ai' && boardCode) {
+                const popup = params.get('popup') === '1' ? '&popup=1' : '';
+                const q = new URLSearchParams({
+                    board_kind: 'industry',
+                    board_code: boardCode,
+                    board_code_source: params.get('board_code_source') || 'tonghuashun',
+                    analyze: '1',
+                });
+                window.location.replace(`board_detail.html?${q.toString()}${popup}`);
                 return true;
             }
         } catch (e) { /* ignore */ }
@@ -440,6 +468,11 @@ const AnalysisPage = {
                     IndexAnalysis.init();
                 } else if (window.IndexAnalysisPanel) {
                     void IndexAnalysisPanel.ensureReady();
+                }
+                break;
+            case 'industry-index-ai':
+                if (window.IndustryIndexAnalysis) {
+                    IndustryIndexAnalysis.init();
                 }
                 break;
             case 'rs-rating':

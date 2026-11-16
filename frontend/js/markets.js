@@ -1845,6 +1845,12 @@ const MarketsPage = {
             ['参与成分', d.member_count_used != null ? `${this.escapeHtml(String(d.member_count_used))} 只` : '--'],
         ].map(([k, v]) => `<span class="sector-slope-meta-item"><span class="k">${k}</span><span class="v">${v}</span></span>`).join('');
 
+        const industryAnalysisHtml = (
+            d.board_kind !== 'concept'
+            && typeof IndustryIndexAnalysis !== 'undefined'
+            && typeof IndustryIndexAnalysis.detailSectionHtml === 'function'
+        ) ? IndustryIndexAnalysis.detailSectionHtml() : '';
+
         body.innerHTML = `
             <div class="sector-detail-grid">
                 ${item('指数', this.formatBoardIndex(d.latest_price))}
@@ -1894,6 +1900,7 @@ const MarketsPage = {
                     </div>
                 </div>
             </div>
+            ${industryAnalysisHtml}
             <div class="sector-detail-section sector-fund-flow-section">
                 <h3>资金流向</h3>
                 <div id="sectorFundFlowHost" class="sector-fund-flow-host">
@@ -1934,6 +1941,17 @@ const MarketsPage = {
         const src = String(d.board_code_source || (this._sectorDetailCtx && this._sectorDetailCtx.boardSource) || 'tonghuashun').trim();
         this.loadSectorBoardGate(kind, code, src);
         this.loadSectorSlopeTrend(kind, code);
+        if (kind === 'industry' && typeof IndustryIndexAnalysis !== 'undefined' && document.getElementById('iiaDetailSection')) {
+            let auto = false;
+            try {
+                auto = new URLSearchParams(window.location.search || '').get('analyze') === '1';
+            } catch (e) { /* ignore */ }
+            IndustryIndexAnalysis.mountDetail({
+                code: code,
+                name: d.board_name || '',
+                auto: auto,
+            });
+        }
         this.loadSectorFundFlow(kind, code, src);
         this.loadSectorLimitUpStocks(kind, code, src, d.board_name || '', {
             waveStartMode: (this._sectorLimitUpPrefs && this._sectorLimitUpPrefs.waveStartMode) || 'board_start',
