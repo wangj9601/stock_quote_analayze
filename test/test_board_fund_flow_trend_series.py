@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock
 
 from backend_api.stock import board_fund_flow as mod
@@ -82,8 +81,7 @@ def test_get_board_fund_flow_trend_series_day():
 
     db.execute.side_effect = execute
 
-    result = asyncio.get_event_loop().run_until_complete(
-        mod.get_board_fund_flow_trend_series(
+    result = mod.get_board_fund_flow_trend_series(
             period="day",
             board_kind="industry",
             board_code_source="tonghuashun",
@@ -91,7 +89,6 @@ def test_get_board_fund_flow_trend_series_day():
             top_n=5,
             db=db,
         )
-    )
     assert result["success"] is True
     data = result["data"]
     assert data["period"] == "day"
@@ -105,8 +102,7 @@ def test_get_board_fund_flow_trend_series_day():
 
 
 def test_get_board_fund_flow_trend_series_invalid_period():
-    result = asyncio.get_event_loop().run_until_complete(
-        mod.get_board_fund_flow_trend_series(
+    result = mod.get_board_fund_flow_trend_series(
             period="year",
             board_kind="industry",
             board_code_source="tonghuashun",
@@ -114,5 +110,4 @@ def test_get_board_fund_flow_trend_series_invalid_period():
             top_n=5,
             db=MagicMock(),
         )
-    )
     assert result.status_code == 400

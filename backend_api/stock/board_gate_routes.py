@@ -31,7 +31,7 @@ def _json_field(v: Any) -> Any:
 
 
 @router.get("/daily")
-async def get_board_gate_daily(
+def get_board_gate_daily(
     board_code: str = Query(..., description="板块代码"),
     board_kind: str = Query("industry", description="industry | concept"),
     board_code_source: str = Query(DEFAULT_BOARD_CODE_SOURCE),
@@ -89,7 +89,7 @@ async def get_board_gate_daily(
 
 
 @router.get("/list")
-async def list_board_gates(
+def list_board_gates(
     trade_date: Optional[str] = Query(None),
     board_kind: Optional[str] = Query(None),
     short_state: Optional[str] = Query(None),

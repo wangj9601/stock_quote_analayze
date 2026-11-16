@@ -2,7 +2,7 @@
 数据库配置和工具函数
 """
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
@@ -20,6 +20,32 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=1800,
 )
+
+
+@event.listens_for(engine, "connect")
+def _set_pg_session_timeouts(dbapi_conn, _connection_record):
+    """拿不到锁 3 秒即失败；空闲事务超过 60 秒由数据库断开。
+
+    避免请求里的 DDL 或未提交事务把整表锁住。迁移走同一引擎时，
+    alembic/env.py 会在升级事务内 SET LOCAL 关掉这两项。
+    """
+    cursor = dbapi_conn.cursor()
+    try:
+        cursor.execute("SET lock_timeout = '3s'")
+        cursor.execute("SET idle_in_transaction_session_timeout = '60s'")
+    except Exception:
+        try:
+            dbapi_conn.rollback()
+        except Exception:
+            pass
+        return
+    finally:
+        cursor.close()
+    try:
+        dbapi_conn.commit()
+    except Exception:
+        pass
+
 
 def _redact_db_url(url: str) -> str:
     """日志中隐藏口令，避免启动时把 DATABASE_URL 明文打到终端。"""

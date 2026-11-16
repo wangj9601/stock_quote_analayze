@@ -831,7 +831,7 @@ def _pick_rank_sides(rows: list, sides: int) -> list:
 
 
 @router.get("/rank")
-async def get_stock_fund_flow_rank(
+def get_stock_fund_flow_rank(
     period: str = Query("day", description="day|week|month（近1/5/20 个交易日净流入合计）"),
     sides: int = Query(
         80,
@@ -995,7 +995,7 @@ def _iso_date_str(value: Any) -> str:
 
 
 @router.get("/trend_series")
-async def get_stock_fund_flow_trend_series(
+def get_stock_fund_flow_trend_series(
     period: str = Query("day", description="day|week|month → 趋势窗口 20/40/60 交易日"),
     trade_date: Optional[str] = Query(
         None, description="锚定交易日 YYYY-MM-DD；默认取库内最新日"

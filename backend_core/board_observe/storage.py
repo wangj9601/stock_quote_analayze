@@ -21,6 +21,11 @@ _READY = False
 
 
 def ensure_board_observe_tables(db) -> None:
+    """只给手工脚本 migrations/add_board_observe_candidate.py 用。
+
+    生产加列走 Alembic ``0007_board_observe``。请求、日批、采纳都不得调用：
+    ``ALTER TABLE`` 会拿排他锁，和页面上的板块查询互等，把接口卡住。
+    """
     global _READY
     if _READY:
         return
@@ -90,7 +95,6 @@ def ensure_board_observe_tables(db) -> None:
 def upsert_observe_candidates(db, rows: Sequence[Dict[str, Any]]) -> int:
     if not rows:
         return 0
-    ensure_board_observe_tables(db)
     sql = text(
         """
         INSERT INTO board_observe_candidate_daily (
@@ -152,7 +156,6 @@ def load_prior_eligibility(
     board_code_source: str = DEFAULT_BOARD_CODE_SOURCE,
 ) -> Dict[str, List[bool]]:
     """加载 asof 之前最近 limit_days 日的 in_eligible / out_eligible（evidence 内布尔）。"""
-    ensure_board_observe_tables(db)
     key = "in_eligible" if field == "in" else "out_eligible"
     try:
         rows = db.execute(
@@ -203,7 +206,6 @@ def apply_observe_flag(
     updated_by: Optional[str] = None,
     board_code_source: str = DEFAULT_BOARD_CODE_SOURCE,
 ) -> Dict[str, Any]:
-    ensure_board_observe_tables(db)
     code = str(board_code or "").strip()
     row = db.execute(
         text(

@@ -212,6 +212,11 @@ def run_migrations_online() -> None:
     with engine.connect() as connection:
         context.configure(connection=connection, **_configure_kwargs())
         with context.begin_transaction():
+            # 接口连接默认 lock_timeout=3s。升级事务内放宽，避免加列被页面查询挡住时直接失败。
+            connection.exec_driver_sql("SET LOCAL lock_timeout = 0")
+            connection.exec_driver_sql(
+                "SET LOCAL idle_in_transaction_session_timeout = 0"
+            )
             context.run_migrations()
 
 

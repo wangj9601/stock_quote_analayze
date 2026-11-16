@@ -220,7 +220,7 @@ _BOARD_FUND_FLOW_RANK_PERIODS = {
 
 
 @router.get("/rank")
-async def get_board_fund_flow_rank(
+def get_board_fund_flow_rank(
     period: str = Query("day", description="day|week|month（近1/5/20 个交易日净流入合计）"),
     board_kind: str = Query(..., description="industry | concept"),
     board_code_source: str = Query(DEFAULT_BOARD_CODE_SOURCE),
@@ -400,7 +400,7 @@ def _iso_date(value: Any) -> str:
 
 
 @router.get("/trend_series")
-async def get_board_fund_flow_trend_series(
+def get_board_fund_flow_trend_series(
     period: str = Query("day", description="day|week|month → 趋势窗口 20/40/60 交易日"),
     board_kind: str = Query(..., description="industry | concept"),
     board_code_source: str = Query(DEFAULT_BOARD_CODE_SOURCE),
@@ -735,7 +735,7 @@ def _resolve_constituent_board_code(
 
 
 @router.get("/constituents")
-async def get_board_constituent_fund_flow(
+def get_board_constituent_fund_flow(
     board_code: str = Query(..., description="板块代码（同花顺口径）"),
     board_kind: str = Query(..., description="industry | concept"),
     period: str = Query("day", description="day|week|month（近1/5/20 个交易日净流入合计）"),

@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """迁移：行业观察池自动候选日表 + industry observe_lock 元数据。
 
+生产默认走 Alembic revision ``0007_board_observe``（``scripts/db_migrate.py upgrade``）。
+本脚本只作手工补齐，会执行 ALTER TABLE，不要在接口进程里调用。
+
 用法:
     python migrations/add_board_observe_candidate.py
 """

@@ -46,7 +46,7 @@ class AdoptBody(BaseModel):
 
 
 @router.get("/candidates")
-async def list_observe_candidates(
+def list_observe_candidates(
     trade_date: Optional[str] = Query(None),
     action: Optional[str] = Query(None, description="suggest_in|suggest_out|in_pool|watch"),
     adoptable_only: bool = Query(False),
@@ -55,9 +55,7 @@ async def list_observe_candidates(
 ):
     try:
         from backend_core.board_gates.storage import resolve_asof_trade_date
-        from backend_core.board_observe.storage import ensure_board_observe_tables
 
-        ensure_board_observe_tables(db)
         asof = resolve_asof_trade_date(db, trade_date)
         # 候选表可能尚无该日：回退最新有数据日
         has = db.execute(
@@ -170,12 +168,8 @@ async def adopt_observe_candidates(
             SOFT_CAP,
             SOURCE_ADOPTED_AUTO,
         )
-        from backend_core.board_observe.storage import (
-            apply_observe_flag,
-            ensure_board_observe_tables,
-        )
+        from backend_core.board_observe.storage import apply_observe_flag
 
-        ensure_board_observe_tables(db)
         asof = resolve_asof_trade_date(db, body.trade_date)
         actions = body.actions or [ACTION_SUGGEST_IN, ACTION_SUGGEST_OUT]
         actions = [str(a).strip() for a in actions if a]

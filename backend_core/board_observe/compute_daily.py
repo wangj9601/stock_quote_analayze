@@ -30,7 +30,6 @@ from backend_core.board_observe.config import (
 )
 from backend_core.board_observe.score import score_board
 from backend_core.board_observe.storage import (
-    ensure_board_observe_tables,
     load_prior_eligibility,
     upsert_observe_candidates,
 )
@@ -236,7 +235,6 @@ def compute_observe_candidates_for_date(
     db,
     trade_date: Optional[str] = None,
 ) -> Dict[str, Any]:
-    ensure_board_observe_tables(db)
     asof = resolve_asof_trade_date(db, trade_date)
     src = DEFAULT_BOARD_CODE_SOURCE
 

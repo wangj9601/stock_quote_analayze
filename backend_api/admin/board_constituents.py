@@ -1348,12 +1348,6 @@ async def set_board_observe_lock(
     _ = current_user
     if body.board_type != "industry":
         raise HTTPException(status_code=400, detail="观察池锁死目前仅支持行业板块")
-    try:
-        from backend_core.board_observe.storage import ensure_board_observe_tables
-
-        ensure_board_observe_tables(db)
-    except Exception:
-        pass
     t = _tables(body.board_type)
     n = db.execute(
         text(
