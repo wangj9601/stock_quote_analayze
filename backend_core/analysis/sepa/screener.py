@@ -117,12 +117,15 @@ def screen_universe(
     statuses: Optional[Sequence[str]] = None,
     tiers: Optional[Sequence[str]] = None,
     stats: Optional[Dict[str, int]] = None,
+    ranks: Optional[Mapping[str, float]] = None,
 ) -> List[Dict[str, Any]]:
     """批量筛选。先横截面算相对强度，再逐票评估，最后按可执行度+得分排序。
 
     stats 传入 dict 时会原地写入漏斗计数，供接口层展示每层淘汰了多少。
     statuses 给定时只保留这些形态；缺省为就位 / 未放量越过 / 放量突破，
     include_forming / include_extended 再把对应形态加进来。分级过滤在截断 top 之前做。
+    ranks 传入时不再用本批 K 线重算相对强度。全市场分批扫描必须传入全池分位，
+    否则每一批都会把自己当成整个横截面。
     """
     c = cfg or SEPAConfig()
     margin_by_code = margin_by_code or {}
@@ -133,8 +136,9 @@ def screen_universe(
     if not codes:
         return []
 
-    momentum = {code: momentum_of(bars_by_code[code]) for code in codes}
-    ranks = dict(zip(codes, rs_rank([momentum[k] for k in codes])))
+    if ranks is None:
+        momentum = {code: momentum_of(bars_by_code[code]) for code in codes}
+        ranks = dict(zip(codes, rs_rank([momentum[k] for k in codes])))
 
     out: List[Dict[str, Any]] = []
     if statuses is None:

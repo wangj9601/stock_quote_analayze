@@ -125,7 +125,7 @@ def test_exec_sepa_without_date_lets_job_pick_latest(monkeypatch):
 
 
 def test_precompute_stores_every_morphology(monkeypatch):
-    captured = {}
+    captured = {"screens": []}
 
     class _DB:
         def rollback(self):
@@ -135,38 +135,136 @@ def test_precompute_stores_every_morphology(monkeypatch):
             pass
 
     monkeypatch.setenv("ENABLE_SEPA_PRECOMPUTE", "true")
+    monkeypatch.setenv("SEPA_BARS_BATCH_SIZE", "1")
     monkeypatch.setattr("backend_api.database.SessionLocal", lambda: _DB())
     monkeypatch.setattr(
-        "backend_core.analysis.sepa.loaders.fetch_inputs",
+        "backend_core.analysis.sepa.loaders.load_universe",
         lambda db, **kwargs: {
-            "bars": {"000001": []},
-            "margin": {},
-            "float_mv": {},
-            "names": {"000001": "平安银行"},
-            "codes": ["000001"],
-            "pool": {"min_avg_amount": 50_000_000},
+            "codes": ["000002", "000001"],
+            "names": {"000001": "平安银行", "000002": "万科"},
+            "min_avg_amount": 50_000_000,
+            "exclude_st": True,
         },
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_momentum_map",
+        lambda db, codes, end_date, n_bars=340: {code: float(i) for i, code in enumerate(codes)},
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_bars",
+        lambda db, codes, end_date, n_bars=340: {code: [{"close": 1}] for code in codes},
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_margin",
+        lambda db, codes, end_date, n_rows=90: {},
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_float_mv",
+        lambda db, codes, end_date: {},
     )
 
     def _screen(bars, **kwargs):
-        captured["screen"] = kwargs
-        return {"rows": [{"code": "000001", "vcp": {"status": "forming"}}], "stats": {"forming": 1}}
+        captured["screens"].append(kwargs)
+        stats = kwargs.get("stats")
+        if stats is not None:
+            stats.update(
+                {
+                    "universe": len(bars),
+                    "trend_pass": len(bars),
+                    "vcp_any": len(bars),
+                    "forming": len(bars),
+                    "breakout": 0,
+                    "quiet": 0,
+                    "ready": 0,
+                    "extended": 0,
+                }
+            )
+        return [
+            {"code": code, "vcp": {"status": "forming"}, "score": 1, "tier": "C"}
+            for code in bars
+        ]
 
-    monkeypatch.setattr("backend_core.analysis.sepa.screen_report", _screen)
+    monkeypatch.setattr("backend_core.analysis.sepa.screener.screen_universe", _screen)
     monkeypatch.setattr(
-        "backend_core.analysis.sepa.to_table_rows",
-        lambda rows: [{"code": "000001", "vcp_status": "forming", "score": 1, "tier": "C"}],
+        "backend_core.analysis.sepa.screener.to_table_rows",
+        lambda rows: [
+            {"code": r["code"], "vcp_status": "forming", "score": r.get("score") or 1, "tier": "C"}
+            for r in rows
+        ],
     )
 
     def _replace(db, **kwargs):
         captured["replace"] = kwargs
-        return 1
+        return len(kwargs["rows"])
 
     monkeypatch.setattr("backend_core.analysis.sepa.trace_store.replace_trace", _replace)
     out = run_sepa_precompute(trade_date="2026-11-11")
     assert out["success"] is True
-    assert out["written"] == 1
-    assert captured["screen"]["include_forming"] is True
-    assert captured["screen"]["include_extended"] is True
-    assert captured["screen"]["top"] >= 1000
-    assert captured["replace"]["rows"][0]["vcp_status"] == "forming"
+    assert out["written"] == 2
+    assert len(captured["screens"]) == 2
+    assert all(call["include_forming"] is True for call in captured["screens"])
+    assert all(call["include_extended"] is True for call in captured["screens"])
+    assert all(call["top"] >= 1000 for call in captured["screens"])
+    assert all(call["ranks"] for call in captured["screens"])
+    assert {row["vcp_status"] for row in captured["replace"]["rows"]} == {"forming"}
+    assert captured["replace"]["universe"] == 2
+
+
+def test_scan_pool_matches_single_pass(monkeypatch):
+    """分批扫描的名单和漏斗必须与一次装入 screen_universe 相同。"""
+    import importlib.util
+    from pathlib import Path
+
+    from backend_core.analysis.sepa.scheduled_precompute import scan_sepa_pool
+    from backend_core.analysis.sepa.screener import screen_universe, to_table_rows
+
+    path = Path(__file__).with_name("test_sepa.py")
+    spec = importlib.util.spec_from_file_location("sepa_fixtures", path)
+    fixtures = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixtures)
+
+    bars = {
+        "000010": fixtures._vcp_bars(seed=11),
+        "000001": fixtures._vcp_bars(seed=7),
+        "000003": fixtures._uptrend_bars(),
+        "000002": fixtures._downtrend_bars(),
+    }
+    monkeypatch.setenv("SEPA_BARS_BATCH_SIZE", "1")
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_universe",
+        lambda db, **kwargs: {
+            "codes": list(bars),
+            "names": {},
+            "min_avg_amount": 50_000_000,
+            "exclude_st": True,
+        },
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_bars",
+        lambda db, codes, end_date, n_bars=340: {code: bars[code] for code in codes if code in bars},
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_margin",
+        lambda db, codes, end_date, n_rows=90: {},
+    )
+    monkeypatch.setattr(
+        "backend_core.analysis.sepa.loaders.load_float_mv",
+        lambda db, codes, end_date: {},
+    )
+
+    scanned = scan_sepa_pool(
+        object(),
+        end_date="2026-11-11",
+        min_avg_amount=50_000_000,
+        top=100,
+        include_forming=True,
+        include_extended=True,
+    )
+    ordered = {code: bars[code] for code in sorted(bars)}
+    full = to_table_rows(
+        screen_universe(ordered, top=100, include_forming=True, include_extended=True)
+    )
+    assert [row["code"] for row in scanned["rows"]] == [row["code"] for row in full]
+    assert [row["vcp_status"] for row in scanned["rows"]] == [row["vcp_status"] for row in full]
+    assert [row["score"] for row in scanned["rows"]] == [row["score"] for row in full]
+    assert scanned["universe"] == 4

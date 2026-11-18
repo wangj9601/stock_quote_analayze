@@ -30,14 +30,14 @@ from backend_core.analysis.sepa import (
 )
 from backend_core.analysis.sepa.loaders import (
     cross_section_rs,
-    fetch_inputs,
     latest_trade_date,
     load_bars,
     load_float_mv,
     load_margin,
     load_universe,
 )
-from backend_core.analysis.sepa.screener import filter_table_rows, screen_report
+from backend_core.analysis.sepa.scheduled_precompute import scan_sepa_pool
+from backend_core.analysis.sepa.screener import filter_table_rows
 from backend_core.analysis.sepa.trace_store import cache_covers_request, load_precompute
 
 logger = logging.getLogger(__name__)
@@ -119,33 +119,27 @@ async def get_sepa_screen(
                 }
             )
 
-        inputs = fetch_inputs(
+        scanned = scan_sepa_pool(
             db,
             end_date=d,
             limit_codes=limit_codes or None,
             min_avg_amount=min_avg_amount,
-        )
-        report = screen_report(
-            inputs["bars"],
-            margin_by_code=inputs["margin"],
-            circ_mv_by_code=inputs["float_mv"],
-            names=inputs.get("names"),
             top=top,
             include_forming=include_forming,
             include_extended=include_extended,
             statuses=statuses,
             tiers=tiers,
         )
-        rows = to_table_rows(report["rows"])
-        pool = inputs.get("pool") or {}
+        rows = scanned["rows"]
+        pool = scanned.get("pool") or {}
         return JSONResponse(
             {
                 "success": True,
                 "data": {
                     "trade_date": d,
-                    "universe": len(inputs["codes"]),
+                    "universe": scanned["universe"],
                     "count": len(rows),
-                    "funnel": report["stats"],
+                    "funnel": scanned["funnel"],
                     "pool": {
                         "min_avg_amount": pool.get("min_avg_amount", min_avg_amount),
                         "amount_start": pool.get("amount_start"),

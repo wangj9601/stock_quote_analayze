@@ -20,7 +20,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Optional, Sequence
+import os
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 
 import numpy as np
 from sqlalchemy import text
@@ -33,6 +34,28 @@ AMOUNT_DAYS = 20
 MIN_AMOUNT_OBS = 10
 # 流动性排序后的安全上限，避免一次请求扫完全市场里的壳股。
 SAFETY_CAP = 4000
+# 单批装入 Python 的股票数。4000 只 × 340 根 K 线一次物化会把采集进程撑过 1GB，
+# 3.5GB 且无 swap 的机器上会被 OOM 杀掉。可用 SEPA_BARS_BATCH_SIZE 覆盖。
+_DEFAULT_BARS_BATCH = 200
+
+
+def bars_batch_size() -> int:
+    """每批查询的股票数。非法或空环境变量时回到默认 200。"""
+    raw = (os.getenv("SEPA_BARS_BATCH_SIZE") or "").strip()
+    if not raw:
+        return _DEFAULT_BARS_BATCH
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return _DEFAULT_BARS_BATCH
+
+
+def iter_code_batches(codes: Iterable[str], size: Optional[int] = None) -> Iterator[List[str]]:
+    """按批切代码。空代码丢掉。size 缺省读 SEPA_BARS_BATCH_SIZE。"""
+    seq = [c for c in codes if c]
+    step = bars_batch_size() if size is None else max(1, int(size))
+    for i in range(0, len(seq), step):
+        yield seq[i : i + step]
 
 
 def is_excluded_name(name: Optional[str]) -> bool:
@@ -161,62 +184,98 @@ def resolve_codes(db, *, end_date: str, limit_codes: Optional[int] = None,
 
 
 def cross_section_rs(db, codes: Sequence[str], end_date: str, n_bars: int = 260) -> Dict[str, float]:
-    """只用收盘价算横截面相对强度，供单票明细，避免为排名再拉整段 OHLC。"""
+    """只用收盘价算横截面相对强度，供单票明细，避免为排名再拉整段 OHLC。
+
+    参照池按批查询，每批结束只留下收盘价数组。排名顺序仍跟调用方传入的代码顺序，
+    没有行情的代码按最弱处理，和一次取回的结果一致。
+    """
     if not codes:
         return {}
-    rows = db.execute(
-        text(
-            """
-            WITH ranked AS (
-                SELECT code, close,
-                       row_number() OVER (PARTITION BY code ORDER BY date DESC) AS rn
-                FROM historical_quotes
-                WHERE code = ANY(:codes) AND date <= :d AND close IS NOT NULL
-            )
-            SELECT code, rn, close FROM ranked WHERE rn <= :n
-            """
-        ),
-        {"codes": list(codes), "d": end_date, "n": int(n_bars)},
-    ).mappings().all()
-    grouped: Dict[str, List[tuple]] = {}
-    for r in rows:
-        close = r["close"]
-        if close is None:
-            continue
-        grouped.setdefault(r["code"], []).append((int(r["rn"]), float(close)))
+    series: Dict[str, np.ndarray] = {}
+    for batch in iter_code_batches(codes):
+        rows = db.execute(
+            text(
+                """
+                WITH ranked AS (
+                    SELECT code, close,
+                           row_number() OVER (PARTITION BY code ORDER BY date DESC) AS rn
+                    FROM historical_quotes
+                    WHERE code = ANY(:codes) AND date <= :d AND close IS NOT NULL
+                )
+                SELECT code, rn, close FROM ranked WHERE rn <= :n
+                """
+            ),
+            {"codes": batch, "d": end_date, "n": int(n_bars)},
+        ).mappings().all()
+        grouped: Dict[str, List[tuple]] = {}
+        for r in rows:
+            close = r["close"]
+            if close is None:
+                continue
+            grouped.setdefault(r["code"], []).append((int(r["rn"]), float(close)))
+        for code, pairs in grouped.items():
+            pairs.sort(key=lambda x: -x[0])
+            series[code] = np.asarray([p[1] for p in pairs], dtype=float)
+        del rows, grouped
     ordered = list(codes)
     moms = []
     for code in ordered:
-        pairs = sorted(grouped.get(code) or [], key=lambda x: -x[0])
-        closes = np.asarray([p[1] for p in pairs], dtype=float)
+        closes = series.get(code)
+        if closes is None:
+            closes = np.asarray([], dtype=float)
         moms.append(weighted_momentum(closes))
     return dict(zip(ordered, rs_rank(moms)))
 
 
 def load_bars(db, codes: Sequence[str], end_date: str, n_bars: int = 340) -> Dict[str, List[Dict[str, Any]]]:
-    """一次取回多只票的最近 n_bars 根日线（前复权口径由采集端保证）。"""
+    """取回多只票的最近 n_bars 根日线（前复权口径由采集端保证）。
+
+    代码先按字典序分批查询，批内 ORDER BY code, date。拼起来的插入顺序与一次
+    全量查询的 ORDER BY code 相同，相对强度并列时的名次不会因为分批而改变。
+    """
     if not codes:
         return {}
-    rows = db.execute(
-        text(
-            """
-            WITH ranked AS (
-                SELECT code, date, open, high, low, close, volume,
-                       row_number() OVER (PARTITION BY code ORDER BY date DESC) AS rn
-                FROM historical_quotes
-                WHERE code = ANY(:codes) AND date <= :d
-            )
-            SELECT code, date, open, high, low, close, volume
-            FROM ranked WHERE rn <= :n
-            ORDER BY code, date
-            """
-        ),
-        {"codes": list(codes), "d": end_date, "n": int(n_bars)},
-    ).mappings().all()
-
     out: Dict[str, List[Dict[str, Any]]] = {}
-    for r in rows:
-        out.setdefault(r["code"], []).append(dict(r))
+    ordered = sorted({c for c in codes if c})
+    for batch in iter_code_batches(ordered):
+        rows = db.execute(
+            text(
+                """
+                WITH ranked AS (
+                    SELECT code, date, open, high, low, close, volume,
+                           row_number() OVER (PARTITION BY code ORDER BY date DESC) AS rn
+                    FROM historical_quotes
+                    WHERE code = ANY(:codes) AND date <= :d
+                )
+                SELECT code, date, open, high, low, close, volume
+                FROM ranked WHERE rn <= :n
+                ORDER BY code, date
+                """
+            ),
+            {"codes": batch, "d": end_date, "n": int(n_bars)},
+        ).mappings().all()
+        for r in rows:
+            out.setdefault(r["code"], []).append(dict(r))
+        del rows
+    return out
+
+
+def load_momentum_map(
+    db,
+    codes: Sequence[str],
+    end_date: str,
+    n_bars: int = 340,
+) -> Dict[str, float]:
+    """分批读 K 线，只留下每只票的加权动量。算完即丢掉 K 线。"""
+    from backend_core.analysis.sepa.trend import momentum_of
+
+    out: Dict[str, float] = {}
+    for batch in iter_code_batches(codes):
+        bars = load_bars(db, batch, end_date, n_bars=n_bars)
+        for code, rows in bars.items():
+            if rows:
+                out[code] = momentum_of(rows)
+        del bars
     return out
 
 
@@ -224,25 +283,26 @@ def load_margin(db, codes: Sequence[str], end_date: str, n_rows: int = 90) -> Di
     """两融明细；非两融标的不会出现在结果里（下游按无数据处理）。"""
     if not codes:
         return {}
-    rows = db.execute(
-        text(
-            """
-            WITH ranked AS (
-                SELECT code, trade_date, rzye, rzmre, rzche,
-                       row_number() OVER (PARTITION BY code ORDER BY trade_date DESC) AS rn
-                FROM stock_margin_daily
-                WHERE code = ANY(:codes) AND trade_date <= :d
-            )
-            SELECT code, trade_date, rzye, rzmre, rzche FROM ranked WHERE rn <= :n
-            ORDER BY code, trade_date
-            """
-        ),
-        {"codes": list(codes), "d": end_date, "n": int(n_rows)},
-    ).mappings().all()
-
     out: Dict[str, List[Dict[str, Any]]] = {}
-    for r in rows:
-        out.setdefault(r["code"], []).append(dict(r))
+    for batch in iter_code_batches(codes):
+        rows = db.execute(
+            text(
+                """
+                WITH ranked AS (
+                    SELECT code, trade_date, rzye, rzmre, rzche,
+                           row_number() OVER (PARTITION BY code ORDER BY trade_date DESC) AS rn
+                    FROM stock_margin_daily
+                    WHERE code = ANY(:codes) AND trade_date <= :d
+                )
+                SELECT code, trade_date, rzye, rzmre, rzche FROM ranked WHERE rn <= :n
+                ORDER BY code, trade_date
+                """
+            ),
+            {"codes": batch, "d": end_date, "n": int(n_rows)},
+        ).mappings().all()
+        for r in rows:
+            out.setdefault(r["code"], []).append(dict(r))
+        del rows
     return out
 
 
@@ -250,19 +310,23 @@ def load_float_mv(db, codes: Sequence[str], end_date: str) -> Dict[str, float]:
     """流通市值（元）：free_float_shares × 最近收盘；小于 1e6 的股本按万股处理。"""
     if not codes:
         return {}
-    rows = db.execute(
-        text(
-            """
-            SELECT b.code, b.free_float_shares,
-                   (SELECT q.close FROM historical_quotes q
-                     WHERE q.code = b.code AND q.date <= :d
-                     ORDER BY q.date DESC LIMIT 1) AS close
-            FROM stock_basic_info b
-            WHERE b.code = ANY(:codes)
-            """
-        ),
-        {"codes": list(codes), "d": end_date},
-    ).mappings().all()
+    rows = []
+    for batch in iter_code_batches(codes):
+        rows.extend(
+            db.execute(
+                text(
+                    """
+                    SELECT b.code, b.free_float_shares,
+                           (SELECT q.close FROM historical_quotes q
+                             WHERE q.code = b.code AND q.date <= :d
+                             ORDER BY q.date DESC LIMIT 1) AS close
+                    FROM stock_basic_info b
+                    WHERE b.code = ANY(:codes)
+                    """
+                ),
+                {"codes": batch, "d": end_date},
+            ).mappings().all()
+        )
 
     out: Dict[str, float] = {}
     for r in rows:
