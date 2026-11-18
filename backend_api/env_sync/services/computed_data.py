@@ -30,6 +30,8 @@ from backend_api.models import (
     BoardFundFlowDaily,
     CSBSignalTrace,
     CSBStrategyConfig,
+    CupbSignalTrace,
+    CupbStrategyConfig,
     GMSSignalTrace,
     GMSStrategyConfig,
     IndexHistoricalQuotes,
@@ -38,6 +40,8 @@ from backend_api.models import (
     RSRatings,
     SBBRSignalTrace,
     SBBRStrategyConfig,
+    SEPASignalScan,
+    SEPASignalTrace,
     StockRecommendBrief,
     URTSignalTrace,
     URTStrategyConfig,
@@ -55,6 +59,9 @@ COMPUTED_TABLES = (
     "csb_signal_trace",
     "sbbr_signal_trace",
     "rpe_signal_trace",
+    "sepa_signal_trace",
+    "sepa_signal_scan",
+    "cupb_signal_trace",
     "index_historical_quotes",
     "board_fund_flow_daily",
     "stock_zt_pool_daily",
@@ -270,6 +277,7 @@ def export_computed_results(
     csb_names = _cfg_name_by_id(db, CSBStrategyConfig)
     sbbr_names = _cfg_name_by_id(db, SBBRStrategyConfig)
     rpe_names = _cfg_name_by_id(db, RPEStrategyConfig)
+    cupb_names = _cfg_name_by_id(db, CupbStrategyConfig)
 
     if "rs_ratings" in want:
         fields = _model_fields(RSRatings)
@@ -349,6 +357,43 @@ def export_computed_results(
             if cid is not None:
                 r["config_name"] = rpe_names.get(int(cid))
         items["rpe_signal_trace"] = rows
+
+    if "sepa_signal_trace" in want:
+        fields = _model_fields(SEPASignalTrace)
+        items["sepa_signal_trace"] = _export_orm_range(
+            db,
+            SEPASignalTrace,
+            date_attr="trade_date",
+            start=start,
+            end=end,
+            fields=fields,
+        )
+        # 选股页没有 scan 会当成未预计算。勾选 SEPA 信号时一并带上同日覆盖记录。
+        scan_fields = _model_fields(SEPASignalScan)
+        items["sepa_signal_scan"] = _export_orm_range(
+            db,
+            SEPASignalScan,
+            date_attr="trade_date",
+            start=start,
+            end=end,
+            fields=scan_fields,
+        )
+
+    if "cupb_signal_trace" in want:
+        fields = _model_fields(CupbSignalTrace)
+        rows = _export_orm_range(
+            db,
+            CupbSignalTrace,
+            date_attr="trade_date",
+            start=start,
+            end=end,
+            fields=fields,
+        )
+        for r in rows:
+            cid = r.get("config_id")
+            if cid is not None:
+                r["config_name"] = cupb_names.get(int(cid))
+        items["cupb_signal_trace"] = rows
 
     if "index_historical_quotes" in want:
         fields = _model_fields(IndexHistoricalQuotes)
@@ -596,6 +641,7 @@ def import_computed_results(
     csb_ids = _cfg_id_by_name(db, CSBStrategyConfig)
     sbbr_ids = _cfg_id_by_name(db, SBBRStrategyConfig)
     rpe_ids = _cfg_id_by_name(db, RPEStrategyConfig)
+    cupb_ids = _cfg_id_by_name(db, CupbStrategyConfig)
 
     if "rs_ratings" in want:
         rows = items.get("rs_ratings") or []
@@ -726,6 +772,68 @@ def import_computed_results(
             db,
             RPESignalTrace,
             pk_fields=("code", "trade_date", "market_type", "config_id", "sector_id"),
+            rows=prepared,
+            result=result,
+            skip_fields={"id"},
+        )
+        db.commit()
+
+    if "sepa_signal_trace" in want:
+        prepared = []
+        for raw in items.get("sepa_signal_trace") or []:
+            code = str(raw.get("code") or "").strip()
+            td = parse_date(raw.get("trade_date"))
+            status = str(raw.get("vcp_status") or "").strip()
+            if not code or not td or not status:
+                result["skipped"] += 1
+                continue
+            prepared.append(
+                {**raw, "code": code, "trade_date": td, "vcp_status": status}
+            )
+        _upsert_orm(
+            db,
+            SEPASignalTrace,
+            pk_fields=("code", "trade_date"),
+            rows=prepared,
+            result=result,
+            skip_fields={"id"},
+        )
+        db.commit()
+
+    if "sepa_signal_trace" in want or "sepa_signal_scan" in want:
+        prepared = []
+        for raw in items.get("sepa_signal_scan") or []:
+            td = parse_date(raw.get("trade_date"))
+            if not td:
+                result["skipped"] += 1
+                continue
+            prepared.append({**raw, "trade_date": td})
+        _upsert_orm(
+            db,
+            SEPASignalScan,
+            pk_fields=("trade_date",),
+            rows=prepared,
+            result=result,
+            skip_fields={"id"},
+        )
+        db.commit()
+
+    if "cupb_signal_trace" in want:
+        prepared = []
+        for raw in items.get("cupb_signal_trace") or []:
+            cid = _resolve_config_id(raw, cupb_ids, table="cupb_signal_trace", result=result)
+            if cid is None:
+                continue
+            code = str(raw.get("code") or "").strip()
+            td = parse_date(raw.get("trade_date"))
+            if not code or not td:
+                result["skipped"] += 1
+                continue
+            prepared.append({**raw, "code": code, "trade_date": td, "config_id": cid})
+        _upsert_orm(
+            db,
+            CupbSignalTrace,
+            pk_fields=("code", "trade_date", "config_id"),
             rows=prepared,
             result=result,
             skip_fields={"id"},

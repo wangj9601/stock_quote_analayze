@@ -89,6 +89,9 @@ def test_expand_modules_granular():
     assert expand_modules(["stock_margin_daily"]) == ["stock_margin_daily"]
     assert "rs_ratings" in expand_modules(["computed_results"])
     assert "gms_signal_trace" in expand_modules(["computed_results"])
+    assert "sepa_signal_trace" in expand_modules(["computed_results"])
+    assert "cupb_signal_trace" in expand_modules(["computed_results"])
+    assert "cupb_strategy_configs" in expand_modules(["strategy_configs"])
     assert "stock_recommend_brief" in expand_modules(["computed_info"])
     assert expand_modules(["rs_ratings"]) == ["rs_ratings"]
     assert expand_modules(["adj_factors"]) == ["stock_adj_factor"]
@@ -555,6 +558,113 @@ def test_computed_results_require_date_and_roundtrip(db):
     assert result2["created"] == 0
     assert result2["updated"] >= 4
     assert db.query(RSRatings).count() == 1
+
+
+def test_sepa_and_cupb_signal_roundtrip(db):
+    """SEPA 勾选同时带上 scan；CUPB 按配置名落到本地 config_id。"""
+    from datetime import date
+
+    from backend_api.env_sync.services import export_modules
+    from backend_api.env_sync.services.computed_data import import_computed_results
+    from backend_api.models import (
+        CupbSignalTrace,
+        CupbStrategyConfig,
+        SEPASignalScan,
+        SEPASignalTrace,
+    )
+
+    db.add(
+        CupbStrategyConfig(
+            name="cupb-default",
+            config_params={"depth": 0.3},
+            is_active=True,
+            is_default=True,
+        )
+    )
+    db.flush()
+    cfg = db.query(CupbStrategyConfig).filter_by(name="cupb-default").one()
+    db.add(
+        CupbSignalTrace(
+            code="000001",
+            trade_date=date(2026, 11, 17),
+            config_id=cfg.id,
+            name="平安银行",
+            status="confirmed",
+            last_close=12.3,
+        )
+    )
+    db.add(
+        SEPASignalTrace(
+            code="000001",
+            trade_date=date(2026, 11, 17),
+            name="平安银行",
+            tier="A",
+            vcp_status="ready",
+            score=80.0,
+            row_data={"code": "000001", "vcp_status": "ready"},
+        )
+    )
+    db.add(
+        SEPASignalScan(
+            trade_date=date(2026, 11, 17),
+            universe=100,
+            hit_count=1,
+            funnel={"ready": 1},
+            pool={"min_avg_amount": 1},
+        )
+    )
+    db.commit()
+
+    out = export_modules(
+        db,
+        ["sepa_signal_trace", "cupb_signal_trace"],
+        start_date="2026-11-17",
+        end_date="2026-11-17",
+    )
+    bundle = out["bundles"]["computed_results"]
+    assert bundle["items"]["sepa_signal_trace"][0]["vcp_status"] == "ready"
+    assert bundle["items"]["sepa_signal_scan"][0]["universe"] == 100
+    assert bundle["items"]["cupb_signal_trace"][0]["config_name"] == "cupb-default"
+
+    db.query(CupbSignalTrace).delete()
+    db.query(SEPASignalTrace).delete()
+    db.query(SEPASignalScan).delete()
+    db.query(CupbStrategyConfig).delete()
+    db.commit()
+    db.add(
+        CupbStrategyConfig(
+            name="cupb-default",
+            config_params={"depth": 0.3},
+            is_active=True,
+            is_default=True,
+        )
+    )
+    db.commit()
+    new_cfg = db.query(CupbStrategyConfig).filter_by(name="cupb-default").one()
+
+    result = import_computed_results(
+        db,
+        bundle,
+        tables={"sepa_signal_trace", "cupb_signal_trace"},
+    )
+    assert result["errors"] == []
+    assert result["created"] == 3
+    saved = db.query(CupbSignalTrace).one()
+    assert saved.config_id == new_cfg.id
+    assert saved.status == "confirmed"
+    scan = db.query(SEPASignalScan).one()
+    assert scan.hit_count == 1
+    assert db.query(SEPASignalTrace).one().vcp_status == "ready"
+
+    again = import_computed_results(
+        db,
+        bundle,
+        tables={"sepa_signal_trace", "cupb_signal_trace"},
+    )
+    assert again["created"] == 0
+    assert again["updated"] == 3
+    assert db.query(SEPASignalTrace).count() == 1
+    assert db.query(CupbSignalTrace).count() == 1
 
 
 def test_import_market_review_json_fields(db):

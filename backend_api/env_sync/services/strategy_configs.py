@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend_api.env_sync.bundle import empty_result, json_safe, make_bundle, table_exists
 from backend_api.models import (
+    CupbStrategyConfig,
     GMSRuntimeConfig,
     GMSStrategyConfig,
     RPEStrategyConfig,
@@ -26,6 +27,7 @@ STRATEGY_TABLES = {
     "urt_strategy_configs": URTStrategyConfig,
     "rpe_strategy_configs": RPEStrategyConfig,
     "sbbr_strategy_configs": SBBRStrategyConfig,
+    "cupb_strategy_configs": CupbStrategyConfig,
     "gms_runtime_config": GMSRuntimeConfig,
 }
 

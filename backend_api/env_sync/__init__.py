@@ -24,6 +24,7 @@ RESOURCE_STRATEGY = [
     "urt_strategy_configs",
     "rpe_strategy_configs",
     "sbbr_strategy_configs",
+    "cupb_strategy_configs",
     "gms_runtime_config",
 ]
 
@@ -81,6 +82,8 @@ RESOURCE_COMPUTED = [
     "csb_signal_trace",
     "sbbr_signal_trace",
     "rpe_signal_trace",
+    "sepa_signal_trace",
+    "cupb_signal_trace",
     "index_historical_quotes",
     "board_fund_flow_daily",
     "stock_zt_pool_daily",
@@ -163,6 +166,7 @@ GROUP_EXPAND: Dict[str, List[str]] = {
     "urt_config_all": ["urt_strategy_configs"],
     "rpe_config_all": ["rpe_strategy_configs"],
     "sbbr_config_all": ["sbbr_strategy_configs"],
+    "cupb_config_all": ["cupb_strategy_configs"],
     "gms_trade": [
         "gms_trade_observe_stocks",
         "gms_trade_observe_history",
@@ -221,6 +225,11 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
                 "code": "sbbr_strategy_configs",
                 "name": "SBBR 策略配置",
                 "desc": "SBBRStrategyConfig",
+            },
+            {
+                "code": "cupb_strategy_configs",
+                "name": "CUPB 策略配置",
+                "desc": "CupbStrategyConfig；同步杯底信号前建议先同步此项",
             },
         ],
     },
@@ -431,6 +440,18 @@ MODULE_CATALOG: List[Dict[str, Any]] = [
                 "code": "rpe_signal_trace",
                 "name": "RPE信号预计算(A股)",
                 "desc": "rpe_signal_trace（CN）；按 config_name 对齐",
+                "requires_date_range": True,
+            },
+            {
+                "code": "sepa_signal_trace",
+                "name": "SEPA买点信号预计算(A股)",
+                "desc": "sepa_signal_trace，并带上同日 sepa_signal_scan（选股页据此判断能否只读缓存）",
+                "requires_date_range": True,
+            },
+            {
+                "code": "cupb_signal_trace",
+                "name": "CUPB杯底信号预计算(A股)",
+                "desc": "cupb_signal_trace；按 config_name 对齐，建议先同步 CUPB 策略配置",
                 "requires_date_range": True,
             },
             {

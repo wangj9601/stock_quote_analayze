@@ -44,7 +44,7 @@ const AnalysisPage = {
             'js/stock_analysis_png.js',
             'js/index_analysis_pdf.js?v=20261116-iia',
             'js/pa_analysis_view.js?v=20261116-iia',
-            'js/industry_index_analysis.js?v=20261116-iia',
+            'js/industry_index_analysis.js?v=20261118-iia-pick',
         ],
         'rs-rating': [
             'js/rs_rating_analysis.js?v=20261007-rsa',

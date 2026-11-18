@@ -5097,10 +5097,40 @@ html.analysis-popup-window .analysis-tabs {
   .rsa-table td.rsa-col-ops { position: static; box-shadow: none; }
 }
 
-#iiaBoardPick {
+#iiaBoardPick,
+.iia-board-pick {
   width: 100%;
   min-width: 220px;
   margin-top: 0.35rem;
+  max-height: 11.5rem;
+  overflow: auto;
+  border: 1px solid rgba(217, 226, 236, 0.28);
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.28);
+}
+.iia-board-pick__status {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  color: var(--ops-ink, #e8eef6);
+  font-size: 0.92rem;
+}
+.iia-board-pick__item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  border: 0;
+  border-bottom: 1px solid rgba(217, 226, 236, 0.12);
+  background: transparent;
+  color: var(--ops-ink, #e8eef6);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.iia-board-pick__item:hover,
+.iia-board-pick__item.is-selected {
+  background: rgba(201, 162, 39, 0.16);
+  color: var(--ops-ink, #e8eef6);
 }
 
 .isa-market-view {

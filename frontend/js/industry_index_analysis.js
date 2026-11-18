@@ -84,6 +84,7 @@
         lastName: '',
         _bound: false,
         _catalog: null,
+        _pickedCode: '',
         _detailCode: '',
 
         async ensureScripts() {
@@ -131,46 +132,74 @@
         async loadCatalog() {
             const pick = document.getElementById('iiaBoardPick');
             if (!pick) return;
+            pick.innerHTML = '<p class="iia-board-pick__status">正在加载行业列表…</p>';
             try {
                 const fetchFn = typeof authFetch === 'function' ? authFetch : fetch;
                 const resp = await fetchFn(
                     `${this.API_BASE_URL}/api/market/industry_board/list?board_code_source=tonghuashun`
                 );
                 const payload = await resp.json().catch(() => ({}));
-                const rows = Array.isArray(payload.data) ? payload.data : [];
-                this._catalog = rows
+                const rawRows = Array.isArray(payload.data) ? payload.data : [];
+                if (!resp.ok || payload.success === false) {
+                    throw new Error(payload.message || payload.detail || '行业列表加载失败');
+                }
+                this._catalog = rawRows
                     .map((row) => ({
                         code: String(row.board_code || row.code || '').trim(),
                         name: String(row.board_name || row.name || '').trim(),
                     }))
                     .filter((row) => row.code);
-                this._filterCatalog('');
+                const query = document.getElementById('iiaBoardQuery');
+                this._filterCatalog(query ? query.value : '');
             } catch (e) {
                 console.error(e);
-                pick.innerHTML = '<option value="">行业列表加载失败</option>';
+                this._catalog = [];
+                pick.innerHTML = '<p class="iia-board-pick__status">行业列表加载失败</p>';
             }
         },
 
         _filterCatalog(raw) {
             const pick = document.getElementById('iiaBoardPick');
-            if (!pick) return;
+            if (!pick || !Array.isArray(this._catalog)) return;
             const q = String(raw || '').trim().toLowerCase();
-            const rows = (this._catalog || []).filter((row) => {
+            const rows = this._catalog.filter((row) => {
                 if (!q) return true;
                 return row.name.toLowerCase().indexOf(q) >= 0 || row.code.toLowerCase().indexOf(q) >= 0;
             }).slice(0, 80);
+            const exact = q
+                ? this._catalog.find((row) => row.code.toLowerCase() === q || row.name.toLowerCase() === q)
+                : null;
+            if (exact) this._pickedCode = exact.code;
+            else if (!rows.some((row) => row.code === this._pickedCode)) this._pickedCode = rows[0] ? rows[0].code : '';
+            if (!rows.length) {
+                pick.innerHTML = '<p class="iia-board-pick__status">无匹配行业</p>';
+                return;
+            }
             pick.innerHTML = rows.map((row) => {
+                const selected = row.code === this._pickedCode ? ' is-selected' : '';
                 const label = `${row.name || row.code} ${row.code}`;
-                return `<option value="${this._esc(row.code)}">${this._esc(label)}</option>`;
-            }).join('') || '<option value="">无匹配行业</option>';
+                return `<button type="button" class="iia-board-pick__item${selected}" role="option" data-code="${this._esc(row.code)}" aria-selected="${selected ? 'true' : 'false'}">${this._esc(label)}</button>`;
+            }).join('');
+            if (!pick.dataset.bound) {
+                pick.dataset.bound = '1';
+                pick.addEventListener('click', (event) => {
+                    const btn = event.target && event.target.closest
+                        ? event.target.closest('.iia-board-pick__item')
+                        : null;
+                    if (!btn) return;
+                    this._pickedCode = btn.getAttribute('data-code') || '';
+                    pick.querySelectorAll('.iia-board-pick__item').forEach((el) => {
+                        const on = el === btn;
+                        el.classList.toggle('is-selected', on);
+                        el.setAttribute('aria-selected', on ? 'true' : 'false');
+                    });
+                });
+            }
         },
 
         selectedCode() {
             if (this._detailCode) return this._detailCode;
-            const pick = document.getElementById('iiaBoardPick');
-            if (!pick) return '';
-            const opt = pick.options[pick.selectedIndex];
-            return opt ? String(opt.value || '').trim() : '';
+            return String(this._pickedCode || '').trim();
         },
 
         async runFromWorkbench(useRealtime) {
