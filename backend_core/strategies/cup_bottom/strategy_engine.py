@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import gc
 import logging
+import os
 from typing import Any, Dict, List, Optional, Sequence
 
 from sqlalchemy.orm import Session
@@ -20,6 +22,21 @@ from .config import CupbConfigManager, get_default_cupb_config, merge_pattern_cf
 from .detector import detect_cup_bottom
 
 logger = logging.getLogger(__name__)
+
+
+def _cupb_batch_size(scan: Dict[str, Any]) -> int:
+    """每批装入内存的股票数。环境变量优先，否则用配置 scan.batch_size，默认 200。"""
+    raw = (os.getenv("CUPB_BARS_BATCH_SIZE") or "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning("CUPB_BARS_BATCH_SIZE=%s 无效，改用配置", raw)
+    try:
+        size = int((scan or {}).get("batch_size") or 200)
+    except (TypeError, ValueError):
+        size = 200
+    return max(1, size)
 
 
 class CupbStrategyEngine:
@@ -131,71 +148,90 @@ class CupbStrategyEngine:
             int(pattern.get("lookback_days") or 160) + 20,
             int(scan.get("history_bars") or 180),
         )
-        bars_by = (
-            batch_load_ohlc_asc(db, codes_to_scan, lookback=lookback, asof=date_s)
-            if codes_to_scan
-            else {}
-        )
-        names = load_names(db, codes_to_scan) if codes_to_scan else {}
-
+        # 全市场一次装入会把采集进程撑过 1GB。按批读 K 线，检测完即丢。
+        batch_size = _cupb_batch_size(scan)
         new_items: List[Dict[str, Any]] = []
         grade_filter = str(scan.get("grade_filter") or "all").strip().lower()
-        for code in codes_to_scan:
-            bars = bars_by.get(code) or []
-            if not bars:
-                continue
-            if date_s:
-                bars = [b for b in bars if str(b.get("date") or "")[:10] <= date_s]
-            if adjust_n == "qfq" and bars:
-                try:
-                    bars, _ = apply_qfq_to_code_bars(db, code, bars)
-                except Exception as e:
-                    logger.warning("CUPB qfq failed for %s: %s", code, e)
+        total = len(codes_to_scan)
+        done = 0
+        if total:
+            logger.info(
+                "CUPB 开始分批扫描 codes=%s batch=%s lookback=%s",
+                total,
+                batch_size,
+                lookback,
+            )
+        for start in range(0, total, batch_size):
+            batch = codes_to_scan[start : start + batch_size]
+            bars_by = batch_load_ohlc_asc(db, batch, lookback=lookback, asof=date_s)
+            names = load_names(db, batch)
+            before = len(new_items)
+            for code in batch:
+                bars = bars_by.get(code) or []
+                if not bars:
                     continue
-            hit = detect_cup_bottom(bars, pattern_cfg=pattern)
-            if not hit:
-                continue
-            st = hit.get("status")
-            if sf != "both" and st != sf:
-                continue
-            g = str(hit.get("grade") or "").upper()
-            if grade_filter not in ("all", "", "both") and g != grade_filter.upper():
-                continue
-            name = names.get(code) or (bars[-1].get("name") if bars else "") or ""
-            boards = list(boards_by.get(code) or [])
-            row = {
-                "code": code,
-                "name": name,
-                "date": date_s,
-                "status": st,
-                "left_rim_date": hit.get("left_rim_date"),
-                "cup_bottom_date": hit.get("cup_bottom_date"),
-                "right_rim_date": hit.get("right_rim_date"),
-                "handle_low_date": hit.get("handle_low_date"),
-                "left_rim_price": hit.get("left_rim_price"),
-                "cup_bottom_price": hit.get("cup_bottom_price"),
-                "right_rim_price": hit.get("right_rim_price"),
-                "handle_low_price": hit.get("handle_low_price"),
-                "rim": hit.get("rim"),
-                "last_close": hit.get("last_close"),
-                "confirm_date": hit.get("confirm_date"),
-                "first_confirm_date": hit.get("first_confirm_date"),
-                "ever_confirmed": bool(hit.get("ever_confirmed")),
-                "price_adjust": adjust_n,
-                "cup_depth_pct": hit.get("cup_depth_pct"),
-                "handle_retrace_pct": hit.get("handle_retrace_pct"),
-                "grade": hit.get("grade"),
-                "volume_score": hit.get("volume_score"),
-                "boards": boards,
-                "board_labels": "、".join(
-                    str(b.get("board_name") or b.get("board_code") or "")
-                    for b in boards
-                    if b
-                ),
-                "detail": hit,
-                "_from_cache": False,
-            }
-            new_items.append(row)
+                if date_s:
+                    bars = [b for b in bars if str(b.get("date") or "")[:10] <= date_s]
+                if adjust_n == "qfq" and bars:
+                    try:
+                        bars, _ = apply_qfq_to_code_bars(db, code, bars)
+                    except Exception as e:
+                        logger.warning("CUPB qfq failed for %s: %s", code, e)
+                        continue
+                hit = detect_cup_bottom(bars, pattern_cfg=pattern)
+                if not hit:
+                    continue
+                st = hit.get("status")
+                if sf != "both" and st != sf:
+                    continue
+                g = str(hit.get("grade") or "").upper()
+                if grade_filter not in ("all", "", "both") and g != grade_filter.upper():
+                    continue
+                name = names.get(code) or (bars[-1].get("name") if bars else "") or ""
+                boards = list(boards_by.get(code) or [])
+                row = {
+                    "code": code,
+                    "name": name,
+                    "date": date_s,
+                    "status": st,
+                    "left_rim_date": hit.get("left_rim_date"),
+                    "cup_bottom_date": hit.get("cup_bottom_date"),
+                    "right_rim_date": hit.get("right_rim_date"),
+                    "handle_low_date": hit.get("handle_low_date"),
+                    "left_rim_price": hit.get("left_rim_price"),
+                    "cup_bottom_price": hit.get("cup_bottom_price"),
+                    "right_rim_price": hit.get("right_rim_price"),
+                    "handle_low_price": hit.get("handle_low_price"),
+                    "rim": hit.get("rim"),
+                    "last_close": hit.get("last_close"),
+                    "confirm_date": hit.get("confirm_date"),
+                    "first_confirm_date": hit.get("first_confirm_date"),
+                    "ever_confirmed": bool(hit.get("ever_confirmed")),
+                    "price_adjust": adjust_n,
+                    "cup_depth_pct": hit.get("cup_depth_pct"),
+                    "handle_retrace_pct": hit.get("handle_retrace_pct"),
+                    "grade": hit.get("grade"),
+                    "volume_score": hit.get("volume_score"),
+                    "boards": boards,
+                    "board_labels": "、".join(
+                        str(b.get("board_name") or b.get("board_code") or "")
+                        for b in boards
+                        if b
+                    ),
+                    "detail": hit,
+                    "_from_cache": False,
+                }
+                new_items.append(row)
+            done += len(batch)
+            logger.info(
+                "CUPB 预计算进度 %s/%s batch=%s hits=%s",
+                done,
+                total,
+                len(batch),
+                len(new_items) - before,
+            )
+            del bars_by, names
+            gc.collect()
 
         items: List[Dict[str, Any]] = list(reused_items) + list(new_items)
         if items:
