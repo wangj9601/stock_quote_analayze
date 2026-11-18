@@ -158,17 +158,30 @@ const KdeLevelsTool = {
         return { kde_from_date: fromDate || null, kde_lookback: days };
     },
 
+    _isBoardIndexAsset(assetType) {
+        const kind = String(assetType || '').toLowerCase();
+        return kind === 'industry_index' || kind === 'concept_index';
+    },
+
+    _boardIndexLabel(assetType) {
+        const kind = String(assetType || '').toLowerCase();
+        if (kind === 'concept_index') return '概念指数';
+        if (kind === 'industry_index') return '行业指数';
+        return '';
+    },
+
     /**
      * 拉取阻力支撑位（与技术工具同口径）。
      * @returns {{ ok: boolean, data: object, message: string, candidates: array, httpOk: boolean }}
      */
     async fetchLevels(query, options = {}) {
         const assetType = String(options.asset_type || options.assetType || '').toLowerCase();
-        if (assetType === 'industry_index') {
+        if (this._isBoardIndexAsset(assetType)) {
+            const label = this._boardIndexLabel(assetType);
             return {
                 ok: false,
                 data: {},
-                message: '行业指数关位随分析一并计算，不单独重算',
+                message: `${label}关位随分析一并计算，不单独重算`,
                 candidates: [],
                 httpOk: false,
             };
@@ -313,8 +326,8 @@ const KdeLevelsTool = {
         if (!host) return;
         // 指数无个股行业/概念归属；避免 000001 误显示「银行」等个股板块
         const assetType = String((ctx && (ctx.asset_type || ctx.assetType)) || container.dataset.assetType || '').toLowerCase();
-        if (this._isIndexAsset(ctx, container) || assetType === 'industry_index') {
-            const label = assetType === 'industry_index' ? '行业指数' : '指数';
+        if (this._isIndexAsset(ctx, container) || this._isBoardIndexAsset(assetType)) {
+            const label = this._boardIndexLabel(assetType) || '指数';
             host.innerHTML =
                 `<div class="kde-levels-board-line"><span class="kde-levels-board-label">标的类型</span><span>${label}</span></div>` +
                 `<div class="kde-levels-board-line"><span class="kde-levels-board-label">行业/概念</span><span class="muted">不适用</span></div>`;
@@ -419,17 +432,18 @@ const KdeLevelsTool = {
         const assetType = String(
             options.asset_type || options.assetType || d.asset_type || ''
         ).toLowerCase();
-        if (assetType === 'index' || assetType === 'industry_index') {
+        if (assetType === 'index' || this._isBoardIndexAsset(assetType)) {
             container.dataset.assetType = assetType;
         } else {
             delete container.dataset.assetType;
         }
         const name = d.stock_name || d.name || '';
         const title = name ? `${code} ${name}` : (code || '结果');
+        const boardLabel = this._boardIndexLabel(assetType);
         const adjustBrief = assetType === 'index'
             ? '指数日线'
-            : assetType === 'industry_index'
-                ? '行业指数日线'
+            : boardLabel
+                ? `${boardLabel}日线`
                 : (d.price_adjust === 'qfq' ? '前复权' : '不复权');
         const summary = ok
             ? `${title} · ${adjustBrief}`
@@ -837,17 +851,17 @@ const KdeLevelsTool = {
             });
         }
 
-        if (assetType === 'industry_index') {
+        if (this._isBoardIndexAsset(assetType)) {
             container.querySelectorAll('.kde-vp-lookback-ctrl, .ssa-kde-vp-sync-lookback').forEach((node) => {
                 node.remove();
             });
         }
         const bindCtx = {
             code,
-            asset_type: assetType === 'index'
-                ? 'index'
-                : (assetType === 'industry_index' ? 'industry_index' : 'stock'),
-            adjust: (assetType === 'index' || assetType === 'industry_index')
+            asset_type: (assetType === 'index' || this._isBoardIndexAsset(assetType))
+                ? assetType
+                : 'stock',
+            adjust: (assetType === 'index' || this._isBoardIndexAsset(assetType))
                 ? 'none'
                 : (options.adjust != null
                     ? (options.adjust === 'qfq' ? 'qfq' : 'none')
@@ -856,7 +870,7 @@ const KdeLevelsTool = {
             max_levels: options.max_levels != null ? options.max_levels : 8,
             onUpdated: typeof options.onUpdated === 'function' ? options.onUpdated : null,
         };
-        if (assetType !== 'industry_index') {
+        if (!this._isBoardIndexAsset(assetType)) {
             this._bindEmbeddedVpControls(container, bindCtx);
             this._bindEmbeddedKdeControls(container, bindCtx);
             this._bindEmbeddedSyncLookback(container, bindCtx);
@@ -880,12 +894,12 @@ const KdeLevelsTool = {
         const assetType = String(
             (ctx && (ctx.asset_type || ctx.assetType)) || container.dataset.assetType || ''
         ).toLowerCase();
-        if (assetType === 'industry_index') {
-            container.dataset.assetType = 'industry_index';
+        if (this._isBoardIndexAsset(assetType)) {
+            container.dataset.assetType = assetType;
             container.querySelectorAll('.kde-vp-lookback-ctrl, .ssa-kde-vp-sync-lookback').forEach((node) => {
                 node.remove();
             });
-            void this._fillEmbeddedBoards(container, code, Object.assign({}, ctx, { asset_type: 'industry_index' }));
+            void this._fillEmbeddedBoards(container, code, Object.assign({}, ctx, { asset_type: assetType }));
             return;
         }
         const isIndex = this._isIndexAsset(ctx, container);

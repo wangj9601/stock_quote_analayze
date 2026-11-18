@@ -38,7 +38,20 @@
     }
     const data = host.lastBundle || {};
     const idx = data.index || {};
-    const isIndustry = String(idx.asset_type || '') === 'industry_index';
+    const assetType = String(idx.asset_type || '');
+    const isIndustry = assetType === 'industry_index';
+    const isConcept = assetType === 'concept_index';
+    const isBoard = isIndustry || isConcept;
+    const reportTitle = isConcept
+      ? '概念指数分析报告'
+      : (isIndustry ? '行业指数分析报告' : '指数分析报告');
+    const subjectLabel = isConcept ? '概念' : (isIndustry ? '行业' : '指数');
+    const envTitle = isConcept
+      ? '一、概念环境研判'
+      : (isIndustry ? '一、行业环境研判' : '一、指数环境研判');
+    const barNote = isConcept
+      ? '概念指数日线、不复权'
+      : (isIndustry ? '行业指数日线、不复权' : '指数日线、不复权');
     const api = core();
     const FONT_NAME = api.FONT_NAME || 'NotoSansSC';
     const doc = await api.createDoc({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -114,12 +127,12 @@
     }
 
     // —— 抬头 ——
-    drawTitle(isIndustry ? '行业指数分析报告' : '指数分析报告', 16, [15, 23, 42]);
+    drawTitle(reportTitle, 16, [15, 23, 42]);
     const rtNote = data.use_realtime
       ? ((data.realtime && data.realtime.merged === false) ? '（实时未改写当日K）' : '（含实时叠 K）')
       : '';
     const metaLines = [
-      `${isIndustry ? '行业' : '指数'}：${cell(idx.code)}${idx.name ? ` ${idx.name}` : ''}${idx.ts_code ? `（${idx.ts_code}）` : ''}`,
+      `${subjectLabel}：${cell(idx.code)}${idx.name ? ` ${idx.name}` : ''}${idx.ts_code ? `（${idx.ts_code}）` : ''}`,
       `点位：${fmtNum(idx.current != null ? idx.current : idx.last_close)}  涨跌幅：${fmtPct(idx.change_percent)}`,
       `基准日：${cell(data.trade_date)}${rtNote}`,
       `日线根数：${cell(data.bar_count)}`,
@@ -130,7 +143,7 @@
     y += 3;
 
     // —— 市场环境 ——
-    drawTitle(isIndustry ? '一、行业环境研判' : '一、指数环境研判', 12, [30, 64, 175]);
+    drawTitle(envTitle, 12, [30, 64, 175]);
     const mv = data.market_view || {};
     if (!mv.ok) {
       drawWrapped(mv.error || '环境研判暂不可用', 9, 4.2);
@@ -144,7 +157,7 @@
     y += 2;
 
     // —— 广度 / 贡献 ——
-    drawTitle(isIndustry ? '二、成分广度与领涨领跌' : '二、成分广度与行业贡献', 12, [30, 64, 175]);
+    drawTitle(isBoard ? '二、成分广度与领涨领跌' : '二、成分广度与行业贡献', 12, [30, 64, 175]);
     const br = data.breadth || {};
     if (!br.available) {
       drawWrapped(br.reason || '暂无成分数据，广度与贡献章节从略。', 9, 4.2);
@@ -290,7 +303,7 @@
     if (!levels.ok) {
       drawWrapped(levels.error || '阻力支撑暂不可用', 9, 4.2);
     } else {
-      drawWrapped(`现价参考：${fmtNum(lv.current_price)}（指数日线、不复权）`, 9, 4.2);
+      drawWrapped(`现价参考：${fmtNum(lv.current_price)}（${barNote}）`, 9, 4.2);
       drawTable(
         [['类型', '价位']],
         [

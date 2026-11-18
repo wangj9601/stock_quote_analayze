@@ -65,6 +65,8 @@ PERMISSION_REGISTRY: List[Dict[str, Any]] = [
     {"code": "channel.analyze.tab.index.btn.analyze", "name": "指数分析执行", "level": 3, "parent_code": "channel.analyze.tab.index", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.industry_index", "name": "行业指数分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 53},
     {"code": "channel.analyze.tab.industry_index.btn.analyze", "name": "行业指数分析执行", "level": 3, "parent_code": "channel.analyze.tab.industry_index", "channel_code": "analyze", "sort_order": 10},
+    {"code": "channel.analyze.tab.concept_index", "name": "概念指数分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 54},
+    {"code": "channel.analyze.tab.concept_index.btn.analyze", "name": "概念指数分析执行", "level": 3, "parent_code": "channel.analyze.tab.concept_index", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.rs", "name": "个股相对强度分析", "level": 2, "parent_code": "channel.analyze", "channel_code": "analyze", "sort_order": 52},
     {"code": "channel.analyze.tab.rs.btn.query", "name": "查询相对强度", "level": 3, "parent_code": "channel.analyze.tab.rs", "channel_code": "analyze", "sort_order": 10},
     {"code": "channel.analyze.tab.rs.btn.batch", "name": "批量个股分析", "level": 3, "parent_code": "channel.analyze.tab.rs", "channel_code": "analyze", "sort_order": 20},

@@ -45,6 +45,7 @@
                     <button class="analysis-tab" data-tab="stock-ai" data-perm="channel.analyze.tab.stock_ai">个股分析</button>
                     <button class="analysis-tab" data-tab="index-ai" data-perm="channel.analyze.tab.index">指数分析</button>
                     <button class="analysis-tab" data-tab="industry-index-ai" data-perm="channel.analyze.tab.industry_index">行业指数分析</button>
+                    <button class="analysis-tab" data-tab="concept-index-ai" data-perm="channel.analyze.tab.concept_index">概念指数分析</button>
                     <button class="analysis-tab" data-tab="rs-rating" data-perm="channel.analyze.tab.rs">个股相对强度分析</button>
                     <button class="analysis-tab" data-tab="trade-observe" data-perm="channel.analyze.tab.trade_observe">交易观察</button>
                     <button type="button" class="analysis-tab" data-tab="recommend" data-perm="channel.analyze.tab.recommend">策略推荐</button>
@@ -539,6 +540,93 @@
                                     <summary class="ssa-block-title">江恩趋势预测</summary>
                                     <div class="ssa-block-status" id="iiaGannStatus"></div>
                                     <div class="ssa-gann-host" id="iiaGannHost"></div>
+                                </details>
+                            </section>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 概念指数分析：概念环境 + 成分广度 + 价格行为 -->
+                <div class="tab-panel" id="concept-index-ai">
+                    <div class="ssa-section isa-workbench" data-perm="channel.analyze.tab.concept_index">
+                        <div class="ssa-header">
+                            <h3>概念指数分析</h3>
+                            <p class="ssa-hint">
+                                针对同花顺概念板块指数，一次给出<strong>概念环境研判</strong>与<strong>价格行为</strong>（波段 → 形态 → 关位 → 江恩）。
+                                成分涨跌来自板块成分与个股实时行情。概念板块没有实时指数行情，点位用最后一根已收盘日 K，分析不改写当日 K。
+                            </p>
+                        </div>
+                        <div class="ssa-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="ciaBoardQuery">概念板块</label>
+                                    <input type="search" id="ciaBoardQuery" placeholder="搜索名称或代码" autocomplete="off">
+                                    <div id="ciaBoardPick" class="iia-board-pick" role="listbox" aria-label="概念板块列表"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="ciaTradeDate">基准日（可选）</label>
+                                    <input type="date" id="ciaTradeDate">
+                                </div>
+                                <div class="form-group ssa-actions">
+                                    <label>&nbsp;</label>
+                                    <div class="ssa-action-btns">
+                                        <button type="button" class="btn btn-primary" id="ciaAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.concept_index.btn.analyze">分析</button>
+                                        <button type="button" class="btn btn-secondary" id="ciaRealtimeAnalyzeBtn"
+                                            data-perm="channel.analyze.tab.concept_index.btn.analyze"
+                                            title="刷新成分涨跌；概念无实时指数点位，不改写当日K">实时分析</button>
+                                        <button type="button" class="btn btn-secondary" id="ciaExportPdfBtn"
+                                            data-perm="channel.analyze.tab.concept_index.btn.analyze"
+                                            title="导出结构化 PDF 报告" disabled>导出 PDF</button>
+                                        <button type="button" class="btn btn-secondary" id="ciaExportPngBtn"
+                                            data-perm="channel.analyze.tab.concept_index.btn.analyze"
+                                            title="导出页面长图 PNG" disabled>导出 PNG</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="ciaEmpty" class="ssa-empty">搜索并选中概念后点击「分析」</div>
+                        <div id="ciaExportRoot" class="ssa-export-root" hidden>
+                            <div class="ssa-meta" id="ciaMeta" hidden></div>
+                            <section class="ssa-block" id="ciaMarketViewBlock" hidden>
+                                <h4 class="ssa-block-title">概念环境研判</h4>
+                                <div class="ssa-block-status" id="ciaMarketViewStatus"></div>
+                                <div id="ciaMarketViewHost"></div>
+                            </section>
+                            <section class="ssa-block" id="ciaBreadthBlock" hidden>
+                                <h4 class="ssa-block-title">成分广度与领涨领跌</h4>
+                                <div id="ciaBreadthHost"></div>
+                            </section>
+                            <section class="ssa-pa-section" id="ciaPaSection" hidden>
+                                <div class="ssa-pa-section__head">
+                                    <h4 class="ssa-pa-section__title">价格行为</h4>
+                                    <p class="ssa-pa-section__hint">阅读顺序：波段定方向 → 形态看短线结构 → 关位定攻防。概念指数日线、不复权；概念板块没有实时指数行情，分析不改写当日 K。</p>
+                                </div>
+                                <section class="ssa-block ssa-block--collapsible" id="ciaSwingBlock" hidden>
+                                    <details class="ssa-details" open>
+                                        <summary class="ssa-block-title">1. 波段与趋势（含 SMC）</summary>
+                                        <div class="ssa-block-status" id="ciaSwingStatus"></div>
+                                        <div class="ssa-swing-host" id="ciaSwingHost"></div>
+                                    </details>
+                                </section>
+                                <section class="ssa-block ssa-block--collapsible" id="ciaPatternBlock" hidden>
+                                    <details class="ssa-details" open>
+                                        <summary class="ssa-block-title">2. 形态识别</summary>
+                                        <div class="ssa-block-status" id="ciaPatternStatus"></div>
+                                        <div class="ssa-pattern-host" id="ciaPatternHost"></div>
+                                    </details>
+                                </section>
+                                <section class="ssa-block" id="ciaLevelsBlock" hidden>
+                                    <h4 class="ssa-block-title">3. 阻力支撑位</h4>
+                                    <div class="ssa-block-status" id="ciaLevelsStatus"></div>
+                                    <div class="ssa-levels-host" id="ciaLevelsHost"></div>
+                                </section>
+                            </section>
+                            <section class="ssa-block ssa-block--collapsible" id="ciaGannBlock" hidden>
+                                <details class="ssa-details">
+                                    <summary class="ssa-block-title">江恩趋势预测</summary>
+                                    <div class="ssa-block-status" id="ciaGannStatus"></div>
+                                    <div class="ssa-gann-host" id="ciaGannHost"></div>
                                 </details>
                             </section>
                         </div>

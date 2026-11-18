@@ -30,8 +30,11 @@ _LEADERS_TOP_N = 10
 
 
 def _series_label(asset_type: Optional[str]) -> str:
-    if str(asset_type or "") == "industry_index":
+    kind = str(asset_type or "")
+    if kind == "industry_index":
         return "行业指数"
+    if kind == "concept_index":
+        return "概念指数"
     return "指数"
 
 

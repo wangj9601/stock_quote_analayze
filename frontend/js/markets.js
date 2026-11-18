@@ -1850,6 +1850,11 @@ const MarketsPage = {
             && typeof IndustryIndexAnalysis !== 'undefined'
             && typeof IndustryIndexAnalysis.detailSectionHtml === 'function'
         ) ? IndustryIndexAnalysis.detailSectionHtml() : '';
+        const conceptAnalysisHtml = (
+            d.board_kind === 'concept'
+            && typeof ConceptIndexAnalysis !== 'undefined'
+            && typeof ConceptIndexAnalysis.detailSectionHtml === 'function'
+        ) ? ConceptIndexAnalysis.detailSectionHtml() : '';
 
         body.innerHTML = `
             <div class="sector-detail-grid">
@@ -1901,6 +1906,7 @@ const MarketsPage = {
                 </div>
             </div>
             ${industryAnalysisHtml}
+            ${conceptAnalysisHtml}
             <div class="sector-detail-section sector-fund-flow-section">
                 <h3>资金流向</h3>
                 <div id="sectorFundFlowHost" class="sector-fund-flow-host">
@@ -1950,6 +1956,17 @@ const MarketsPage = {
                 code: code,
                 name: d.board_name || '',
                 auto: auto,
+            });
+        }
+        if (kind === 'concept' && typeof ConceptIndexAnalysis !== 'undefined' && document.getElementById('ciaDetailSection')) {
+            let autoConcept = false;
+            try {
+                autoConcept = new URLSearchParams(window.location.search || '').get('analyze') === '1';
+            } catch (e) { /* ignore */ }
+            ConceptIndexAnalysis.mountDetail({
+                code: code,
+                name: d.board_name || '',
+                auto: autoConcept,
             });
         }
         this.loadSectorFundFlow(kind, code, src);
