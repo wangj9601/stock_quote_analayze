@@ -18,6 +18,36 @@ def _norm_code(code: str) -> str:
     return s
 
 
+def _bar_from_quote_row(row: Any, offset: int = 0) -> Dict[str, Any]:
+    """historical_quotes 一行 → 正序 bar。offset=0 时列从 date 起，批量查询则 code 在前、offset=1。"""
+    d = row[offset]
+    ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
+    turn = row[offset + 7]
+    return {
+        "date": ds,
+        "open": float(row[offset + 1] or 0),
+        "high": float(row[offset + 2] or 0),
+        "low": float(row[offset + 3] or 0),
+        "close": float(row[offset + 4] or 0),
+        "volume": float(row[offset + 5] or 0),
+        "amount": float(row[offset + 6] or 0),
+        "turnover_rate": float(turn) if turn is not None else None,
+    }
+
+
+def _is_oom_error(exc: Exception) -> bool:
+    msg = str(exc).lower()
+    name = type(exc).__name__.lower()
+    return (
+        isinstance(exc, MemoryError)
+        or "out of memory" in msg
+        or "memoryerror" in name
+        or "query result" in msg
+        or "portalholdcontext" in msg
+        or "内存用尽" in str(exc)
+    )
+
+
 def normalize_index_ts_code(index_code: str = "000001.SH") -> str:
     """将 000001 / sh000001 / 000001.SH 等规范为 index_historical_quotes.ts_code。"""
     raw = str(index_code or "000001").strip()
@@ -266,29 +296,117 @@ class SBBRDataLoader:
                     """
                 )
             rows = db.execute(sql, params).fetchall()
-            bars = []
-            for r in reversed(rows):
-                d = r[0]
-                ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10]
-                bars.append(
-                    {
-                        "date": ds,
-                        "open": float(r[1] or 0),
-                        "high": float(r[2] or 0),
-                        "low": float(r[3] or 0),
-                        "close": float(r[4] or 0),
-                        "volume": float(r[5] or 0),
-                        "amount": float(r[6] or 0),
-                        "turnover_rate": float(r[7]) if r[7] is not None else None,
-                    }
-                )
-            return bars
+            return [_bar_from_quote_row(r) for r in reversed(rows)]
         except Exception as e:
             logger.warning("load_bars %s failed: %s", code, e)
             return []
         finally:
             if own:
                 db.close()
+
+    def load_bars_batch(
+        self,
+        codes: List[str],
+        *,
+        end_date: Optional[str] = None,
+        limit: int = 120,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """按批取每只最近 ``limit`` 根日 K（时间正序）。
+
+        SQL 用窗口截断，等价于逐只 ``load_bars`` 的 LIMIT，不会把更早的历史整段拉回。
+        结果集过大时把本批对半拆开重试，仍失败则退回逐只查询。
+        """
+        uniq: List[str] = []
+        seen: set[str] = set()
+        for code in codes or []:
+            code_n = _norm_code(code)
+            if not code_n or code_n in seen:
+                continue
+            seen.add(code_n)
+            uniq.append(code_n)
+        out: Dict[str, List[Dict[str, Any]]] = {code: [] for code in uniq}
+        if not uniq:
+            return out
+
+        lim = max(1, int(limit))
+        db = self._session()
+        own = self._db is None
+        try:
+            pending: List[List[str]] = [uniq]
+            while pending:
+                chunk = pending.pop()
+                try:
+                    fetched = self._query_bars_chunk(
+                        db, chunk, end_date=end_date, limit=lim
+                    )
+                except Exception as e:
+                    self._rollback_quiet(db)
+                    if _is_oom_error(e) and len(chunk) > 1:
+                        mid = max(1, len(chunk) // 2)
+                        logger.warning(
+                            "SBBR 批量拉行情内存不足，缩小分块 %s→%s",
+                            len(chunk),
+                            mid,
+                        )
+                        pending.append(chunk[mid:])
+                        pending.append(chunk[:mid])
+                        continue
+                    logger.warning(
+                        "SBBR 批量拉行情失败，改逐票 codes=%s: %s",
+                        len(chunk),
+                        e,
+                    )
+                    for code in chunk:
+                        out[code] = self.load_bars(code, end_date=end_date, limit=lim)
+                    continue
+                for code, bars in fetched.items():
+                    out[code] = bars
+            return out
+        finally:
+            if own:
+                db.close()
+
+    def _query_bars_chunk(
+        self,
+        db: Any,
+        codes: List[str],
+        *,
+        end_date: Optional[str],
+        limit: int,
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        params: Dict[str, Any] = {"codes": list(codes), "lim": int(limit)}
+        date_sql = ""
+        if end_date:
+            date_sql = "AND date <= :d"
+            params["d"] = str(end_date)[:10]
+        sql = text(
+            f"""
+            SELECT code, date, open, high, low, close, volume, amount, turnover_rate
+            FROM (
+                SELECT code, date, open, high, low, close, volume, amount, turnover_rate,
+                       ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) AS rn
+                FROM historical_quotes
+                WHERE code = ANY(:codes)
+                  {date_sql}
+            ) t
+            WHERE rn <= :lim
+            ORDER BY code, date
+            """
+        )
+        grouped: Dict[str, List[Dict[str, Any]]] = {code: [] for code in codes}
+        for row in db.execute(sql, params).fetchall():
+            code = _norm_code(row[0])
+            if code not in grouped:
+                continue
+            grouped[code].append(_bar_from_quote_row(row, offset=1))
+        return grouped
+
+    @staticmethod
+    def _rollback_quiet(db: Any) -> None:
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
     def load_index_bars(
         self,

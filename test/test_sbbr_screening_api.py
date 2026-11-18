@@ -107,6 +107,7 @@ def test_sbbr_screen_single_bypasses_size_filter():
 
     eng.evaluate_code = _fake_eval  # type: ignore[method-assign]
     eng.loader.resolve_effective_trade_date = lambda d=None: "2026-01-05"  # type: ignore
+    eng.loader.load_bars_batch = lambda codes, **kwargs: {}  # type: ignore[method-assign]
     eng.loader.load_market_returns = lambda end_date=None: []  # type: ignore
     eng.loader.load_share_map = lambda codes, as_of_date=None: {  # type: ignore
         "600519": {"name": "贵州茅台", "total_shares": 1e10, "free_float_shares": 1e10}

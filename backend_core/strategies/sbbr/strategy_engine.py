@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import gc
 import logging
+import os
 from typing import Any, Dict, List, Optional
 
 from backend_core.strategies.gms.structure_levels import (
@@ -36,6 +38,31 @@ def _find_entry_idx(bars: List[Dict[str, Any]], entry_date: Optional[str]) -> Op
         if str(b.get("date") or "")[:10] >= ed:
             return i
     return None
+
+
+_SBBR_BATCH_TARGET_ROWS = 12_000
+
+
+def sbbr_bars_batch_size(scan: Optional[Dict[str, Any]], bars_per_code: int) -> int:
+    """每批股票数。
+
+    ``SBBR_BARS_BATCH_SIZE`` 优先。否则不超过 ``scan.batch_size``，
+    并按每只 K 线根数把单批压在约 1.2 万行，避免 800 根窗口按 200 只一次装入。
+    """
+    raw = (os.getenv("SBBR_BARS_BATCH_SIZE") or "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            logger.warning("SBBR_BARS_BATCH_SIZE=%s 无效，改用配置", raw)
+    try:
+        configured = int((scan or {}).get("batch_size") or 200)
+    except (TypeError, ValueError):
+        configured = 200
+    configured = max(1, configured)
+    per = max(int(bars_per_code or 1), 1)
+    by_rows = max(1, _SBBR_BATCH_TARGET_ROWS // per)
+    return max(1, min(configured, by_rows))
 
 
 def _bars_for_strategy(bars: List[Dict[str, Any]], history_bars: int) -> List[Dict[str, Any]]:
@@ -421,32 +448,72 @@ class SBBRStrategyEngine:
         results: List[Dict[str, Any]] = []
         total = len(code_list)
         progress_state: Dict[str, Any] = {"last": 0}
-        for idx, code in enumerate(code_list, start=1):
-            try:
-                info = universe_infos.get(_norm_code(code))
-                row = self.evaluate_code(
-                    code,
-                    date=trade_date,
-                    config=cfg,
-                    share_info=info,
-                    market_returns=market_returns,
-                )
-                if not row:
+        hist_n = int(scan_cfg.get("history_bars", 120))
+        load_n = max(hist_n, kde_bars_limit(cfg))
+        batch_size = sbbr_bars_batch_size(scan_cfg, load_n)
+        batch_load = getattr(self.loader, "load_bars_batch", None)
+        use_batch = callable(batch_load)
+        if total:
+            logger.info(
+                "SBBR 开始分批扫描 codes=%s batch=%s bars=%s",
+                total,
+                batch_size,
+                load_n,
+            )
+        done = 0
+        for start in range(0, total, batch_size):
+            batch = code_list[start : start + batch_size]
+            before = len(results)
+            bars_by: Optional[Dict[str, List[Dict[str, Any]]]] = None
+            if use_batch:
+                try:
+                    bars_by = batch_load(batch, end_date=trade_date, limit=load_n) or {}
+                except Exception as e:
+                    logger.warning("SBBR 批量拉行情失败，本批改逐票: %s", e)
+                    bars_by = None
+            for code in batch:
+                done += 1
+                try:
+                    info = universe_infos.get(_norm_code(code))
+                    bars = None
+                    if bars_by is not None:
+                        code_n = _norm_code(code)
+                        bars = bars_by.get(code_n)
+                        if bars is None:
+                            bars = []
+                    row = self.evaluate_code(
+                        code,
+                        date=trade_date,
+                        config=cfg,
+                        share_info=info,
+                        market_returns=market_returns,
+                        bars=bars,
+                    )
+                    if not row:
+                        continue
+                    if require_size and not row.get("size_ok"):
+                        continue
+                    if require_bottom and not row.get("bottom_matched"):
+                        continue
+                    if require_entry and not row.get("entry_signal"):
+                        continue
+                    results.append(row)
+                except Exception as e:
+                    logger.debug("SBBR evaluate %s failed: %s", code, e)
                     continue
-                if require_size and not row.get("size_ok"):
-                    continue
-                if require_bottom and not row.get("bottom_matched"):
-                    continue
-                if require_entry and not row.get("entry_signal"):
-                    continue
-                results.append(row)
-            except Exception as e:
-                logger.debug("SBBR evaluate %s failed: %s", code, e)
-                continue
-            finally:
-                maybe_log_precompute_progress(
-                    logger, "SBBR", idx, total, state=progress_state
-                )
+                finally:
+                    maybe_log_precompute_progress(
+                        logger, "SBBR", done, total, state=progress_state
+                    )
+            logger.info(
+                "SBBR 预计算进度 %s/%s batch=%s hits=%s",
+                done,
+                total,
+                len(batch),
+                len(results) - before,
+            )
+            del bars_by
+            gc.collect()
 
         # 优先入场信号，其次筑底
         results.sort(
