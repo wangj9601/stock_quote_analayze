@@ -1,14 +1,14 @@
 {
-  "run_at": "2026-11-16T12:59:48",
+  "run_at": "2026-11-19T13:09:42",
   "targets": [
     {
       "config_id": 13,
       "user_id": 7,
       "username": "wangxw1",
       "wechat_userid": "WangXueWu",
-      "push_time": "M12:59:50",
+      "push_time": "M13:09:43",
       "success": true,
-      "record_id": 227,
+      "record_id": 233,
       "error_message": null,
       "channels": [
         {
@@ -22,7 +22,7 @@
           "error": null
         }
       ],
-      "report_file_path": "reports/csv\\urt_7_20261113_130015.xlsx",
+      "report_file_path": "reports/csv\\urt_7_20261118_130958.xlsx",
       "record_status": "success",
       "channel_status": {
         "email": "success",
@@ -34,9 +34,9 @@
       "user_id": 6,
       "username": "wangxw",
       "wechat_userid": "WangXueWu",
-      "push_time": "M13:00:41",
+      "push_time": "M13:10:06",
       "success": true,
-      "record_id": 228,
+      "record_id": 234,
       "error_message": null,
       "channels": [
         {
@@ -45,7 +45,7 @@
           "error": null
         }
       ],
-      "report_file_path": "reports/csv\\urt_6_20261113_130228.xlsx",
+      "report_file_path": "reports/csv\\urt_6_20261118_131101.xlsx",
       "record_status": "success",
       "channel_status": {
         "wechat": "success"

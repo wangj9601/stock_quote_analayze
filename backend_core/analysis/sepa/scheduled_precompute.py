@@ -192,12 +192,13 @@ def run_sepa_precompute(
         db.close()
 
 
-def scheduled_sepa_signals_cn() -> None:
+def scheduled_sepa_signals_cn():
     """工作日 cron 入口。周末直接返回；失败抛出，便于采集节点标红。"""
     if datetime.now().weekday() >= 5:
-        return
+        return {"skipped": True, "reason": "周末跳过"}
     if not _env_bool("ENABLE_SEPA_PRECOMPUTE", True):
-        return
+        return {"skipped": True, "reason": "ENABLE_SEPA_PRECOMPUTE=false"}
     out = run_sepa_precompute()
     if not out.get("success"):
         raise RuntimeError(out.get("error") or "SEPA 预计算失败")
+    return out

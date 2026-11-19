@@ -22,12 +22,17 @@ class NodeResult:
         return cls(success=True, message=message, data=data or {})
 
     @classmethod
-    def skip(cls, message: str) -> "NodeResult":
-        return cls(success=True, skipped=True, message=message)
+    def skip(cls, message: str, data: Optional[Dict[str, Any]] = None) -> "NodeResult":
+        return cls(success=True, skipped=True, message=message, data=data or {})
 
     @classmethod
-    def fail(cls, error: str, message: str = "失败") -> "NodeResult":
-        return cls(success=False, message=message, error=error)
+    def fail(
+        cls,
+        error: str,
+        message: str = "失败",
+        data: Optional[Dict[str, Any]] = None,
+    ) -> "NodeResult":
+        return cls(success=False, message=message, error=error, data=data or {})
 
 
 @dataclass

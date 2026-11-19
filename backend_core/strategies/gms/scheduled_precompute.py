@@ -166,6 +166,14 @@ def run_gms_precompute_for_config(
             floor,
             meta,
         )
+        return {
+            "success": True,
+            "config_id": config_id,
+            "market": market,
+            "trade_date": target_date,
+            "signal_count": len(results),
+            "written": len(results),
+        }
     except Exception as e:
         duration_ms = int((time.perf_counter() - t0) * 1000)
         record_precompute_run(
@@ -185,6 +193,15 @@ def run_gms_precompute_for_config(
             e,
             exc_info=True,
         )
+        return {
+            "success": False,
+            "config_id": config_id,
+            "market": market,
+            "trade_date": target_date,
+            "error": str(e),
+            "signal_count": 0,
+            "written": 0,
+        }
     finally:
         db.close()
 
@@ -193,7 +210,7 @@ def run_gms_precompute(
     market: str,
     stock_pool: Optional[List[str]] = None,
     skip_weekend: bool = True,
-) -> None:
+):
     """
     执行一次 GMS 全量扫描并写入 gms_signal_trace（已有记录会跳过计算）。
     对 is_default 或 precompute_enabled 的每个参数版本分别预计算。
@@ -203,33 +220,36 @@ def run_gms_precompute(
         stock_pool: 非空时按自定义列表计算，market 传 all
         skip_weekend: 周六日跳过（与历史采集任务一致）
     """
+    from backend_core.data_collectors.workflow.signal_count import pack_signal_runs
+
     if skip_weekend and datetime.now().weekday() in (5, 6):
         logger.info("[GMS预计算] 周末跳过 market=%s", market)
-        return
+        return {"skipped": True, "reason": "周末跳过", "market": market}
 
     config_ids = _resolve_precompute_config_ids()
     if not config_ids:
         logger.warning("[GMS预计算] 无可用 config_id，跳过 market=%s", market)
-        return
+        return {"skipped": True, "reason": "无预计算版本", "market": market}
 
-    for cid in config_ids:
-        run_gms_precompute_for_config(cid, market, stock_pool)
-
-
-def scheduled_gms_signals_cn() -> None:
-    run_gms_precompute("cn", stock_pool=None)
+    return pack_signal_runs(
+        [run_gms_precompute_for_config(cid, market, stock_pool) for cid in config_ids]
+    )
 
 
-def scheduled_gms_signals_hk() -> None:
-    run_gms_precompute("hk", stock_pool=None)
+def scheduled_gms_signals_cn():
+    return run_gms_precompute("cn", stock_pool=None)
 
 
-def scheduled_gms_signals_custom() -> None:
+def scheduled_gms_signals_hk():
+    return run_gms_precompute("hk", stock_pool=None)
+
+
+def scheduled_gms_signals_custom():
     codes = parse_gms_custom_stock_codes()
     if not codes:
         logger.info("[GMS预计算] GMS_CUSTOM_STOCK_CODES 为空，跳过 custom")
-        return
-    run_gms_precompute("all", stock_pool=codes)
+        return {"skipped": True, "reason": "自定义股票池为空"}
+    return run_gms_precompute("all", stock_pool=codes)
 
 
 def scheduled_gms_signals_watchlist() -> None:
@@ -242,5 +262,5 @@ def scheduled_gms_signals_watchlist() -> None:
         db.close()
     if not codes:
         logger.info("[GMS预计算] 全用户 watchlist 为空，跳过")
-        return
-    run_gms_precompute("all", stock_pool=codes)
+        return {"skipped": True, "reason": "自选股为空"}
+    return run_gms_precompute("all", stock_pool=codes)

@@ -351,11 +351,13 @@ def run_csb_trace_refresh_range(
         db.close()
 
 
-def scheduled_csb_signals_cn() -> None:
+def scheduled_csb_signals_cn():
+    from backend_core.data_collectors.workflow.signal_count import pack_signal_runs
+
     if datetime.now().weekday() >= 5:
-        return
+        return {"skipped": True, "reason": "周末跳过"}
     if not _env_bool("ENABLE_CSB_PRECOMPUTE", True):
-        return
+        return {"skipped": True, "reason": "ENABLE_CSB_PRECOMPUTE=false"}
     from backend_api.database import SessionLocal
 
     db = SessionLocal()
@@ -363,5 +365,6 @@ def scheduled_csb_signals_cn() -> None:
         ids = list_precompute_config_ids(db)
     finally:
         db.close()
-    for cid in ids:
-        run_csb_precompute_for_config(cid)
+    if not ids:
+        return {"skipped": True, "reason": "无预计算版本"}
+    return pack_signal_runs([run_csb_precompute_for_config(cid) for cid in ids])

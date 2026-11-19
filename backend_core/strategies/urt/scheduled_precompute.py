@@ -326,23 +326,23 @@ def run_urt_trace_refresh_range(
         db.close()
 
 
-def scheduled_urt_signals_cn() -> None:
+def scheduled_urt_signals_cn():
     """定时入口：工作日 A 股全量预计算。"""
     if datetime.now().weekday() >= 5:
         logger.info("URT 预计算跳过周末")
-        return
+        return {"skipped": True, "reason": "周末跳过"}
     if not _env_bool("ENABLE_URT_PRECOMPUTE", True):
         logger.info("URT 预计算已禁用 ENABLE_URT_PRECOMPUTE=false")
-        return
-    run_urt_precompute_ashare()
+        return {"skipped": True, "reason": "ENABLE_URT_PRECOMPUTE=false"}
+    return run_urt_precompute_ashare()
 
 
-def scheduled_urt_signals_hk() -> None:
+def scheduled_urt_signals_hk():
     """定时入口：工作日港股全量预计算。"""
     if datetime.now().weekday() >= 5:
         logger.info("URT 港股预计算跳过周末")
-        return
+        return {"skipped": True, "reason": "周末跳过"}
     if not _env_bool("ENABLE_URT_PRECOMPUTE", True):
         logger.info("URT 预计算已禁用 ENABLE_URT_PRECOMPUTE=false")
-        return
-    run_urt_precompute_hk()
+        return {"skipped": True, "reason": "ENABLE_URT_PRECOMPUTE=false"}
+    return run_urt_precompute_hk()

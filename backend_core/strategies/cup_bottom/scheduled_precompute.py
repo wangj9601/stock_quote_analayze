@@ -108,13 +108,13 @@ def run_cupb_precompute(
 def scheduled_cupb_signals_cn() -> None:
     """A股收盘流程入口：全市场 CN、不复权、forming+confirmed 入库。
 
-    失败向上抛，便于 `_wrap_plain` 将节点标红。周末直接返回。
+    失败向上抛，便于采集节点标红。周末返回跳过。
     """
     if datetime.now().weekday() >= 5:
-        return
+        return {"skipped": True, "reason": "周末跳过"}
     if not _env_bool("ENABLE_CUPB_PRECOMPUTE", True):
         logger.info("CUPB 信号预计算已禁用（ENABLE_CUPB_PRECOMPUTE=false）")
-        return
+        return {"skipped": True, "reason": "ENABLE_CUPB_PRECOMPUTE=false"}
     started = datetime.now()
     out = run_cupb_precompute(
         stock_pool_mode="market",
@@ -135,3 +135,4 @@ def scheduled_cupb_signals_cn() -> None:
         out.get("deleted_stale"),
         elapsed,
     )
+    return out

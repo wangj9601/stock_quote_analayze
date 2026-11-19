@@ -320,6 +320,17 @@
                 <template v-if="currentRunDetail.finished_at"> → {{ formatTime(currentRunDetail.finished_at) }}</template>
               </p>
               <p v-if="currentRunDetail.error_message" class="error-text">{{ currentRunDetail.error_message }}</p>
+              <section v-if="signalSummary.length" class="signal-summary" aria-label="信号数量">
+                <h4>信号数量</h4>
+                <ul>
+                  <li v-for="item in signalSummary" :key="item.key">
+                    <span>{{ item.label }}</span>
+                    <strong v-if="item.note">{{ item.note }}</strong>
+                    <strong v-else-if="item.count != null">{{ item.count }} 条</strong>
+                    <span v-else class="muted">{{ signalStatusText(item.status) }}</span>
+                  </li>
+                </ul>
+              </section>
               <el-timeline>
                 <el-timeline-item
                   v-for="nr in currentRunDetail.node_runs || []"
@@ -409,6 +420,54 @@ const restartingKey = ref<string | null>(null)
 /** 运行记录 / 详情轮询间隔（毫秒） */
 const RUN_POLL_INTERVAL_MS = 30_000
 let pollTimer: number | null = null
+
+const SIGNAL_NODE_LABELS: Record<string, string> = {
+  gms_signals_cn: 'GMS信号预计算(A股)',
+  gms_signals_hk: 'GMS信号预计算(港股)',
+  urt_signals_cn: 'URT信号预计算(A股)',
+  urt_signals_hk: 'URT信号预计算(港股)',
+  sbbr_signals_cn: 'SBBR信号预计算',
+  rpe_signals_cn: 'RPE信号预计算',
+  csb_signals_cn: 'CSB信号预计算',
+  sepa_signals_cn: 'SEPA买点信号预计算',
+  cupb_signals_cn: 'CUPB杯底信号预计算',
+}
+
+function signalNoteOf(nr: { message?: string | null; result?: Record<string, any> }) {
+  const note = nr.result?.signal_note
+  if (typeof note === 'string' && note.trim()) return note.trim()
+  const msg = nr.message || ''
+  const idx = msg.indexOf('，')
+  if (idx >= 0 && /条/.test(msg.slice(idx + 1))) return msg.slice(idx + 1)
+  return ''
+}
+
+function signalCountOf(nr: { result?: Record<string, any> }) {
+  const raw = nr.result?.signal_count
+  if (raw == null || raw === '') return null
+  const count = Number(raw)
+  return Number.isNaN(count) ? null : count
+}
+
+const signalSummary = computed(() => {
+  const runs = currentRunDetail.value?.node_runs || []
+  return runs
+    .filter((nr) => Object.prototype.hasOwnProperty.call(SIGNAL_NODE_LABELS, nr.node_key))
+    .map((nr) => ({
+      key: `${nr.node_key}-${nr.order_index}`,
+      label: SIGNAL_NODE_LABELS[nr.node_key],
+      status: nr.status,
+      note: signalNoteOf(nr),
+      count: signalCountOf(nr),
+    }))
+})
+
+function signalStatusText(status: string) {
+  if (status === 'skipped') return '跳过'
+  if (status === 'failed') return '失败'
+  if (status === 'running' || status === 'pending') return '计算中'
+  return '未记录'
+}
 
 const categoryLabel = (c: string) =>
   ({
@@ -1066,6 +1125,37 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+}
+.signal-summary {
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+.signal-summary h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.signal-summary ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.signal-summary li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.signal-summary li + li {
+  border-top: 1px solid #f3f4f6;
+}
+.signal-summary strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .run-id-line {
   margin: 4px 0;

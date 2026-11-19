@@ -71,6 +71,42 @@ def _wrap_plain(fn: Callable[[], Any], name: str) -> Callable[[WorkflowContext],
     return _exec
 
 
+def _signal_result_data(out: Any, decision: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "result": _safe(out),
+        "signal_count": decision["signal_count"],
+        "signal_written": decision["written"],
+        "signal_hits": decision["hits"],
+        "signal_note": decision["note"],
+    }
+
+
+def _wrap_signal(fn: Callable[[], Any], name: str) -> Callable[[WorkflowContext], NodeResult]:
+    """策略预计算节点：日志带上生成条数，失败时节点标红。"""
+
+    def _exec(ctx: WorkflowContext) -> NodeResult:
+        from backend_core.data_collectors.workflow.signal_count import classify_signal_payload
+
+        try:
+            out = fn()
+            decision = classify_signal_payload(name, out)
+            data = _signal_result_data(out, decision)
+            if decision["skipped"]:
+                return NodeResult.skip(decision["message"], data=data)
+            if decision["failed"]:
+                return NodeResult.fail(
+                    decision["error"] or f"{name}失败",
+                    message=decision["message"],
+                    data=data,
+                )
+            return NodeResult.ok(decision["message"], data=data)
+        except Exception as e:
+            logger.exception("%s 异常", name)
+            return NodeResult.fail(str(e), message=f"{name}失败")
+
+    return _exec
+
+
 def _safe(v: Any) -> Any:
     if v is None or isinstance(v, (bool, int, float, str)):
         return v
@@ -460,57 +496,49 @@ def _gen_hk_annual() -> Any:
 def _gms_cn() -> Any:
     from backend_core.strategies.gms.scheduled_precompute import scheduled_gms_signals_cn
 
-    scheduled_gms_signals_cn()
-    return True
+    return scheduled_gms_signals_cn()
 
 
 def _urt_cn() -> Any:
     from backend_core.strategies.urt.scheduled_precompute import scheduled_urt_signals_cn
 
-    scheduled_urt_signals_cn()
-    return True
+    return scheduled_urt_signals_cn()
 
 
 def _gms_hk() -> Any:
     from backend_core.strategies.gms.scheduled_precompute import scheduled_gms_signals_hk
 
-    scheduled_gms_signals_hk()
-    return True
+    return scheduled_gms_signals_hk()
 
 
 def _urt_hk() -> Any:
     from backend_core.strategies.urt.scheduled_precompute import scheduled_urt_signals_hk
 
-    scheduled_urt_signals_hk()
-    return True
+    return scheduled_urt_signals_hk()
 
 
 def _sbbr_cn() -> Any:
     from backend_core.strategies.sbbr.scheduled_precompute import scheduled_sbbr_signals_cn
 
-    scheduled_sbbr_signals_cn()
-    return True
+    return scheduled_sbbr_signals_cn()
 
 
 def _rpe_cn() -> Any:
     from backend_core.strategies.rpe.scheduled_precompute import scheduled_rpe_signals_cn
 
-    scheduled_rpe_signals_cn()
-    return True
+    return scheduled_rpe_signals_cn()
 
 
 def _csb_cn() -> Any:
     from backend_core.strategies.csb.scheduled_precompute import scheduled_csb_signals_cn
 
-    scheduled_csb_signals_cn()
-    return True
+    return scheduled_csb_signals_cn()
 
 
 def _cupb_cn() -> Any:
     from backend_core.strategies.cup_bottom.scheduled_precompute import scheduled_cupb_signals_cn
 
-    scheduled_cupb_signals_cn()
-    return True
+    return scheduled_cupb_signals_cn()
 
 
 def exec_sepa_cn(ctx: WorkflowContext) -> NodeResult:
@@ -522,14 +550,19 @@ def exec_sepa_cn(ctx: WorkflowContext) -> NodeResult:
         if _has_explicit_trade_date(ctx):
             trade_date = _resolve_node_trade_date(ctx)
         result = run_sepa_precompute(trade_date=trade_date)
-        if isinstance(result, dict) and result.get("skipped"):
-            return NodeResult.skip(str(result.get("reason") or "SEPA 预计算已跳过"))
-        if isinstance(result, dict) and result.get("success") is False:
+        from backend_core.data_collectors.workflow.signal_count import classify_signal_payload
+
+        decision = classify_signal_payload("SEPA买点信号预计算", result)
+        data = _signal_result_data(result, decision)
+        if decision["skipped"]:
+            return NodeResult.skip(decision["message"], data=data)
+        if decision["failed"]:
             return NodeResult.fail(
-                str(result.get("error") or "SEPA 预计算失败"),
-                message="SEPA买点信号预计算失败",
+                decision["error"] or "SEPA 预计算失败",
+                message=decision["message"],
+                data=data,
             )
-        return NodeResult.ok("SEPA买点信号预计算完成", data={"result": _safe(result)})
+        return NodeResult.ok(decision["message"], data=data)
     except Exception as e:
         logger.exception("SEPA买点信号预计算 异常")
         return NodeResult.fail(str(e), message="SEPA买点信号预计算失败")
@@ -651,14 +684,14 @@ exec_hk_monthly = _wrap_hk(_gen_hk_monthly, "港股月K")
 exec_hk_quarterly = _wrap_hk(_gen_hk_quarterly, "港股季K")
 exec_hk_semiannual = _wrap_hk(_gen_hk_semiannual, "港股半年K")
 exec_hk_annual = _wrap_hk(_gen_hk_annual, "港股年K")
-exec_gms_cn = _wrap_plain(_gms_cn, "GMS信号预计算(A股)")
-exec_gms_hk = _wrap_plain(_gms_hk, "GMS信号预计算(港股)")
-exec_urt_cn = _wrap_plain(_urt_cn, "URT信号预计算(A股)")
-exec_urt_hk = _wrap_plain(_urt_hk, "URT信号预计算(港股)")
-exec_sbbr_cn = _wrap_plain(_sbbr_cn, "SBBR信号预计算")
-exec_rpe_cn = _wrap_plain(_rpe_cn, "RPE信号预计算")
-exec_csb_cn = _wrap_plain(_csb_cn, "CSB信号预计算")
-exec_cupb_cn = _wrap_plain(_cupb_cn, "CUPB信号预计算")
+exec_gms_cn = _wrap_signal(_gms_cn, "GMS信号预计算(A股)")
+exec_gms_hk = _wrap_signal(_gms_hk, "GMS信号预计算(港股)")
+exec_urt_cn = _wrap_signal(_urt_cn, "URT信号预计算(A股)")
+exec_urt_hk = _wrap_signal(_urt_hk, "URT信号预计算(港股)")
+exec_sbbr_cn = _wrap_signal(_sbbr_cn, "SBBR信号预计算")
+exec_rpe_cn = _wrap_signal(_rpe_cn, "RPE信号预计算")
+exec_csb_cn = _wrap_signal(_csb_cn, "CSB信号预计算")
+exec_cupb_cn = _wrap_signal(_cupb_cn, "CUPB信号预计算")
 exec_rs_rating_cn = _wrap_plain(_rs_rating_cn, "A股相对强度RS预计算")
 exec_rs_rating_hk = _wrap_plain(_rs_rating_hk, "港股相对强度RS预计算")
 exec_fina_indicator_cn = _wrap_plain(_fina_indicator_cn, "A股财务指标采集")
