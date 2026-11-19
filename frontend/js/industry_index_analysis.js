@@ -12,6 +12,7 @@
         'js/vendor/html2canvas.min.js',
         'js/stock_analysis_png.js',
         'js/pa_analysis_view.js',
+        'js/board_flow_focus.js?v=20261119-flow2',
     ];
 
     function loadScript(src) {
@@ -41,6 +42,11 @@
                 <section class="ssa-block" id="iiaBreadthBlock" hidden>
                     <h4 class="ssa-block-title">成分广度与领涨领跌</h4>
                     <div id="iiaBreadthHost"></div>
+                </section>
+                <section class="ssa-block" id="iiaFlowBlock" hidden>
+                    <h4 class="ssa-block-title">资金与相对轮动</h4>
+                    <p class="ssa-flow-hint">只描述当前板块。资金看当日主力净流入在同行业里的名次，轮动看相对沪深300的象限和近 15 日轨迹。</p>
+                    <div id="iiaFlowHost"></div>
                 </section>
                 <section class="ssa-pa-section" id="iiaPaSection" hidden>
                     <div class="ssa-pa-section__head">
@@ -85,6 +91,7 @@
         _bound: false,
         _catalog: null,
         _pickedCode: '',
+        _listOpen: false,
         _detailCode: '',
 
         async ensureScripts() {
@@ -125,7 +132,20 @@
             const query = document.getElementById('iiaBoardQuery');
             if (query && !query.dataset.bound) {
                 query.dataset.bound = '1';
-                query.addEventListener('input', () => this._filterCatalog(query.value));
+                query.addEventListener('focus', () => this._openList());
+                query.addEventListener('input', () => {
+                    this._listOpen = true;
+                    this._filterCatalog(query.value);
+                });
+                query.addEventListener('keydown', (event) => this._onQueryKey(event));
+            }
+            if (!this._outsideBound) {
+                this._outsideBound = true;
+                document.addEventListener('pointerdown', (event) => {
+                    const field = document.querySelector('#industry-index-ai .iia-board-field');
+                    if (!field || field.contains(event.target)) return;
+                    this._closeList();
+                });
             }
         },
 
@@ -151,11 +171,81 @@
                     .filter((row) => row.code);
                 const query = document.getElementById('iiaBoardQuery');
                 this._filterCatalog(query ? query.value : '');
+                this._closeList();
             } catch (e) {
                 console.error(e);
                 this._catalog = [];
+                this._showChosen('行业列表加载失败', true);
                 pick.innerHTML = '<p class="iia-board-pick__status">行业列表加载失败</p>';
             }
+        },
+
+        _openList() {
+            this._listOpen = true;
+            const query = document.getElementById('iiaBoardQuery');
+            this._filterCatalog(query ? query.value : '');
+        },
+
+        _closeList() {
+            this._listOpen = false;
+            const pick = document.getElementById('iiaBoardPick');
+            const query = document.getElementById('iiaBoardQuery');
+            if (pick) {
+                pick.classList.remove('is-open');
+                pick.hidden = true;
+            }
+            if (query) query.setAttribute('aria-expanded', 'false');
+        },
+
+        _pickedRow() {
+            const code = String(this._pickedCode || '');
+            if (!code || !Array.isArray(this._catalog)) return null;
+            return this._catalog.find((row) => row.code === code) || null;
+        },
+
+        _showChosen(text, isError) {
+            const el = document.getElementById('iiaBoardChosen');
+            if (!el) return;
+            if (!text) {
+                el.hidden = true;
+                el.textContent = '';
+                el.classList.remove('is-error');
+                return;
+            }
+            el.hidden = false;
+            el.textContent = text;
+            el.classList.toggle('is-error', !!isError);
+        },
+
+        _syncChosen() {
+            const row = this._pickedRow();
+            if (!row) {
+                this._showChosen('');
+                return;
+            }
+            this._showChosen(`已选 ${row.name || row.code} ${row.code}`);
+        },
+
+        _choose(code) {
+            const row = (this._catalog || []).find((item) => item.code === code);
+            if (!row) return;
+            this._pickedCode = row.code;
+            const query = document.getElementById('iiaBoardQuery');
+            if (query) query.value = row.name || row.code;
+            this._syncChosen();
+            this._closeList();
+        },
+
+        _onQueryKey(event) {
+            if (event.key === 'Escape') {
+                this._closeList();
+                return;
+            }
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            const pick = document.getElementById('iiaBoardPick');
+            const first = pick && pick.querySelector('.iia-board-pick__item');
+            if (first) this._choose(first.getAttribute('data-code') || '');
         },
 
         _filterCatalog(raw) {
@@ -170,7 +260,19 @@
                 ? this._catalog.find((row) => row.code.toLowerCase() === q || row.name.toLowerCase() === q)
                 : null;
             if (exact) this._pickedCode = exact.code;
-            else if (!rows.some((row) => row.code === this._pickedCode)) this._pickedCode = rows[0] ? rows[0].code : '';
+            else if (this._pickedCode) {
+                const current = this._pickedRow();
+                const name = current ? String(current.name || '').toLowerCase() : '';
+                const code = current ? String(current.code || '').toLowerCase() : '';
+                if (q !== name && q !== code) this._pickedCode = '';
+            }
+            this._syncChosen();
+            const query = document.getElementById('iiaBoardQuery');
+            if (this._listOpen) {
+                pick.hidden = false;
+                pick.classList.add('is-open');
+                if (query) query.setAttribute('aria-expanded', 'true');
+            }
             if (!rows.length) {
                 pick.innerHTML = '<p class="iia-board-pick__status">无匹配行业</p>';
                 return;
@@ -182,17 +284,13 @@
             }).join('');
             if (!pick.dataset.bound) {
                 pick.dataset.bound = '1';
+                pick.addEventListener('mousedown', (event) => event.preventDefault());
                 pick.addEventListener('click', (event) => {
                     const btn = event.target && event.target.closest
                         ? event.target.closest('.iia-board-pick__item')
                         : null;
                     if (!btn) return;
-                    this._pickedCode = btn.getAttribute('data-code') || '';
-                    pick.querySelectorAll('.iia-board-pick__item').forEach((el) => {
-                        const on = el === btn;
-                        el.classList.toggle('is-selected', on);
-                        el.setAttribute('aria-selected', on ? 'true' : 'false');
-                    });
+                    this._choose(btn.getAttribute('data-code') || '');
                 });
             }
         },
@@ -206,7 +304,7 @@
             const code = this.selectedCode();
             if (!code) {
                 if (typeof CommonUtils !== 'undefined' && CommonUtils.showToast) {
-                    CommonUtils.showToast('请先选择行业板块', 'warning');
+                    CommonUtils.showToast('请先从列表点选行业板块', 'warning');
                 }
                 return;
             }
@@ -219,7 +317,10 @@
             const options = opts || {};
             const code = String(options.code || '').trim();
             if (!code) return;
-            this._setBusy(true);
+            const picked = this._pickedRow();
+            const busyName = (picked && (picked.name || picked.code)) || this.lastName || code;
+            this._closeList();
+            this._setBusy(true, busyName);
             try {
                 await this.ensureScripts();
                 const data = await this.fetchBundle(code, options);
@@ -267,6 +368,7 @@
                 patternMetaLabel: '行业指数',
                 emptyBreadthText: '库内暂无该行业成分，广度从略；价格行为仍可用。',
             });
+            if (global.BoardFlowFocus) BoardFlowFocus.render(data, 'iia');
         },
 
         detailSectionHtml() {
@@ -370,11 +472,22 @@
             }
         },
 
-        _setBusy(busy) {
-            ['iiaAnalyzeBtn', 'iiaRealtimeAnalyzeBtn'].forEach((id) => {
-                const el = document.getElementById(id);
-                if (el) el.disabled = !!busy;
-            });
+        _setBusy(busy, name) {
+            const analyze = document.getElementById('iiaAnalyzeBtn');
+            const realtime = document.getElementById('iiaRealtimeAnalyzeBtn');
+            if (analyze) {
+                analyze.disabled = !!busy;
+                analyze.textContent = busy ? '分析中…' : '分析';
+            }
+            if (realtime) {
+                realtime.disabled = !!busy;
+                realtime.textContent = busy ? '分析中…' : '实时分析';
+            }
+            const status = document.getElementById('iiaAnalyzeStatus');
+            if (status) {
+                status.hidden = !busy;
+                status.textContent = busy ? `正在分析${name ? ' ' + name : ''}…` : '';
+            }
         },
 
         _enableExport(on) {

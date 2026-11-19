@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261007b">
     <link rel="stylesheet" href="css/ops-responsive.css?v=20260930-rv">
-    <link rel="stylesheet" href="css/analysis.css?v=20261118-iia-pick">
+    <link rel="stylesheet" href="css/analysis.css?v=20261119-pick">
     <link rel="stylesheet" href="css/margin_ui.css?v=20261031-margin-read">
     <link rel="stylesheet" href="css/recommend.css?v=20260930-rv">
     <script>
@@ -25,7 +25,7 @@
     </script>
     <link rel="stylesheet" href="css/analysis-ops.css?v=20261109-lm-polish3">
     <link rel="stylesheet" href="css/index_detail.css?v=20261015-idx">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261109-lm-polish3">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261119-flow2">
 </head>
 
 <body data-channel="analyze" class="ops-map">
@@ -465,16 +465,19 @@
                         <div class="ssa-header">
                             <h3>行业指数分析</h3>
                             <p class="ssa-hint">
-                                针对同花顺行业板块指数，一次给出<strong>行业环境研判</strong>与<strong>价格行为</strong>（波段 → 形态 → 关位 → 江恩）。
+                                针对同花顺行业板块指数，一次给出<strong>行业环境研判</strong>、<strong>资金与相对轮动</strong>与<strong>价格行为</strong>（波段 → 形态 → 关位 → 江恩）。
                                 成分涨跌来自板块成分与个股实时行情。实时分析只刷新现价和广度锚点，不改写当日 K（行业实时行情没有开高低）。
                             </p>
                         </div>
                         <div class="ssa-form">
                             <div class="form-row">
-                                <div class="form-group">
+                                <div class="form-group iia-board-field">
                                     <label for="iiaBoardQuery">行业板块</label>
-                                    <input type="search" id="iiaBoardQuery" placeholder="搜索名称或代码" autocomplete="off">
-                                    <div id="iiaBoardPick" class="iia-board-pick" role="listbox" aria-label="行业板块列表"></div>
+                                    <div class="iia-board-combo">
+                                        <input type="search" id="iiaBoardQuery" placeholder="输入名称或代码，从列表点选" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="iiaBoardPick">
+                                        <div id="iiaBoardPick" class="iia-board-pick" role="listbox" aria-label="行业板块列表" hidden></div>
+                                    </div>
+                                    <p id="iiaBoardChosen" class="iia-board-chosen" hidden></p>
                                 </div>
                                 <div class="form-group">
                                     <label for="iiaTradeDate">基准日（可选）</label>
@@ -498,7 +501,8 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="iiaEmpty" class="ssa-empty">搜索并选中行业后点击「分析」</div>
+                        <p id="iiaAnalyzeStatus" class="iia-analyze-status" role="status" hidden></p>
+                        <div id="iiaEmpty" class="ssa-empty">从列表点选行业后点击「分析」</div>
                         <div id="iiaExportRoot" class="ssa-export-root" hidden>
                             <div class="ssa-meta" id="iiaMeta" hidden></div>
                             <section class="ssa-block" id="iiaMarketViewBlock" hidden>
@@ -509,6 +513,11 @@
                             <section class="ssa-block" id="iiaBreadthBlock" hidden>
                                 <h4 class="ssa-block-title">成分广度与领涨领跌</h4>
                                 <div id="iiaBreadthHost"></div>
+                            </section>
+                            <section class="ssa-block" id="iiaFlowBlock" hidden>
+                                <h4 class="ssa-block-title">资金与相对轮动</h4>
+                                <p class="ssa-flow-hint">只描述当前板块。资金看当日主力净流入在同行业里的名次，轮动看相对沪深300的象限和近 15 日轨迹。</p>
+                                <div id="iiaFlowHost"></div>
                             </section>
                             <section class="ssa-pa-section" id="iiaPaSection" hidden>
                                 <div class="ssa-pa-section__head">
@@ -552,16 +561,19 @@
                         <div class="ssa-header">
                             <h3>概念指数分析</h3>
                             <p class="ssa-hint">
-                                针对同花顺概念板块指数，一次给出<strong>概念环境研判</strong>与<strong>价格行为</strong>（波段 → 形态 → 关位 → 江恩）。
+                                针对同花顺概念板块指数，一次给出<strong>概念环境研判</strong>、<strong>资金与相对轮动</strong>与<strong>价格行为</strong>（波段 → 形态 → 关位 → 江恩）。
                                 成分涨跌来自板块成分与个股实时行情。概念板块没有实时指数行情，点位用最后一根已收盘日 K，分析不改写当日 K。
                             </p>
                         </div>
                         <div class="ssa-form">
                             <div class="form-row">
-                                <div class="form-group">
+                                <div class="form-group iia-board-field">
                                     <label for="ciaBoardQuery">概念板块</label>
-                                    <input type="search" id="ciaBoardQuery" placeholder="搜索名称或代码" autocomplete="off">
-                                    <div id="ciaBoardPick" class="iia-board-pick" role="listbox" aria-label="概念板块列表"></div>
+                                    <div class="iia-board-combo">
+                                        <input type="search" id="ciaBoardQuery" placeholder="输入名称或代码，从列表点选" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="ciaBoardPick">
+                                        <div id="ciaBoardPick" class="iia-board-pick" role="listbox" aria-label="概念板块列表" hidden></div>
+                                    </div>
+                                    <p id="ciaBoardChosen" class="iia-board-chosen" hidden></p>
                                 </div>
                                 <div class="form-group">
                                     <label for="ciaTradeDate">基准日（可选）</label>
@@ -585,7 +597,8 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="ciaEmpty" class="ssa-empty">搜索并选中概念后点击「分析」</div>
+                        <p id="ciaAnalyzeStatus" class="iia-analyze-status" role="status" hidden></p>
+                        <div id="ciaEmpty" class="ssa-empty">从列表点选概念后点击「分析」</div>
                         <div id="ciaExportRoot" class="ssa-export-root" hidden>
                             <div class="ssa-meta" id="ciaMeta" hidden></div>
                             <section class="ssa-block" id="ciaMarketViewBlock" hidden>
@@ -596,6 +609,11 @@
                             <section class="ssa-block" id="ciaBreadthBlock" hidden>
                                 <h4 class="ssa-block-title">成分广度与领涨领跌</h4>
                                 <div id="ciaBreadthHost"></div>
+                            </section>
+                            <section class="ssa-block" id="ciaFlowBlock" hidden>
+                                <h4 class="ssa-block-title">资金与相对轮动</h4>
+                                <p class="ssa-flow-hint">只描述当前板块。资金看当日主力净流入在同概念里的名次，轮动看相对沪深300的象限和近 15 日轨迹。</p>
+                                <div id="ciaFlowHost"></div>
                             </section>
                             <section class="ssa-pa-section" id="ciaPaSection" hidden>
                                 <div class="ssa-pa-section__head">
@@ -2202,7 +2220,7 @@
     <script src="js/board_gate_ui.js?v=20261113-bgate1"></script>
     <script src="js/board_analysis_pdf.js"></script>
     <script src="js/board_analysis.js?v=20261113-bgate1"></script>
-    <script src="js/analysis.js?v=20261118-iia-pick"></script>
+    <script src="js/analysis.js?v=20261119-pick"></script>
 </body>
 
 </html>

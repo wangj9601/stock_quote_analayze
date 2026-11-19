@@ -1,6 +1,6 @@
 /**
  * 指数分析 · 数据驱动 PDF（复用 BoardAnalysisPdf / jsPDF）
- * 覆盖：抬头、市场环境研判、广度/强弱/行业贡献、波段摘要、形态摘要、关位要点、江恩
+ * 覆盖：抬头、市场环境研判、广度/强弱/行业贡献、资金与相对轮动、波段摘要、形态摘要、关位要点、江恩
  */
 (function (global) {
   function cell(v) {
@@ -225,6 +225,42 @@
             3: { cellWidth: 24 },
           }
         );
+      }
+      y += 2;
+    }
+
+    if (isBoard) {
+      drawTitle('资金与相对轮动', 12, [30, 64, 175]);
+      const ff = data.flow_focus || null;
+      if (!ff || !ff.available || !ff.flow) {
+        drawWrapped((ff && ff.note) || '资金与相对轮动暂不可用', 9, 4.2);
+      } else {
+        const flow = ff.flow || {};
+        const rot = ff.rotation || {};
+        const sig = ff.signal || {};
+        const yi = Number(flow.main_net_yi);
+        const yiText = Number.isFinite(yi)
+          ? `${yi > 0 ? '+' : ''}${Math.abs(yi) >= 1 ? `${yi.toFixed(2)}亿` : `${(yi * 10000).toFixed(0)}万`}`
+          : '--';
+        drawWrapped(
+          `资金日 ${cell(ff.trade_date)}${ff.date_note ? `，${ff.date_note}` : ''}。涨跌幅 ${fmtPct(flow.change_percent)}，主力净流入 ${yiText}。净流入第 ${cell(flow.net_rank)} / ${cell(flow.universe)}，涨跌幅第 ${cell(flow.change_rank)} / ${cell(flow.universe)}。`,
+          9,
+          4.2
+        );
+        if (rot.available) {
+          const trailText = (rot.trail || [])
+            .map((point) => `${String(point.trade_date || '').slice(5)} ${point.label || point.quadrant || ''}`)
+            .filter((item) => item.trim())
+            .join(' → ');
+          drawWrapped(
+            `相对${cell(rot.benchmark_name || '沪深300')}：${cell(rot.label)}，RS-Ratio ${fmtNum(rot.rs_ratio)}，RS-Momentum ${fmtNum(rot.rs_momentum)}。近端轨迹：${trailText || '--'}`,
+            9,
+            4.2
+          );
+        } else {
+          drawWrapped(rot.note || '相对轮动暂不可用', 9, 4.2);
+        }
+        drawWrapped(`交叉信号：${cell(sig.signal_label)}。${cell(sig.signal_note)}`, 9, 4.2);
       }
       y += 2;
     }

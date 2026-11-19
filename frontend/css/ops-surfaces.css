@@ -1584,3 +1584,31 @@ body.ops-map select:not(.ops-select-native):focus,
 body.ops-map select:not(.ops-select-native):focus-visible {
     background-image: var(--ops-select-chevron-focus) !important;
 }
+
+/* 指数分析 · 资金与相对轮动：深底上不要浅色告警条 */
+body.ops-map .ssa-flow-hint,
+body.ops-map .ssa-flow-note,
+body.ops-map .ssa-flow-legend,
+body.ops-map .ssa-flow-signal span {
+    color: var(--ops-ink-muted) !important;
+}
+body.ops-map .ssa-flow-date,
+body.ops-map .ssa-flow-rotation {
+    color: var(--ops-ink) !important;
+}
+body.ops-map .ssa-flow-signal {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid rgba(217, 226, 236, 0.12) !important;
+    border-radius: 2px !important;
+    color: var(--ops-ink) !important;
+    box-shadow: none !important;
+}
+body.ops-map .ssa-flow-signal--strong strong { color: var(--color-rise) !important; }
+body.ops-map .ssa-flow-signal--risk strong { color: var(--ops-alert, #c23b3b) !important; }
+body.ops-map .ssa-flow-signal--watch strong { color: var(--ops-route) !important; }
+body.ops-map .ssa-flow-signal--unknown strong { color: var(--ops-ink-muted) !important; }
+body.ops-map .ssa-flow-quad--leading { color: #d61f28 !important; }
+body.ops-map .ssa-flow-quad--weakening { color: #c9a227 !important; }
+body.ops-map .ssa-flow-quad--lagging { color: #0f9d5c !important; }
+body.ops-map .ssa-flow-quad--improving { color: #6f8cff !important; }
+body.ops-map .ssa-flow-quad--neutral { color: var(--ops-ink-muted) !important; }

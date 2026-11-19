@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend_api.utils.board_flow_focus import flow_focus_or_note
+
 from backend_core.analysis.concept_index_bars import (
     concept_bar_lookback,
     load_concept_board_ohlc_asc,
@@ -334,6 +336,10 @@ def build_concept_index_analysis_bundle(
     breadth["official_up_count"] = None
     breadth["official_down_count"] = None
 
+    flow_focus = flow_focus_or_note(
+        db, code_n, board_kind="concept", asof=asof_req or None
+    )
+
     market_view = _build_market_view(
         code=code_n,
         name=name_n,
@@ -368,6 +374,7 @@ def build_concept_index_analysis_bundle(
             "market_view": market_view,
             "breadth": breadth,
             "leaders": leaders,
+            "flow_focus": flow_focus,
             "sector_contrib": None,
             "levels": levels,
             "pattern": pattern,

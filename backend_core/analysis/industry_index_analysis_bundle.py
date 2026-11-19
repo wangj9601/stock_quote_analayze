@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from backend_api.utils.board_flow_focus import flow_focus_or_note
+
 from backend_core.analysis.index_analysis_bundle import (
     _build_market_view,
     _compute_breadth_and_leaders,
@@ -326,6 +328,10 @@ def build_industry_index_analysis_bundle(
         breadth, leaders = _compute_breadth_and_leaders(members)
     breadth = _attach_official_breadth(breadth, quote)
 
+    flow_focus = flow_focus_or_note(
+        db, code_n, board_kind="industry", asof=asof_req or None
+    )
+
     market_view = _build_market_view(
         code=code_n,
         name=name_n,
@@ -360,6 +366,7 @@ def build_industry_index_analysis_bundle(
             "market_view": market_view,
             "breadth": breadth,
             "leaders": leaders,
+            "flow_focus": flow_focus,
             "sector_contrib": None,
             "levels": levels,
             "pattern": pattern,
