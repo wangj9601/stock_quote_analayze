@@ -6,7 +6,7 @@
                     <button type="button" class="gms-sub-tab" data-sbbr-sub="formal">正式交易</button>
                     <button type="button" class="gms-sub-tab" data-sbbr-sub="reserve">储备箱</button>
                 </div>
-                <p class="gms-integrated-hint">做小做底：总市值 20~300 亿 <strong>或</strong> 流通股 &gt;5 亿股（任一项符合即通过）→ 筑底识别 → 共振弱转强入场；列表展示箱体支撑/阻力与 KDE 结构位；可加入观察并转正式交易（五·三·二分仓，加仓需上方支撑确认）。</p>
+                <p class="gms-integrated-hint">做小做底：总市值 20~300 亿 <strong>或</strong> 流通股 &gt;5 亿股（任一项符合即通过）→ 筑底识别 → 共振弱转强入场。列表只显示每日采集写入的信号，刷新筛选不重新计算；箱体支撑/阻力与 KDE 结构位来自该次采集。可加入观察并转正式交易（五·三·二分仓，加仓需上方支撑确认）。</p>
             </div>
 
             <div id="sbbr-sub-signals" class="sbbr-sub-panel" style="display:block;">
@@ -23,19 +23,19 @@
                         </select>
                     </div>
                     <div class="param-group">
-                        <label for="sbbrDate" title="选股用 K 线窗口的「止日」；按该日及之前行情回溯计算。若该日非交易日或尚无行情，则自动对齐到 ≤该日 的最近交易日；留空则用表内最新交易日。">基准日（回溯）</label>
-                        <input type="date" id="sbbrDate" class="param-input" title="留空=最新交易日；填写历史日可回溯查看该日信号（live 现算或勾选优先读预计算）。">
+                        <label for="sbbrDate" title="显示该日已采集的做小做底信号。若该日非交易日或尚无行情，则对齐到 ≤该日 的最近交易日；留空则用表内最新交易日。不在页面上重新计算。">基准日（回溯）</label>
+                        <input type="date" id="sbbrDate" class="param-input" title="留空=最新交易日；填写历史日只显示该日已采集信号，不重新计算。">
                     </div>
                     <div class="param-group param-group-stock" id="sbbrStockCodeGroup" style="display:none;">
                         <label for="sbbrStockCode">股票代码或名称</label>
                         <input type="text" id="sbbrStockCode" class="param-input" placeholder="如 000001 或 平安银行"
-                            title="对该股现算做小做底信号；不强制落在做小宇宙，结果中标注是否通过做小">
+                            title="只显示该股在基准日已采集信号中的记录，不现场重算">
                     </div>
                     <div class="param-group param-group-check">
                         <label><input type="checkbox" id="sbbrEntryOnly"> 仅入场信号</label>
                     </div>
                     <div class="param-group param-group-check">
-                        <label title="仅全市场：读取 sbbr_signal_trace 中该基准日预计算结果；无数据时前端会自动回退 live 现算。"><input type="checkbox" id="sbbrTraceOnly"> 优先读预计算</label>
+                        <label title="选股只显示每日采集写入的做小做底信号，不在页面上重新计算。"><input type="checkbox" id="sbbrTraceOnly" checked disabled> 每日采集信号</label>
                     </div>
                     <div class="param-actions">
                         <button type="button" id="sbbrRefreshBtn" class="refresh-btn" data-strategy="sbbr" data-perm="channel.screening.tab.sbbr.btn.refresh">刷新筛选</button>
@@ -43,7 +43,7 @@
                     </div>
                     <div id="sbbrSingleSkipFilterHint" class="params-section-hint" style="display:none;">
                         <span class="param-field-hint">输入后按 Enter 或点「刷新筛选」</span>
-                        <p class="param-hint">个股模式：绕过做小宇宙硬筛，直接计算并展示策略明细（含未过做小/未筑底的情况）；勾选「仅入场」时仍只返回入场信号。</p>
+                        <p class="param-hint">个股模式：只显示该股在基准日已采集信号中的记录，不现场重算。勾选「仅入场」时仍只返回入场信号。</p>
                     </div>
                     <span id="sbbrSearchMeta" class="gms-meta-text"></span>
                     <span id="sbbrDataDateHint" class="gms-meta-text" style="margin-left:8px;color:#64748b;"></span>

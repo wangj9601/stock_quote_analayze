@@ -176,7 +176,7 @@ def test_full_market_no_precompute_allows_realtime():
 
 
 def test_trace_only_blocks_full_market_realtime_even_when_env_allows():
-    """页面勾选优先读预计算(trace_only)：无缓存时不回退全量现算。"""
+    """选股页 trace_only：无采集时返回空列表，不回退全量现算。"""
     db = MagicMock()
     with patch.object(URTFrontendInterface, "_resolve_config_id", return_value=1), patch(
         "backend_core.strategies.urt.frontend_interface.URTConfigManager"
@@ -207,9 +207,58 @@ def test_trace_only_blocks_full_market_realtime_even_when_env_allows():
             trace_only=True,
             market="CN",
         )
-    assert out["success"] is False
+    assert out["success"] is True
+    assert out.get("data") == []
     assert out.get("need_precompute") is True
     assert out.get("trace_only") is True
+    assert "不重新计算" in (out.get("message") or "")
+    Eng.assert_not_called()
+
+
+def test_trace_only_watchlist_reads_cache_not_realtime():
+    """自选/个股 trace_only：只过滤已采集买点，不现算明细。"""
+    rows = [
+        {"code": "600519", "name": "茅台", "buy_signal": True, "score": 88, "volume_multiple": 3.2},
+        {"code": "000001", "name": "平安", "buy_signal": True, "score": 75, "volume_multiple": 2.1},
+    ]
+    db = MagicMock()
+    with patch.object(URTFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.urt.frontend_interface.URTConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.urt.frontend_interface.URTDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.urt.frontend_interface.query_buy_signals_for_date",
+        return_value=rows,
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.dates_ready_for_universe_backtest",
+        return_value={"2026-09-28"},
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.get_trace_freshness",
+        return_value={"stale": False, "need_recompute": False, "config_updated_at": None, "trace_computed_at": None},
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.URTStrategyEngine"
+    ) as Eng, patch(
+        "backend_core.strategies.urt.signal_detector.build_buy_logic",
+        return_value={"filter_ok": True, "score_ok": True},
+    ):
+        cm = CM.return_value
+        cm.get_config.return_value = CFG
+        cm.merge_overrides.return_value = CFG
+        Loader.resolve_effective_history_end_date.return_value = "2026-09-28"
+        Loader.return_value = MagicMock()
+        out = URTFrontendInterface.screen(
+            db,
+            scope="watchlist",
+            config_id=1,
+            stock_codes=["600519", "300001"],
+            prefer_cache=True,
+            trace_only=True,
+            skip_screening_filters=True,
+            market="CN",
+        )
+    assert out["success"] is True
+    assert out["data_source"] == "urt_signal_trace"
+    assert [r["code"] for r in out["data"]] == ["600519"]
     Eng.assert_not_called()
 
 
@@ -257,5 +306,6 @@ if __name__ == "__main__":
     test_full_market_no_precompute_failfast()
     test_full_market_no_precompute_allows_realtime()
     test_trace_only_blocks_full_market_realtime_even_when_env_allows()
+    test_trace_only_watchlist_reads_cache_not_realtime()
     test_cache_hits_sorted_by_score_desc()
     print("test_urt_board_cache_filter.py: all passed")

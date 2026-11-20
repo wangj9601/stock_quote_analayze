@@ -399,7 +399,9 @@ admin/  # /urt-management 参数配置页
 | `min_turnover` / `min_volume_ratio` | 临时阈值 | ≥0 | 同上 |
 | `boards` | 板块过滤（可多选） | `CYB` / `KCB` / `SH_MAIN` / `SZ_MAIN` / `SZ_SME` / `BJ` | 按代码前缀过滤 `stock_basic_info`；不传=不限板块 |
 
-**`scope=single` / `watchlist` / `industry_board` / `concept_board`**：不按硬筛与最低得分过滤结果列表，实时计算并返回策略信号明细（含 `buy_signal=false`）；前端禁用量能/最低得分覆盖。实现：`URTFrontendInterface.screen(skip_screening_filters=True)` → `evaluate_buy_signal(..., require_pass=False)`。正式买点仍由行内 `buy_signal` 标识。
+**网站选股页**：始终 `trace_only=true`，任意范围只读每日采集 `urt_signal_trace` 买点；有记录就显示，无记录返回空列表，不现场重算。
+
+**`scope=single` / `watchlist` / `industry_board` / `concept_board`（未传 `trace_only`）**：不按硬筛与最低得分过滤结果列表，实时计算并返回策略信号明细（含 `buy_signal=false`）。实现：`URTFrontendInterface.screen(skip_screening_filters=True)` → `evaluate_buy_signal(..., require_pass=False)`。正式买点仍由行内 `buy_signal` 标识。
 
 板块前缀（`URT_BOARD_PREFIX_GROUPS`）：创业板 `300*`、科创 `688*`、沪主板 `600/601/602/603/605*`、深主板 `000/001*`、中小 `002*`、北证 `43/83/87/88/92*`。
 

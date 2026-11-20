@@ -235,13 +235,13 @@
 
   let lastSignalRows = [];
 
-  function renderSignalRows(rows) {
+  function renderSignalRows(rows, emptyText) {
     const body = document.getElementById('sbbrResultsBody');
     if (!body) return;
     lastSignalRows = rows || [];
     document.getElementById('sbbrResultsCount').textContent = `共 ${lastSignalRows.length} 只`;
     if (!lastSignalRows.length) {
-      body.innerHTML = `<tr><td colspan="${SBBR_RESULT_COLSPAN}" class="empty-state">无符合条件的结果</td></tr>`;
+      body.innerHTML = `<tr><td colspan="${SBBR_RESULT_COLSPAN}" class="empty-state">${esc(emptyText || '无符合条件的结果')}</td></tr>`;
       setAllResultChecks(false);
       return;
     }
@@ -407,7 +407,6 @@
       const scope = document.getElementById('sbbrScope').value || 'market';
       const date = document.getElementById('sbbrDate').value || '';
       const entryOnly = document.getElementById('sbbrEntryOnly').checked;
-      const traceOnly = document.getElementById('sbbrTraceOnly').checked;
       const stockCode = (document.getElementById('sbbrStockCode')?.value || '').trim();
       const industryCodes = selectedIndustryCodes();
       const conceptCodes = selectedConceptCodes();
@@ -423,13 +422,14 @@
         throw new Error('个股范围需要填写股票代码或名称');
       }
 
-      // 个股：不强制做小/筑底硬筛（后端也会覆盖）；其它范围保持原筛选口径
+      // 选股页只读每日采集信号。个股同样只查该股是否已入库，不现场重算。
       const isSingle = scope === 'single';
       const q = new URLSearchParams({
         scope,
         entry_only: String(entryOnly),
         require_bottom: isSingle ? 'false' : 'true',
         require_size: isSingle ? 'false' : 'true',
+        trace_only: 'true',
         max_results:
           scope === 'industry_board' || scope === 'concept_board'
             ? '2000'
@@ -439,7 +439,6 @@
       });
       if (date) q.set('date', date);
       if (stockCode) q.set('stock_code', stockCode);
-      if (traceOnly && scope === 'market') q.set('trace_only', 'true');
       if (!isSingle) {
         boardSegs.forEach((seg) => q.append('cn_board_segment', seg));
       }
@@ -451,16 +450,14 @@
         q.set('board_code_source', preferredBoardCodeSource('concept', conceptCodes));
       }
 
-      let data = await api(`/api/screening/sbbr-strategy?${q}`);
-      if (traceOnly && scope === 'market' && (!data.data || !data.data.length)) {
-        q.delete('trace_only');
-        data = await api(`/api/screening/sbbr-strategy?${q}`);
-      }
+      const data = await api(`/api/screening/sbbr-strategy?${q}`);
       const rows = data.data || [];
       const asof = data.asof_date || data.search_date || '-';
       const srcLabel =
-        data.source_label ||
-        (data.source === 'trace' ? '预计算' : data.source === 'live' ? '实时计算' : data.source || 'live');
+        data.source === 'trace'
+          ? '每日采集'
+          : data.source_label ||
+            (data.source === 'live' ? '实时计算' : data.source || '');
       const metaParts = [
         `回溯基准日 ${asof}`,
         `数据来源 ${srcLabel}`,
@@ -486,7 +483,7 @@
       if (data.concept_board_codes && data.concept_board_codes.length) {
         metaParts.push(`概念 ${data.concept_board_codes.join(',')}`);
       }
-      if (data.message) {
+      if (data.message && rows.length) {
         showErr(data.message);
       }
       document.getElementById('sbbrSearchMeta').textContent = metaParts.join(' · ');
@@ -494,15 +491,15 @@
       if (hint) {
         const isLatest = !data.data_max_date || asof === data.data_max_date;
         hint.textContent = isLatest
-          ? '（当前为最新行情日）'
-          : `（历史回溯：仅使用 ≤${asof} 的 K 线）`;
+          ? '（当前为最新行情日的已采集信号）'
+          : `（历史回溯：显示 ${asof} 已采集信号）`;
       }
       // 若服务端对齐了交易日，回写到日期框便于用户确认
       const dateEl = document.getElementById('sbbrDate');
       if (dateEl && asof && asof !== '-' && (!date || data.date_snapped)) {
         dateEl.value = asof;
       }
-      renderSignalRows(rows);
+      renderSignalRows(rows, rows.length ? '' : data.message);
     } catch (e) {
       showErr(e.message || String(e));
       lastSignalRows = [];

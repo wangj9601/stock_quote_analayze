@@ -236,8 +236,8 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 2. **K 线截断**：`load_bars(..., end_date=asof)` 仅加载 `date <= asof` 的行情；引擎再以 `truncate_bars_asof` 兜底，保证不用未来数据。
 3. **做小宇宙收盘**：`load_latest_closes` 在有基准日时按 `date <= asof` 取各股最近收盘（非精确日等值匹配），避免非交易日宇宙为空。
 4. **股本/市值**：`load_shares_from_realtime` 同样按 `trade_date <= asof`。
-5. **预计算**：勾选「优先读预计算」时读 `sbbr_signal_trace` 中该 `trade_date` 的行；管理端「手动预计算」可指定基准日写入。无预计算数据时前端会回退 live 现算。
-6. **响应字段**：`search_date` / `asof_date`（实际计算日）、`requested_date`（用户请求日）、`data_max_date`（行情表最新日）、`source`（`live`|`trace`）、`source_label`（实时计算|预计算）、`date_snapped`（是否发生对齐）。
+5. **预计算**：网站选股页始终 `trace_only=true`，只读 `sbbr_signal_trace` 中该 `trade_date` 的每日采集记录，有记录就显示，无记录返回空列表，不回退 live 现算。自选、板块、个股同样只在已采集记录里过滤。管理端不传 `trace_only` 时仍可现算。
+6. **响应字段**：`search_date` / `asof_date`（实际基准日）、`requested_date`（用户请求日）、`data_max_date`（行情表最新日）、`source`（`live`|`trace`）、`source_label`（实时计算|预计算）、`date_snapped`（是否发生对齐）。
 
 默认行为不变：不传 `date` 时按最新交易日计算。
 
@@ -250,5 +250,5 @@ SBBR 先判定横盘收集；不命中再判定打压恐慌（黄金坑）。
 
 ## 12. 选股范围「个股」（scope=single）
 
-- 与 URT/RPE 一致：前端范围选「个股」，传 `stock_code`（代码或名称）；后端解析为 6 位 A 股后对该股 live 现算。
-- **不强制落在做小宇宙**：`require_size`/`require_bottom` 硬筛对个股关闭，结果仍含 `size_ok`/`bottom_matched` 等字段；未过做小会提示并展示明细。`entry_only` 仍生效。
+- 网站选股页传 `trace_only=true`：解析为 6 位 A 股后，只返回该股在基准日 `sbbr_signal_trace` 中的记录；没有记录则列表为空，不现场重算。
+- 管理端不传 `trace_only` 时仍对该股 live 现算，并绕过做小/筑底硬筛，结果含 `size_ok`/`bottom_matched`。`entry_only` 两种路径都生效。

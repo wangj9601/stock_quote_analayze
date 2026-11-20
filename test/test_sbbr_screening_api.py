@@ -130,3 +130,76 @@ def test_sbbr_strategy_scope_doc_mentions_single():
     doc = inspect.getdoc(routes.get_sbbr_strategy) or ""
     assert "single" in doc
     assert "个股" in doc or "stock_code" in doc
+    assert "trace_only" in doc
+    assert "不调用策略现算" in doc
+
+
+def test_sbbr_resolve_trace_asof_dates_uses_trace_max(monkeypatch):
+    """只读路径按 sbbr_signal_trace 对齐日期，不扫行情全表。"""
+    from datetime import date
+
+    from backend_api.stock import stock_screening_routes as routes
+
+    class _Q:
+        def __init__(self, value):
+            self.value = value
+
+        def filter(self, *args, **kwargs):
+            return self
+
+        def scalar(self):
+            return self.value
+
+    class _DB:
+        def query(self, *args, **kwargs):
+            return _Q(date(2026, 11, 19))
+
+    trade_date, data_max = routes._sbbr_resolve_trace_asof_dates(
+        _DB(), config_id=1, requested_date=None
+    )
+    assert trade_date == "2026-11-19"
+    assert data_max == "2026-11-19"
+
+    trade_date2, data_max2 = routes._sbbr_resolve_trace_asof_dates(
+        _DB(), config_id=1, requested_date="2026-11-20"
+    )
+    assert trade_date2 == "2026-11-19"
+    assert data_max2 == "2026-11-19"
+
+
+def test_sbbr_filter_trace_rows_keeps_pool_and_skips_others():
+    """已采集信号按股票池、板型、做小/筑底过滤，不依赖现算。"""
+    from backend_api.stock import stock_screening_routes as routes
+
+    rows = [
+        {"code": "600000", "bottom_matched": True, "size_ok": True, "entry_signal": True},
+        {"code": "300001", "bottom_matched": True, "size_ok": True, "entry_signal": False},
+        {"code": "688001", "bottom_matched": False, "size_ok": True, "entry_signal": False},
+        {"code": "000001", "bottom_matched": True, "size_ok": False, "entry_signal": False},
+    ]
+    pooled = routes._sbbr_filter_trace_rows(
+        rows,
+        stock_codes=["300001", "000001"],
+        seg_list=[],
+        require_bottom=True,
+        require_size=True,
+        effective_max=200,
+    )
+    assert [r["code"] for r in pooled] == ["300001"]
+
+    by_board = routes._sbbr_filter_trace_rows(
+        rows,
+        stock_codes=None,
+        seg_list=["KCB"],
+        require_bottom=False,
+        require_size=False,
+        effective_max=200,
+    )
+    assert [r["code"] for r in by_board] == ["688001"]
+
+    assert "没有已采集" in routes._sbbr_trace_empty_message(
+        "market", entry_only=False, narrowed=False
+    )
+    assert "仅入场" in routes._sbbr_trace_empty_message(
+        "single", entry_only=True, narrowed=True
+    )

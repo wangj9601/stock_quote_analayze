@@ -91,7 +91,7 @@ const ScreeningPage = {
         gms: ['js/gms_score_detail.js', 'js/board_roles_panel.js'],
         urt: ['js/urt_score_detail.js', 'js/board_roles_panel.js'],
         rpe: ['js/rpe_score_detail.js', 'js/rpe_screening.js?v=20261115a', 'js/board_roles_panel.js'],
-        sbbr: ['js/sbbr_score_detail.js', 'js/sbbr_screening.js?v=20260918a', 'js/board_roles_panel.js'],
+        sbbr: ['js/sbbr_score_detail.js', 'js/sbbr_screening.js?v=20261120-trace-only', 'js/board_roles_panel.js'],
         csb: ['js/csb_score_detail.js?v=20261007-csb', 'js/csb_screening.js?v=20261017-lazy-panels', 'js/board_roles_panel.js'],
         sepa: ['js/sepa_screening.js?v=20261031-sepa'],
         cupb: ['js/cupb_screening.js?v=20261115-cupb-nolimit'],
@@ -4195,7 +4195,7 @@ const ScreeningPage = {
         this.syncUrtFilterParamsForScope();
     },
 
-    /** 仅「全部A股/全部港股」应用页面量能/最低得分；其它数据来源列表不过滤（对齐 GMS） */
+    /** 量能/最低得分/limit 仅「全部A股/全部港股」可覆盖；选股始终只读每日采集 */
     syncUrtFilterParamsForScope() {
         const checked = document.querySelector('input[name="urtScope"]:checked');
         const scope = checked ? checked.value : 'cn';
@@ -4206,11 +4206,11 @@ const ScreeningPage = {
             if (!el) return;
             el.disabled = !applyOverride;
             if (isSingle) {
-                el.title = '单只股票模式不应用筛选条件，仅直接计算策略信号';
+                el.title = '单只股票模式只查已采集买点，不应用页面覆盖条件';
             } else if (!applyOverride) {
-                el.title = '仅「全部A股 / 全部港股」可覆盖；当前数据来源列表不过滤，得分原样返回';
+                el.title = '仅「全部A股 / 全部港股」可覆盖；当前范围只在已采集买点中按股票池过滤';
             } else {
-                el.title = '';
+                el.title = '填写后仅在已采集买点上过滤，不重新计算';
             }
         });
         const limEl = document.getElementById('urtLimit');
@@ -4220,16 +4220,21 @@ const ScreeningPage = {
         }
         const preferWrap = document.getElementById('urtPreferPrecomputeWrap');
         if (preferWrap) {
-            preferWrap.style.display = applyOverride ? '' : 'none';
+            preferWrap.style.display = '';
+        }
+        const preferEl = document.getElementById('urtPreferPrecompute');
+        if (preferEl) {
+            preferEl.checked = true;
+            preferEl.disabled = true;
         }
         const hint = document.getElementById('urtSingleSkipFilterHint');
         if (hint) {
             if (isSingle) {
                 hint.style.display = 'block';
-                hint.textContent = '单只股票模式：不按硬筛/最低得分过滤，直接计算并展示策略信号（含未通过买点）；得分原样显示。';
+                hint.textContent = '单只股票模式：只显示该股在基准日已采集买点中的记录，不现场重算。';
             } else if (!applyOverride) {
                 hint.style.display = 'block';
-                hint.textContent = '当前数据来源（自选/行业/概念）：对齐 GMS，不按硬筛与最低得分（含默认 70）过滤列表，得分多少显示多少；是否正式买点见结果「买点」列。页面量能/最低得分不生效。';
+                hint.textContent = '当前数据来源（自选/行业/概念）：只在每日采集买点中按股票池过滤，不现场重算。';
             } else {
                 hint.style.display = 'none';
             }
@@ -5056,20 +5061,10 @@ const ScreeningPage = {
             params.set('signal_quality_mode', sqm);
         }
 
-        // 全部 A/H：勾选「优先读预计算」→ prefer_cache + trace_only；取消 → force_realtime
-        if (scope === 'cn' || scope === 'hk') {
-            const preferEl = this._byId('urtPreferPrecompute');
-            const prefer = !preferEl || preferEl.checked;
-            if (prefer) {
-                params.set('prefer_cache', 'true');
-                params.set('trace_only', 'true');
-                params.set('force_realtime', 'false');
-            } else {
-                params.set('prefer_cache', 'false');
-                params.set('trace_only', 'false');
-                params.set('force_realtime', 'true');
-            }
-        }
+        // 选股页任意范围只读每日采集，不现场重算（对齐做小做底）
+        params.set('prefer_cache', 'true');
+        params.set('trace_only', 'true');
+        params.set('force_realtime', 'false');
         return params;
     },
 
@@ -5176,7 +5171,10 @@ const ScreeningPage = {
         if (msEl) msEl.value = '';
         if (sqmEl) sqmEl.value = '';
         const preferEl = this._byId('urtPreferPrecompute');
-        if (preferEl) preferEl.checked = true;
+        if (preferEl) {
+            preferEl.checked = true;
+            preferEl.disabled = true;
+        }
     },
 
     _fillUrtParamPlaceholders(item) {
@@ -5686,11 +5684,11 @@ const ScreeningPage = {
                             || (result.parameters && result.parameters.data_source)
                             || '';
                         if (ds === 'urt_signal_trace') {
-                            dateText += ' · 预计算';
+                            dateText += ' · 每日采集';
                         } else if (ds === 'realtime' || ds === 'live') {
                             dateText += ' · 现算';
                         } else if (ds === 'none') {
-                            dateText += ' · 无预计算';
+                            dateText += ' · 无采集信号';
                         }
                     }
                     if (result.data.length > 0 && result.message) dateText += `（${result.message}）`;

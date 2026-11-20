@@ -3256,7 +3256,7 @@ async def get_urt_strategy(
     ),
     trace_only: bool = Query(
         False,
-        description="全市场仅读预计算：无 urt_signal_trace 时不回退全量现算（避免生产 502）",
+        description="只读 urt_signal_trace：全市场/自选/板块/个股都不现场重算",
     ),
     boards: Optional[List[str]] = Query(
         None,
@@ -3286,7 +3286,7 @@ async def get_urt_strategy(
     上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
     支持 A 股与港股全市场；数据来源对齐 GMS：全部A股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
     全部A股/全部港股：应用硬筛 + min_score（可被 Query 覆盖）；默认优先读每日预计算 urt_signal_trace。
-    自选/行业/概念/单股：对齐 GMS，不按硬筛与最低得分过滤列表，返回可算明细（含未买点），得分原样展示。
+    trace_only=true 时任意范围只读每日采集买点，不现算。未传 trace_only 时，自选/行业/概念/单股仍现算明细。
     """
     if not _ensure_urt_imports() or URTFrontendInterface is None:
         return JSONResponse(
@@ -3471,11 +3471,17 @@ async def get_urt_strategy(
     sqm_raw = (signal_quality_mode or "").strip().lower()
     sqm = sqm_raw if sqm_raw in ("standard", "premium") else None
 
-    # 全市场：页面「优先读预计算」→ prefer_cache + trace_only（无缓存不回退全量现算）
-    # 取消勾选 → force_realtime。自选/板块/单股仍由 skip_filters 强制现算明细。
-    eff_prefer_cache = bool(prefer_cache) and not force_realtime and not skip_filters
-    eff_force_realtime = bool(force_realtime) and not skip_filters
-    eff_trace_only = bool(trace_only) and not skip_filters and scope_raw in ("cn", "hk")
+    # trace_only：网站选股页只读每日采集，自选/板块/单股也不现算。
+    # 未传 trace_only：自选/板块/单股仍由 skip_filters 强制现算明细；全市场可 force_realtime。
+    if trace_only:
+        eff_prefer_cache = True
+        eff_force_realtime = False
+        eff_trace_only = True
+        skip_filters = False
+    else:
+        eff_prefer_cache = bool(prefer_cache) and not force_realtime and not skip_filters
+        eff_force_realtime = bool(force_realtime) or skip_filters
+        eff_trace_only = False
 
     loop = asyncio.get_event_loop()
 
@@ -3885,7 +3891,10 @@ async def get_sbbr_strategy(
     entry_only: bool = Query(False, description="仅返回入场信号"),
     require_bottom: bool = Query(True),
     require_size: bool = Query(True),
-    trace_only: bool = Query(False, description="仅读 sbbr_signal_trace（仅 scope=market）"),
+    trace_only: bool = Query(
+        False,
+        description="仅读 sbbr_signal_trace，不现场重算；全市场/自选/板块/个股都按已采集记录过滤",
+    ),
     cn_board_segment: Optional[List[str]] = Query(
         None,
         description="可选 A 股板型（可多选）: MAIN/CYB/SZ_SME/KCB/BJ；不传或不选=不限；与范围组合收窄股票池",
@@ -3914,8 +3923,8 @@ async def get_sbbr_strategy(
 ):
     """做小做底（SBBR）全市场/自选/储备箱/行业·概念板块/个股选股；板型为额外过滤（可多选并集），不改变做小市值口径。
 
-    scope=single 时绕过做小宇宙与筑底硬筛，直接对该股现算策略明细（结果含 size_ok/bottom_matched 标注），
-    对齐 URT/RPE 单股「跳过硬筛、仍展示明细」交互；仍尊重 entry_only。
+    trace_only=true 时任意范围只读每日采集写入的 sbbr_signal_trace，不调用策略现算。
+    未传 trace_only 时仍可现算（管理端）；scope=single 现算会绕过做小宇宙与筑底硬筛，仍尊重 entry_only。
     管理员查询自选股或储备箱时传 watchlist_user_id，指定网站用户。
     """
     try:
@@ -3970,11 +3979,20 @@ async def get_sbbr_strategy(
 
     cm = SBBRConfigManager()
     cid = int(config_id) if config_id is not None else cm.get_default_config_id()
-    cfg = cm.get_config(cid)
-    engine = SBBRStrategyEngine(db_session=db, config=cfg)
     requested_date = (str(date).strip()[:10] if date else None) or None
-    trade_date = engine.loader.resolve_effective_trade_date(requested_date)
-    data_max_date = engine.loader.resolve_trade_date()
+    # 只读采集时不要扫 historical_quotes 全表 MAX(date)（生产可达分钟级）；
+    # 现算路径仍用行情表对齐交易日。
+    engine = None
+    cfg = None
+    if trace_only:
+        trade_date, data_max_date = _sbbr_resolve_trace_asof_dates(
+            db, config_id=cid, requested_date=requested_date
+        )
+    else:
+        cfg = cm.get_config(cid)
+        engine = SBBRStrategyEngine(db_session=db, config=cfg)
+        trade_date = engine.loader.resolve_effective_trade_date(requested_date)
+        data_max_date = trade_date if not requested_date else engine.loader.resolve_trade_date()
 
     def _sbbr_meta(source: str, message: Optional[str] = None) -> Dict[str, Any]:
         meta: Dict[str, Any] = {
@@ -4003,6 +4021,7 @@ async def get_sbbr_strategy(
     extra_meta: Dict[str, Any] = {}
     user = None
     effective_max = max_results or 200
+    pool_source = "trace" if trace_only else "live"
 
     if scope_raw in ("watchlist", "reserve"):
         if not token:
@@ -4045,7 +4064,7 @@ async def get_sbbr_strategy(
             return JSONResponse(
                 {
                     **_sbbr_meta(
-                        "live",
+                        pool_source,
                         f"{pool_label}为空" + ("（板型过滤后无匹配）" if seg_list else ""),
                     ),
                     "data": [],
@@ -4081,7 +4100,7 @@ async def get_sbbr_strategy(
             return JSONResponse(
                 {
                     **_sbbr_meta(
-                        "live",
+                        pool_source,
                         f"行业板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
                     ),
                     "data": [],
@@ -4117,7 +4136,7 @@ async def get_sbbr_strategy(
             return JSONResponse(
                 {
                     **_sbbr_meta(
-                        "live",
+                        pool_source,
                         f"概念板块「{'、'.join(bcodes)}」成分股为空或板型过滤后无匹配",
                     ),
                     "data": [],
@@ -4135,8 +4154,11 @@ async def get_sbbr_strategy(
         # 个股模式：只算这一只，不按板型再过滤
         if effective_max < 10:
             effective_max = 10
-    elif scope_raw == "market" and seg_list:
-        # 全市场 + 板型：先做小宇宙再按代码段收窄，再跑策略（仍走 require_size）
+    elif scope_raw == "market" and seg_list and not trace_only:
+        # 全市场现算 + 板型：先做小宇宙再按代码段收窄。只读采集信号时不建宇宙，直接按代码段过滤 trace。
+        if engine is None:
+            cfg = cm.get_config(cid)
+            engine = SBBRStrategyEngine(db_session=db, config=cfg)
         universe = engine.loader.build_size_universe(cfg, trade_date=trade_date)
         stock_codes = _apply_board_segment([str(u.get("code") or "") for u in universe])
         if not stock_codes:
@@ -4152,45 +4174,23 @@ async def get_sbbr_strategy(
     eff_require_size = False if scope_raw == "single" else require_size
     eff_require_bottom = False if scope_raw == "single" else require_bottom
 
-    if trace_only and scope_raw == "market":
-        # 板型过滤时多取一些再截断，避免 limit 截在过滤前导致结果偏少
-        trace_limit = effective_max
-        if seg_list:
-            trace_limit = min(2000, max(effective_max * 5, effective_max))
+    if trace_only:
+        # 先多取再按范围过滤，避免 limit 截在板块/自选过滤之前。
         rows = load_traces(
             db,
             trade_date=trade_date,
             config_id=cid,
             entry_only=entry_only,
-            limit=trace_limit,
+            limit=2000,
         )
-        if seg_list:
-            allow = {
-                _normalize_stock_code_for_gms_pool(c)
-                for c in (stock_codes or [])
-                if _normalize_stock_code_for_gms_pool(c)
-            }
-            if allow:
-                rows = [
-                    r
-                    for r in rows
-                    if _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) in allow
-                ]
-            else:
-                row_codes = [
-                    _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) for r in rows
-                ]
-                keep = set(filter_stock_codes_by_board_segments(row_codes, seg_list))
-                rows = [
-                    r
-                    for r in rows
-                    if _normalize_stock_code_for_gms_pool(str(r.get("code") or "")) in keep
-                ]
-        if eff_require_bottom:
-            rows = [r for r in rows if r.get("bottom_matched")]
-        if eff_require_size:
-            rows = [r for r in rows if r.get("size_ok")]
-        rows = rows[:effective_max]
+        rows = _sbbr_filter_trace_rows(
+            rows,
+            stock_codes=stock_codes,
+            seg_list=seg_list,
+            require_bottom=eff_require_bottom,
+            require_size=eff_require_size,
+            effective_max=effective_max,
+        )
         _sbbr_attach_role_tags(
             db,
             rows,
@@ -4200,13 +4200,24 @@ async def get_sbbr_strategy(
             concept_codes=extra_meta.get("concept_board_codes") or [],
         )
         _sbbr_attach_industry_names(db, rows, board_code_source=board_code_source)
+        trace_msg = None
+        if not rows:
+            trace_msg = _sbbr_trace_empty_message(
+                scope_raw,
+                entry_only=entry_only,
+                narrowed=bool(seg_list) or stock_codes is not None,
+            )
         return JSONResponse(
             {
-                **_sbbr_meta("trace"),
+                **_sbbr_meta("trace", trace_msg),
                 "data": rows,
                 "total": len(rows),
             }
         )
+
+    if engine is None:
+        cfg = cm.get_config(cid)
+        engine = SBBRStrategyEngine(db_session=db, config=cfg)
 
     loop = asyncio.get_event_loop()
     codes_arg = stock_codes
@@ -4248,6 +4259,109 @@ async def get_sbbr_strategy(
             "total": len(rows),
         }
     )
+
+
+def _sbbr_resolve_trace_asof_dates(
+    db: Session,
+    *,
+    config_id: int,
+    requested_date: Optional[str],
+) -> tuple:
+    """只读采集路径：用 sbbr_signal_trace 对齐基准日，避免扫 historical_quotes。
+
+    返回 (trade_date, data_max_date)，均为 YYYY-MM-DD。
+    无任何采集记录时退回请求日或今天。
+    """
+    from sqlalchemy import func
+
+    from backend_api.models import SBBRSignalTrace
+
+    today_s = datetime.now().strftime("%Y-%m-%d")
+    raw = (requested_date or "").strip()[:10] or None
+    if raw:
+        try:
+            datetime.strptime(raw, "%Y-%m-%d")
+        except ValueError:
+            raw = None
+
+    max_d = (
+        db.query(func.max(SBBRSignalTrace.trade_date))
+        .filter(SBBRSignalTrace.config_id == int(config_id))
+        .scalar()
+    )
+    if max_d is None:
+        # 该版本尚无采集：再试全表最新采集日，仍无则用请求日/今天
+        max_d = db.query(func.max(SBBRSignalTrace.trade_date)).scalar()
+    if max_d is None:
+        fallback = raw or today_s
+        return fallback, fallback
+
+    max_s = max_d.strftime("%Y-%m-%d") if hasattr(max_d, "strftime") else str(max_d)[:10]
+    if not raw:
+        return max_s, max_s
+
+    asof = (
+        db.query(func.max(SBBRSignalTrace.trade_date))
+        .filter(
+            SBBRSignalTrace.config_id == int(config_id),
+            SBBRSignalTrace.trade_date <= raw,
+        )
+        .scalar()
+    )
+    if asof is None:
+        asof = (
+            db.query(func.max(SBBRSignalTrace.trade_date))
+            .filter(SBBRSignalTrace.trade_date <= raw)
+            .scalar()
+        )
+    if asof is None:
+        return max_s, max_s
+    asof_s = asof.strftime("%Y-%m-%d") if hasattr(asof, "strftime") else str(asof)[:10]
+    return asof_s, max_s
+
+
+def _sbbr_filter_trace_rows(
+    rows: List[Dict[str, Any]],
+    *,
+    stock_codes: Optional[List[str]],
+    seg_list: List[str],
+    require_bottom: bool,
+    require_size: bool,
+    effective_max: int,
+) -> List[Dict[str, Any]]:
+    """按范围、板型、做小/筑底过滤已采集信号，不触发策略计算。"""
+    from backend_api.utils.cn_listed_board_filter import (
+        filter_stock_codes_by_board_segments,
+    )
+
+    def _norm(code: Any) -> str:
+        return _normalize_stock_code_for_gms_pool(str(code or ""))
+
+    if stock_codes is not None:
+        allow = {_norm(c) for c in stock_codes if _norm(c)}
+        rows = [r for r in rows if _norm(r.get("code")) in allow]
+    elif seg_list:
+        row_codes = [_norm(r.get("code")) for r in rows]
+        keep = set(filter_stock_codes_by_board_segments(row_codes, seg_list))
+        rows = [r for r in rows if _norm(r.get("code")) in keep]
+    if require_bottom:
+        rows = [r for r in rows if r.get("bottom_matched")]
+    if require_size:
+        rows = [r for r in rows if r.get("size_ok")]
+    cap = max(int(effective_max or 0), 0)
+    return rows[:cap] if cap else []
+
+
+def _sbbr_trace_empty_message(scope_raw: str, *, entry_only: bool, narrowed: bool) -> str:
+    if scope_raw == "single":
+        msg = "该股在该基准日没有已采集的做小做底信号"
+    elif narrowed:
+        msg = "所选范围内没有已采集的做小做底信号"
+    else:
+        msg = "该基准日没有已采集的做小做底信号"
+    if entry_only:
+        msg += "（已勾选仅入场）"
+    return msg
 
 
 def _sbbr_attach_role_tags(

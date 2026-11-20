@@ -130,8 +130,9 @@
 - 全市场 / 港股：后滤直接减少列表条数。  
 - 自选 / 行业 / 概念 / 单股：列表仍含未过筛明细；不满足精选的行 **`buy_signal` 置为 false**。
 
-选股全部A股/全部港股：`require_pass=True`，**只返回正式买点**（再经信号质量后滤）。  
-`scope=watchlist|industry_board|concept_board|single`：对齐 GMS，`skip_screening_filters=True`，返回可算明细（含未过筛/未达分），得分原样展示；**不等于**给出买点（看 `buy_signal`）。
+网站选股页：始终只读每日采集买点（`trace_only`），全市场/自选/板块/个股都不现场重算。  
+选股全部A股/全部港股（未强制只读时）：`require_pass=True`，**只返回正式买点**（再经信号质量后滤）。  
+`scope=watchlist|industry_board|concept_board|single`（未传 `trace_only`）：`skip_screening_filters=True`，返回可算明细（含未过筛/未达分），得分原样展示；**不等于**给出买点（看 `buy_signal`）。
 
 ### 6.2 得分分项（封顶 100）
 

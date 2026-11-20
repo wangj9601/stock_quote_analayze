@@ -75,7 +75,7 @@ class URTFrontendInterface:
 
         prefer_cache=True（默认）：无参数覆盖时优先读 urt_signal_trace。
         force_realtime=True：跳过预计算，强制现算。
-        trace_only=True：全市场仅读预计算，无缓存时不回退全量现算（避免生产 502）。
+        trace_only=True：任意范围只读 urt_signal_trace，不调用现算；无记录则空列表。
         """
         cm = URTConfigManager()
         try:
@@ -83,8 +83,9 @@ class URTFrontendInterface:
         except Exception:
             pass
 
-        # 非全量列表模式：忽略选股筛选 Query 覆盖，仅用策略版本参数计算信号（列表不过滤）
-        if skip_screening_filters:
+        # 非全量列表且未要求只读采集：忽略筛选覆盖，强制现算明细（含未买点）。
+        # trace_only 时保留覆盖项，只用来过滤已采集买点。
+        if skip_screening_filters and not trace_only:
             volume_multiple = None
             min_score = None
             use_turnover = None
@@ -94,6 +95,9 @@ class URTFrontendInterface:
             force_realtime = True
             prefer_cache = False
             trace_only = False
+        elif trace_only:
+            force_realtime = False
+            prefer_cache = True
 
         resolved_id = URTFrontendInterface._resolve_config_id(db, config_id, cm)
         base = cm.get_config(resolved_id, db=db)
@@ -219,9 +223,9 @@ class URTFrontendInterface:
         if (
             prefer_cache
             and not force_realtime
-            and not overrides_active
+            and (not overrides_active or trace_only)
             and resolved_id is not None
-            and require_pass
+            and (require_pass or trace_only)
         ):
             try:
                 cached = query_buy_signals_for_date(
@@ -232,12 +236,13 @@ class URTFrontendInterface:
                     limit=None if stock_codes is not None else limit,
                 ) or []
                 date_trace_ready = False
-                if stock_codes is None and mkt != "HK":
+                if (stock_codes is None and mkt != "HK") or trace_only:
                     try:
                         date_trace_ready = effective in dates_ready_for_universe_backtest(
                             db,
                             config_id=int(resolved_id),
                             dates=[effective],
+                            stock_pool=list(stock_codes) if stock_codes is not None else None,
                         )
                     except Exception as e:
                         logger.debug("URT date_trace_ready check failed: %s", e)
@@ -283,6 +288,13 @@ class URTFrontendInterface:
                                 for r in cached
                                 if code_matches_urt_boards(r.get("code"), board_keys)
                             ]
+                        if volume_multiple is not None:
+                            threshold = float(volume_multiple)
+                            cached = [
+                                r
+                                for r in cached
+                                if float(r.get("volume_multiple") or 0) >= threshold
+                            ]
                         if cached:
                             from backend_core.strategies.urt.signal_detector import build_buy_logic
 
@@ -303,12 +315,59 @@ class URTFrontendInterface:
                         data = []
                     data_source = "urt_signal_trace"
                     cache_served = True
-                    if not data and date_trace_ready and not hint:
-                        hint = f"基准日 {effective} 已有预计算，当日无符合条件的买点。"
+                    if not data and not hint:
+                        if stock_codes is not None or board_keys:
+                            hint = f"基准日 {effective} 的已采集信号中，当前范围没有买点。"
+                        elif date_trace_ready:
+                            hint = f"基准日 {effective} 已有预计算，当日无符合条件的买点。"
             except Exception as e:
                 logger.debug("URT cache read failed: %s", e)
 
         if not cache_served and not data:
+            if trace_only:
+                msg = (
+                    f"该基准日没有已采集的上升趋势信号（基准日 {effective}，config_id={resolved_id}）。"
+                    "请等待每日采集，选股页不重新计算。"
+                )
+                if stock_codes is not None or board_keys:
+                    msg = (
+                        f"所选范围在基准日 {effective} 没有已采集的上升趋势信号"
+                        f"（config_id={resolved_id}）。选股页不重新计算。"
+                    )
+                if hint:
+                    msg = f"{hint} {msg}"
+                # 与做小做底一致：有记录显示、无记录空列表，不把「未采集」当成接口失败。
+                return {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "strategy_name": "上升趋势策略",
+                    "scope": scope,
+                    "parameters": {
+                        "config_id": resolved_id,
+                        "market": mkt,
+                        "screening_date_requested": req_norm,
+                        "screening_date_effective": effective,
+                        "data_source": "none",
+                        "boards": board_keys,
+                        "need_precompute": True,
+                        "prefer_cache": True,
+                        "trace_only": True,
+                        "skip_screening_filters": bool(skip_screening_filters),
+                        "signal_quality_mode": quality_mode,
+                        "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
+                    },
+                    "search_date": effective,
+                    "data_source": "none",
+                    "need_precompute": True,
+                    "prefer_cache": True,
+                    "trace_only": True,
+                    "skip_screening_filters": bool(skip_screening_filters),
+                    "signal_quality_mode": quality_mode,
+                    "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
+                    "message": msg,
+                }
+
             pool_codes = stock_codes if stock_codes is not None else None
 
             # 全市场且无预计算：默认同步实时计算。
