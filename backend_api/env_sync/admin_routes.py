@@ -447,6 +447,16 @@ def admin_test_connection(
         return {"success": True, "message": "连接生产环境同步网关成功", "data": resp.json()}
     except HTTPException:
         raise
+    except ValueError as e:
+        write_audit(
+            db,
+            direction="test",
+            modules=None,
+            operator=_operator(admin),
+            success=False,
+            error_message=str(e),
+        )
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         write_audit(
             db,

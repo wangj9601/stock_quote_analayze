@@ -12,6 +12,7 @@ from __future__ import annotations
 import http.client
 import ipaddress
 import json
+import os
 import socket
 import ssl
 from dataclasses import dataclass
@@ -59,14 +60,25 @@ def _ip_is_blocked(ip: ipaddress._BaseAddress) -> bool:
     return False
 
 
+def _allow_private_outbound() -> bool:
+    """开发/测试或显式开关下允许访问内网（本地联调 env-sync）。"""
+    flag = (os.getenv("ENV_SYNC_ALLOW_PRIVATE_URLS") or "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    env = (os.getenv("ENVIRONMENT") or "development").strip().lower()
+    return env in ("development", "dev", "local", "test")
+
+
 def assert_url_allowed_for_outbound(url: str) -> None:
-    """校验出站 URL：仅 http(s)，且解析后的全部 IP 不得为内网/保留地址。"""
+    """校验出站 URL：仅 http(s)；生产默认拒绝内网/保留地址（防 SSRF）。"""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError(f"不支持的 URL scheme: {parsed.scheme}")
     host = parsed.hostname
     if not host:
         raise ValueError(f"无效 URL: {url}")
+    if _allow_private_outbound():
+        return
     # 字面量 IP
     try:
         literal = ipaddress.ip_address(host)

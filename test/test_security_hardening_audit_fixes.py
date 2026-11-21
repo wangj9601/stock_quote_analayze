@@ -56,13 +56,20 @@ def test_require_permission_anonymous_401():
     assert getattr(ei.value, "status_code", None) == 401
 
 
-def test_remote_http_blocks_private_url():
+def test_remote_http_blocks_private_url(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.delenv("ENV_SYNC_ALLOW_PRIVATE_URLS", raising=False)
     with pytest.raises(ValueError, match="禁止访问"):
         assert_url_allowed_for_outbound("http://127.0.0.1:5000/api")
     with pytest.raises(ValueError, match="禁止访问"):
         assert_url_allowed_for_outbound("http://192.168.1.1/")
     with pytest.raises(ValueError, match="禁止访问"):
         assert_url_allowed_for_outbound("http://10.0.0.5/secret")
+
+
+def test_remote_http_allows_private_in_development(monkeypatch):
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    assert_url_allowed_for_outbound("http://127.0.0.1:5000/api")
 
 
 def test_parse_insert_rejects_other_tables_and_upserts_params():

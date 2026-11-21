@@ -484,20 +484,20 @@ except ImportError as e:
     print(f"hk_stock_router 导入失败: {e}")
     hk_stock_router = None
 
-# 尝试导入quotes路由
+# 尝试导入quotes路由（捕获全部异常，避免非 ImportError 导致路由静默缺失 → 前端 404）
 try:
     from .quotes_routes import router as quotes_router
     print("quotes_router 导入成功")
-except ImportError as e:
-    print(f"quotes_router 导入失败: {e}")
+except Exception as e:
+    print(f"quotes_router 导入失败: {type(e).__name__}: {e}")
     quotes_router = None
 
 # 尝试导入多周期历史行情路由
 try:
     from .multi_period_quotes_routes import router as multi_period_quotes_router
     print("multi_period_quotes_router 导入成功")
-except ImportError as e:
-    print(f"multi_period_quotes_router 导入失败: {e}")
+except Exception as e:
+    print(f"multi_period_quotes_router 导入失败: {type(e).__name__}: {e}")
     multi_period_quotes_router = None
 
 # 尝试导入推送路由

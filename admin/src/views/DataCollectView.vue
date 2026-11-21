@@ -384,6 +384,7 @@
                     <el-upload
                       class="upload-demo"
                       :action="`${API_BASE}/api/data-collection/upload-historical-file`"
+                      :headers="getAuthHeader()"
                       :on-success="handleFileUploadSuccess"
                       :on-error="handleFileUploadError"
                       :before-upload="beforeFileUpload"
@@ -1331,6 +1332,17 @@ import {
 import axios from 'axios'
 import { API_BASE } from '@/config/api'
 
+/** 数据采集 / 管理接口鉴权头（路由已强制 admin JWT） */
+const getAuthHeader = () => {
+  const token = localStorage.getItem('admin_token') || localStorage.getItem('token') || ''
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+const withAuth = (config: Record<string, any> = {}) => ({
+  ...config,
+  headers: { ...getAuthHeader(), ...(config.headers || {}) },
+})
+
 // 类型定义
 interface Task {
   task_id: string
@@ -1751,7 +1763,11 @@ const startCollection = async () => {
     }
 
     console.log('发送请求:', requestData)
-    const response = await axios.post(`${API_BASE}/api/data-collection/historical`, requestData)
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/historical`,
+      requestData,
+      withAuth()
+    )
     
     if (response.data.status === 'started') {
       ElMessage.success('采集任务已启动')
@@ -1802,7 +1818,11 @@ const startRealtimeHistoricalCollection = async () => {
     }
 
     console.log('发送实时行情表历史采集请求:', payload)
-    const response = await axios.post(`${API_BASE}/api/data-collection/realtime-historical`, payload)
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/realtime-historical`,
+      payload,
+      withAuth()
+    )
 
     if (response.data.status === 'started') {
       ElMessage.success('实时行情表历史采集任务已启动')
@@ -1878,7 +1898,11 @@ const startHKCollection = async () => {
     }
 
     console.log('发送港股采集请求:', requestData)
-    const response = await axios.post(`${API_BASE}/api/data-collection/historical`, requestData)
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/historical`,
+      requestData,
+      withAuth()
+    )
     
     if (response.data.status === 'started') {
       ElMessage.success('港股采集任务已启动')
@@ -1906,7 +1930,7 @@ const startHKCollection = async () => {
 
 const loadTasks = async () => {
   try {
-    const response = await axios.get(`${API_BASE}/api/data-collection/tasks`)
+    const response = await axios.get(`${API_BASE}/api/data-collection/tasks`, withAuth())
     // 确保 tasks.value 始终是数组
     const data = response.data
     if (Array.isArray(data)) {
@@ -1929,7 +1953,7 @@ const loadTasks = async () => {
 
 const loadCurrentTask = async () => {
   try {
-    const response = await axios.get(`${API_BASE}/api/data-collection/current-task`)
+    const response = await axios.get(`${API_BASE}/api/data-collection/current-task`, withAuth())
     currentTask.value = response.data.current_task
   } catch (error) {
     console.error('加载当前任务信息失败:', error)
@@ -1944,7 +1968,7 @@ const cancelTask = async (taskId: string) => {
       type: 'warning'
     })
 
-    await axios.delete(`${API_BASE}/api/data-collection/tasks/${taskId}`)
+    await axios.delete(`${API_BASE}/api/data-collection/tasks/${taskId}`, withAuth())
     ElMessage.success('任务已取消')
     loadTasks()
     loadCurrentTask()
@@ -2046,12 +2070,16 @@ const startTushareCollection = async () => {
     )
 
     console.log('发送TuShare采集请求:', tushareForm.value)
-    const response = await axios.post(`${API_BASE}/api/data-collection/tushare-historical`, {
-      start_date: tushareForm.value.start_date,
-      end_date: tushareForm.value.end_date,
-      force_update: tushareForm.value.force_update,
-      indicators: indicatorsToRun
-    })
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/tushare-historical`,
+      {
+        start_date: tushareForm.value.start_date,
+        end_date: tushareForm.value.end_date,
+        force_update: tushareForm.value.force_update,
+        indicators: indicatorsToRun
+      },
+      withAuth()
+    )
     
     if (response.data.status === 'started') {
       ElMessage.success('TuShare采集任务已启动')
@@ -2205,13 +2233,17 @@ const startFileCollection = async () => {
     // 指标
     const indicatorsToRun = safeFileIndicators.value
 
-    const response = await axios.post(`${API_BASE}/api/data-collection/file-historical`, {
-      start_date: fileForm.value.start_date,
-      end_date: fileForm.value.end_date,
-      force_update: fileForm.value.force_update,
-      indicators: indicatorsToRun,
-      file_type: fileForm.value.file_type
-    })
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/file-historical`,
+      {
+        start_date: fileForm.value.start_date,
+        end_date: fileForm.value.end_date,
+        force_update: fileForm.value.force_update,
+        indicators: indicatorsToRun,
+        file_type: fileForm.value.file_type
+      },
+      withAuth()
+    )
     
     if (response.data.status === 'started') {
       ElMessage.success('历史数据采集(文件)任务已启动')
@@ -2263,13 +2295,17 @@ const startHKFileHistoricalCollection = async () => {
 
     console.log('发送港股文件采集请求:', hkFileForm.value)
     
-    const response = await axios.post(`${API_BASE}/api/data-collection/historical/hk-file`, {
-      start_date: hkFileForm.value.start_date,
-      end_date: hkFileForm.value.end_date,
-      force_update: hkFileForm.value.force_update,
-      indicators: safeHKFileIndicators.value,
-      file_type: hkFileForm.value.file_type
-    })
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/historical/hk-file`,
+      {
+        start_date: hkFileForm.value.start_date,
+        end_date: hkFileForm.value.end_date,
+        force_update: hkFileForm.value.force_update,
+        indicators: safeHKFileIndicators.value,
+        file_type: hkFileForm.value.file_type
+      },
+      withAuth()
+    )
     
     if (response.data.status === 'started') {
       ElMessage.success('港股历史数据采集(文件)任务已启动')
@@ -2309,7 +2345,11 @@ const startAShareRealtimeCollection = async () => {
       full_collection_mode: ashareRealtimeForm.value.collection_type === 'all'
     }
 
-    const response = await axios.post(`${API_BASE}/api/data-collection/realtime`, payload)
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/realtime`,
+      payload,
+      withAuth()
+    )
     if (response.data.status === 'started') {
       ElMessage.success('A股实时采集任务已启动')
       loadTasks()
@@ -2336,7 +2376,11 @@ const startHKRealtimeCollection = async () => {
       full_collection_mode: hkRealtimeForm.value.collection_type === 'all'
     }
 
-    const response = await axios.post(`${API_BASE}/api/data-collection/realtime`, payload)
+    const response = await axios.post(
+      `${API_BASE}/api/data-collection/realtime`,
+      payload,
+      withAuth()
+    )
     if (response.data.status === 'started') {
       ElMessage.success('港股实时采集任务已启动')
       loadTasks()
@@ -2458,11 +2502,6 @@ const holidayForm = ref<HolidayForm>({
 const batchImportDialogVisible = ref(false)
 const batchImporting = ref(false)
 const batchImportText = ref('')
-
-const getAuthHeader = () => {
-  const token = localStorage.getItem('admin_token') || localStorage.getItem('token') || ''
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
 
 const loadCalendar = async () => {
   calendarLoading.value = true
@@ -2650,7 +2689,7 @@ const exportCalendar = () => {
 
 const loadETFStats = async () => {
   try {
-    const res = await axios.get(`${API_BASE}/api/admin/etf/stats`)
+    const res = await axios.get(`${API_BASE}/api/admin/etf/stats`, withAuth())
     if (res.data?.success) {
       etfStats.value = res.data.data
     }
@@ -2661,7 +2700,7 @@ const loadETFStats = async () => {
 
 const pollETFTaskStatus = async () => {
   try {
-    const res = await axios.get(`${API_BASE}/api/admin/etf/task-status`)
+    const res = await axios.get(`${API_BASE}/api/admin/etf/task-status`, withAuth())
     if (res.data?.success) {
       etfTaskStatus.value = res.data.data
       if (!res.data.data.is_running && etfPollingTimer) {
@@ -2686,7 +2725,7 @@ const startETFPolling = () => {
 const syncETFList = async () => {
   try {
     etfSyncLoading.value = true
-    const res = await axios.post(`${API_BASE}/api/admin/etf/sync-list`)
+    const res = await axios.post(`${API_BASE}/api/admin/etf/sync-list`, {}, withAuth())
     if (res.data?.success) {
       ElMessage.success('ETF列表同步任务已启动')
       startETFPolling()
@@ -2722,11 +2761,15 @@ const startETFCollection = async () => {
 
   try {
     etfCollectLoading.value = true
-    const res = await axios.post(`${API_BASE}/api/admin/etf/collect`, {
-      start_date: etfForm.value.start_date,
-      end_date: etfForm.value.end_date,
-      etf_codes: etf_codes
-    })
+    const res = await axios.post(
+      `${API_BASE}/api/admin/etf/collect`,
+      {
+        start_date: etfForm.value.start_date,
+        end_date: etfForm.value.end_date,
+        etf_codes: etf_codes
+      },
+      withAuth()
+    )
     if (res.data?.success) {
       ElMessage.success('ETF行情采集任务已启动')
       startETFPolling()
