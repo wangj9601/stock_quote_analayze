@@ -12,6 +12,7 @@ def test_default_config_has_pattern_and_scan():
     assert "volume" in cfg
     assert cfg["pattern"]["lookback_days"] >= 50
     assert cfg["pattern"]["use_low_for_bottom"] is True
+    assert cfg["pattern"]["forming_timeout_bars"] == 60
 
 
 def test_too_few_bars_returns_none():
@@ -138,6 +139,39 @@ def test_cup_forming_or_confirmed():
     hit2 = detect_cup_bottom(_bars_cup(breakout=True), pattern_cfg=cfg)
     assert hit2 is not None
     assert hit2["status"] in ("forming", "confirmed")
+
+
+def test_forming_timeout_invalidates_and_can_disable():
+    """柄结束后超过 N 根仍未确认 → invalidated（exclude 时返回 None）；0 关闭。"""
+    cfg = _test_cfg()
+    cfg["forming_timeout_bars"] = 5
+    cfg["exclude_invalidated"] = True
+    bars = _bars_cup(breakout=False)
+    # _bars_cup 柄后约 17 根，超过 5 → 应超时剔除
+    assert detect_cup_bottom(bars, pattern_cfg=cfg) is None
+
+    cfg_keep = dict(cfg)
+    cfg_keep["exclude_invalidated"] = False
+    hit = detect_cup_bottom(bars, pattern_cfg=cfg_keep)
+    assert hit is not None
+    assert hit["status"] == "invalidated"
+    assert "forming_timeout" in str(hit.get("invalidate_reason") or "")
+
+    cfg_off = dict(cfg)
+    cfg_off["forming_timeout_bars"] = 0
+    cfg_off["exclude_invalidated"] = True
+    hit_off = detect_cup_bottom(bars, pattern_cfg=cfg_off)
+    assert hit_off is not None
+    assert hit_off["status"] == "forming"
+
+
+def test_forming_timeout_not_triggered_when_within_window():
+    cfg = _test_cfg()
+    cfg["forming_timeout_bars"] = 40
+    bars = _bars_cup(breakout=False)
+    hit = detect_cup_bottom(bars, pattern_cfg=cfg)
+    assert hit is not None
+    assert hit["status"] == "forming"
 
 
 def test_ever_confirmed_after_pullback_below_rim():

@@ -400,8 +400,8 @@ except ImportError as e:
 try:
     from .news_channel_routes import router as news_router
     print("news_router 导入成功")
-except ImportError as e:
-    print(f"news_router 导入失败: {e}")
+except Exception as e:
+    print(f"news_router 导入失败: {type(e).__name__}: {e}")
     news_router = None
 
 # 尝试导入数据采集路由
@@ -846,14 +846,14 @@ _include_router(app, push_admin_router, "推送管理员")
 try:
     from .trading_notes_routes import router as trading_notes_router
     print("trading_notes_router 导入成功")
-except ImportError as e:
-    print(f"trading_notes_router 导入失败: {e}")
+except Exception as e:
+    print(f"trading_notes_router 导入失败: {type(e).__name__}: {e}")
     trading_notes_router = None
 try:
     from .trading_routes import router as simtrade_router
     print("simtrade_router 导入成功")
-except ImportError as e:
-    print(f"simtrade_router 导入失败: {e}")
+except Exception as e:
+    print(f"simtrade_router 导入失败: {type(e).__name__}: {e}")
     simtrade_router = None
 
 _include_router(app, trading_notes_router, "trading_notes")

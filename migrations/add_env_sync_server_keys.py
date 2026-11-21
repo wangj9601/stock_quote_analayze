@@ -1,4 +1,8 @@
-"""迁移：环境同步服务端多 Key 表 env_sync_server_keys，并迁入旧单 Key。"""
+"""迁移：环境同步服务端多 Key 表 env_sync_server_keys，并迁入旧单 Key。
+
+对应 Alembic revision: 0008_env_sync_server_keys
+生产与日常开发默认走 scripts/db_migrate.py upgrade；本脚本仅作可选补齐。
+"""
 import os
 import sys
 from pathlib import Path

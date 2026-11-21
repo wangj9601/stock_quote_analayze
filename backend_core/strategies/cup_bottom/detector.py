@@ -2,6 +2,7 @@
 """杯底形态识别（O'Neil 带柄杯底增强版）。
 
 forming：柄部形成未突破杯口；confirmed：收盘突破杯口且可选放量确认。
+forming 超时：柄结束后 ≥ forming_timeout_bars 根仍未确认 → invalidated（0=关闭）。
 输出含 grade（A/B/C/X）、volume_score、quality_flags。
 """
 
@@ -20,6 +21,16 @@ def _f(v: Any) -> Optional[float]:
         return x if x == x else None
     except (TypeError, ValueError):
         return None
+
+
+def _parse_nonneg_int(v: Any, *, default: int) -> int:
+    """解析非负整数；显式 0 保留（关闭开关），缺省用 default。"""
+    if v is None or v == "":
+        return max(0, int(default))
+    try:
+        return max(0, int(v))
+    except (TypeError, ValueError):
+        return max(0, int(default))
 
 
 def _bar_date(bar: Dict[str, Any]) -> str:
@@ -78,6 +89,10 @@ def _parse_cfg(pattern_cfg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         "handle_retrace_of_rim_max": float(cfg.get("handle_retrace_of_rim_max") or 0.18),
         "confirm_close_above": bool(cfg.get("confirm_close_above", True)),
         "confirm_buffer_pct": float(cfg.get("confirm_buffer_pct") or 0.005),
+        # 柄结束后未突破杯口的交易日根数上限；默认 60（约 3 个月），0=关闭超时
+        "forming_timeout_bars": _parse_nonneg_int(
+            cfg.get("forming_timeout_bars"), default=60
+        ),
         "exclude_invalidated": bool(cfg.get("exclude_invalidated", True)),
         "use_low_for_bottom": bool(cfg.get("use_low_for_bottom", True)),
         "use_high_for_rim": bool(cfg.get("use_high_for_rim", True)),
@@ -585,6 +600,18 @@ def detect_cup_bottom(
     if cfg["volume_require_all"] and vol_pass < 4:
         return None
 
+    invalidate_reason: Optional[str] = None
+    timeout_n = int(cfg.get("forming_timeout_bars") or 0)
+    if status == "forming" and timeout_n > 0:
+        elapsed_after_handle = len(closes) - 1 - int(hei)
+        if elapsed_after_handle >= timeout_n:
+            status = "invalidated"
+            invalidate_reason = (
+                f"forming_timeout: handle_end后≥{timeout_n}根仍未收盘突破杯口"
+            )
+            confirm_date = None
+            confirm_i = None
+
     grade = _grade_from_flags(
         structure_ok=True,
         vol_flags=vol_flags,
@@ -601,6 +628,7 @@ def detect_cup_bottom(
     return {
         "ok": True,
         "status": status,
+        "invalidate_reason": invalidate_reason,
         "grade": grade,
         "left_rim_date": _bar_date(seq[li]),
         "cup_bottom_date": _bar_date(seq[bi]),

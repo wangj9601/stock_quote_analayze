@@ -10,10 +10,17 @@ from typing import List, Optional
 from datetime import date, datetime
 from pydantic import BaseModel
 
-from database import get_db, engine
-from auth import get_current_user
-from models import TradingNotes, HistoricalQuotes, TradingJournalLog, User, TradeExecutionLog
 from sqlalchemy import text
+
+from backend_api.database import get_db, engine
+from backend_api.auth import get_current_user
+from backend_api.models import (
+    TradingNotes,
+    HistoricalQuotes,
+    TradingJournalLog,
+    User,
+    TradeExecutionLog,
+)
 
 router = APIRouter(prefix="/api/trading_notes", tags=["trading_notes"])
 

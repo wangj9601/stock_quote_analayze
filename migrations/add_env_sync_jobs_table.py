@@ -1,4 +1,8 @@
-"""迁移：环境同步异步任务表 env_sync_jobs。"""
+"""迁移：环境同步异步任务表 env_sync_jobs。
+
+对应 Alembic revision: 0009_env_sync_jobs
+生产与日常开发默认走 scripts/db_migrate.py upgrade；本脚本仅作可选补齐。
+"""
 import os
 import sys
 from pathlib import Path

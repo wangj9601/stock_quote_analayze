@@ -1,5 +1,7 @@
 """
-迁移：龙虎榜落库。
+迁移：龙虎榜落库（可选补齐；生产默认走 Alembic）。
+
+对应 revision：``0010_dragon_tiger``（``python scripts/db_migrate.py upgrade``）。
 
 - dragon_tiger_snapshot：某交易日、某榜别（all/org/hot_money）的一次快照
 - dragon_tiger_stock：上榜个股；org_net_value / hot_money_net_value 仅同花顺有值（单位：元）

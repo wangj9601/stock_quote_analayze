@@ -30,6 +30,8 @@ def get_default_cupb_config() -> Dict[str, Any]:
             "handle_retrace_of_rim_max": 0.18,
             "confirm_close_above": True,
             "confirm_buffer_pct": 0.005,
+            # 柄结束后仍未突破杯口的交易日上限（约 3 个月）；0=关闭超时规则
+            "forming_timeout_bars": 60,
             "exclude_invalidated": True,
             "use_low_for_bottom": True,
             "use_high_for_rim": True,

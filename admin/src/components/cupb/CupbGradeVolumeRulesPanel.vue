@@ -33,6 +33,10 @@
           <p class="rules-note">
             <strong>延长基底 / 深杯</strong>：杯深 &gt;33%，或杯身 K 线数 ≥60 日等；此类形态若量价未四项全过，等级优先定为 C（即使量价分为 3）。
           </p>
+          <p class="rules-note">
+            <strong>形成中超时</strong>：柄部结束后默认 ≥60 个交易日仍未收盘突破杯口 → 判失效并默认过滤（
+            <code>pattern.forming_timeout_bars</code>，设为 <code>0</code> 可关闭）。
+          </p>
         </section>
       </div>
     </el-collapse-item>

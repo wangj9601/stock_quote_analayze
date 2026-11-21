@@ -12,8 +12,8 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import logging
 
-from database import get_db
-from models import StockNews
+from backend_api.database import get_db
+from backend_api.models import StockNews
 
 logger = logging.getLogger(__name__)
 

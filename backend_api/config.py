@@ -98,11 +98,22 @@ def _require_jwt_secret() -> str:
     return secret
 
 
-JWT_CONFIG = {
-    "secret_key": _require_jwt_secret(),
-    "algorithm": _env("JWT_ALGORITHM", "HS256"),
-    "access_token_expire_minutes": _env_int("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 1440),
-}
+def get_jwt_config() -> dict:
+    """JWT 配置（按需求值）。迁移等只读 DATABASE_CONFIG 的路径不应强制校验密钥。"""
+    return {
+        "secret_key": _require_jwt_secret(),
+        "algorithm": _env("JWT_ALGORITHM", "HS256"),
+        "access_token_expire_minutes": _env_int("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 1440),
+    }
+
+
+def __getattr__(name: str):
+    # 懒加载：``from backend_api.config import DATABASE_CONFIG`` 不触发 JWT 校验；
+    # 访问 ``JWT_CONFIG``（如 auth 启动）时再校验。避免阿里云 ``db_migrate`` 因
+    # shared/.env 缺密钥或占位符而整段升级失败。
+    if name == "JWT_CONFIG":
+        return get_jwt_config()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # API 配置
 API_CONFIG = {

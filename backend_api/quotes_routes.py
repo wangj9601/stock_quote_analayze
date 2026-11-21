@@ -1,24 +1,43 @@
 import logging
+from datetime import datetime
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func, or_
-from typing import List, Optional
-from datetime import datetime
-import sys
-import os
-# 添加项目根目录到Python路径
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-sys.path.insert(0, parent_dir)
-sys.path.insert(0, current_dir)
-from database import get_db
-from models import (
-    StockRealtimeQuote, IndexRealtimeQuotes, IndustryBoardRealtimeQuotes,
-    HistoricalQuotes, StockRealtimeQuoteHK, HKIndexRealtimeQuotes,
-    HistoricalQuotesHK, HKIndexHistoricalQuotes, FundRealtimeQuote, FundHistoricalQuotes
+
+from backend_api.database import get_db
+from backend_api.models import (
+    StockRealtimeQuote,
+    IndexRealtimeQuotes,
+    IndustryBoardRealtimeQuotes,
+    HistoricalQuotes,
+    StockRealtimeQuoteHK,
+    HKIndexRealtimeQuotes,
+    HistoricalQuotesHK,
+    HKIndexHistoricalQuotes,
+    FundRealtimeQuote,
+    FundHistoricalQuotes,
 )
 from backend_core.data_collectors.akshare.hk_historical_import_from_file import complete_hk_change_fields
 from backend_api.utils.turnover_backfill import backfill_missing_turnover_a_share
+
+_REQUIRED_MODELS = (
+    StockRealtimeQuote,
+    IndexRealtimeQuotes,
+    IndustryBoardRealtimeQuotes,
+    HistoricalQuotes,
+    StockRealtimeQuoteHK,
+    HKIndexRealtimeQuotes,
+    HistoricalQuotesHK,
+    HKIndexHistoricalQuotes,
+    FundRealtimeQuote,
+    FundHistoricalQuotes,
+)
+if any(m is None for m in _REQUIRED_MODELS):
+    raise ImportError(
+        "quotes_routes: backend_api.models 未正确导出行情 ORM（models 包与 models.py 冲突加载失败）"
+    )
 
 router = APIRouter(prefix="/api/quotes", tags=["quotes"])
 _logger = logging.getLogger(__name__)
