@@ -11,12 +11,124 @@ from backend_core.database.db import SessionLocal
 from sqlalchemy import text
 import re
 
+_ALLOWED_BASICINFO_COLS = frozenset({
+    "ts_code", "trade_date", "code", "name", "open", "high", "low", "close",
+    "pre_close", "change", "pct_chg", "vol", "amount", "turnover_rate",
+})
+
+
 class HistoricalQuoteImportFromFileCollector(TushareCollector):
     """历史行情数据采集器"""
     def _safe_value(self, val: Any) -> Optional[float]:
         return None if pd.isna(val) else float(val)
     def extract_code_from_ts_code(self, ts_code: str) -> str:
         return ts_code.split(".")[0] if ts_code else ""
+
+    @staticmethod
+    def _split_sql_values(values_str: str) -> list:
+        """拆分 SQL VALUES 列表，支持单引号字符串（含转义 ''）。"""
+        parts = []
+        buf = []
+        in_quote = False
+        i = 0
+        s = values_str
+        while i < len(s):
+            ch = s[i]
+            if in_quote:
+                if ch == "'" and i + 1 < len(s) and s[i + 1] == "'":
+                    buf.append("'")
+                    i += 2
+                    continue
+                if ch == "'":
+                    in_quote = False
+                    i += 1
+                    continue
+                buf.append(ch)
+                i += 1
+                continue
+            if ch == "'":
+                in_quote = True
+                i += 1
+                continue
+            if ch == ",":
+                parts.append("".join(buf).strip())
+                buf = []
+                i += 1
+                continue
+            buf.append(ch)
+            i += 1
+        parts.append("".join(buf).strip())
+        return parts
+
+    @staticmethod
+    def _coerce_sql_literal(raw: str):
+        if raw.upper() == "NULL" or raw == "":
+            return None
+        if len(raw) >= 2 and raw[0] == "'" and raw[-1] == "'":
+            return raw[1:-1].replace("''", "'")
+        try:
+            if "." in raw:
+                return float(raw)
+            return int(raw)
+        except ValueError:
+            return raw
+
+    def _upsert_basicinfo_row(self, session, row: Dict[str, Any]) -> bool:
+        """参数化写入 MKT_STK_BASICINFO，禁止执行任意 SQL 文本。"""
+        data = {}
+        for k, v in row.items():
+            key = str(k).replace("`", "").replace("pct_change", "pct_chg").strip()
+            if key in _ALLOWED_BASICINFO_COLS:
+                data[key] = v
+        if "ts_code" not in data or "trade_date" not in data:
+            return False
+        cols = list(data.keys())
+        placeholders = ", ".join(f":{c}" for c in cols)
+        col_sql = ", ".join(cols)
+        update_clause = ", ".join(
+            f"{c}=EXCLUDED.{c}" for c in cols if c not in ("ts_code", "trade_date")
+        )
+        if update_clause:
+            sql = (
+                f"INSERT INTO MKT_STK_BASICINFO ({col_sql}) VALUES ({placeholders}) "
+                f"ON CONFLICT (ts_code, trade_date) DO UPDATE SET {update_clause}"
+            )
+        else:
+            sql = (
+                f"INSERT INTO MKT_STK_BASICINFO ({col_sql}) VALUES ({placeholders}) "
+                f"ON CONFLICT (ts_code, trade_date) DO NOTHING"
+            )
+        session.execute(text(sql), data)
+        return True
+
+    def _parse_insert_line_to_row(self, sql_line: str) -> Optional[Dict[str, Any]]:
+        """仅接受指向 mkt_stk_basicinfo 的 insert/replace 行，解析为字典。"""
+        lower = sql_line.lower()
+        if "mkt_stk_basicinfo" not in lower:
+            return None
+        if not (lower.startswith("insert ") or lower.startswith("replace ")):
+            return None
+        m = re.match(
+            r"(?:insert|replace)\s+into\s+[`\"]?(\w+)[`\"]?\s*\(([^)]*)\)\s*values\s*\((.*)\)\s*;?\s*$",
+            sql_line,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if not m:
+            return None
+        table = m.group(1)
+        if table.lower() != "mkt_stk_basicinfo":
+            return None
+        fields = [f.strip().replace("`", "").replace('"', "") for f in m.group(2).split(",")]
+        values = self._split_sql_values(m.group(3))
+        if len(fields) != len(values):
+            return None
+        row = {}
+        for f, v in zip(fields, values):
+            key = f.replace("pct_change", "pct_chg")
+            if key not in _ALLOWED_BASICINFO_COLS:
+                continue
+            row[key] = self._coerce_sql_literal(v)
+        return row
     
     def find_file_for_date(self, date_str: str, file_type: str) -> Optional[Path]:
         """寻找指定日期的历史行情数据文件，尝试多种命名称规范"""
@@ -110,24 +222,14 @@ class HistoricalQuoteImportFromFileCollector(TushareCollector):
                     if not sql_line:
                         continue
                     try:
-                        # 自动转换REPLACE INTO为PostgreSQL兼容语法
-                        if sql_line.lower().startswith("replace into"):
-                            import re
-                            sql_line = sql_line.replace('`pct_change`', '`pct_chg`').replace('pct_change', 'pct_chg')
-                            m = re.match(r"replace into\s+(\w+)\s*\(([^)]*)\)\s*values\s*\(([^)]*)\);?", sql_line, re.IGNORECASE)
-                            if m:
-                                table = m.group(1)
-                                fields = m.group(2).replace('`', '')
-                                values = m.group(3)
-                                field_list = [f.strip() for f in fields.split(',')]
-                                update_clause = ', '.join([f"{f}=EXCLUDED.{f}" for f in field_list if f not in ('ts_code', 'trade_date')])
-                                sql_line = f"INSERT INTO {table} ({fields}) VALUES ({values}) ON CONFLICT (ts_code, trade_date) DO UPDATE SET {update_clause};"
-                        if (("insert" in sql_line.lower() or "replace" in sql_line.lower())
-                            and "mkt_stk_basicinfo" in sql_line.lower()):
-                            session.execute(text(sql_line))
+                        row = self._parse_insert_line_to_row(sql_line)
+                        if not row:
+                            self.logger.warning("跳过无法安全解析的 SQL 行")
+                            continue
+                        if self._upsert_basicinfo_row(session, row):
                             insert_count += 1
                     except Exception as e:
-                        self.logger.error(f"插入SQL失败: {e}, SQL: {sql_line}")
+                        self.logger.error(f"插入失败: {e}")
                         session.rollback()
                         continue
                 session.commit()
@@ -141,32 +243,20 @@ class HistoricalQuoteImportFromFileCollector(TushareCollector):
                 insert_count = 0
                 with open(file_path, "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
-                    # 字段名兼容处理
-                    field_list = [f.replace('pct_change', 'pct_chg') for f in reader.fieldnames]
-                    if not field_list:
+                    if not reader.fieldnames:
                         self.logger.error(f"CSV文件无表头: {file_path}")
                         return False
                     for row in reader:
                         try:
-                            # 行数据兼容处理
-                            row = {k.replace('pct_change', 'pct_chg'): v for k, v in row.items()}
-                            fields = ', '.join(field_list)
-                            values = []
-                            for k in field_list:
-                                v = row.get(k, '')
-                                if v is None or v == '':
-                                    values.append('NULL')
-                                elif k in ('ts_code', 'trade_date', 'name', 'market') or not self._is_number(v):
-                                    values.append(f"'{v}'")
-                                else:
-                                    values.append(v)
-                            values_str = ', '.join(values)
-                            update_clause = ', '.join([f"{f}=EXCLUDED.{f}" for f in field_list if f not in ('ts_code', 'trade_date')])
-                            sql_line = f"INSERT INTO MKT_STK_BASICINFO ({fields}) VALUES ({values_str}) ON CONFLICT (ts_code, trade_date) DO UPDATE SET {update_clause};"
-                            session.execute(text(sql_line))
-                            insert_count += 1
+                            normalized = {
+                                k.replace("pct_change", "pct_chg"): (None if v == "" else v)
+                                for k, v in row.items()
+                                if k
+                            }
+                            if self._upsert_basicinfo_row(session, normalized):
+                                insert_count += 1
                         except Exception as e:
-                            self.logger.error(f"CSV插入SQL失败: {e}, 行: {row}")
+                            self.logger.error(f"CSV插入失败: {e}, 行: {row}")
                             session.rollback()
                             continue
                 session.commit()

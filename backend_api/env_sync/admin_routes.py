@@ -288,7 +288,8 @@ def _prod_headers(key: str) -> Dict[str, str]:
 
 
 def _remote_fail_detail(action: str, status_code: int, body: str) -> str:
-    text = (body or "")[:400]
+    # 脱敏：不回传远端响应体，避免 SSRF 探测内网服务指纹
+    text = f"(已省略远端响应体, len={(len(body) if body else 0)})"
     if status_code == 401:
         return (
             f"{action} 失败 HTTP 401：生产 Sync Key 无效或未启用校验。"

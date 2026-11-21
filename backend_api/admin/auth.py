@@ -12,11 +12,17 @@ from datetime import datetime
 from pydantic import BaseModel
 from backend_api.models import AdminInDB, Admin
 from backend_api.database import get_db
+from jose import JWTError, jwt
+
 from backend_api.auth import (
     authenticate_admin,
     create_access_token,
     get_current_admin,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    oauth2_scheme,
+    revoke_token_jti,
+    SECRET_KEY,
+    ALGORITHM,
 )
 from backend_api.services.login_log_service import record_login_log
 
@@ -108,8 +114,14 @@ async def read_admin_me(current_admin: Admin = Depends(get_current_admin)):
     return current_admin
 
 @router.post("/logout")
-async def logout(current_admin: Admin = Depends(get_current_admin)):
-    """管理员登出"""
-    # 在实际应用中，这里可以将token加入黑名单
-    # 或者执行其他登出逻辑
+async def logout(
+    current_admin: Admin = Depends(get_current_admin),
+    token: str = Depends(oauth2_scheme),
+):
+    """管理员登出：吊销当前 Bearer 的 jti"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        revoke_token_jti(payload.get("jti"))
+    except JWTError:
+        pass
     return {"message": "登出成功"} 

@@ -582,20 +582,19 @@ async def remove_from_watchlist(
 
 class DeleteByCodeRequest(BaseModel):
     stock_code: str
-    user_id: int
+    user_id: Optional[int] = None  # 兼容旧客户端；服务端忽略，仅用当前登录用户
 
 @router.post("/delete_by_code")
 async def delete_watchlist_by_code(
     req: DeleteByCodeRequest,
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    _perm: None = Depends(require_permission("channel.watchlist.tab.default.btn.delete")),
 ):
+    """根据股票代码删除当前用户的自选股（忽略客户端 user_id）"""
     stock_code = req.stock_code
-    user_id = req.user_id
-    print(f"[watchlist] 请求用户ID: {user_id}, 股票代码: {stock_code}")
-    """根据股票代码+用户ID删除自选股"""
-    # 检查自选股是否存在
     watchlist = db.query(Watchlist).filter(
-        Watchlist.user_id == user_id,
+        Watchlist.user_id == current_user.id,
         Watchlist.stock_code == stock_code
     ).first()
 
@@ -605,7 +604,6 @@ async def delete_watchlist_by_code(
             detail="自选股不存在"
         )
 
-    # 删除自选股
     db.delete(watchlist)
     db.commit()
     return JSONResponse({'success': True, 'message': "删除成功"})

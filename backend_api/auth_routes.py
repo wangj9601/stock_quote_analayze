@@ -22,8 +22,13 @@ from .auth import (
     create_access_token,
     get_current_user,
     get_current_user_optional,
-    ACCESS_TOKEN_EXPIRE_MINUTES
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    oauth2_scheme_optional,
+    revoke_token_jti,
+    SECRET_KEY,
+    ALGORITHM,
 )
+from jose import JWTError, jwt
 from .permissions import build_permissions_response
 from backend_api.services.login_log_service import record_login_log
 
@@ -327,13 +332,22 @@ async def get_permissions(
     return build_permissions_response(db, current_user)
 
 @router.post("/logout")
-async def logout(request: Request):
-    """用户登出"""
+async def logout(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+):
+    """用户登出：吊销当前 Bearer 的 jti（进程内黑名单）"""
     start_time = time.time()
     client_host = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "unknown")
-    
+
     try:
+        if token:
+            try:
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                revoke_token_jti(payload.get("jti"))
+            except JWTError:
+                pass
         process_time = time.time() - start_time
         logger.info(
             f"用户登出请求 - "

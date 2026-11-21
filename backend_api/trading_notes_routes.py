@@ -399,7 +399,11 @@ class HistoricalQuoteWithNotes(BaseModel):
         from_attributes = True
 
 @router.post("/", response_model=TradingNoteResponse)
-def create_or_update_trading_note(note: TradingNoteCreate, db: Session = Depends(get_db)):
+def create_or_update_trading_note(
+    note: TradingNoteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """创建或更新交易备注（upsert操作）"""
     try:
         # 检查是否已存在
@@ -430,7 +434,7 @@ def create_or_update_trading_note(note: TradingNoteCreate, db: Session = Depends
                 notes=note.notes,
                 strategy_type=note.strategy_type,
                 risk_level=note.risk_level,
-                created_by=note.created_by or "system"
+                created_by=note.created_by or current_user.username,
             )
             
             db.add(db_note)
@@ -448,7 +452,8 @@ def get_trading_notes(
     stock_code: str,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """获取指定股票的交易备注"""
     try:
@@ -469,7 +474,8 @@ def get_trading_notes(
 def update_trading_note(
     note_id: int,
     note_update: TradingNoteUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """更新交易备注"""
     try:
@@ -496,7 +502,11 @@ def update_trading_note(
         raise HTTPException(status_code=500, detail=f"更新交易备注失败: {str(e)}")
 
 @router.delete("/{note_id}")
-def delete_trading_note(note_id: int, db: Session = Depends(get_db)):
+def delete_trading_note(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """删除交易备注"""
     try:
         db_note = db.query(TradingNotes).filter(TradingNotes.id == note_id).first()
@@ -656,7 +666,11 @@ def calculate_derived_fields(
         raise HTTPException(status_code=500, detail=f"计算派生字段失败: {str(e)}")
 
 @router.post("/upsert")
-def upsert_trading_note(note: TradingNoteCreate, db: Session = Depends(get_db)):
+def upsert_trading_note(
+    note: TradingNoteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """创建或更新交易备注（upsert操作）"""
     try:
         # 检查是否已存在
@@ -691,7 +705,7 @@ def upsert_trading_note(note: TradingNoteCreate, db: Session = Depends(get_db)):
                 notes=note.notes,
                 strategy_type=note.strategy_type,
                 risk_level=note.risk_level,
-                created_by=note.created_by or "system"
+                created_by=note.created_by or current_user.username,
             )
             
             db.add(db_note)

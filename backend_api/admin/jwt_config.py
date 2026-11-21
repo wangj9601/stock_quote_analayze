@@ -28,7 +28,9 @@ class JWTConfig:
     def _validate_config(self):
         """验证JWT配置"""
         if not self.secret_key or self.secret_key == "your-secret-key-here":
-            logger.warning("⚠️  警告: 使用默认JWT密钥，生产环境中请设置JWT_SECRET_KEY环境变量")
+            raise ValueError(
+                "JWT_SECRET_KEY 必须设置为非默认强密钥（与 backend_api.config 一致）"
+            )
         
         if self.algorithm not in ["HS256", "HS384", "HS512"]:
             logger.error(f"❌ 不支持的JWT算法: {self.algorithm}")

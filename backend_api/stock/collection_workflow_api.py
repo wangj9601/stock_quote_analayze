@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from backend_api.auth import get_current_admin
 from backend_api.database import get_db
 from backend_core.data_collectors.workflow.engine import workflow_engine
 from backend_core.data_collectors.workflow.mutex import get_active, is_busy, list_active
@@ -24,7 +25,11 @@ from backend_core.models.collection_workflow import (
 logger = logging.getLogger(__name__)
 
 # 管理端 apiService baseURL 为 /api/admin，须与此前缀一致
-router = APIRouter(prefix="/api/admin/collection-workflows", tags=["采集流程"])
+router = APIRouter(
+    prefix="/api/admin/collection-workflows",
+    tags=["采集流程"],
+    dependencies=[Depends(get_current_admin)],
+)
 
 
 # ---------- Pydantic ----------

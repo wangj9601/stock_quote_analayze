@@ -3,6 +3,7 @@
 """
 
 from typing import List, Optional
+import secrets
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, or_
@@ -313,8 +314,7 @@ async def reset_user_password(
     current_user = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
-    """管理员重置指定用户密码为系统默认值"""
-    DEFAULT_PASSWORD = "bingfengtang$91"
+    """管理员重置指定用户密码为一次性临时口令"""
     db_user = db.query(User).filter(User.id == user_id).first()
     if not db_user:
         raise HTTPException(
@@ -322,7 +322,13 @@ async def reset_user_password(
             detail="用户不存在"
         )
 
-    db_user.password_hash = get_password_hash(DEFAULT_PASSWORD)
+    temp_password = secrets.token_urlsafe(16)
+    db_user.password_hash = get_password_hash(temp_password)
     db.commit()
 
-    return {"message": "密码已重置为默认值", "default": DEFAULT_PASSWORD}
+    return {
+        "message": "密码已重置为临时密码，请通知用户尽快修改",
+        "temporary_password": temp_password,
+        # 兼容旧管理端字段名
+        "default": temp_password,
+    }

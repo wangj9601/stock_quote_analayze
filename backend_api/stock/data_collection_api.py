@@ -55,7 +55,13 @@ from backend_api.models import (
 )
 from sqlalchemy import text, bindparam
 
-router = APIRouter(prefix="/api/data-collection", tags=["数据采集"])
+from backend_api.auth import get_current_admin
+
+router = APIRouter(
+    prefix="/api/data-collection",
+    tags=["数据采集"],
+    dependencies=[Depends(get_current_admin)],
+)
 
 # 全局变量存储采集任务状态
 collection_tasks = {}
@@ -2472,41 +2478,41 @@ async def upload_historical_file(
 ):
     """上传历史行情数据文件（A股/港股「历史数据采集-文件」共用）"""
     try:
-        # 确保目录存在
-        upload_dir = os.path.join("backend_core", "data")
-        if not os.path.exists(upload_dir):
-            os.makedirs(upload_dir)
-            
-        # 校验文件名格式（与 backend_core 下文件采集器查找规则一致）
-        filename = file.filename or ""
+        upload_dir = os.path.realpath(os.path.join("backend_core", "data"))
+        os.makedirs(upload_dir, exist_ok=True)
+
+        # 仅保留 basename，拒绝路径穿越；前缀/扩展名强制校验
+        filename = os.path.basename(file.filename or "")
         valid_prefixes = (
             "daily_", "historical_quotes_",
             "hk_daily_", "hk_historical_quotes_",
         )
         is_valid_prefix = filename.startswith(valid_prefixes)
-        is_valid_ext = filename.endswith(".txt") or filename.endswith(".csv") or filename.endswith(".xlsx")
-        
-        if not (is_valid_prefix and is_valid_ext):
-             # 虽然不做严格限制，但打印警告
-             logger.warning(
-                 f"上传的文件名 {filename} 不符合建议格式 "
-                 f"（前缀可为 daily_、historical_quotes_、hk_daily_、hk_historical_quotes_ 之一，扩展名 txt/csv/xlsx）"
-             )
-             
-        file_path = os.path.join(upload_dir, filename)
-        
-        # 保存文件
+        is_valid_ext = filename.endswith((".txt", ".csv", ".xlsx"))
+        if not filename or not (is_valid_prefix and is_valid_ext):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "文件名不符合要求：须为 basename，前缀为 daily_ / historical_quotes_ / "
+                    "hk_daily_ / hk_historical_quotes_ 之一，扩展名为 txt/csv/xlsx"
+                ),
+            )
+
+        file_path = os.path.realpath(os.path.join(upload_dir, filename))
+        if file_path != upload_dir and not file_path.startswith(upload_dir + os.sep):
+            raise HTTPException(status_code=400, detail="非法文件路径")
+
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
-        logger.info(f"文件上传成功: {filename} 到 {file_path}")
-        
+
+        logger.info("文件上传成功: %s", filename)
         return {
             "success": True,
             "message": f"文件 {filename} 上传成功",
             "filename": filename,
-            "path": file_path
         }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"文件上传失败: {str(e)}")
         raise HTTPException(status_code=500, detail=f"文件上传失败: {str(e)}")

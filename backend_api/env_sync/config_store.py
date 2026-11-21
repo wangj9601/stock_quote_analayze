@@ -264,7 +264,12 @@ def update_client_config(
     if enabled is not None:
         row.enabled = bool(enabled)
     if prod_base_url is not None:
-        row.prod_base_url = str(prod_base_url).strip().rstrip("/")
+        cleaned = str(prod_base_url).strip().rstrip("/")
+        if cleaned:
+            from backend_api.env_sync.remote_http import assert_url_allowed_for_outbound
+
+            assert_url_allowed_for_outbound(cleaned)
+        row.prod_base_url = cleaned
     if sync_key is not None and str(sync_key).strip():
         row.sync_key = str(sync_key).strip()
     row.updated_at = datetime.now()

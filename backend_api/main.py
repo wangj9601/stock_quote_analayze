@@ -104,6 +104,8 @@ import sys
 from sqlalchemy.orm import Session
 
 from backend_api.database import get_db
+from backend_api.auth import get_current_admin
+from backend_api.models import Admin
 
 # 配置日志
 logging.basicConfig(
@@ -537,7 +539,6 @@ async def _orm_stock_code_pg_check():
     sql = str(compiled)
     upper = sql.upper()
     return {
-        "main_py": __file__,
         "stock_code_type": type(StockBasicInfo.code.type).__name__,
         "postgresql_sql_contains_cast": "CAST(" in upper and "VARCHAR" in upper,
         "sample_sql": sql,
@@ -601,9 +602,11 @@ app.add_middleware(
 # 添加请求日志中间件 — 在 CORS 之后
 app.add_middleware(RequestLoggingMiddleware)
 
-# 在任何 include_router 之前注册：避免与其它路由冲突；路径唯一，便于排查
+# 在任何 include_router 之前注册：避免与其它路由冲突；路径唯一，便于排查（需管理员鉴权）
 @app.get("/api/_debug/orm-stock-code-pg-check")
-async def orm_stock_code_pg_check_early():
+async def orm_stock_code_pg_check_early(
+    _admin: Admin = Depends(get_current_admin),
+):
     return JSONResponse(content=await _orm_stock_code_pg_check(), headers=_NO_CACHE)
 
 
@@ -1331,22 +1334,18 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # 根路径重定向到管理后台
 @app.get("/")
-async def root(orm_check: Optional[str] = Query(None, description="任意非空则返回 ORM 编译自检 JSON")):
-    if orm_check is not None:
-        return JSONResponse(content=await _orm_stock_code_pg_check(), headers=_NO_CACHE)
+async def root():
     return JSONResponse(
         content={
             "message": "Welcome to Stock Analysis System API [rev:2026-04-orm3]",
-            "main_py": __file__,
             "api_revision": "2026-04-orm3",
-            "orm_selftest": "请打开 /api/_debug/orm-stock-code-pg-check（不要用缓存的 /）",
         },
         headers=_NO_CACHE,
     )
 
 @app.get("/debug/routes")
-async def list_routes():
-    """列出已注册的路由（调试用）。"""
+async def list_routes(_admin: Admin = Depends(get_current_admin)):
+    """列出已注册的路由（调试用，需管理员鉴权）。"""
     routes = []
     for route in app.routes:
         # BaseRoute 无 path/name/methods；APIRoute/Mount 等子类才有。
@@ -1363,12 +1362,18 @@ async def list_routes():
     return routes
 
 
+async def _orm_stock_code_pg_check_authed(
+    _admin: Admin = Depends(get_current_admin),
+):
+    return await _orm_stock_code_pg_check()
+
+
 for _path in (
     "/stock-code-orm-check",
     "/debug/stock-code-orm-check",
     "/api/health/stock-code-orm-check",
 ):
-    app.add_api_route(_path, _orm_stock_code_pg_check, methods=["GET"])
+    app.add_api_route(_path, _orm_stock_code_pg_check_authed, methods=["GET"])
 
 
 @app.on_event("startup")

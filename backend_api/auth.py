@@ -3,7 +3,7 @@
 """
 
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Optional, Union, Set
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
@@ -12,6 +12,8 @@ from sqlalchemy.orm import Session
 import hashlib
 import logging
 import bcrypt
+import uuid
+from threading import Lock
 
 from backend_api.models import User, Admin, TokenData
 from backend_api.database import get_db, SessionLocal
@@ -19,6 +21,24 @@ from backend_api.config import JWT_CONFIG
 
 # 配置日志
 logger = logging.getLogger(__name__)
+
+# 进程内 JWT 吊销表（jti）；多 worker 时各进程独立，配合 status 复查与密钥轮换
+_revoked_jtis: Set[str] = set()
+_revoked_lock = Lock()
+
+
+def revoke_token_jti(jti: Optional[str]) -> None:
+    if not jti:
+        return
+    with _revoked_lock:
+        _revoked_jtis.add(jti)
+
+
+def is_jti_revoked(jti: Optional[str]) -> bool:
+    if not jti:
+        return False
+    with _revoked_lock:
+        return jti in _revoked_jtis
 
 # 密码加密上下文
 pwd_context = CryptContext(
@@ -132,6 +152,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.setdefault("jti", str(uuid.uuid4()))
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -148,6 +169,8 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
+        if is_jti_revoked(payload.get("jti")):
+            raise credentials_exception
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
@@ -155,6 +178,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     user = db.query(User).filter(User.username == token_data.username).first()
     if user is None:
         raise credentials_exception
+    if (user.status or "").lower() != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已被禁用或未激活",
+        )
     return user
 
 
@@ -182,6 +210,8 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
         username: str = payload.get("sub")
         is_admin: bool = payload.get("is_admin", False)
         if username is None or not is_admin:
+            raise credentials_exception
+        if is_jti_revoked(payload.get("jti")):
             raise credentials_exception
         token_data = TokenData(username=username, is_admin=True)
     except JWTError:
@@ -211,6 +241,8 @@ async def get_current_user_or_admin(
         username: str = payload.get("sub")
         if username is None:
             raise credentials_exception
+        if is_jti_revoked(payload.get("jti")):
+            raise credentials_exception
         is_admin: bool = payload.get("is_admin", False)
     except JWTError:
         raise credentials_exception
@@ -224,6 +256,11 @@ async def get_current_user_or_admin(
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         raise credentials_exception
+    if (user.status or "").lower() != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="账号已被禁用或未激活",
+        )
     return user
 
 

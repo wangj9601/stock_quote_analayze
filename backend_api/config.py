@@ -73,9 +73,33 @@ DATABASE_CONFIG = {
     "echo": _env_bool("DB_ECHO", False),
 }
 
-# JWT 配置
+# JWT 配置：禁止使用仓库可见的默认密钥（生产/日常均应显式配置）
+_JWT_INSECURE_DEFAULTS = frozenset({
+    "",
+    "your-secret-key-here",
+    "CHANGE_ME_TO_A_LONG_RANDOM_STRING",
+    "REPLACE_WITH_LONG_RANDOM_SECRET_AT_LEAST_32_CHARS",
+})
+
+
+def _require_jwt_secret() -> str:
+    secret = _env("JWT_SECRET_KEY", "")
+    allow_insecure = _env_bool("ALLOW_INSECURE_DEFAULT_JWT", False) or _env_bool("TESTING", False)
+    if secret in _JWT_INSECURE_DEFAULTS or secret.lower() in {"changeme", "secret", "password"}:
+        if allow_insecure:
+            # 仅测试或显式放行时允许；仍写入不安全占位以便本地单测
+            return secret or "your-secret-key-here"
+        raise RuntimeError(
+            "JWT_SECRET_KEY 必须设置为唯一的非默认强密钥。"
+            "请在 .env 中配置，或仅在本地测试时设置 ALLOW_INSECURE_DEFAULT_JWT=1 / TESTING=1。"
+        )
+    if len(secret) < 32:
+        raise RuntimeError("JWT_SECRET_KEY 长度至少 32 字符，请使用足够熵的随机串。")
+    return secret
+
+
 JWT_CONFIG = {
-    "secret_key": _env("JWT_SECRET_KEY", "your-secret-key-here"),
+    "secret_key": _require_jwt_secret(),
     "algorithm": _env("JWT_ALGORITHM", "HS256"),
     "access_token_expire_minutes": _env_int("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", 1440),
 }

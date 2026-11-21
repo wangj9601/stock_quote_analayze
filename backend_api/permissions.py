@@ -152,6 +152,12 @@ def require_permission(code: str) -> Callable:
         current_user: Optional[User] = Depends(get_current_user_optional),
         db: Session = Depends(get_db),
     ) -> None:
+        if current_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="需要登录",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
         if not user_has_permission(db, current_user, code):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
