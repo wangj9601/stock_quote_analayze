@@ -13,7 +13,7 @@
                     <div class="param-group">
                         <label for="rpeScope">范围</label>
                         <select id="rpeScope" class="param-input">
-                            <option value="cn">全市场（读预计算）</option>
+                            <option value="cn">全市场（读预计算·概念）</option>
                             <option value="watchlist">自选股</option>
                             <option value="industry_board">行业板块</option>
                             <option value="concept_board">概念板块</option>
@@ -42,7 +42,7 @@
                         <label><input type="checkbox" id="rpeEntryOnly"> 仅入场信号</label>
                     </div>
                     <div class="param-group param-group-check">
-                        <label><input type="checkbox" id="rpeTraceOnly" checked> 优先读预计算</label>
+                        <label title="全市场勾选后只读日终预计算；无结果不自动全市场现算"><input type="checkbox" id="rpeTraceOnly" checked> 优先读预计算</label>
                     </div>
                     <div class="param-actions">
                         <button type="button" id="rpeRefreshBtn" class="refresh-btn" data-strategy="rpe" data-perm="channel.screening.tab.rpe.btn.refresh">刷新筛选</button>

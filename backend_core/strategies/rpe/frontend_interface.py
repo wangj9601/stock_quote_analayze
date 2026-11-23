@@ -63,7 +63,12 @@ class RPEFrontendInterface:
             elif board_code:
                 resolved_boards = [str(board_code).strip()]
 
-            if use_trace and scope == "cn" and not resolved_boards and not codes:
+            # 全市场现算与日终预计算对齐：无指定板块/代码时默认扫同花顺概念
+            full_market = scope == "cn" and not resolved_boards and not codes
+            if full_market and not use_trace:
+                kind = "concept"
+
+            if use_trace and full_market:
                 rows = load_traces(
                     session,
                     trade_date=trade_date,
@@ -73,6 +78,38 @@ class RPEFrontendInterface:
                     limit=max_results,
                     include_no_signal=include_no_signal,
                 )
+                message = None
+                need_precompute = False
+                if not rows:
+                    # 区分「当日无预计算」与「有信号但无入场买点」；调用方不得再回退全市场现算
+                    probe = []
+                    if entry_only or signal_type:
+                        probe = load_traces(
+                            session,
+                            trade_date=trade_date,
+                            config_id=cid,
+                            entry_only=False,
+                            signal_type=None,
+                            limit=1,
+                            include_no_signal=False,
+                        )
+                    if probe:
+                        if entry_only:
+                            message = (
+                                f"基准日 {trade_date} 已有预计算，但当日无符合条件的入场买点"
+                                f"（config_id={cid}）。选股页不自动全市场现算；可取消「仅入场信号」查看全部信号。"
+                            )
+                        else:
+                            message = (
+                                f"基准日 {trade_date} 已有预计算，但当前信号类型过滤后无结果"
+                                f"（config_id={cid}）。选股页不自动全市场现算。"
+                            )
+                    else:
+                        need_precompute = True
+                        message = (
+                            f"基准日 {trade_date} 没有已采集的比价效应信号"
+                            f"（config_id={cid}）。请等待日终预计算，选股页不自动全市场现算。"
+                        )
                 return {
                     "data": rows,
                     "search_date": trade_date,
@@ -80,6 +117,9 @@ class RPEFrontendInterface:
                     "source": "trace",
                     "price_adjust": "none",
                     "total": len(rows),
+                    "board_kind": "concept",
+                    "need_precompute": need_precompute,
+                    "message": message,
                 }
 
             # 单股/自选：预先检查是否有板块归属，便于返回可读提示

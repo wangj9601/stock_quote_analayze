@@ -545,6 +545,8 @@ class RPEStrategyEngine:
             # 自选/单股：按个股归属板块建簇（行业优先，无则概念）
             board_jobs = self._resolve_boards_for_codes(list(codes), kind)
         else:
+            # 全市场无指定板：扫同花顺概念（与日终预计算一致；不再默认扫行业）
+            kind = "concept"
             board_jobs = [
                 {
                     "board_code": b["board_code"],

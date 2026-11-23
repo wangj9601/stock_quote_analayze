@@ -551,13 +551,9 @@
     if (loading) loading.style.display = 'flex';
     try {
       await loadObserveMap();
-      const { q, scope } = buildRpeQuery({ adjust: 'none' });
-      const traceOnly = document.getElementById('rpeTraceOnly').checked;
-      let data = await api(`/api/screening/rpe-strategy?${q}`);
-      if (traceOnly && scope === 'cn' && (!data.data || !data.data.length)) {
-        q.delete('trace_only');
-        data = await api(`/api/screening/rpe-strategy?${q}`);
-      }
+      const { q } = buildRpeQuery({ adjust: 'none' });
+      // 全市场 + 优先读预计算：空结果也不回退全市场现算（与 URT 一致，避免买点为 0 时卡数分钟）
+      const data = await api(`/api/screening/rpe-strategy?${q}`);
       renderSignalRows(data);
     } catch (e) {
       showErr(e.message || String(e));

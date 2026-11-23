@@ -4642,7 +4642,10 @@ async def get_rpe_strategy(
         if not board_codes:
             raise HTTPException(status_code=400, detail="未找到有效的指数板块代码")
         include_no_signal = True
-    elif scope_raw != "cn":
+    elif scope_raw == "cn":
+        # 全市场现算与日终预计算一致：按同花顺概念板块扫描（读预计算仍走 rpe_signal_trace）
+        board_kind = "concept"
+    else:
         raise HTTPException(
             status_code=400,
             detail="scope 仅支持 cn|watchlist|industry_board|concept_board|index_board|single",
@@ -4807,7 +4810,10 @@ async def get_rpe_strategy(
             "source": result.get("source"),
             "price_adjust": result.get("price_adjust") or adjust_n,
             "message": result.get("message"),
-            "board_kind": board_kind if scope_raw in ("industry_board", "concept_board") else None,
+            "need_precompute": result.get("need_precompute"),
+            "board_kind": board_kind
+            if scope_raw in ("industry_board", "concept_board", "index_board", "cn")
+            else None,
             "board_codes": board_codes,
             **extra_meta,
         }
