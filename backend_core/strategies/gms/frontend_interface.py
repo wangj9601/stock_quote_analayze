@@ -1,7 +1,9 @@
 """
 GMS 前端选股接口
 供 API 与回测调用的选股入口。
-策略信号记录优先从 gms_signal_trace 表读取；若不存在或缺失，则增量重新计算，结果回填写入 gms_signal_trace。
+
+用户站选股应传 trace_only=True：只读 gms_signal_trace，不在 HTTP 路径现算回填。
+批处理 / 管理端补算可传 trace_only=False：缺失时增量计算并写回 gms_signal_trace。
 """
 
 import logging
@@ -879,12 +881,11 @@ class GMSFrontendInterface:
         cn_board_segment: Optional[str] = None,
     ) -> Union[List[dict], Tuple[List[dict], Dict[str, Any]]]:
         """
-        获取选股结果。优先从 gms_signal_trace 表读取策略信号记录；
-        若不存在或缺失，则增量重新计算，结果回填写入 gms_signal_trace 后返回。
+        获取选股结果。优先从 gms_signal_trace 表读取。
 
         Args:
-            trace_only: 为 True 时只读库内 trace，不对缺失股票做实时计算（用于前端先快速展示缓存）。
-            return_meta: 为 True 时返回 (列表, 统计字典)，便于接口返回 trace_complete 等字段。
+            trace_only: True 时只读库内 trace，不建池、不现算回填（用户站选股）。
+            return_meta: 为 True 时返回 (列表, 统计字典)，含 need_precompute / trace_complete 等。
             exclude_st: 为 True 时剔除 A 股 ST 类股票（名称含 ST）。
             cn_board_segment: A 股板块 MAIN/CYB/SZ_SME/KCB/BJ；仅过滤 A 股代码，港股/ETF 保留。
         """
@@ -922,8 +923,8 @@ class GMSFrontendInterface:
                 fast_traces = [r for r in fast_traces if str(r.get("symbol") or "") in kept]
 
             precompute_ok = self._precompute_succeeded(date, market)
-            # 有足够缓存且（预计算成功 或 仅读缓存）→ 不再建池/补算
-            if fast_traces and (trace_only or precompute_ok):
+            # trace_only：即使无行也直接返回，禁止建池/现算；预计算成功有缓存时同样快路径。
+            if trace_only or (fast_traces and precompute_ok):
                 combined = fast_traces
                 if self.min_score > 0:
                     combined = [
@@ -938,15 +939,16 @@ class GMSFrontendInterface:
                         "from_trace_count": len(fast_traces),
                         "computed_count": 0,
                         "requested_count": len(fast_traces),
-                        "trace_complete": bool(precompute_ok) or bool(trace_only and fast_traces),
+                        "trace_complete": bool(precompute_ok),
                         "config_id": self.config_id,
                         "use_trace": True,
                         "batch_size": _GMS_BATCH_SIZE,
                         "fast_path": "trace_market",
                         "precompute_ok": precompute_ok,
+                        "trace_only": bool(trace_only),
+                        "need_precompute": not bool(precompute_ok),
                     }
                 )
-                # trace_only 且预计算未确认时：不谎称 complete，便于前端决定是否二次请求
                 if trace_only and not precompute_ok:
                     meta["trace_complete"] = False
                     meta = enrich_trace_meta(meta)
@@ -958,7 +960,6 @@ class GMSFrontendInterface:
                     precompute_ok,
                     trace_only,
                 )
-                # 旧 trace 无 structure：增量补算（全市场有上限，避免拖垮超时；单股/小池在调用方再兜底）
                 _max_st = None
                 if len(combined) > 300:
                     _max_st = int(os.getenv("GMS_STRUCTURE_ENRICH_MAX", "300"))
@@ -968,7 +969,7 @@ class GMSFrontendInterface:
                     self.config,
                     date=date,
                     config_id=self.config_id,
-                    persist=bool(self.use_trace),
+                    persist=False if trace_only else bool(self.use_trace),
                     max_items=_max_st,
                 )
                 return (combined, meta) if return_meta else combined
@@ -1153,10 +1154,11 @@ class GMSFrontendInterface:
             self.config,
             date=date,
             config_id=self.config_id,
-            persist=bool(self.use_trace),
+            persist=False if trace_only else bool(self.use_trace),
             max_items=_max_st,
         )
 
+        precompute_ok_pool = self._precompute_succeeded(date, market) if self.use_trace else False
         meta: Dict[str, Any] = enrich_trace_meta(
             {
                 "from_trace_count": len(from_trace),
@@ -1166,6 +1168,9 @@ class GMSFrontendInterface:
                 "config_id": self.config_id,
                 "use_trace": self.use_trace,
                 "batch_size": _GMS_BATCH_SIZE,
+                "trace_only": bool(trace_only),
+                # 地板分未入库不算「需预计算」；仅日批未成功时提示补算。
+                "need_precompute": bool(trace_only) and (not precompute_ok_pool),
             }
         )
         if return_meta:

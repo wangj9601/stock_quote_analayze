@@ -8,7 +8,7 @@
 |------|------|
 | [strategies/](strategies/) | 选股/交易策略设计、规则、回测与运维说明 |
 | [prod/](prod/) | 环境说明、部署运维、Nginx 模板与迁机手册 |
-| [design/](design/) | 系统需求、总体设计与实现总览 |
+| [design/](design/) | 系统需求、总体设计与实现总览（架构事实以校正后的总览为准，见下「其它常用入口」） |
 | [admin/](admin/) | 管理后台与用户使用手册 |
 | [data/](data/) | 数据采集、AKShare/ETF/港股、相关 API 说明 |
 | [database/](database/) | 数据库 schema 变更规范（[Alembic 迁移指南](database/Alembic_guide.md)） |
@@ -48,13 +48,16 @@
 
 ## 其它常用入口
 
-- 系统设计/需求：`design/系统设计.md`、`design/需求分析.md`、`design/系统实现.md`  
+- 产品定位：仓库根 [`PRODUCT.md`](../PRODUCT.md)（内部投研优先；不以实盘撮合为目标）  
+- 系统设计/需求：`design/系统设计.md`（§1 / §11.3 / §12.3 为 2026-11 校正后的架构事实）、`design/需求分析.md`、`design/latest_system_design.md`、`design/系统实现.md`  
+- 部署与端口：以 `prod/` 为准（Nginx + systemd 五服务 + PostgreSQL；Redis/Celery 非现行依赖）  
 - 管理端 / 用户：`admin/管理后台说明与使用指南.md`、`admin/用户使用手册.md`  
 - 推送：`notifications/公司内部用户_企业微信与邮件推送配置指南.md`  
 - 采集：`data/AKShare使用与连接问题指南.md`、`data/ETF历史迁移脚本使用说明.md`  
 
 ## 说明
 
+- **权威优先级**：`PRODUCT.md`（产品）→ `prod/`（部署端口与运维）→ `design/系统设计.md` 校正后总览（架构事实）→ 其余设计/策略细节。细节 cron 与代码冲突时以代码与采集运维文档为准。  
 - 目录命名沿用既有英文风格（`prod` / `fixed` / `design` / `specs`）。  
 - 支撑位/阻力位等历史修复文档仍在 `fixed/`，未拆散；**现行算法**见 `features/支撑阻力与形态识别_算法说明.md`（含形态识别 / 共振带 / 攻防分层 / 盘口自适应 **四维闭环** 场景总览）。  
 - 引用文档时请使用新路径；`.cursor/plans/` 内旧链接未批量改动。  

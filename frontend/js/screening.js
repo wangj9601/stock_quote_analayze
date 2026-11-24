@@ -5313,24 +5313,18 @@ const ScreeningPage = {
         }
     },
 
-    /** GMS：先 trace_only 再按需全量，queryString 已含分页或全量参数 */
+    /** GMS：用户站只读预计算（trace_only），不再二次全量现算 */
     async fetchGmsStrategyResult(queryString) {
         const apiBaseUrl = this.API_BASE_URL;
         const fetchFn = this.getAuthFetchFn();
         const traceUrl = `${apiBaseUrl}/api/screening/gms-strategy?${queryString}&trace_only=true`;
-        let result = await this.handleHttpAndParseScreening('gms', await fetchFn(traceUrl));
+        const result = await this.handleHttpAndParseScreening('gms', await fetchFn(traceUrl));
         const meta = result.gms_trace_meta || {};
-        // 二次全量计算仅在几乎无缓存时触发，避免「有预计算仍再算一遍全市场」
-        const fromTrace = Number(meta.from_trace_count || 0);
-        const hitRate = Number(meta.trace_hit_rate || 0);
-        const layer = String(meta.cache_layer || '');
-        const needFullCompute =
-            meta.trace_complete !== true &&
-            layer !== 'snapshot' &&
-            (fromTrace === 0 || hitRate < 0.5);
-        if (needFullCompute) {
-            const fullUrl = `${apiBaseUrl}/api/screening/gms-strategy?${queryString}`;
-            result = await this.handleHttpAndParseScreening('gms', await fetchFn(fullUrl));
+        if (meta.need_precompute === true) {
+            const tip = '当日预计算未就绪，请稍后重试或联系管理端补算';
+            if (window.CommonUtils && typeof CommonUtils.showToast === 'function') {
+                CommonUtils.showToast(tip, 'warning');
+            }
         }
         return result;
     },

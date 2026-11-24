@@ -1568,11 +1568,11 @@ async def get_gms_strategy(
     code: Optional[str] = Query(None, description="单个股票代码（如果提供，则忽略 scope）"),
     trace_only: bool = Query(
         False,
-        description="为 true 时仅从 gms_signal_trace 读缓存，不触发缺失股票的实时计算（前端可先快显再二次请求全量）",
+        description="已废弃：用户站选股一律只读 gms_signal_trace；传 false 亦不触发现算（现算仅日批/管理端）",
     ),
     use_snapshot: bool = Query(
         True,
-        description="为 true 时优先读取当日筛选结果快照（相同 scope+参数），miss 后计算并回写",
+        description="为 true 时优先读取当日筛选结果快照（相同 scope+参数）；用户站只读路径 miss 后不回写",
     ),
     config_id: Optional[int] = Query(
         None,
@@ -1589,9 +1589,13 @@ async def get_gms_strategy(
     db: Session = Depends(get_db),
 ):
     """
-    GMS 均值引力与动量突变策略选股。
+    GMS 均值引力与动量突变策略选股（用户站只读预计算）。
+
     数据来源由 scope 决定：watchlist=当前用户自选股；gms_watchlist=管理端 GMS 观察股表（启用版本且 status=active）；
     industry_board=指定行业板块成分股；concept_board=指定概念板块成分股；cn/hk/etf=全市场对应品种。
+
+    本接口强制只读 gms_signal_trace / snapshot，忽略 trace_only=false；缺失时返回 need_precompute，
+    不在 HTTP 路径现算回填。现算写库仅日批 scheduled_precompute / 管理端补算入口。
     """
     if not _ensure_gms_imports():
         return JSONResponse(
@@ -2076,12 +2080,14 @@ async def get_gms_strategy(
             concept_board_codes=concept_board_code if scope == "concept_board" else None,
             gms_watchlist_market=gms_watchlist_market if scope == "gms_watchlist" else None,
         )
+        # 用户站选股强制只读：忽略 Query trace_only=false，禁止 HTTP 现算与 snapshot 回写。
+        eff_trace_only = True
         param_hash = build_param_hash(
             {
                 "min_score": min_score,
                 "exclude_st": exclude_st,
                 "left_buy_min_accumulation": left_buy_min_accumulation,
-                "trace_only": trace_only,
+                "trace_only": eff_trace_only,
                 "config_id": resolved_config_id,
                 "industry_board_codes": sorted(industry_board_code) if industry_board_code else None,
                 "concept_board_codes": sorted(concept_board_code) if concept_board_code else None,
@@ -2129,6 +2135,8 @@ async def get_gms_strategy(
                     "trace_complete": True,
                     "config_id": resolved_config_id,
                     "cache_layer": "snapshot",
+                    "trace_only": True,
+                    "need_precompute": False,
                 }
             )
         else:
@@ -2136,15 +2144,16 @@ async def get_gms_strategy(
                 loop.run_in_executor(
                     None,
                     lambda: _run_gms(
-                        target_date, config, resolved_config_id, min_score, max_results, trace_only, exclude_st
+                        target_date, config, resolved_config_id, min_score, max_results, eff_trace_only, exclude_st
                     ),
                 ),
                 timeout=GMS_SCREENING_TIMEOUT,
             )
         gms_meta.update(gms_meta_run or {})
+        gms_meta["trace_only"] = True
         gms_meta = enrich_trace_meta(gms_meta)
         note_screening_request(gms_meta, timed_out=False)
-        if use_snapshot and snapshot_results is None and selection_results and not trace_only:
+        if use_snapshot and snapshot_results is None and selection_results and not eff_trace_only:
             save_snapshot(db, target_date, resolved_config_id, scope_key, param_hash, selection_results)
 
         # 当指定日期无数据时，回退到指标表最新可用日期
@@ -2159,7 +2168,7 @@ async def get_gms_strategy(
                     fallback_date_str = str(fallback_date).strip()[:10]
                     if fallback_date_str != target_date:
                         logger.info(f"GMS 所选日期 {target_date} 无数据，回退到指标表最新日期 {fallback_date_str}")
-                        selection_results, gms_meta = await asyncio.wait_for(
+                        selection_results, gms_meta_fb = await asyncio.wait_for(
                             loop.run_in_executor(
                                 None,
                                 lambda: _run_gms(
@@ -2168,12 +2177,15 @@ async def get_gms_strategy(
                                     resolved_config_id,
                                     min_score,
                                     max_results,
-                                    trace_only,
+                                    eff_trace_only,
                                     exclude_st,
                                 ),
                             ),
                             timeout=GMS_SCREENING_TIMEOUT,
                         )
+                        gms_meta.update(gms_meta_fb or {})
+                        gms_meta["trace_only"] = True
+                        gms_meta = enrich_trace_meta(gms_meta)
                         target_date = fallback_date_str
                         fallback_used = bool(selection_results)
             except Exception as e:
@@ -2189,7 +2201,7 @@ async def get_gms_strategy(
                 "strategy_name": "GMS均值引力动量策略",
                 "message": msg,
                 "gms_trace_meta": gms_meta,
-                "trace_only": trace_only,
+                "trace_only": True,
                 "paging": {
                     "enabled": use_pagination,
                     "page": 1,
@@ -2641,7 +2653,7 @@ async def get_gms_strategy(
                 "page_size": page_size if use_pagination else total_all,
             },
             "gms_trace_meta": gms_meta,
-            "trace_only": trace_only,
+            "trace_only": True,
             "paging": {
                 "enabled": use_pagination,
                 "page": page_eff,

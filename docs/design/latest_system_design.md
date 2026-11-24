@@ -1,15 +1,18 @@
 # 股票分析系统最新设计文档（2025-11-07）
 
+> **校正说明（2026-11）**：产品定位以仓库根 `PRODUCT.md` 为准（内部投研优先）。总体架构、存储与部署事实以 `docs/design/系统设计.md` §1 / §11.3 / §12.3 与 `docs/prod/` 为准。本稿保留模块级细节；下列概览与运维节已对齐现行约定。
+
 ## 1. 系统概览
 
-整个股票分析平台由四个核心子系统组成：
+整个股票分析平台为**多进程模块化单体**，核心子系统：
 
-- `frontend`：面向终端投资者的静态站点，使用原生 HTML/CSS/JavaScript 搭配模块化脚本，负责行情展示、自选股、资讯浏览等交互。
-- `admin`：基于 Vue 3 + Element Plus 的管理后台，提供用户、行情、日志、公告等运营工具。
-- `backend_api`：FastAPI 服务层，整合认证、行情、资讯、交易笔记等 REST 接口，并为前端与后台提供统一的数据访问入口。
-- `backend_core`：数据采集与分析引擎，负责对接第三方数据源、调度任务、生成报表，并与 API 层共享 PostgreSQL 数据库。
+- `frontend`：面向内部用户的静态站点（原生 HTML/CSS/JavaScript），负责行情、自选股、选股、资讯等交互。
+- `admin`：基于 Vue 3 + Element Plus 的管理后台，提供用户、行情、日志、采集、回测、推送等运营工具。
+- `backend_api`：FastAPI 服务层，整合认证、行情、资讯、选股查询等 REST 接口；与 core **共享 PostgreSQL 连接池**，部分路径仍同步 import 策略引擎。
+- `backend_core`：数据采集与分析引擎，**cron 采集调度权威**，对接第三方数据源、批处理与报表写入。
+- 推送调度：独立进程（`start_scheduler.py` / `stock-quote-notify`）。
 
-除上述模块外，系统还包含一套公共配置（如 `deploy_config.json`、Nginx 模板、批处理脚本），用于生产部署与一键启动。
+主库为 **PostgreSQL**；Redis / Celery **未**作为现行依赖。生产部署以 **Nginx + systemd 五服务** 为主（非 Docker 默认路径）。公共配置见 `scripts/deploy/`、`docs/prod/`。
 
 ## 2. 管理后台（`admin`）
 
@@ -596,17 +599,19 @@ class DailyReportScheduler:
 
 ## 7. 运维与部署要点
 
-- 开发阶段建议通过 `.env` / `VITE_API_BASE_URL` 控制管理端 API 地址；静态前端则依赖 `Config.getApiBaseUrl` 自动适配。
-- FastAPI 服务默认监听 `0.0.0.0:5000`，若部署在生产，可配合 `nginx_complete.conf` 实现反向代理与静态资源托管。
-- 数据采集脚本使用 BlockingScheduler，如需与 FastAPI 同机运行，应采用独立进程或使用 `BackgroundScheduler` 嵌入服务进程。
-- 企业微信、Tushare Token 等敏感信息应通过环境变量或加密配置注入。
+- 开发阶段通过 `.env` / `VITE_API_BASE_URL` 控制管理端 API 地址；静态前端依赖 `Config.getApiBaseUrl` 自动适配。
+- 生产：API / 用户站 / 管理端 **监听本机**，由 Nginx 反代对外；安全组勿开放 5000/8000/8001(或 8002)/5432。单元与端口见 `docs/prod/环境说明.md`。
+- 数据采集使用 core 进程内 BlockingScheduler，与 FastAPI **分进程**运行（`stock-quote-core` 与 `stock-quote-api`）；勿把 cron 采集权威绑回 API 进程。
+- 企业微信、Tushare Token、库密码等敏感信息仅注入现场 `.env`，勿写入公开文档。
 
 ## 8. 演进建议
 
-- **统一数据库配置**：目前 `backend_api` 与 `backend_core` 各自维护连接 URL，可考虑集中到共享配置或服务发现机制。
-- **身份与权限**：前端公共站点的登录状态依赖 LocalStorage，建议引入刷新 token 与单点注销机制，降低盗用风险。
-- **监控与告警**：为采集任务增加失败回调（如飞书/微信告警），并对 APScheduler 任务执行情况进行可视化统计。
-- **测试覆盖**：完善 `docs` 与 `test` 目录下的集成测试，确保新增接口能被前端正确消费。
+- **读写职责**：策略/日更指标逐步改为 Core 预计算落库，API 以查询为主，降低同步重计算拖垮 HTTP。
+- **调度单一真相源**：采集 cron 归 core；推送归 notify；API 仅触发与查状态。
+- **模型与迁移**：新表单一归属 + Alembic；避免扩张第二套 ORM `Base`。
+- **身份与权限**：巩固 JWT + `channel.*`；按需加强刷新 token / 注销。
+- **监控与告警**：采集失败回调与 APScheduler 执行可视。
+- **测试覆盖**：完善 `test/` 集成测试，保证新增接口可被前端消费。
 
 ---
 

@@ -165,3 +165,93 @@ def test_batch_resolve_gms_stock_names():
     assert names["000001"] == "平安银行"
     assert names["00700"] == "腾讯"
     assert names["510300"] == "沪深300ETF"
+
+
+def test_trace_only_sets_need_precompute_when_precompute_not_ok(monkeypatch):
+    db = MagicMock()
+    iface = gfi.GMSFrontendInterface(db, {"scoring": {}}, config_id=1)
+    iface.use_trace = True
+    iface.set_selection_config(min_score=0, max_results=10000)
+
+    monkeypatch.setattr(iface, "_precompute_succeeded", lambda *_a, **_k: False)
+    monkeypatch.setattr(iface, "_load_traces_for_market", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        iface,
+        "_get_stock_pool",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("trace_only must not build pool")),
+    )
+
+    with patch.object(gfi, "GMSStrategyEngine") as Eng:
+        rows, meta = iface.get_selection_results(
+            "2026-07-29",
+            stock_pool=None,
+            market="cn",
+            trace_only=True,
+            return_meta=True,
+        )
+
+    assert rows == []
+    assert meta.get("need_precompute") is True
+    assert meta.get("computed_count") == 0
+    assert meta.get("trace_only") is True
+    Eng.assert_not_called()
+
+
+def test_trace_only_pool_need_precompute_ignores_floor_missing(monkeypatch):
+    """显式股票池缺行（地板分未入库）时，若日批已成功，need_precompute 应为 False。"""
+    db = MagicMock()
+    iface = gfi.GMSFrontendInterface(db, {"scoring": {}}, config_id=1)
+    iface.use_trace = True
+    iface.set_selection_config(min_score=0, max_results=10000)
+
+    monkeypatch.setattr(iface, "_precompute_succeeded", lambda *_a, **_k: True)
+
+    q = MagicMock()
+    q.filter.return_value.all.return_value = []
+    db.query.return_value = q
+
+    with patch.object(gfi, "GMSStrategyEngine") as Eng:
+        with patch.object(gfi, "enrich_results_with_structure", lambda *a, **k: None):
+            rows, meta = iface.get_selection_results(
+                "2026-07-29",
+                stock_pool=["000001", "000002"],
+                market="cn",
+                trace_only=True,
+                return_meta=True,
+            )
+
+    assert rows == []
+    assert meta.get("need_precompute") is False
+    assert meta.get("computed_count") == 0
+    Eng.assert_not_called()
+
+
+def test_trace_only_structure_enrich_does_not_persist(monkeypatch):
+    db = MagicMock()
+    iface = gfi.GMSFrontendInterface(db, {"scoring": {}}, config_id=1)
+    iface.use_trace = True
+    iface.set_selection_config(min_score=0, max_results=10000)
+
+    row = gfi._trace_row_to_result(_fake_trace_row())
+    monkeypatch.setattr(iface, "_precompute_succeeded", lambda *_a, **_k: True)
+    monkeypatch.setattr(iface, "_load_traces_for_market", lambda *_a, **_k: [row])
+
+    seen = {"persist": None}
+
+    def _fake_enrich(db, results, config, **kwargs):
+        seen["persist"] = kwargs.get("persist")
+        return results
+
+    monkeypatch.setattr(gfi, "enrich_results_with_structure", _fake_enrich)
+
+    rows, meta = iface.get_selection_results(
+        "2026-07-29",
+        stock_pool=None,
+        market="cn",
+        trace_only=True,
+        return_meta=True,
+    )
+    assert len(rows) == 1
+    assert seen["persist"] is False
+    assert meta.get("need_precompute") is False
+    assert meta.get("trace_only") is True
