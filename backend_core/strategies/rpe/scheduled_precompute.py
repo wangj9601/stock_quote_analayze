@@ -49,7 +49,8 @@ def run_rpe_precompute(
         date_s = trade_date or engine.loader.resolve_trade_date()
         boards = engine.loader.list_boards("concept", limit=limit)
         logger.info(
-            "RPE concept precompute start config_id=%s date=%s boards=%s partial=%s",
+            "RPE concept precompute start config_id=%s date=%s boards=%s partial=%s "
+            "(batch bars + cross-board cache; skip KDE for in-band)",
             cid,
             date_s,
             len(boards),

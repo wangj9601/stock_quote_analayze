@@ -54,6 +54,7 @@ class RPEStrategyEngine:
         trade_date: str,
         config: Optional[Dict] = None,
         name: Optional[str] = None,
+        signal_candidates_only: bool = False,
     ) -> Optional[Dict[str, Any]]:
         cfg = config or self.config
         code_n = _norm_code(code)
@@ -83,6 +84,15 @@ class RPEStrategyEngine:
         closes_map = {b["date"]: b["close"] for b in bars}
         zinfo = latest_zscore(closes_map, benchmark, int(cfg.get("z_window", 40)))
         if not zinfo:
+            return None
+
+        z_lead = float(cfg.get("z_lead", 2.0))
+        z_catch = float(cfg.get("z_catch_up", -1.5))
+        z_val = zinfo.get("z_score")
+        catch_hit = z_val is not None and float(z_val) <= z_catch
+        lead_hit = z_val is not None and float(z_val) >= z_lead
+        # 日终预计算 / 选股只要有信号类型：区间内不做 KDE（scipy 多窗是主耗时）
+        if signal_candidates_only and not catch_hit and not lead_hit:
             return None
 
         price = float(zinfo["price"])
@@ -127,14 +137,9 @@ class RPEStrategyEngine:
             nearest_support=near.get("nearest_support"),
             nearest_resistance=near.get("nearest_resistance"),
         )
-        z_lead = float(cfg.get("z_lead", 2.0))
-        z_catch = float(cfg.get("z_catch_up", -1.5))
         min_rr = float(cfg.get("min_rr_to_resistance", 1.5))
         enable_veto = bool(cfg.get("enable_trend_veto", True))
         enable_lead_trade = bool(cfg.get("enable_lead_trade", False))
-        z_val = zinfo.get("z_score")
-        catch_hit = z_val is not None and float(z_val) <= z_catch
-        lead_hit = z_val is not None and float(z_val) >= z_lead
         veto = bool(sig.get("trend_veto"))
         struct_ok = bool(struct.get("structure_valid"))
         liq_ok = bool(liq.get("liquidity_ok"))
@@ -389,11 +394,14 @@ class RPEStrategyEngine:
             except Exception as e:
                 logger.warning("screen_board 补全股票名称失败 board=%s: %s", board_code, e)
         adjust_n = str(price_adjust or "none").strip().lower() or "none"
-        # 拉足 KDE 最大回看；Z/斜率仍在 evaluate 内截断到 lookback_days
+        # 非明细场景：Z 落在区间内不会落库/展示，跳过 KDE；panel 先按 lookback 拉，
+        # 仅信号候选再扩到 kde_max（概念全市场预计算的主耗时来自 KDE + 过长日线）。
+        candidates_only = not bool(include_no_signal)
+        panel_lookback = lookback if candidates_only else kde_max
         panel = self.loader.load_sector_panel(
             codes,
             end_date=date,
-            lookback=kde_max,
+            lookback=panel_lookback,
             adjust=adjust_n,
             factor_source=factor_source,
             refresh_factor=refresh_factor,
@@ -425,7 +433,7 @@ class RPEStrategyEngine:
                     bars = self.loader.load_bars(
                         c,
                         end_date=date,
-                        limit=kde_max,
+                        limit=panel_lookback,
                         adjust=adjust_n,
                         factor_source=factor_source,
                         refresh_factor=refresh_factor,
@@ -433,6 +441,38 @@ class RPEStrategyEngine:
                     if bars:
                         panel[c] = bars
                         eval_codes.append(c)
+
+        # 候选路径：Z 触阈值的股票再补足 KDE 回看（跨板缓存命中时几乎无额外 IO）
+        if candidates_only and kde_max > lookback:
+            z_lead = float(cfg.get("z_lead", 2.0))
+            z_catch = float(cfg.get("z_catch_up", -1.5))
+            z_win = int(cfg.get("z_window", 40))
+            need_extend: List[str] = []
+            for code in eval_codes:
+                bars = panel.get(code) or []
+                if len(bars) < z_win + 5:
+                    continue
+                bars_z = _bars_for_lookback(bars, lookback)
+                closes_map = {b["date"]: b["close"] for b in bars_z}
+                zinfo = latest_zscore(closes_map, benchmark, z_win)
+                if not zinfo or zinfo.get("z_score") is None:
+                    continue
+                z_val = float(zinfo["z_score"])
+                if z_val <= z_catch or z_val >= z_lead:
+                    if len(bars) < kde_max:
+                        need_extend.append(code)
+            if need_extend:
+                extended = self.loader.load_bars_batch(
+                    need_extend,
+                    end_date=date,
+                    limit=kde_max,
+                    adjust=adjust_n,
+                    factor_source=factor_source,
+                    refresh_factor=refresh_factor,
+                )
+                for code, bars in extended.items():
+                    if bars:
+                        panel[code] = bars
 
         results = []
         for code in eval_codes:
@@ -447,6 +487,7 @@ class RPEStrategyEngine:
                     trade_date=trade_date,
                     config=cfg,
                     name=name_map.get(code),
+                    signal_candidates_only=candidates_only,
                 )
                 if not row:
                     continue
