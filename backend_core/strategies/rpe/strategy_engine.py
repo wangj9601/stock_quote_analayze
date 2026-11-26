@@ -22,6 +22,9 @@ from .zscore import latest_zscore
 
 logger = logging.getLogger(__name__)
 
+# screen_board(sector_slope=...) 未传入时仍按库内板斜率解析
+_SLOPE_UNSET = object()
+
 
 def _bars_for_lookback(bars: List[Dict[str, Any]], lookback: int) -> List[Dict[str, Any]]:
     """评估用 K 线截断到 lookback（与日终选股一致，避免全历史 KDE 带宽过大）。"""
@@ -29,6 +32,28 @@ def _bars_for_lookback(bars: List[Dict[str, Any]], lookback: int) -> List[Dict[s
     if not bars or len(bars) <= n:
         return bars
     return bars[-n:]
+
+
+def _zinfo_from_bars(
+    bars: List[Dict[str, Any]],
+    benchmark: List[Dict[str, float]],
+    trade_date: str,
+    lookback: int,
+    z_window: int,
+    min_need: int,
+) -> Optional[Dict[str, Any]]:
+    """与 evaluate_in_sector 同一截断口径，只算末日 Z。"""
+    if not bars or len(bars) < min_need:
+        return None
+    if trade_date and bars[-1]["date"] > trade_date:
+        bars = [b for b in bars if b["date"] <= trade_date]
+        if not bars:
+            return None
+    bars = _bars_for_lookback(bars, lookback)
+    if len(bars) < min_need:
+        return None
+    closes_map = {b["date"]: b["close"] for b in bars}
+    return latest_zscore(closes_map, benchmark, z_window)
 
 
 class RPEStrategyEngine:
@@ -41,6 +66,8 @@ class RPEStrategyEngine:
         self.loader = RPEDataLoader(db_session, board_code_source=board_code_source)
         self.config_manager = RPEConfigManager()
         self.config = config or self.config_manager.get_config()
+        # 同一只股票的 KDE 只依赖自身量价，概念板之间复用
+        self._kde_level_cache: Dict[tuple, Dict[str, Any]] = {}
 
     def evaluate_in_sector(
         self,
@@ -55,6 +82,7 @@ class RPEStrategyEngine:
         config: Optional[Dict] = None,
         name: Optional[str] = None,
         signal_candidates_only: bool = False,
+        zinfo: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
         cfg = config or self.config
         code_n = _norm_code(code)
@@ -81,8 +109,9 @@ class RPEStrategyEngine:
         if len(bars) < min_need:
             return None
 
-        closes_map = {b["date"]: b["close"] for b in bars}
-        zinfo = latest_zscore(closes_map, benchmark, int(cfg.get("z_window", 40)))
+        if zinfo is None:
+            closes_map = {b["date"]: b["close"] for b in bars}
+            zinfo = latest_zscore(closes_map, benchmark, int(cfg.get("z_window", 40)))
         if not zinfo:
             return None
 
@@ -96,18 +125,13 @@ class RPEStrategyEngine:
             return None
 
         price = float(zinfo["price"])
-        kde = extract_kde_levels_expand_support(
-            [b["close"] for b in bars_full],
-            [b["volume"] for b in bars_full],
+        kde = self._cached_kde_levels(
+            code_n,
+            bars_full,
             price=price,
-            initial_lookback=lookback,
-            step=int(cfg.get("kde_lookback_step", 250)),
-            max_lookback=kde_max,
-            base_factor=float(cfg.get("kde_base_factor", 1.0)),
-            grid_points=int(cfg.get("kde_grid_points", 200)),
-            min_bw=float(cfg.get("kde_min_bw", 0.01)),
-            max_bw=float(cfg.get("kde_max_bw", 0.08)),
-            expand_factor_decay=float(cfg.get("kde_expand_factor_decay", 0.85)),
+            cfg=cfg,
+            lookback=lookback,
+            kde_max=kde_max,
         )
         near = nearest_levels(price, kde.get("support_levels") or [], kde.get("resistance_levels") or [])
         struct = structure_filter(
@@ -352,6 +376,59 @@ class RPEStrategyEngine:
                 pass
         return None
 
+    def _cached_kde_levels(
+        self,
+        code: str,
+        bars_full: List[Dict[str, Any]],
+        *,
+        price: float,
+        cfg: Dict[str, Any],
+        lookback: int,
+        kde_max: int,
+    ) -> Dict[str, Any]:
+        """KDE 只看个股量价。同一配置、同一截断窗口下跨概念板复用。"""
+        first = bars_full[0]["date"] if bars_full else ""
+        last = bars_full[-1]["date"] if bars_full else ""
+        step = int(cfg.get("kde_lookback_step", 250))
+        base_factor = float(cfg.get("kde_base_factor", 1.0))
+        grid_points = int(cfg.get("kde_grid_points", 200))
+        min_bw = float(cfg.get("kde_min_bw", 0.01))
+        max_bw = float(cfg.get("kde_max_bw", 0.08))
+        decay = float(cfg.get("kde_expand_factor_decay", 0.85))
+        key = (
+            code,
+            first,
+            last,
+            len(bars_full),
+            round(float(price), 4),
+            int(lookback),
+            int(kde_max),
+            step,
+            round(base_factor, 6),
+            grid_points,
+            round(min_bw, 6),
+            round(max_bw, 6),
+            round(decay, 6),
+        )
+        cached = self._kde_level_cache.get(key)
+        if cached is not None:
+            return cached
+        kde = extract_kde_levels_expand_support(
+            [b["close"] for b in bars_full],
+            [b["volume"] for b in bars_full],
+            price=price,
+            initial_lookback=lookback,
+            step=step,
+            max_lookback=kde_max,
+            base_factor=base_factor,
+            grid_points=grid_points,
+            min_bw=min_bw,
+            max_bw=max_bw,
+            expand_factor_decay=decay,
+        )
+        self._kde_level_cache[key] = kde
+        return kde
+
     def screen_board(
         self,
         board_code: str,
@@ -362,6 +439,8 @@ class RPEStrategyEngine:
         entry_only: bool = False,
         board_kind: str = "industry",
         include_no_signal: bool = False,
+        members: Optional[List[Dict[str, str]]] = None,
+        sector_slope: Any = _SLOPE_UNSET,
         codes_filter: Optional[set] = None,
         price_adjust: str = "none",
         factor_source: str = "auto",
@@ -371,7 +450,8 @@ class RPEStrategyEngine:
         lookback = int(cfg.get("lookback_days", 250))
         kde_max = max(lookback, int(cfg.get("kde_lookback_max", KDE_LOOKBACK_MAX)))
         min_members = int((cfg.get("scan") or {}).get("min_sector_members", 5))
-        members = self.loader.load_board_members(board_code, board_kind=board_kind)
+        if members is None:
+            members = self.loader.load_board_members(board_code, board_kind=board_kind)
         if len(members) < min_members:
             return []
         codes = [m["code"] for m in members]
@@ -414,12 +494,15 @@ class RPEStrategyEngine:
             return []
         # 比价仍用 VWAP；趋势否决读板斜率（官方指数/等权收益入库口径）
         slope_window = int(cfg.get("sector_slope_window", 60))
-        slope = self._resolve_board_trend_slope(
-            board_code,
-            board_kind=board_kind,
-            end_date=date,
-            window=slope_window,
-        )
+        if sector_slope is _SLOPE_UNSET:
+            slope = self._resolve_board_trend_slope(
+                board_code,
+                board_kind=board_kind,
+                end_date=date,
+                window=slope_window,
+            )
+        else:
+            slope = None if sector_slope is None else float(sector_slope)
         trade_date = date or (benchmark[-1]["date"] if benchmark else self.loader.resolve_trade_date())
 
         # 全成分建基准；仅对目标代码评估（单股/自选过滤时）
@@ -442,23 +525,30 @@ class RPEStrategyEngine:
                         panel[c] = bars
                         eval_codes.append(c)
 
+        z_lead = float(cfg.get("z_lead", 2.0))
+        z_catch = float(cfg.get("z_catch_up", -1.5))
+        z_win = int(cfg.get("z_window", 40))
+        min_need = z_win + 5
+        z_by_code: Dict[str, Dict[str, Any]] = {}
+        for code in eval_codes:
+            zinfo = _zinfo_from_bars(
+                panel.get(code) or [],
+                benchmark,
+                trade_date,
+                lookback,
+                z_win,
+                min_need,
+            )
+            if zinfo and zinfo.get("z_score") is not None:
+                z_by_code[code] = zinfo
+
         # 候选路径：Z 触阈值的股票再补足 KDE 回看（跨板缓存命中时几乎无额外 IO）
         if candidates_only and kde_max > lookback:
-            z_lead = float(cfg.get("z_lead", 2.0))
-            z_catch = float(cfg.get("z_catch_up", -1.5))
-            z_win = int(cfg.get("z_window", 40))
             need_extend: List[str] = []
-            for code in eval_codes:
-                bars = panel.get(code) or []
-                if len(bars) < z_win + 5:
-                    continue
-                bars_z = _bars_for_lookback(bars, lookback)
-                closes_map = {b["date"]: b["close"] for b in bars_z}
-                zinfo = latest_zscore(closes_map, benchmark, z_win)
-                if not zinfo or zinfo.get("z_score") is None:
-                    continue
+            for code, zinfo in z_by_code.items():
                 z_val = float(zinfo["z_score"])
                 if z_val <= z_catch or z_val >= z_lead:
+                    bars = panel.get(code) or []
                     if len(bars) < kde_max:
                         need_extend.append(code)
             if need_extend:
@@ -476,6 +566,13 @@ class RPEStrategyEngine:
 
         results = []
         for code in eval_codes:
+            zinfo = z_by_code.get(code)
+            if candidates_only:
+                if not zinfo:
+                    continue
+                z_val = float(zinfo["z_score"])
+                if not (z_val <= z_catch or z_val >= z_lead):
+                    continue
             try:
                 row = self.evaluate_in_sector(
                     code,
@@ -488,6 +585,7 @@ class RPEStrategyEngine:
                     config=cfg,
                     name=name_map.get(code),
                     signal_candidates_only=candidates_only,
+                    zinfo=zinfo,
                 )
                 if not row:
                     continue

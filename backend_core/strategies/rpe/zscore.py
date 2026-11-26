@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections import deque
 from typing import Dict, List, Optional, Sequence
 
 
@@ -45,19 +46,51 @@ def latest_zscore(
     benchmark: List[Dict[str, float]],
     window: int,
 ) -> Optional[Dict]:
-    series = relative_ratio_series(stock_closes, benchmark)
-    if len(series) < max(5, window):
+    """只算对齐序列最后一窗的 Z，与 ``rolling_zscore(...)[-1]`` 相同。
+
+    日终按概念板重复评估时，全序列滚动会把 O(样本×窗宽) 的纯 Python 循环放大成主耗时。
+    """
+    w = max(5, int(window))
+    buf: deque = deque()
+    last_date = None
+    last_ratio = None
+    last_price = None
+    last_i = None
+    n = 0
+    for b in benchmark:
+        d = b["date"]
+        try:
+            i_t = float(b["i_t"])
+        except (TypeError, ValueError):
+            continue
+        p = stock_closes.get(d)
+        if p is None or i_t <= 0:
+            continue
+        try:
+            p = float(p)
+        except (TypeError, ValueError):
+            continue
+        if p <= 0:
+            continue
+        n += 1
+        ratio = p / i_t
+        buf.append(ratio)
+        if len(buf) > w:
+            buf.popleft()
+        last_date = d
+        last_ratio = ratio
+        last_price = p
+        last_i = i_t
+    if n < w or last_date is None or len(buf) < w:
         return None
-    ratios = [s["ratio"] for s in series]
-    zs = rolling_zscore(ratios, window)
-    z = zs[-1]
-    if z is None:
-        return None
-    last = series[-1]
+    mean = sum(buf) / w
+    var = sum((x - mean) ** 2 for x in buf) / w
+    std = math.sqrt(var)
+    z = 0.0 if std <= 1e-12 else (buf[-1] - mean) / std
     return {
-        "date": last["date"],
+        "date": last_date,
         "z_score": float(z),
-        "ratio": last["ratio"],
-        "price": last["price"],
-        "i_t": last["i_t"],
+        "ratio": float(last_ratio),
+        "price": float(last_price),
+        "i_t": float(last_i),
     }

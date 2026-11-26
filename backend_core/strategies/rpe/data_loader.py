@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 # 与全站约定一致：空 board_code_source 视为历史东财
 _LEGACY_BOARD_CODE_SOURCE = "eastmoney"
 _DEFAULT_BOARD_CODE_SOURCE = "tonghuashun"
-# 批量拉日线默认分块；过大时遇 OOM 再对半拆
-_RPE_BARS_BATCH_SIZE = 80
+# 批量拉日线默认分块。LATERAL 每只只回 limit 根，200 只约 5 万行。
+_RPE_BARS_BATCH_SIZE = 200
 
 
 def _norm_code(code: str) -> str:
@@ -345,6 +345,45 @@ class RPEDataLoader:
                     m["name"] = filled[m["code"]]
         return members
 
+    def load_concept_members_grouped(self) -> Dict[str, List[Dict[str, str]]]:
+        """一次取出同花顺概念成分，按 board_code 分组。失败返回空字典。"""
+        db = self._session()
+        own = self._db is None
+        grouped: Dict[str, List[Dict[str, str]]] = {}
+        try:
+            sql = text(
+                f"""
+                SELECT c.board_code, c.stock_code, c.stock_name
+                FROM concept_board_constituents c
+                INNER JOIN concept_board_basic_info b ON b.board_code = c.board_code
+                WHERE b.board_code IS NOT NULL AND TRIM(b.board_code) <> ''
+                  AND {self._source_sql("b")}
+                """
+            )
+            missing: List[str] = []
+            for r in db.execute(sql, self._source_params()).fetchall():
+                board_code = str(r[0] or "").strip()
+                code = _norm_code(r[1])
+                if not board_code or not code:
+                    continue
+                name = str(r[2] or "").strip()
+                grouped.setdefault(board_code, []).append({"code": code, "name": name})
+                if not name:
+                    missing.append(code)
+            if missing:
+                filled = self.load_stock_names(list(dict.fromkeys(missing)))
+                for members in grouped.values():
+                    for m in members:
+                        if not m.get("name") and filled.get(m["code"]):
+                            m["name"] = filled[m["code"]]
+            return grouped
+        except Exception as e:
+            logger.warning("load_concept_members_grouped failed: %s", e)
+            return {}
+        finally:
+            if own:
+                db.close()
+
     def _code_variants(self, code: str) -> List[str]:
         code_n = _norm_code(code)
         raw = str(code or "").strip()
@@ -566,16 +605,18 @@ class RPEDataLoader:
             params["d"] = str(end_date)[:10]
         sql = text(
             f"""
-            SELECT code, date, open, high, low, close, volume, amount, turnover_rate
-            FROM (
-                SELECT code, date, open, high, low, close, volume, amount, turnover_rate,
-                       ROW_NUMBER() OVER (PARTITION BY code ORDER BY date DESC) AS rn
-                FROM historical_quotes
-                WHERE code = ANY(:codes)
+            SELECT u.code, q.date, q.open, q.high, q.low, q.close,
+                   q.volume, q.amount, q.turnover_rate
+            FROM unnest(CAST(:codes AS text[])) AS u(code)
+            JOIN LATERAL (
+                SELECT date, open, high, low, close, volume, amount, turnover_rate
+                FROM historical_quotes h
+                WHERE h.code = u.code
                   {date_sql}
-            ) t
-            WHERE rn <= :lim
-            ORDER BY code, date
+                ORDER BY h.date DESC
+                LIMIT :lim
+            ) q ON TRUE
+            ORDER BY u.code, q.date
             """
         )
         grouped: Dict[str, List[Dict[str, Any]]] = {code: [] for code in codes}

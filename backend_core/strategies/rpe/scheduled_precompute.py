@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -11,6 +12,58 @@ logger = logging.getLogger(__name__)
 def _signal_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """只保留补涨/领涨。区间内无信号成分不落库。"""
     return [r for r in rows if r.get("signal_type") or r.get("entry_signal")]
+
+
+def _preload_concept_slopes(
+    db,
+    board_codes: List[str],
+    *,
+    trade_date: str,
+    window: int,
+) -> Optional[Dict[str, Optional[float]]]:
+    """一次读出概念板斜率；缺失的板合并现算。失败返回 None，调用方改逐板解析。"""
+    try:
+        from backend_core.board_metrics.sector_slope_store import (
+            load_board_sector_slopes,
+            refresh_board_sector_slopes,
+        )
+
+        stored = load_board_sector_slopes(
+            db,
+            board_codes,
+            board_kind="concept",
+            asof_date=trade_date,
+            window=window,
+        )
+        missing = [
+            c
+            for c in board_codes
+            if (stored.get(c) or {}).get("sector_slope") is None
+        ]
+        if missing:
+            refresh_board_sector_slopes(
+                db,
+                board_kind="concept",
+                board_codes=missing,
+                end_date=trade_date,
+                window=window,
+                commit=True,
+            )
+            stored = load_board_sector_slopes(
+                db,
+                board_codes,
+                board_kind="concept",
+                asof_date=trade_date,
+                window=window,
+            )
+        return {c: (stored.get(c) or {}).get("sector_slope") for c in board_codes}
+    except Exception as e:
+        logger.warning("RPE slope preload skipped: %s", e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return None
 
 
 def run_rpe_precompute(
@@ -50,7 +103,7 @@ def run_rpe_precompute(
         boards = engine.loader.list_boards("concept", limit=limit)
         logger.info(
             "RPE concept precompute start config_id=%s date=%s boards=%s partial=%s "
-            "(batch bars + cross-board cache; skip KDE for in-band)",
+            "(lateral bars + last-window Z + cross-board KDE cache)",
             cid,
             date_s,
             len(boards),
@@ -67,6 +120,37 @@ def run_rpe_precompute(
 
         sector_ids = [str(b.get("board_code") or "").strip() for b in boards]
         sector_ids = [s for s in sector_ids if s]
+
+        members_by_board = None
+        load_members = getattr(engine.loader, "load_concept_members_grouped", None)
+        if callable(load_members):
+            grouped = load_members()
+            if grouped:
+                members_by_board = grouped
+        slope_window = int(cfg.get("sector_slope_window", 60))
+        slope_by_board = _preload_concept_slopes(
+            db, sector_ids, trade_date=date_s, window=slope_window
+        )
+        lookback = int(cfg.get("lookback_days", 250))
+        if members_by_board and hasattr(engine.loader, "load_bars_batch"):
+            uniq: List[str] = []
+            seen: set = set()
+            for members in members_by_board.values():
+                for m in members:
+                    code = str(m.get("code") or "").strip()
+                    if not code or code in seen:
+                        continue
+                    seen.add(code)
+                    uniq.append(code)
+            t0 = time.perf_counter()
+            engine.loader.load_bars_batch(uniq, end_date=date_s, limit=lookback)
+            logger.info(
+                "RPE preloaded bars codes=%s boards_with_members=%s sec=%.2f",
+                len(uniq),
+                len(members_by_board),
+                time.perf_counter() - t0,
+            )
+
         removed = delete_traces_for_date(
             db,
             config_id=cid,
@@ -86,6 +170,11 @@ def run_rpe_precompute(
                 continue
             board_name = str(board.get("board_name") or board_code)
             try:
+                screen_kw: Dict[str, Any] = {}
+                if members_by_board is not None:
+                    screen_kw["members"] = members_by_board.get(board_code, [])
+                if slope_by_board is not None:
+                    screen_kw["sector_slope"] = slope_by_board.get(board_code)
                 rows = engine.screen_board(
                     board_code,
                     board_name,
@@ -94,6 +183,7 @@ def run_rpe_precompute(
                     entry_only=False,
                     board_kind="concept",
                     include_no_signal=False,
+                    **screen_kw,
                 )
                 rows = _signal_rows(rows)
                 if rows:
@@ -116,6 +206,7 @@ def run_rpe_precompute(
                 idx,
                 total_boards,
                 state=progress_state,
+                every=10,
                 extra="概念板块",
             )
 

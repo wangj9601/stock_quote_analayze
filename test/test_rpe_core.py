@@ -38,6 +38,22 @@ def test_rolling_zscore_and_latest():
     info = latest_zscore(closes, bm, 20)
     assert info is not None
     assert "z_score" in info
+    series = relative_ratio_series(closes, bm)
+    full = rolling_zscore([s["ratio"] for s in series], 20)
+    assert full[-1] is not None
+    assert abs(info["z_score"] - full[-1]) < 1e-9
+    assert info["date"] == series[-1]["date"]
+    assert abs(info["ratio"] - series[-1]["ratio"]) < 1e-9
+
+    # 中间缺一天时，最后一窗仍与全序列滚动的末日 Z 一致
+    gap_closes = dict(closes)
+    gap_day = sorted(closes.keys())[10]
+    gap_closes.pop(gap_day)
+    gap_info = latest_zscore(gap_closes, bm, 20)
+    gap_series = relative_ratio_series(gap_closes, bm)
+    gap_full = rolling_zscore([s["ratio"] for s in gap_series], 20)
+    assert gap_info is not None and gap_full[-1] is not None
+    assert abs(gap_info["z_score"] - gap_full[-1]) < 1e-9
 
 
 def test_kde_levels_basic():
