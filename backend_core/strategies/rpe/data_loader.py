@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import OrderedDict
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -15,6 +16,9 @@ _LEGACY_BOARD_CODE_SOURCE = "eastmoney"
 _DEFAULT_BOARD_CODE_SOURCE = "tonghuashun"
 # 批量拉日线默认分块。LATERAL 每只只回 limit 根，200 只约 5 万行。
 _RPE_BARS_BATCH_SIZE = 200
+# 跨板日线缓存上限。全市场一次预载（约 4800 只 × 250 根字典）在 3.5GB 机器上会把
+# 节点子进程打到 1GB 以上，随后被 OOM 杀掉。只保留最近用过的若干只。
+_RPE_BARS_CACHE_MAX = 480
 
 
 def _norm_code(code: str) -> str:
@@ -77,8 +81,9 @@ class RPEDataLoader:
         self.board_code_source = _resolve_source(board_code_source)
         # 同一次选股/重算内缓存 ensure_adj_factors 结果，避免成分股重复读库/拉因子
         self._qfq_factor_cache: Dict[str, Dict[str, Any]] = {}
-        # 同一次预计算/选股内跨概念板复用日线（概念成分重叠极高）
-        self._bars_cache: Dict[str, List[Dict[str, Any]]] = {}
+        # 同一次预计算/选股内跨概念板复用日线。有上限，避免全市场日线常驻。
+        self._bars_cache: "OrderedDict[str, List[Dict[str, Any]]]" = OrderedDict()
+        self._bars_cache_max = _RPE_BARS_CACHE_MAX
 
     def _source_params(self) -> Dict[str, str]:
         return {
@@ -518,6 +523,21 @@ class RPEDataLoader:
     def clear_bars_cache(self) -> None:
         self._bars_cache.clear()
 
+    def _recall_bars(self, cache_key: str) -> Optional[List[Dict[str, Any]]]:
+        cached = self._bars_cache.get(cache_key)
+        if cached is not None:
+            self._bars_cache.move_to_end(cache_key)
+        return cached
+
+    def _remember_bars(self, cache_key: str, bars: List[Dict[str, Any]]) -> None:
+        self._bars_cache[cache_key] = bars
+        self._bars_cache.move_to_end(cache_key)
+        max_n = int(self._bars_cache_max or 0)
+        if max_n <= 0:
+            return
+        while len(self._bars_cache) > max_n:
+            self._bars_cache.popitem(last=False)
+
     def load_bars(
         self,
         code: str,
@@ -527,6 +547,7 @@ class RPEDataLoader:
         adjust: str = "none",
         factor_source: str = "auto",
         refresh_factor: bool = False,
+        store_cache: bool = True,
     ) -> List[Dict[str, Any]]:
         adjust_n = str(adjust or "none").strip().lower() or "none"
         cache_key = self._bars_cache_key(
@@ -537,7 +558,7 @@ class RPEDataLoader:
             factor_source=factor_source or "auto",
             refresh_factor=refresh_factor,
         )
-        cached = self._bars_cache.get(cache_key)
+        cached = self._recall_bars(cache_key)
         if cached is not None:
             return cached
 
@@ -581,7 +602,8 @@ class RPEDataLoader:
                     factor_source=factor_source,
                     refresh_factor=refresh_factor,
                 )
-            self._bars_cache[cache_key] = bars
+            if store_cache:
+                self._remember_bars(cache_key, bars)
             return bars
         except Exception as e:
             logger.warning("load_bars %s failed: %s", code, e)
@@ -644,10 +666,12 @@ class RPEDataLoader:
         factor_source: str = "auto",
         refresh_factor: bool = False,
         batch_size: int = _RPE_BARS_BATCH_SIZE,
+        store_cache: bool = True,
     ) -> Dict[str, List[Dict[str, Any]]]:
-        """按批取每只最近 ``limit`` 根日 K（时间正序），并写入跨板缓存。
+        """按批取每只最近 ``limit`` 根日 K（时间正序），并写入有上限的跨板缓存。
 
         ``limit is None`` 时退回逐只 ``load_bars``（全历史，避免一次拉爆内存）。
+        ``store_cache=False`` 时只读缓存、不把本批结果留在进程里（KDE 长窗用）。
         """
         adjust_n = str(adjust or "none").strip().lower() or "none"
         uniq: List[str] = []
@@ -671,6 +695,7 @@ class RPEDataLoader:
                     adjust=adjust_n,
                     factor_source=factor_source,
                     refresh_factor=refresh_factor,
+                    store_cache=store_cache,
                 )
                 if bars:
                     out[code] = bars
@@ -687,7 +712,7 @@ class RPEDataLoader:
                 factor_source=factor_source or "auto",
                 refresh_factor=refresh_factor,
             )
-            cached = self._bars_cache.get(cache_key)
+            cached = self._recall_bars(cache_key)
             if cached is not None:
                 if cached:
                     out[code] = cached
@@ -735,6 +760,7 @@ class RPEDataLoader:
                             adjust=adjust_n,
                             factor_source=factor_source,
                             refresh_factor=refresh_factor,
+                            store_cache=store_cache,
                         )
                         if bars:
                             out[code] = bars
@@ -750,15 +776,16 @@ class RPEDataLoader:
                             factor_source=factor_source,
                             refresh_factor=refresh_factor,
                         )
-                    cache_key = self._bars_cache_key(
-                        code,
-                        end_date=end_date,
-                        limit=lim,
-                        adjust=adjust_n,
-                        factor_source=factor_source or "auto",
-                        refresh_factor=refresh_factor,
-                    )
-                    self._bars_cache[cache_key] = bars
+                    if store_cache:
+                        cache_key = self._bars_cache_key(
+                            code,
+                            end_date=end_date,
+                            limit=lim,
+                            adjust=adjust_n,
+                            factor_source=factor_source or "auto",
+                            refresh_factor=refresh_factor,
+                        )
+                        self._remember_bars(cache_key, bars)
                     if bars:
                         out[code] = bars
             return out

@@ -559,6 +559,7 @@ class RPEStrategyEngine:
                     adjust=adjust_n,
                     factor_source=factor_source,
                     refresh_factor=refresh_factor,
+                    store_cache=False,
                 )
                 for code, bars in extended.items():
                     if bars:

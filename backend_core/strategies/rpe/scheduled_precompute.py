@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -103,7 +102,7 @@ def run_rpe_precompute(
         boards = engine.loader.list_boards("concept", limit=limit)
         logger.info(
             "RPE concept precompute start config_id=%s date=%s boards=%s partial=%s "
-            "(lateral bars + last-window Z + cross-board KDE cache)",
+            "(per-board lateral bars, cache cap, last-window Z, cross-board KDE)",
             cid,
             date_s,
             len(boards),
@@ -131,25 +130,8 @@ def run_rpe_precompute(
         slope_by_board = _preload_concept_slopes(
             db, sector_ids, trade_date=date_s, window=slope_window
         )
-        lookback = int(cfg.get("lookback_days", 250))
-        if members_by_board and hasattr(engine.loader, "load_bars_batch"):
-            uniq: List[str] = []
-            seen: set = set()
-            for members in members_by_board.values():
-                for m in members:
-                    code = str(m.get("code") or "").strip()
-                    if not code or code in seen:
-                        continue
-                    seen.add(code)
-                    uniq.append(code)
-            t0 = time.perf_counter()
-            engine.loader.load_bars_batch(uniq, end_date=date_s, limit=lookback)
-            logger.info(
-                "RPE preloaded bars codes=%s boards_with_members=%s sec=%.2f",
-                len(uniq),
-                len(members_by_board),
-                time.perf_counter() - t0,
-            )
+        # 不在开跑时把全市场日线灌进进程。3.5GB 机器上 4800 只 × 250 根会把
+        # 节点子进程打到 1GB 以上并被 OOM 杀掉；日线改由各板块现拉，缓存有上限。
 
         removed = delete_traces_for_date(
             db,

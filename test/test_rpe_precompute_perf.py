@@ -228,6 +228,19 @@ def test_kde_reused_across_concept_boards(monkeypatch):
     assert kde_calls["n"] == 1
 
 
+def test_bars_cache_evicts_oldest_when_over_cap():
+    loader = RPEDataLoader(db_session=object())
+    loader._bars_cache_max = 3
+    for i in range(5):
+        loader._remember_bars(f"k{i}", [{"date": f"2024-01-0{i + 1}"}])
+    assert list(loader._bars_cache) == ["k2", "k3", "k4"]
+    assert loader._recall_bars("k2")[0]["date"] == "2024-01-03"
+    loader._remember_bars("k5", [{"date": "2024-01-06"}])
+    assert "k3" not in loader._bars_cache
+    assert "k2" in loader._bars_cache
+    assert "k5" in loader._bars_cache
+
+
 def test_load_sector_panel_uses_batch_and_cache(monkeypatch):
     loader = RPEDataLoader(db_session=object())
     calls = {"batch": 0, "codes": []}
