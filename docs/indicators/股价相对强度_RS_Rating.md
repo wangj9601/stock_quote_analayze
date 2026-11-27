@@ -15,6 +15,7 @@ RS_Rating = round(percentile_rank × 98 + 1)   # 整数 1–99
 
 - 百分位：当日有效宇宙内并列取平均秩；`percentile_rank ∈ [0,1]`。
 - 覆盖率：有效 `RS_Raw` 数 / 候选池 &lt; **90%** 时，当日只落库 `rs_raw`，**不发布** `rs_rating`。
+- A 股前复权回看：**520** 个日历日（约一年半）。旧值 420 在近年仅约 254 个交易日，停牌/缺 K 一线就会落到 252（需 ≥253），覆盖率跌破 90%。
 
 ## 价格口径（前复权）
 
@@ -36,6 +37,7 @@ RS_Rating = round(percentile_rank × 98 + 1)   # 整数 1–99
 - `stock_basic_info` 存在且 `collect_enabled`
 - 名称排除 ST、含「退」
 - 另需：足够窗口的前复权收盘序列（约 ≥253 根）及库内复权因子（`akshare_sina_qfq` / `baostock_qfq`）
+- 回看日历日：A 股 **`LOOKBACK_CALENDAR_DAYS=520`**（港股仍为 750）
 - 落库：`rs_ratings`（`market_type='CN'`）
 
 ### 港股（HK）

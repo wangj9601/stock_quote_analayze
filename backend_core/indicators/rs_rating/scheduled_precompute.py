@@ -14,7 +14,14 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .calculator import compute_rs_raw, rank_cross_section
-from .config import LOOKBACK_CALENDAR_DAYS, MARKET_TYPE, PRICE_ADJUST, RS_WINDOWS, coverage_threshold
+from .config import (
+    LOOKBACK_CALENDAR_DAYS,
+    MARKET_TYPE,
+    PRICE_ADJUST,
+    RS_WINDOWS,
+    coverage_allows_publish,
+    coverage_threshold,
+)
 from .qfq_closes import build_qfq_close_map
 from .storage import upsert_rs_ratings
 from .universe import list_candidate_codes
@@ -100,7 +107,7 @@ def run_rs_rating_precompute(
 
         universe_size = len(raw_rows)
         coverage = (universe_size / pool_size) if pool_size else 0.0
-        publish = coverage >= coverage_threshold()
+        publish = coverage_allows_publish(coverage, MARKET_TYPE)
         ranked = rank_cross_section(raw_rows, publish_ratings=publish)
         for r in ranked:
             r["universe_size"] = universe_size

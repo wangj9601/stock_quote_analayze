@@ -107,10 +107,15 @@ def _get_rs_rating_cn(
         "asof": asof[:10] if asof else _date_str(row.date),
     }
     if rating is None:
+        cov = row.coverage_ratio
+        try:
+            cov_pct = f"{float(cov) * 100:.1f}%" if cov is not None else "--"
+        except (TypeError, ValueError):
+            cov_pct = "--"
         return {
             "success": True,
             "code": code_n,
-            "message": "已有加权得分，但当日覆盖率不足未发布评级",
+            "message": f"已有加权得分，但当日覆盖率 {cov_pct} 不足 90%，未发布评级",
             "reason": "rating_unpublished",
             "data": data,
         }
@@ -165,10 +170,15 @@ def _get_rs_rating_hk(
         "asof": asof[:10] if asof else _date_str(row.date),
     }
     if rating is None:
+        cov = row.coverage_ratio
+        try:
+            cov_pct = f"{float(cov) * 100:.1f}%" if cov is not None else "--"
+        except (TypeError, ValueError):
+            cov_pct = "--"
         return {
             "success": True,
             "code": code_n,
-            "message": "已有加权得分，但当日覆盖率不足未发布评级",
+            "message": f"已有加权得分，但当日覆盖率 {cov_pct} 不足 90%，未发布评级",
             "reason": "rating_unpublished",
             "data": data,
         }

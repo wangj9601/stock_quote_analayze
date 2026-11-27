@@ -23,7 +23,7 @@ const AnalysisPage = {
             'js/page_scroll_fab.js',
             'js/stock_analysis_pdf.js?v=20260929-rr',
             'js/stock_analysis_png.js',
-            'js/stock_multi_strategy.js?v=20261031-margin-tab',
+            'js/stock_multi_strategy.js?v=20261127-rs-cov',
         ],
         'index-ai': [
             'js/kde_levels_tool.js?v=20261015-idxlv',

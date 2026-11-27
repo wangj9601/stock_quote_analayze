@@ -4256,9 +4256,17 @@ const StockMultiStrategy = {
             rating == null
                 ? `<span class="ssa-rs-score ssa-rs-score--na">--</span>`
                 : `<span class="ssa-rs-score ssa-rs-score--${tone}">${this.esc(String(rating))}</span>`;
+        const covRaw = data.coverage_ratio;
+        const covTxt =
+            covRaw == null || Number.isNaN(Number(covRaw))
+                ? null
+                : `${(Number(covRaw) * 100).toFixed(1)}%`;
         const note =
             reason === 'rating_unpublished'
-                ? message || '当日覆盖率不足，未发布 1–99 评级'
+                ? (message
+                    || (covTxt
+                        ? `当日覆盖率 ${covTxt} 不足 90%，未发布 1–99 评级`
+                        : '当日覆盖率不足，未发布 1–99 评级'))
                 : '';
         const code = String(
             data.code
@@ -4267,13 +4275,15 @@ const StockMultiStrategy = {
         ).trim();
         const name = data.name || (this.lastStock && this.lastStock.name) || '';
         const traceHref = `stock_rs_trace.html?code=${encodeURIComponent(code)}`;
+        const uniMeta = `宇宙 ${this.esc(String(data.universe_size ?? '--'))}`;
+        const covMeta = covTxt ? ` · 覆盖率 ${this.esc(covTxt)}` : '';
         host.innerHTML = `
             <div class="ssa-rs-card">
               <div class="ssa-rs-main">
                 ${ratingHtml}
                 <div class="ssa-rs-meta">
                   <div class="ssa-rs-label">${this.esc(label || (rating == null ? '无评级' : ''))}</div>
-                  <div class="ssa-rs-date">基准日 ${this.esc(data.trade_date || '--')} · 宇宙 ${this.esc(String(data.universe_size ?? '--'))}</div>
+                  <div class="ssa-rs-date">基准日 ${this.esc(data.trade_date || '--')} · ${uniMeta}${covMeta}</div>
                   ${note ? `<div class="ssa-rs-note">${this.esc(note)}</div>` : ''}
                   <div class="ssa-rs-actions">
                     <a class="ssa-rs-trace-link" href="${this.esc(traceHref)}" target="_blank" rel="noopener noreferrer">历史追溯</a>
