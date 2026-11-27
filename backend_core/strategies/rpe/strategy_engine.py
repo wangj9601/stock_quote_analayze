@@ -730,28 +730,10 @@ class RPEStrategyEngine:
                 extra="板块",
             )
 
-        results.sort(
-            key=lambda r: (
-                1 if r.get("entry_signal") else 0,
-                1 if r.get("signal_type") == "catch_up" else 0,
-                -(abs(r.get("z_score") or 0)),
-            ),
-            reverse=True,
-        )
         # 同股多板块去重（显式多选板块时仍可能撞车）：保留 |z| 最大
+        # 与 load_traces(dedupe_by_code=True) / 选股页读预计算对齐
         # 单股/自选路径已固定主板块，通常不会产生同股多行
-        dedup: Dict[str, Dict] = {}
-        for r in results:
-            prev = dedup.get(r["code"])
-            if prev is None or abs(r.get("z_score") or 0) > abs(prev.get("z_score") or 0):
-                dedup[r["code"]] = r
-        out = list(dedup.values())
-        out.sort(
-            key=lambda r: (
-                1 if r.get("entry_signal") else 0,
-                1 if r.get("signal_type") == "catch_up" else 0,
-                -(abs(r.get("z_score") or 0)),
-            ),
-            reverse=True,
-        )
+        from .signal_storage import dedupe_rpe_rows_by_code
+
+        out = dedupe_rpe_rows_by_code(results)
         return out[:max_n]

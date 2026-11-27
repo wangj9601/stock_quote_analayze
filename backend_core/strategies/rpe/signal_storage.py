@@ -143,6 +143,40 @@ def upsert_signal_traces(
     return n
 
 
+def sort_rpe_selection_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """选股列表排序：入场 → catch_up → |Z| 降序。
+
+    注意：reverse=True 时第三项必须用 abs(z)，不能再写 -abs(z)，否则会变成 |Z| 升序。
+    """
+    return sorted(
+        rows,
+        key=lambda r: (
+            1 if r.get("entry_signal") else 0,
+            1 if r.get("signal_type") == "catch_up" else 0,
+            abs(r.get("z_score") or 0),
+        ),
+        reverse=True,
+    )
+
+
+def dedupe_rpe_rows_by_code(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """同股多概念/多板块只留一行：保留 |Z| 最大；并列时保留先出现者。
+
+    日终预计算按概念板各写一行（唯一键含 sector_id）；选股页与 live screen()
+    应对齐为「同日同股一条」。管理端 list_admin_entry_signals 仍可看全量概念明细。
+    """
+    ordered = sort_rpe_selection_rows(list(rows or []))
+    dedup: Dict[str, Dict[str, Any]] = {}
+    for r in ordered:
+        code = str(r.get("code") or "").strip()
+        if not code:
+            continue
+        prev = dedup.get(code)
+        if prev is None or abs(r.get("z_score") or 0) > abs(prev.get("z_score") or 0):
+            dedup[code] = r
+    return sort_rpe_selection_rows(list(dedup.values()))
+
+
 def load_traces(
     db,
     *,
@@ -152,6 +186,7 @@ def load_traces(
     signal_type: str = None,
     limit: int = 500,
     include_no_signal: bool = False,
+    dedupe_by_code: bool = True,
 ) -> List[Dict[str, Any]]:
     from backend_api.models import RPESignalTrace
 
@@ -167,11 +202,9 @@ def load_traces(
     elif not include_no_signal:
         # 全市场预计算列表：排除 in_band / 无类型（板块扫描、单股追溯会写入这些行）
         q = q.filter(RPESignalTrace.signal_type.isnot(None))
-    rows = (
-        q.order_by(RPESignalTrace.entry_signal.desc(), RPESignalTrace.z_score.asc())
-        .limit(limit)
-        .all()
-    )
+    # 去重前不能先 limit：否则重复概念行会占满配额，漏掉其它股票
+    q = q.order_by(RPESignalTrace.entry_signal.desc(), RPESignalTrace.z_score.asc())
+    rows = q.all() if dedupe_by_code else q.limit(limit).all()
     out = []
     for r in rows:
         out.append(
@@ -201,7 +234,13 @@ def load_traces(
                 "config_id": r.config_id,
             }
         )
-    return out
+    if dedupe_by_code:
+        out = dedupe_rpe_rows_by_code(out)
+    try:
+        max_n = max(1, int(limit))
+    except (TypeError, ValueError):
+        max_n = 500
+    return out[:max_n]
 
 
 def _parse_dt(value: Any) -> Optional[datetime]:
