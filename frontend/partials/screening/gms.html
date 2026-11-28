@@ -22,13 +22,19 @@
             <div class="strategy-params-card" id="gmsDataSourceCard">
                 <h3>数据来源</h3>
                 <p class="gms-params-refresh-hint">修改数据来源、板块选择、剔除 ST 或策略参数后，须点击下方「刷新筛选」才会触发 GMS 策略打分选股。</p>
-                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0; flex-wrap: wrap;">
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: flex-end; padding: 10px 0; flex-wrap: wrap;">
                     <div class="param-item" style="display: flex; align-items: center; gap: 12px;">
                         <span style="color: #666; font-size: 13px;">周期：</span>
                         <label style="cursor: pointer;"><input type="radio" name="gmsTimeframe" id="gmsTimeframeDaily" value="daily" checked style="margin-right: 4px;">日线</label>
                         <label style="cursor: pointer;" title="以个股周线为基准；信号日为已收盘周周五标签（周五休市时按交易日完备提前确认）">
                             <input type="radio" name="gmsTimeframe" id="gmsTimeframeWeekly" value="weekly" style="margin-right: 4px;">周线
                         </label>
+                    </div>
+                    <div class="param-item" style="display: flex; flex-direction: column; gap: 4px; min-width: 200px;">
+                        <label for="gms-start_date" id="gmsAsOfDateLabel" style="color: #666; font-size: 13px;">基准日</label>
+                        <input type="date" id="gms-start_date" class="param-input" style="min-width: 160px;"
+                            title="留空则用最近可用交易日；周线会再解析为截至该日的最近已收盘周（周五标签）">
+                        <span id="gmsAsOfDateHint" style="color: #888; font-size: 12px;">留空=最近交易日；周线自动对齐已收盘周</span>
                     </div>
                 </div>
                 <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
@@ -156,11 +162,6 @@
                 </div>
                 <div id="gms-param-override-panel" class="gms-param-override-panel is-collapsed" aria-hidden="true">
                 <div class="params-grid gms-params-grid">
-                    <div class="parameter-group">
-                        <label for="gms-start_date">策略起始交易日期</label>
-                        <input type="date" id="gms-start_date" class="param-input">
-                        <span class="param-rule">留空则取历史行情表最近一日，格式 YYYY-MM-DD</span>
-                    </div>
                     <div class="parameter-group">
                         <label for="gms-observation_period">观察周期（天）</label>
                         <input type="number" id="gms-observation_period" class="param-input" min="10" max="60" step="1">

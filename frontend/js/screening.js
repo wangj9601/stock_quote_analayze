@@ -4616,6 +4616,10 @@ const ScreeningPage = {
                 }
             });
         });
+        scope.querySelectorAll('input[name="gmsTimeframe"]').forEach((radio) => {
+            radio.addEventListener('change', () => this.syncGmsAsOfDateLabels());
+        });
+        this.syncGmsAsOfDateLabels();
         scope.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach((radio) => {
             radio.addEventListener('change', () => this.syncGmsWatchlistBoardWrap());
         });
@@ -4853,6 +4857,26 @@ const ScreeningPage = {
         return document.getElementById(id);
     },
 
+    /** 按日线/周线切换基准日/基准周文案 */
+    syncGmsAsOfDateLabels() {
+        const tfEl = document.querySelector('input[name="gmsTimeframe"]:checked');
+        const weekly = tfEl && tfEl.value === 'weekly';
+        const label = document.getElementById('gmsAsOfDateLabel');
+        const hint = document.getElementById('gmsAsOfDateHint');
+        const input = document.getElementById('gms-start_date');
+        if (label) label.textContent = weekly ? '基准周' : '基准日';
+        if (hint) {
+            hint.textContent = weekly
+                ? '任选日期即可；服务端对齐截至该日的最近已收盘周（周五标签，含周五休市）'
+                : '留空=最近交易日；填写后按该交易日筛选';
+        }
+        if (input) {
+            input.title = weekly
+                ? '留空则用最近可用交易日，再解析为已收盘周周五标签'
+                : '留空则用历史行情表最近交易日';
+        }
+    },
+
     /**
      * 构建 GMS 接口查询串（不含 trace_only）
      * @param {{ page?: number, includePagination?: boolean, resolvedSingleCode?: string }} options
@@ -4867,6 +4891,8 @@ const ScreeningPage = {
         const gmsParams = this.getGmsParams();
         const q = new URLSearchParams();
         q.set('timeframe', timeframe);
+        // 基准日/基准周始终随请求发送（不再藏在「临时覆盖参数」折叠区）
+        if (gmsParams.start_date) q.set('date', gmsParams.start_date);
         if (scope === 'single') {
             const code = options.resolvedSingleCode || '';
             if (code) q.set('code', code);
@@ -4906,7 +4932,6 @@ const ScreeningPage = {
         const overrideEl = this._byId('gms-param-override');
         const useOverride = overrideEl && overrideEl.checked;
         if (useOverride) {
-            if (gmsParams.start_date) q.set('date', gmsParams.start_date);
             if (gmsParams.accumulation_fz_min != null) q.set('accumulation_fz_min', gmsParams.accumulation_fz_min);
             if (gmsParams.balance_ratio_max != null) q.set('balance_ratio_max', gmsParams.balance_ratio_max);
             if (gmsParams.volume_ratio_min != null) q.set('volume_ratio_min', gmsParams.volume_ratio_min);
@@ -4927,8 +4952,6 @@ const ScreeningPage = {
             if (gmsParams.weight_mom_ratio_d1 != null) q.set('weight_mom_ratio_d1', gmsParams.weight_mom_ratio_d1);
             if (gmsParams.weight_mom_deviation != null) q.set('weight_mom_deviation', gmsParams.weight_mom_deviation);
             if (gmsParams.weight_mom_volume != null) q.set('weight_mom_volume', gmsParams.weight_mom_volume);
-        } else if (gmsParams.start_date) {
-            q.set('date', gmsParams.start_date);
         }
         const excludeStEl = this._byId('gmsExcludeSt');
         if (excludeStEl && excludeStEl.checked) {
@@ -5959,7 +5982,7 @@ const ScreeningPage = {
             const el = document.getElementById(id);
             if (el) el.value = value != null && value !== '' ? value : '';
         };
-        set('gms-start_date', data.start_date || '');
+        // 基准日/基准周是筛选 as-of，不随策略参数版本覆盖
         set('gms-observation_period', data.observation_period);
         set('gms-ratio_d20_max', data.ratio_d20_max);
         set('gms-volume_ratio_max', data.volume_ratio_max);
