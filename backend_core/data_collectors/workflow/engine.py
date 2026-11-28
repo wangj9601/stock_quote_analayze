@@ -28,6 +28,40 @@ from backend_core.models.collection_workflow import (
 
 logger = logging.getLogger(__name__)
 
+
+def _param_truthy(val: Any) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return False
+    return str(val).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def _bypass_holiday_skip(
+    nodes: List[Any],
+    override_params: Optional[Dict[str, Any]],
+) -> bool:
+    """
+    节点或运行参数声明 force / ignore_holiday 时，绕过流程级休市整条跳过。
+    否则周末/休市日即使勾选「强制计算周信号」也会在引擎入口被 skipped，节点执行器进不去。
+    """
+    sources: List[Dict[str, Any]] = []
+    if override_params:
+        sources.append(override_params)
+    for n in nodes or []:
+        params = getattr(n, "params", None) or {}
+        if isinstance(params, dict):
+            sources.append(params)
+    for src in sources:
+        if _param_truthy(src.get("force")) or _param_truthy(src.get("force_recompute")):
+            return True
+        if _param_truthy(src.get("ignore_holiday")) or _param_truthy(
+            src.get("bypass_holiday")
+        ):
+            return True
+    return False
+
+
 # 单测可置 True：节点在同进程同步执行（无法强制 terminate）
 _FORCE_SYNC_EXEC = os.getenv("COLLECTION_WORKFLOW_SYNC_NODES", "").strip() in (
     "1",
@@ -494,8 +528,15 @@ class CollectionWorkflowEngine:
                 raise RuntimeError(f"已有执行占用中: {kind}={existing}")
 
             try:
-                # 休市整条跳过
+                # 休市整条跳过（节点 force / ignore_holiday 可绕过，便于周末补算周信号）
                 skip, skip_msg = should_skip_for_holiday(wf.skip_on_holiday or "NONE")
+                if skip and _bypass_holiday_skip(nodes, override_params):
+                    logger.info(
+                        "流程 %s 已声明 force/ignore_holiday，绕过休市跳过: %s",
+                        workflow_id,
+                        skip_msg,
+                    )
+                    skip, skip_msg = False, ""
                 ctx = WorkflowContext(
                     run_id=run_id,
                     workflow_id=workflow_id,

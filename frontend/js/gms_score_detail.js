@@ -80,18 +80,20 @@ const GmsScoreDetail = {
         const riskTagsHtml = riskTags.length
             ? `<div class="gms-score-detail-section"><strong>【风险提示】</strong><div class="gms-risk-tags">${riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')}</div></div>`
             : '';
+        const isWeekly = String(sd.timeframe || meta.timeframe || '').toLowerCase() === 'weekly';
         const closePrice = sd.d20 != null ? sd.d20 : (sd.d != null && sd.instant_deviation != null ? sd.d + sd.instant_deviation : null);
         const ma60FlatLookback = sd.ma60_flat_lookback_days != null ? sd.ma60_flat_lookback_days : 20;
-        let ma60Hint = '60日移动平均线';
+        const maLabel = isWeekly ? '周线均线' : 'MA60';
+        let ma60Hint = isWeekly ? '周线均线（策略默认约 12 周）' : '60日移动平均线';
         if (sd.ma60_d != null && closePrice != null) {
-            ma60Hint += closePrice < sd.ma60_d ? '；当前收盘低于 MA60' : '；当前收盘高于/等于 MA60';
+            ma60Hint += closePrice < sd.ma60_d ? `；当前收盘低于 ${maLabel}` : `；当前收盘高于/等于 ${maLabel}`;
         }
         if (sd.ma60_flat === true) {
             const chg = sd.ma60_flat_change_pct != null ? (Number(sd.ma60_flat_change_pct) * 100).toFixed(2) + '%' : '--';
-            ma60Hint += `；MA60 走平（${ma60FlatLookback}日变化 ${chg}）`;
+            ma60Hint += `；${maLabel} 走平（${ma60FlatLookback}${isWeekly ? '周' : '日'}变化 ${chg}）`;
         } else if (sd.ma60_flat === false) {
             const chg = sd.ma60_flat_change_pct != null ? (Number(sd.ma60_flat_change_pct) * 100).toFixed(2) + '%' : '--';
-            ma60Hint += `；MA60 非走平（${ma60FlatLookback}日变化 ${chg}）`;
+            ma60Hint += `；${maLabel} 非走平（${ma60FlatLookback}${isWeekly ? '周' : '日'}变化 ${chg}）`;
         }
         const formatPenaltyCondition = (p) => {
             if (p.id === 'close_below_ma60') {
@@ -260,8 +262,8 @@ const GmsScoreDetail = {
                         <tbody>
                             <tr><td>d₁ (首日收盘价)</td><td>${gmsFmt(sd.d1, 'price')}</td><td>周期起点价格${sd.d1_date ? '，交易日期 ' + sd.d1_date : ''}</td></tr>
                             <tr><td>d₂₀ (末日收盘价)</td><td>${gmsFmt(sd.d20, 'price')}</td><td>周期末位/当日价格${sd.d20_date ? '，交易日期 ' + sd.d20_date : ''}</td></tr>
-                            <tr><td>MA60 (60日均价)</td><td>${gmsFmt(sd.ma60_d, 'price')}</td><td>${ma60Hint}</td></tr>
-                            <tr><td>d (20日均价)</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
+                            <tr><td>${isWeekly ? '周线均线 (ma60_d)' : 'MA60 (60日均价)'}</td><td>${gmsFmt(sd.ma60_d, 'price')}</td><td>${ma60Hint}</td></tr>
+                            <tr><td>${isWeekly ? 'd (周均价)' : 'd (20日均价)'}</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
                             <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
                             <tr><td>Δ/d</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--')}</td><td>宏观位移相对均价 (Δ/d)</td></tr>
                             <tr><td>Δ/d₂₀（宏观位移/收盘价）</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>左侧买点粘合用 |Δ/d₂₀|；≠ 下方均线乖离 Δ₂₀/d</td></tr>

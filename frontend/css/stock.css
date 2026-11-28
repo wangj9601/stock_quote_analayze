@@ -1609,9 +1609,11 @@ mark {
 }
 
 .gms-indicators-section {
-    padding-left: 16px;
-    border-left: 2px solid #e2e8f0;
+    padding-left: 0;
+    border-left: none;
     margin-top: 1rem;
+    padding-top: 10px;
+    border-top: 1px solid #e2e8f0;
 }
 
 

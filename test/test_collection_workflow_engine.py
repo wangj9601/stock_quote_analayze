@@ -578,6 +578,21 @@ def test_request_restart_terminates_process(monkeypatch):
     eng_mod.clear_restart("r_force")
 
 
+def test_bypass_holiday_skip_when_node_force():
+    """节点 force=true 时须绕过流程级休市整条跳过（周末补算周信号场景）。"""
+    from backend_core.data_collectors.workflow.engine import _bypass_holiday_skip
+
+    n = MagicMock()
+    n.params = {"force": True}
+    assert _bypass_holiday_skip([n], None) is True
+
+    n2 = MagicMock()
+    n2.params = {}
+    assert _bypass_holiday_skip([n2], None) is False
+    assert _bypass_holiday_skip([n2], {"force": True}) is True
+    assert _bypass_holiday_skip([n2], {"ignore_holiday": "1"}) is True
+
+
 def test_resume_from_failed_run_respawns(monkeypatch):
     """failed 整单后 resume_from 应重置失败节点、改回 running 并启动引擎线程。"""
     from backend_core.data_collectors.workflow import engine as eng_mod

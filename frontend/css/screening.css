@@ -1358,18 +1358,41 @@
     padding: 10px 16px;
     border-left: 3px solid #2e7d32;
     font-size: 13px;
+    vertical-align: top;
+    box-sizing: border-box;
 }
+/*
+ * 明细面板：纵向堆叠，并限制在视口宽度内。
+ * 避免 flex-wrap 把「综合 / 计算指标」挤到宽表右侧（横向滚动外）看起来像被裁切。
+ */
 .gms-score-detail-inner {
     display: flex;
-    flex-wrap: wrap;
-    gap: 16px 24px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    width: 100%;
+    max-width: min(960px, calc(100vw - 220px));
+    box-sizing: border-box;
+}
+#resultsContainer-gms .results-table tr.gms-score-detail-row > td.gms-score-detail-cell {
+    position: sticky;
+    left: 0;
+    z-index: 1;
+    max-width: calc(100vw - 1.5rem);
+    width: max(100%, calc(100vw - 1.5rem));
+    overflow-x: auto;
+    background: #f8f9fa;
 }
 #resultsContainer-gms .gms-score-detail-toggle,
 #resultsContainer-urt .urt-score-detail-toggle {
     font-family: inherit;
 }
 .gms-score-detail-section {
-    margin-bottom: 12px;
+    margin-bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    flex: none;
 }
 .gms-score-detail-section:last-child {
     margin-bottom: 0;
@@ -1586,23 +1609,28 @@
     font-style: italic;
 }
 .gms-indicators-section {
-    padding-left: 16px;
-    border-left: 1px solid #e0e0e0;
+    padding-left: 0;
+    border-left: none;
+    padding-top: 10px;
+    border-top: 1px solid #e0e0e0;
 }
 .gms-indicators-table {
-    max-width: 360px;
+    max-width: 100%;
 }
 .gms-weight-table {
-    width: auto;
+    width: 100%;
+    max-width: 100%;
     border-collapse: collapse;
     font-size: 13px;
     margin-top: 6px;
+    table-layout: auto;
 }
 .gms-weight-table th,
 .gms-weight-table td {
     border: 1px solid #e0e0e0;
     padding: 6px 12px;
     text-align: left;
+    word-break: break-word;
 }
 .gms-weight-table .gms-judge {
     color: #1565c0;

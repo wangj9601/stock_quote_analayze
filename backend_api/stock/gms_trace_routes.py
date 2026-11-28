@@ -18,7 +18,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from backend_api.database import get_db, SessionLocal, engine
-from backend_api.models import GMSSignalTrace, MeanFrequencyResonanceIndicators, GmsTraceRecomputeTask
+from backend_api.models import (
+    GMSSignalTrace,
+    GMSSignalTraceWeekly,
+    MeanFrequencyResonanceIndicators,
+    MeanFrequencyResonanceIndicatorsWeekly,
+    GmsTraceRecomputeTask,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +32,23 @@ router = APIRouter(prefix="/api/stock", tags=["GMS信号追溯"])
 
 _trace_recompute_table_ready = False
 _trace_recompute_table_lock = threading.Lock()
+
+
+def _normalize_timeframe(timeframe: Optional[str]) -> str:
+    tf = (timeframe or "daily").strip().lower()
+    return tf if tf in ("daily", "weekly") else "daily"
+
+
+def _resolve_trace_model(timeframe: str = "daily"):
+    return GMSSignalTraceWeekly if _normalize_timeframe(timeframe) == "weekly" else GMSSignalTrace
+
+
+def _resolve_mfr_model(timeframe: str = "daily"):
+    return (
+        MeanFrequencyResonanceIndicatorsWeekly
+        if _normalize_timeframe(timeframe) == "weekly"
+        else MeanFrequencyResonanceIndicators
+    )
 
 
 def _ensure_trace_recompute_task_table() -> None:
@@ -145,6 +168,9 @@ def _get_trace_recompute_task(task_id: str) -> Optional[dict]:
 class GmsTraceRecomputeRequest(BaseModel):
     code: str = Field(..., description="股票代码")
     config_id: Optional[int] = Field(None, ge=1, description="GMS 策略参数版本 ID")
+    timeframe: Optional[str] = Field(
+        "daily", description="周期：daily（日线）| weekly（周线，写 gms_signal_trace_weekly）"
+    )
 
 
 def _run_trace_recompute_background(
@@ -154,15 +180,18 @@ def _run_trace_recompute_background(
     config_id: int,
     config: dict,
     config_display: str,
+    timeframe: str = "daily",
 ) -> None:
+    tf = _normalize_timeframe(timeframe)
+    TraceModel = _resolve_trace_model(tf)
     db = SessionLocal()
     try:
         _update_trace_recompute_task(task_id, status="running", message="正在清除旧记录…", progress=0)
 
-        db.query(GMSSignalTrace).filter(
-            GMSSignalTrace.code == code,
-            GMSSignalTrace.market_type == market_type,
-            GMSSignalTrace.config_id == config_id,
+        db.query(TraceModel).filter(
+            TraceModel.code == code,
+            TraceModel.market_type == market_type,
+            TraceModel.config_id == config_id,
         ).delete(synchronize_session=False)
         db.commit()
 
@@ -177,16 +206,29 @@ def _run_trace_recompute_background(
             )
 
         count = _compute_gms_trace_for_stock(
-            db, code, market_type, config, config_id, progress_cb=progress_cb
+            db,
+            code,
+            market_type,
+            config,
+            config_id,
+            progress_cb=progress_cb,
+            timeframe=tf,
         )
+        period_label = "周" if tf == "weekly" else "日"
         _update_trace_recompute_task(
             task_id,
             status="completed",
             progress=100,
             saved_count=count,
-            message=f"已按「{config_display}」重新计算，写入 {count} 条",
+            message=f"已按「{config_display}」重新计算（{period_label}线），写入 {count} 条",
         )
-        logger.info("GMS 追溯异步重算完成: %s config_id=%s, 写入 %s 条", code, config_id, count)
+        logger.info(
+            "GMS 追溯异步重算完成: %s config_id=%s tf=%s, 写入 %s 条",
+            code,
+            config_id,
+            tf,
+            count,
+        )
     except Exception as e:
         logger.exception("GMS 追溯异步重算失败 task_id=%s", task_id)
         _update_trace_recompute_task(
@@ -199,8 +241,10 @@ def _run_trace_recompute_background(
         db.close()
 
 
-def _merge_mfr_d1_d20_into_trace_dict(db: Session, row_dict: dict) -> dict:
-    """从 mean_frequency_resonance_indicators 合并 d1、d20、成交量及 bias(均线乖离 Δ₂₀/d) 等，供前端「计算指标细项」展示。
+def _merge_mfr_d1_d20_into_trace_dict(
+    db: Session, row_dict: dict, *, timeframe: str = "daily"
+) -> dict:
+    """从日/周 MF 指标表合并 d1、d20、成交量及 bias 等，供前端「计算指标细项」展示。
 
     trace 表与 to_dict 不含 avg_volume_20d / current_volume / ratio_d，必须与筛选页一致从指标行带出。
     """
@@ -209,12 +253,13 @@ def _merge_mfr_d1_d20_into_trace_dict(db: Session, row_dict: dict) -> dict:
     market_type = row_dict.get("market_type", "CN")
     if not code or not date_str:
         return row_dict
+    MfrModel = _resolve_mfr_model(timeframe)
     row = (
-        db.query(MeanFrequencyResonanceIndicators)
+        db.query(MfrModel)
         .filter(
-            MeanFrequencyResonanceIndicators.code == code,
-            MeanFrequencyResonanceIndicators.market_type == market_type,
-            MeanFrequencyResonanceIndicators.date == date_str,
+            MfrModel.code == code,
+            MfrModel.market_type == market_type,
+            MfrModel.date == date_str,
         )
         .first()
     )
@@ -388,7 +433,11 @@ def _attach_trace_score_detail(
             if merged.get(k) in (None, "") and v is not None:
                 merged[k] = v
         score_detail = merged
-    if need_fallback and code and date_str:
+    # 日线 fallback 读日 MF；周线勿串表
+    row_tf = _normalize_timeframe(
+        (config or {}).get("timeframe") or row_dict.get("timeframe")
+    )
+    if need_fallback and code and date_str and row_tf != "weekly":
         fb = _fill_gms_score_fallback(db, code, date_str, market_type, config)
         if fb and isinstance(fb.get("score_detail"), dict):
             fb_sd = fb["score_detail"]
@@ -427,9 +476,11 @@ except ImportError as e:
     GMS_AVAILABLE = False
 
 
-def _enrich_trace_row_score_detail(db: Session, row_dict: dict, config: dict) -> dict:
+def _enrich_trace_row_score_detail(
+    db: Session, row_dict: dict, config: dict, *, timeframe: str = "daily"
+) -> dict:
     """
-    当 trace 记录的得分明细或计算指标为空时，从指标表重新计算并补全。
+    当 trace 记录的得分明细或计算指标为空时，从日/周指标表重新计算并补全。
     用于兼容迁移前写入的历史数据。
     """
     code = row_dict.get("code")
@@ -443,12 +494,16 @@ def _enrich_trace_row_score_detail(db: Session, row_dict: dict, config: dict) ->
     try:
         from backend_core.strategies.gms.indicators_calculator import GMSIndicatorsCalculator
 
+        tf = _normalize_timeframe(
+            timeframe or (config or {}).get("timeframe") or "daily"
+        )
+        MfrModel = _resolve_mfr_model(tf)
         row = (
-            db.query(MeanFrequencyResonanceIndicators)
+            db.query(MfrModel)
             .filter(
-                MeanFrequencyResonanceIndicators.code == code,
-                MeanFrequencyResonanceIndicators.market_type == market_type,
-                MeanFrequencyResonanceIndicators.date == date_str,
+                MfrModel.code == code,
+                MfrModel.market_type == market_type,
+                MfrModel.date == date_str,
             )
             .first()
         )
@@ -484,13 +539,13 @@ def _enrich_trace_row_score_detail(db: Session, row_dict: dict, config: dict) ->
         }
         stable_days = int(config.get("scoring", {}).get("instant_deviation_stable_days", 3) or 3)
         series_rows = (
-            db.query(MeanFrequencyResonanceIndicators.instant_deviation)
+            db.query(MfrModel.instant_deviation)
             .filter(
-                MeanFrequencyResonanceIndicators.code == code,
-                MeanFrequencyResonanceIndicators.market_type == market_type,
-                MeanFrequencyResonanceIndicators.date <= date_str,
+                MfrModel.code == code,
+                MfrModel.market_type == market_type,
+                MfrModel.date <= date_str,
             )
-            .order_by(MeanFrequencyResonanceIndicators.date.desc())
+            .order_by(MfrModel.date.desc())
             .limit(max(1, stable_days))
             .all()
         )
@@ -571,15 +626,19 @@ def _config_display_name(row) -> str:
     return label or name or f"配置#{getattr(row, 'id', '?')}"
 
 
-def _list_stock_trace_config_options(db: Session, code: str, market_type: str) -> List[dict]:
-    """策略版本标签：canonical 版本始终展示；record_count 来自该股票 trace 表。"""
+def _list_stock_trace_config_options(
+    db: Session, code: str, market_type: str, *, timeframe: str = "daily"
+) -> List[dict]:
+    """策略版本标签：canonical 版本始终展示；record_count 来自该股票对应周期 trace 表。"""
+    tf = _normalize_timeframe(timeframe)
+    TraceModel = _resolve_trace_model(tf)
     count_rows = (
-        db.query(GMSSignalTrace.config_id, func.count(GMSSignalTrace.date))
+        db.query(TraceModel.config_id, func.count(TraceModel.date))
         .filter(
-            GMSSignalTrace.code == code,
-            GMSSignalTrace.market_type == market_type,
+            TraceModel.code == code,
+            TraceModel.market_type == market_type,
         )
-        .group_by(GMSSignalTrace.config_id)
+        .group_by(TraceModel.config_id)
         .all()
     )
     counts: Dict[int, int] = {int(cid): int(cnt or 0) for cid, cnt in count_rows}
@@ -595,9 +654,10 @@ def _list_stock_trace_config_options(db: Session, code: str, market_type: str) -
             "is_default": is_default or bool(getattr(row, "is_default", False)),
             "record_count": counts.get(cid, 0),
             "scoring_mechanism_label": mechanism_label or "",
+            "timeframe": tf,
         }
 
-    for meta in mgr.list_canonical_configs(active_only=True):
+    for meta in mgr.list_canonical_configs(active_only=True, timeframe=tf):
         cid = int(meta["id"])
         row = mgr.get_config_row(cid)
         _append_option(
@@ -624,23 +684,26 @@ def _resolve_trace_config_id(
     code: str,
     market_type: str,
     requested_config_id: Optional[int],
+    *,
+    timeframe: str = "daily",
 ) -> int:
+    tf = _normalize_timeframe(timeframe)
     mgr = GMSConfigManager()
     if requested_config_id is not None:
-        cid = mgr.resolve_config_id(requested_config_id)
+        cid = mgr.resolve_config_id(requested_config_id, timeframe=tf)
         row = mgr.get_config_row(cid)
         if not row:
             raise HTTPException(status_code=404, detail="策略参数版本不存在")
         if not row.is_active:
             raise HTTPException(status_code=400, detail="策略参数版本已禁用")
         return cid
-    options = _list_stock_trace_config_options(db, code, market_type)
+    options = _list_stock_trace_config_options(db, code, market_type, timeframe=tf)
     if options:
         for opt in options:
             if opt.get("is_default"):
                 return int(opt["config_id"])
         return int(options[0]["config_id"])
-    return mgr.resolve_config_id(None)
+    return mgr.resolve_config_id(None, timeframe=tf)
 
 
 def _compute_gms_trace_for_stock(
@@ -650,10 +713,12 @@ def _compute_gms_trace_for_stock(
     config: dict,
     config_id: int,
     progress_cb: Optional[Callable[[int, int, str], None]] = None,
+    *,
+    timeframe: str = "daily",
 ) -> int:
     """
-    对单只股票从 mean_frequency_resonance_indicators 的首日到最新日执行 GMS 追溯计算，
-    并写入 gms_signal_trace 表（指定 config_id）。
+    对单只股票从日/周 MF 指标首日到最新日执行 GMS 追溯计算，
+    并写入对应 trace 表（指定 config_id）。
     返回写入条数。
 
     通过 engine.screen 构建完整 score_detail（含 structure），再入库。
@@ -661,16 +726,23 @@ def _compute_gms_trace_for_stock(
     if not GMS_AVAILABLE:
         raise RuntimeError("GMS 策略模块不可用")
 
+    tf = _normalize_timeframe(timeframe or (config or {}).get("timeframe") or "daily")
+    if tf == "weekly" and str(market_type or "").strip().upper() != "CN":
+        raise RuntimeError("周线 GMS 第一期仅支持 A 股")
+
     from backend_core.strategies.gms.json_safe import sanitize_for_pg_json
 
-    # 查询该股票所有日期（升序）
+    MfrModel = _resolve_mfr_model(tf)
+    TraceModel = _resolve_trace_model(tf)
+
+    # 查询该股票所有日期（升序）；周线 date=已收盘周周五标签
     rows = (
-        db.query(MeanFrequencyResonanceIndicators.date)
+        db.query(MfrModel.date)
         .filter(
-            MeanFrequencyResonanceIndicators.code == code,
-            MeanFrequencyResonanceIndicators.market_type == market_type,
+            MfrModel.code == code,
+            MfrModel.market_type == market_type,
         )
-        .order_by(MeanFrequencyResonanceIndicators.date.asc())
+        .order_by(MfrModel.date.asc())
         .all()
     )
     dates = [str(r.date)[:10] for r in rows if r.date]
@@ -678,8 +750,10 @@ def _compute_gms_trace_for_stock(
         return 0
 
     total_dates = len(dates)
-    loader = GMSDataLoader(db)
-    engine = GMSStrategyEngine(loader, config)
+    cfg = dict(config or {})
+    cfg["timeframe"] = tf
+    loader = GMSDataLoader(db, timeframe=tf)
+    engine = GMSStrategyEngine(loader, cfg)
     codes = [code]
     saved = 0
 
@@ -692,7 +766,7 @@ def _compute_gms_trace_for_stock(
                 codes,
                 target_date,
                 market_type,
-                config=config,
+                config=cfg,
                 min_score=0,
                 use_latest_per_stock=False,
             )
@@ -701,7 +775,7 @@ def _compute_gms_trace_for_stock(
             r = results[0]
             sd = sanitize_for_pg_json(r.get("score_detail") or {})
             risk_tags = sanitize_for_pg_json(r.get("risk_tags"))
-            rec = GMSSignalTrace(
+            rec = TraceModel(
                 code=code,
                 date=target_date,
                 market_type=market_type,
@@ -744,7 +818,7 @@ def _compute_gms_trace_for_stock(
                 db.merge(rec)
             saved += 1
         except Exception as e:
-            logger.warning(f"GMS 追溯 {code} {target_date} 失败: {e}")
+            logger.warning("GMS 追溯 %s %s tf=%s 失败: %s", code, target_date, tf, e)
             continue
 
     db.commit()
@@ -757,7 +831,7 @@ async def start_gms_signal_trace_recompute(
     db: Session = Depends(get_db),
 ):
     """
-    异步强制重新计算单股 GMS 信号追溯（当前 config_id）。
+    异步强制重新计算单股 GMS 信号追溯（当前 config_id + timeframe）。
     返回 task_id，前端轮询 GET /gms-signal-trace/recompute/{task_id} 获取进度。
     """
     if not GMS_AVAILABLE:
@@ -770,12 +844,20 @@ async def start_gms_signal_trace_recompute(
     if not code:
         raise HTTPException(status_code=400, detail="股票代码不能为空")
 
+    tf = _normalize_timeframe(body.timeframe)
     market_type = _infer_market_type(code)
     code_norm = _normalize_code(code, market_type)
+    if tf == "weekly" and market_type != "CN":
+        raise HTTPException(status_code=400, detail="周线 GMS 第一期仅支持 A 股")
 
     mgr = GMSConfigManager()
-    resolved_config_id = _resolve_trace_config_id(db, code_norm, market_type, body.config_id)
+    resolved_config_id = _resolve_trace_config_id(
+        db, code_norm, market_type, body.config_id, timeframe=tf
+    )
     config = mgr.get_config(resolved_config_id)
+    if isinstance(config, dict):
+        config = dict(config)
+        config["timeframe"] = tf
     config_row = mgr.get_config_row(resolved_config_id)
     config_display = _config_display_name(config_row)
 
@@ -783,7 +865,11 @@ async def start_gms_signal_trace_recompute(
     if existing:
         return JSONResponse({
             "success": True,
-            "data": {"task_id": existing, "already_running": True},
+            "data": {
+                "task_id": existing,
+                "already_running": True,
+                "timeframe": tf,
+            },
             "message": "该股票当前策略版本正在重新计算，请稍候",
         })
 
@@ -805,7 +891,15 @@ async def start_gms_signal_trace_recompute(
 
     thread = threading.Thread(
         target=_run_trace_recompute_background,
-        args=(task_id, code_norm, market_type, resolved_config_id, config, config_display),
+        args=(
+            task_id,
+            code_norm,
+            market_type,
+            resolved_config_id,
+            config,
+            config_display,
+            tf,
+        ),
         daemon=True,
     )
     thread.start()
@@ -816,6 +910,7 @@ async def start_gms_signal_trace_recompute(
             "task_id": task_id,
             "config_id": resolved_config_id,
             "config_name": config_display,
+            "timeframe": tf,
         },
     })
 
@@ -836,12 +931,16 @@ async def get_gms_signal_trace(
     end_date: Optional[str] = Query(None, description="结束日期 YYYY-MM-DD"),
     config_id: Optional[int] = Query(None, ge=1, description="GMS 策略参数版本 ID"),
     force_compute: Optional[int] = Query(None, description="1 时强制重新计算"),
+    timeframe: Optional[str] = Query(
+        "daily",
+        description="周期：daily（日线）| weekly（周线，读 gms_signal_trace_weekly；第一期仅 CN）",
+    ),
     db: Session = Depends(get_db),
 ):
     """
-    查询某股票的 GMS 信号追溯记录（按 config_id 隔离，避免多版本混显重复）。
+    查询某股票的 GMS 信号追溯记录（按 config_id + timeframe 隔离，避免多版本/周期混显）。
     若该版本无记录且未传 force_compute：先执行追溯计算并入库，再返回。
-    force_compute=1：仅重算当前 config_id 对应版本。
+    force_compute=1：仅重算当前 config_id + timeframe 对应版本。
     """
     if not GMS_AVAILABLE:
         return JSONResponse(
@@ -853,50 +952,97 @@ async def get_gms_signal_trace(
     if not code:
         raise HTTPException(status_code=400, detail="股票代码不能为空")
 
+    tf = _normalize_timeframe(timeframe)
     market_type = _infer_market_type(code)
     code_norm = _normalize_code(code, market_type)
+    TraceModel = _resolve_trace_model(tf)
+    MfrModel = _resolve_mfr_model(tf)
+
+    if tf == "weekly" and market_type != "CN":
+        return JSONResponse({
+            "success": True,
+            "data": [],
+            "total": 0,
+            "timeframe": tf,
+            "config_id": None,
+            "config_name": None,
+            "configs": [],
+            "message": "周线 GMS 第一期仅支持 A 股",
+        })
 
     try:
         mgr = GMSConfigManager()
-        resolved_config_id = _resolve_trace_config_id(db, code_norm, market_type, config_id)
+        resolved_config_id = _resolve_trace_config_id(
+            db, code_norm, market_type, config_id, timeframe=tf
+        )
         config = mgr.get_config(resolved_config_id)
+        if isinstance(config, dict):
+            config = dict(config)
+            config["timeframe"] = tf
         config_row = mgr.get_config_row(resolved_config_id)
-        config_options = _list_stock_trace_config_options(db, code_norm, market_type)
+        config_options = _list_stock_trace_config_options(
+            db, code_norm, market_type, timeframe=tf
+        )
         recompute_message: Optional[str] = None
+        period_label = "周" if tf == "weekly" else "日"
+        empty_mfr_msg = (
+            "该股票暂无周线 GMS 指标数据（需先跑 weekly_mf_cn）"
+            if tf == "weekly"
+            else "该股票暂无 GMS 指标数据"
+        )
 
         if force_compute == 1:
-            db.query(GMSSignalTrace).filter(
-                GMSSignalTrace.code == code_norm,
-                GMSSignalTrace.market_type == market_type,
-                GMSSignalTrace.config_id == resolved_config_id,
+            db.query(TraceModel).filter(
+                TraceModel.code == code_norm,
+                TraceModel.market_type == market_type,
+                TraceModel.config_id == resolved_config_id,
             ).delete(synchronize_session=False)
             db.commit()
-            logger.info("GMS 追溯 强制重新计算: %s config_id=%s", code_norm, resolved_config_id)
-            count = _compute_gms_trace_for_stock(
-                db, code_norm, market_type, config, resolved_config_id
+            logger.info(
+                "GMS 追溯 强制重新计算: %s config_id=%s tf=%s",
+                code_norm,
+                resolved_config_id,
+                tf,
             )
-            logger.info("GMS 追溯 计算完成: %s config_id=%s, 写入 %s 条", code_norm, resolved_config_id, count)
-            config_options = _list_stock_trace_config_options(db, code_norm, market_type)
+            count = _compute_gms_trace_for_stock(
+                db,
+                code_norm,
+                market_type,
+                config,
+                resolved_config_id,
+                timeframe=tf,
+            )
+            logger.info(
+                "GMS 追溯 计算完成: %s config_id=%s tf=%s, 写入 %s 条",
+                code_norm,
+                resolved_config_id,
+                tf,
+                count,
+            )
+            config_options = _list_stock_trace_config_options(
+                db, code_norm, market_type, timeframe=tf
+            )
             recompute_message = (
-                f"已按「{_config_display_name(config_row)}」重新计算，写入 {count} 条"
+                f"已按「{_config_display_name(config_row)}」重新计算（{period_label}线），"
+                f"写入 {count} 条"
             )
 
         else:
             exists = (
-                db.query(GMSSignalTrace)
+                db.query(TraceModel)
                 .filter(
-                    GMSSignalTrace.code == code_norm,
-                    GMSSignalTrace.market_type == market_type,
-                    GMSSignalTrace.config_id == resolved_config_id,
+                    TraceModel.code == code_norm,
+                    TraceModel.market_type == market_type,
+                    TraceModel.config_id == resolved_config_id,
                 )
                 .first()
             )
             if not exists:
                 has_mfr = (
-                    db.query(MeanFrequencyResonanceIndicators)
+                    db.query(MfrModel)
                     .filter(
-                        MeanFrequencyResonanceIndicators.code == code_norm,
-                        MeanFrequencyResonanceIndicators.market_type == market_type,
+                        MfrModel.code == code_norm,
+                        MfrModel.market_type == market_type,
                     )
                     .first()
                 )
@@ -905,31 +1051,50 @@ async def get_gms_signal_trace(
                         "success": True,
                         "data": [],
                         "total": 0,
+                        "timeframe": tf,
                         "config_id": resolved_config_id,
                         "config_name": _config_display_name(config_row),
                         "configs": config_options,
-                        "message": "该股票暂无 GMS 指标数据",
+                        "message": empty_mfr_msg,
                     })
-                logger.info("GMS 追溯 首次计算: %s config_id=%s", code_norm, resolved_config_id)
-                count = _compute_gms_trace_for_stock(
-                    db, code_norm, market_type, config, resolved_config_id
+                logger.info(
+                    "GMS 追溯 首次计算: %s config_id=%s tf=%s",
+                    code_norm,
+                    resolved_config_id,
+                    tf,
                 )
-                logger.info("GMS 追溯 计算完成: %s config_id=%s, 写入 %s 条", code_norm, resolved_config_id, count)
-                config_options = _list_stock_trace_config_options(db, code_norm, market_type)
+                count = _compute_gms_trace_for_stock(
+                    db,
+                    code_norm,
+                    market_type,
+                    config,
+                    resolved_config_id,
+                    timeframe=tf,
+                )
+                logger.info(
+                    "GMS 追溯 计算完成: %s config_id=%s tf=%s, 写入 %s 条",
+                    code_norm,
+                    resolved_config_id,
+                    tf,
+                    count,
+                )
+                config_options = _list_stock_trace_config_options(
+                    db, code_norm, market_type, timeframe=tf
+                )
 
         q = (
-            db.query(GMSSignalTrace)
+            db.query(TraceModel)
             .filter(
-                GMSSignalTrace.code == code_norm,
-                GMSSignalTrace.market_type == market_type,
-                GMSSignalTrace.config_id == resolved_config_id,
+                TraceModel.code == code_norm,
+                TraceModel.market_type == market_type,
+                TraceModel.config_id == resolved_config_id,
             )
         )
         if start_date:
-            q = q.filter(GMSSignalTrace.date >= str(start_date)[:10])
+            q = q.filter(TraceModel.date >= str(start_date)[:10])
         if end_date:
-            q = q.filter(GMSSignalTrace.date <= str(end_date)[:10])
-        q = q.order_by(GMSSignalTrace.date.desc())
+            q = q.filter(TraceModel.date <= str(end_date)[:10])
+        q = q.order_by(TraceModel.date.desc())
         rows = q.all()
 
         def to_dict(r):
@@ -989,13 +1154,19 @@ async def get_gms_signal_trace(
         data = [to_dict(r) for r in rows]
         # 合并指标表中的 d1/d20/ma60 等；补全得分；附加与选股页一致的 score_detail
         for i, item in enumerate(data):
-            merged = _merge_mfr_d1_d20_into_trace_dict(db, item)
-            enriched = _enrich_trace_row_score_detail(db, merged, config)
-            data[i] = _attach_trace_score_detail(db, enriched, config, gms_config_meta, calc_meta)
+            item["timeframe"] = tf
+            merged = _merge_mfr_d1_d20_into_trace_dict(db, item, timeframe=tf)
+            enriched = _enrich_trace_row_score_detail(
+                db, merged, config, timeframe=tf
+            )
+            data[i] = _attach_trace_score_detail(
+                db, enriched, config, gms_config_meta, calc_meta
+            )
         return JSONResponse({
             "success": True,
             "data": data,
             "total": len(data),
+            "timeframe": tf,
             "config_id": resolved_config_id,
             "config_name": _config_display_name(config_row),
             "gms_config_meta": gms_config_meta,

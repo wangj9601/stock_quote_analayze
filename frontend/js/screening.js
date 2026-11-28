@@ -6786,6 +6786,8 @@ const ScreeningPage = {
                 `;
             } else if (strategy === 'gms') {
                 // GMS 均值引力动量策略表格
+                const gmsTfEl = document.querySelector('input[name="gmsTimeframe"]:checked');
+                const gmsTimeframe = gmsTfEl && gmsTfEl.value === 'weekly' ? 'weekly' : 'daily';
                 const sd = {
                     ratio_d: stock.ratio_d,
                     avg_volume_20d: stock.avg_volume_20d,
@@ -6802,6 +6804,7 @@ const ScreeningPage = {
                     ...(stock.score_detail || stock.indicators?.score_detail || {}),
                     risk_tags: stock.risk_tags || [],
                     ...(this.gmsConfigMeta || {}),
+                    timeframe: gmsTimeframe,
                 };
                 const fmtPct = (v) => (v != null && typeof v === 'number') ? (v * 100).toFixed(1) + '%' : '--';
                 const scoreDetailHtml = this.buildGmsScoreDetailHtml(sd);

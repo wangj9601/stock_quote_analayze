@@ -22,6 +22,8 @@ class StockGMSTracePage {
         this.forceComputeTaskId = '';
         this.forceComputePollCount = 0;
         this.maxForceComputePolls = 3600;
+        /** daily | weekly */
+        this.timeframe = 'daily';
         this.init();
     }
 
@@ -31,10 +33,27 @@ class StockGMSTracePage {
         this.setDefaultDates();
     }
 
+    getTimeframe() {
+        const weekly = document.getElementById('gmsTraceTfWeekly');
+        if (weekly && weekly.checked) return 'weekly';
+        return 'daily';
+    }
+
+    setTimeframe(tf) {
+        const next = tf === 'weekly' ? 'weekly' : 'daily';
+        this.timeframe = next;
+        const daily = document.getElementById('gmsTraceTfDaily');
+        const weekly = document.getElementById('gmsTraceTfWeekly');
+        if (daily) daily.checked = next === 'daily';
+        if (weekly) weekly.checked = next === 'weekly';
+    }
+
     loadFromUrl() {
         const params = new URLSearchParams(window.location.search);
         this.currentStockCode = params.get('code') || '';
         this.currentStockName = params.get('name') || '';
+        const tf = (params.get('timeframe') || 'daily').toLowerCase();
+        this.setTimeframe(tf === 'weekly' ? 'weekly' : 'daily');
         document.getElementById('stockDisplay').textContent =
             this.currentStockCode ? `${this.currentStockCode} ${decodeURIComponent(this.currentStockName || '')}` : '--';
         const marketSel = document.getElementById('btMarket');
@@ -64,6 +83,21 @@ class StockGMSTracePage {
             this.fetchData();
         });
         document.getElementById('forceComputeBtn').addEventListener('click', () => this.forceCompute());
+        document.querySelectorAll('input[name="gmsTraceTimeframe"]').forEach((el) => {
+            el.addEventListener('change', () => {
+                if (this.forceComputeRunning) {
+                    this.setTimeframe(this.timeframe);
+                    return;
+                }
+                const next = this.getTimeframe();
+                if (next === this.timeframe) return;
+                this.timeframe = next;
+                // 切换日/周时勿沿用另一周期的 config_id
+                this.traceConfigId = null;
+                this.traceConfigOptions = [];
+                this.fetchData();
+            });
+        });
         document.getElementById('firstPage').addEventListener('click', () => this.goToPage(1));
         document.getElementById('prevPage').addEventListener('click', () => this.goToPage(this.currentPage - 1));
         document.getElementById('nextPage').addEventListener('click', () => this.goToPage(this.currentPage + 1));
@@ -134,7 +168,9 @@ class StockGMSTracePage {
             loading.textContent = '正在加载 GMS 信号追溯，请稍候…';
         }
 
+        this.timeframe = this.getTimeframe();
         let url = `${this.getApiBase()}/api/stock/gms-signal-trace?code=${encodeURIComponent(this.currentStockCode)}`;
+        url += `&timeframe=${encodeURIComponent(this.timeframe)}`;
         if (startDate) url += `&start_date=${startDate}`;
         if (endDate) url += `&end_date=${endDate}`;
         if (forceCompute) {
@@ -192,8 +228,10 @@ class StockGMSTracePage {
     forceCompute() {
         if (this.forceComputeRunning) return;
         this.syncActiveConfigFromTabs();
+        this.timeframe = this.getTimeframe();
         const label = this.getActiveConfigLabel();
-        if (!confirm(`将按「${label}」重新计算该股全部交易日的 GMS 信号（仅影响该策略版本），是否继续？`)) {
+        const period = this.timeframe === 'weekly' ? '全部已收盘周' : '全部交易日';
+        if (!confirm(`将按「${label}」重新计算该股${period}的 GMS ${this.timeframe === 'weekly' ? '周线' : '日线'}信号（仅影响该策略版本），是否继续？`)) {
             return;
         }
         void this.startForceComputeTask();
@@ -216,6 +254,9 @@ class StockGMSTracePage {
             btn.textContent = this.forceComputeRunning ? '正在重新计算…' : '强制重新计算';
         }
         if (searchBtn) searchBtn.disabled = this.forceComputeRunning;
+        document.querySelectorAll('input[name="gmsTraceTimeframe"]').forEach((el) => {
+            el.disabled = this.forceComputeRunning;
+        });
         const tabs = document.getElementById('gmsTraceConfigTabs');
         if (tabs) {
             tabs.querySelectorAll('[data-config-id]').forEach((el) => {
@@ -264,6 +305,7 @@ class StockGMSTracePage {
                 body: JSON.stringify({
                     code: this.currentStockCode,
                     config_id: this.traceConfigId,
+                    timeframe: this.getTimeframe(),
                 }),
             });
             const json = await resp.json().catch(() => ({}));
@@ -387,7 +429,7 @@ class StockGMSTracePage {
             const cnt = opt.record_count != null ? ` (${opt.record_count})` : '';
             const cls = String(id) === String(activeId) ? 'gms-trace-config-tab active' : 'gms-trace-config-tab';
             return `<button type="button" class="${cls}" data-config-id="${id}">${label}${cnt}</button>`;
-        }).join('') + '<span class="gms-trace-config-tab-hint">切换版本查看；「强制重新计算」仅重算当前选中版本</span>';
+        }).join('') + `<span class="gms-trace-config-tab-hint">切换版本查看；「强制重新计算」仅重算当前选中版本（${this.timeframe === 'weekly' ? '周线' : '日线'}）</span>`;
         wrap.querySelectorAll('[data-config-id]').forEach((btn) => {
             btn.addEventListener('click', () => {
                 if (this.forceComputeRunning) return;
@@ -439,6 +481,7 @@ class StockGMSTracePage {
             momentum_grade: row.momentum_grade,
             ...(row.score_detail || {}),
             ...(this.gmsConfigMeta || {}),
+            timeframe: this.getTimeframe ? this.getTimeframe() : (this.timeframe || 'daily'),
         };
         if (typeof GmsScoreDetail !== 'undefined' && GmsScoreDetail.buildHtml) {
             return GmsScoreDetail.buildHtml(sd, this.gmsConfigMeta, this.traceConfigId);

@@ -585,7 +585,12 @@ body.ops-map .gms-board-picker-summary {
 }
 
 body.ops-map .gms-indicators-section {
-    border-left-color: var(--color-border) !important;
+    border-left: none !important;
+    border-top-color: var(--color-border) !important;
+}
+
+body.ops-map #resultsContainer-gms .results-table tr.gms-score-detail-row > td.gms-score-detail-cell {
+    background: var(--ops-ground-elevated) !important;
 }
 
 /* —— 风险 / 建议徽章（深底可读膜） —— */

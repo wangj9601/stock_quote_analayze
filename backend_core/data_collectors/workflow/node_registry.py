@@ -127,7 +127,10 @@ _GMS_WEEKLY_SIGNAL_SCHEMA: Dict[str, Any] = {
             "type": "boolean",
             "title": "强制计算周信号",
             "default": False,
-            "description": "勾选后确保 default_weekly 可用并忽略环境白名单滤空，强制跑周线预计算",
+            "description": (
+                "勾选后：1) 绕过流程级「休市跳过」以便周末/假日可跑；"
+                "2) 确保 default_weekly 可用并忽略环境白名单滤空，强制跑周线预计算"
+            ),
         },
         "as_of": {
             "type": "string",

@@ -29,6 +29,11 @@
             <div class="toolbar">
                 <div class="toolbar-row">
                     <label>股票: <span id="stockDisplay">--</span></label>
+                    <span class="gms-trace-tf-group" title="周线信号日为已收盘周周五标签">
+                        <span class="gms-trace-tf-label">周期:</span>
+                        <label class="gms-trace-tf-opt"><input type="radio" name="gmsTraceTimeframe" id="gmsTraceTfDaily" value="daily" checked>日线</label>
+                        <label class="gms-trace-tf-opt"><input type="radio" name="gmsTraceTimeframe" id="gmsTraceTfWeekly" value="weekly">周线</label>
+                    </span>
                     <label>开始日期: <input type="date" id="startDate"></label>
                     <label>结束日期: <input type="date" id="endDate"></label>
                     <button id="searchBtn">查询</button>

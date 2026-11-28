@@ -31,6 +31,33 @@
     gap: 4px;
 }
 
+.gms-trace-tf-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    background: #fafafa;
+}
+
+.gms-trace-tf-label {
+    color: #555;
+    font-size: 13px;
+}
+
+.gms-trace-tf-opt {
+    gap: 3px !important;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.gms-trace-tf-opt input {
+    margin: 0;
+    cursor: pointer;
+}
+
 .gms-trace-card .toolbar-row input[type="date"] {
     padding: 4px 8px;
     border: 1px solid #ddd;
