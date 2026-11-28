@@ -2226,7 +2226,15 @@ async def get_gms_strategy(
                 logger.warning(f"GMS 回退日期失败: {e}")
 
         if not selection_results:
-            msg = f"所选日期 {target_date} 暂无指标数据" if user_specified_date else ""
+            if gms_timeframe == "weekly":
+                msg = (
+                    f"周线信号日 {target_date} 暂无预计算结果"
+                    "（请确认已跑 gms_signals_weekly_cn，且参数版本为周线标准版）"
+                )
+            elif user_specified_date:
+                msg = f"所选日期 {target_date} 暂无指标数据"
+            else:
+                msg = ""
             return JSONResponse({
                 "success": True,
                 "data": [],
@@ -2234,6 +2242,7 @@ async def get_gms_strategy(
                 "search_date": target_date,
                 "strategy_name": "GMS均值引力动量策略",
                 "message": msg,
+                "timeframe": gms_timeframe,
                 "gms_trace_meta": gms_meta,
                 "trace_only": True,
                 "paging": {

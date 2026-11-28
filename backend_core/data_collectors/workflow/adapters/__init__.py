@@ -505,12 +505,50 @@ def _weekly_mf_cn() -> Any:
     return scheduled_weekly_mf_cn()
 
 
-def _gms_weekly_cn() -> Any:
+def _truthy_param(val: Any) -> bool:
+    if isinstance(val, bool):
+        return val
+    if val is None:
+        return False
+    return str(val).strip().lower() in ("1", "true", "yes", "y", "on")
+
+
+def exec_gms_signals_weekly_cn(ctx: WorkflowContext) -> NodeResult:
+    """GMS 周线预计算；支持节点参数 force / as_of(trade_date)。"""
+    from backend_core.data_collectors.workflow.signal_count import classify_signal_payload
     from backend_core.strategies.gms.scheduled_precompute import (
         scheduled_gms_signals_weekly_cn,
     )
 
-    return scheduled_gms_signals_weekly_cn()
+    force = False
+    as_of = None
+    for src in (ctx.node_params or {}, ctx.params or {}):
+        if _truthy_param(src.get("force") or src.get("force_recompute")):
+            force = True
+        if not as_of:
+            for key in ("as_of", "trade_date", "end_date", "start_date"):
+                if src.get(key):
+                    as_of = str(src.get(key)).strip()[:10]
+                    break
+    try:
+        out = scheduled_gms_signals_weekly_cn(force=force, as_of=as_of)
+        decision = classify_signal_payload("GMS周线信号预计算(A股)", out)
+        data = _signal_result_data(out, decision)
+        data["force"] = force
+        if as_of:
+            data["as_of"] = as_of
+        if decision["skipped"]:
+            return NodeResult.skip(decision["message"], data=data)
+        if decision["failed"]:
+            return NodeResult.fail(
+                decision["error"] or "GMS周线信号预计算(A股)失败",
+                message=decision["message"],
+                data=data,
+            )
+        return NodeResult.ok(decision["message"], data=data)
+    except Exception as e:
+        logger.exception("GMS周线信号预计算(A股) 异常")
+        return NodeResult.fail(str(e), message="GMS周线信号预计算(A股)失败")
 
 
 def _urt_cn() -> Any:
@@ -701,7 +739,7 @@ exec_hk_annual = _wrap_hk(_gen_hk_annual, "港股年K")
 exec_gms_cn = _wrap_signal(_gms_cn, "GMS信号预计算(A股)")
 exec_gms_hk = _wrap_signal(_gms_hk, "GMS信号预计算(港股)")
 exec_weekly_mf_cn = _wrap_plain(_weekly_mf_cn, "A股周频MF")
-exec_gms_signals_weekly_cn = _wrap_signal(_gms_weekly_cn, "GMS周线信号预计算(A股)")
+# exec_gms_signals_weekly_cn 在上方定义为 ctx 感知执行器（支持 force）
 exec_urt_cn = _wrap_signal(_urt_cn, "URT信号预计算(A股)")
 exec_urt_hk = _wrap_signal(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_signal(_sbbr_cn, "SBBR信号预计算")

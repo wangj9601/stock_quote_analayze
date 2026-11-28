@@ -42,13 +42,18 @@ async def get_gms_ui_config():
 
 
 @router.get("/strategy-configs")
-async def list_gms_strategy_configs_public():
+async def list_gms_strategy_configs_public(
+    timeframe: str = Query("daily", description="daily|weekly，决定返回日线/周线 canonical 参数版本"),
+):
     """公开：列出启用的 GMS 策略参数版本（供网站选股页选择）。"""
     try:
         from backend_core.strategies.gms.config import GMSConfigManager
 
+        tf = (timeframe or "daily").strip().lower()
+        if tf not in ("daily", "weekly"):
+            tf = "daily"
         mgr = GMSConfigManager()
-        rows = mgr.list_canonical_configs(active_only=True)
+        rows = mgr.list_canonical_configs(active_only=True, timeframe=tf)
         data = []
         for r in rows:
             item = {
@@ -59,13 +64,18 @@ async def list_gms_strategy_configs_public():
                 "precompute_enabled": r.get("precompute_enabled"),
                 "scoring_mechanism": r.get("scoring_mechanism"),
                 "scoring_mechanism_label": r.get("scoring_mechanism_label"),
+                "timeframe": r.get("timeframe") or tf,
             }
             data.append(item)
-        default_id = mgr.resolve_canonical_config_id("tiered_dual_max")
+        if tf == "weekly":
+            default_id = mgr.ensure_canonical_weekly_config()
+        else:
+            default_id = mgr.resolve_canonical_config_id("tiered_dual_max")
         return JSONResponse({
             "success": True,
             "data": data,
             "default_config_id": default_id,
+            "timeframe": tf,
             "enable_etf": is_etf_enabled(),
         })
     except Exception as e:

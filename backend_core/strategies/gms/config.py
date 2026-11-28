@@ -193,9 +193,20 @@ class GMSConfigManager:
     def resolve_config_id(
         self, config_id: Optional[int] = None, *, timeframe: str = "daily"
     ) -> int:
-        if config_id is not None:
-            return int(config_id)
         tf = (timeframe or "daily").strip().lower()
+        if tf not in ("daily", "weekly"):
+            tf = "daily"
+        if config_id is not None:
+            row = self.get_config_row(int(config_id))
+            if row:
+                row_tf = (
+                    str(getattr(row, "timeframe", None) or "").strip().lower()
+                    or str((row.config_params or {}).get("timeframe") or "").strip().lower()
+                    or ("weekly" if row.name == GMS_CANONICAL_WEEKLY_NAME else "daily")
+                )
+                # 周期一致才采用传入 id；否则回落 canonical，避免日线 config 查周 trace 为空
+                if row_tf == tf:
+                    return int(config_id)
         if tf == "weekly":
             return int(self.ensure_canonical_weekly_config())
         db = self._session()
@@ -468,18 +479,20 @@ class GMSConfigManager:
         except Exception as e:
             logger.warning("合并 board_weak 减分规则失败 config_id=%s: %s", penalty_id, e)
 
-    def list_canonical_configs(self, active_only: bool = True) -> List[Dict[str, Any]]:
-        """仅返回选股/管理端使用的两个共享参数版本。"""
+    def list_canonical_configs(
+        self, active_only: bool = True, *, timeframe: str = "daily"
+    ) -> List[Dict[str, Any]]:
+        """返回选股用共享参数版本；timeframe=weekly 时返回 default_weekly。"""
         from backend_core.strategies.gms.scoring import get_mechanism_meta
 
-        ids = self.ensure_canonical_configs()
+        tf = (timeframe or "daily").strip().lower()
         out: List[Dict[str, Any]] = []
-        for name in (GMS_CANONICAL_STANDARD_NAME, GMS_CANONICAL_PENALTY_NAME):
-            row = self.get_config_row(ids[name])
+
+        def _append_row(row) -> None:
             if not row:
-                continue
+                return
             if active_only and not row.is_active:
-                continue
+                return
             item = self._serialize_config_row(row)
             try:
                 cfg = self.get_config(int(row.id))
@@ -490,6 +503,15 @@ class GMSConfigManager:
             except Exception:
                 pass
             out.append(item)
+
+        if tf == "weekly":
+            wid = self.ensure_canonical_weekly_config()
+            _append_row(self.get_config_row(wid))
+            return out
+
+        ids = self.ensure_canonical_configs()
+        for name in (GMS_CANONICAL_STANDARD_NAME, GMS_CANONICAL_PENALTY_NAME):
+            _append_row(self.get_config_row(ids[name]))
         return out
 
     def deactivate_non_canonical_configs(self) -> int:
@@ -548,17 +570,40 @@ class GMSConfigManager:
 
     def ensure_canonical_weekly_config(self) -> int:
         """确保周线 canonical 参数版本 default_weekly 存在并开启预计算。"""
+        from backend_api.models import GMSStrategyConfig
+
         row = self.get_config_row_by_name(GMS_CANONICAL_WEEKLY_NAME)
         if row:
             cid = int(row.id)
-            if not row.is_active or not row.precompute_enabled:
-                self.update_config(
-                    cid,
-                    {},
-                    is_active=True,
-                    precompute_enabled=True,
-                    change_note="reactivate_canonical_weekly",
-                )
+            need_fix = (
+                (not row.is_active)
+                or (not row.precompute_enabled)
+                or (str(getattr(row, "timeframe", "") or "").strip().lower() != "weekly")
+            )
+            if need_fix:
+                db = self._session()
+                try:
+                    r = (
+                        db.query(GMSStrategyConfig)
+                        .filter(GMSStrategyConfig.id == cid)
+                        .first()
+                    )
+                    if r:
+                        r.is_active = True
+                        r.precompute_enabled = True
+                        if hasattr(r, "timeframe"):
+                            r.timeframe = "weekly"
+                        params = dict(r.config_params or {})
+                        params["timeframe"] = "weekly"
+                        r.config_params = params
+                        r.updated_at = datetime.now()
+                        db.commit()
+                        self._invalidate_cache(cid)
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.close()
             return cid
         params = self.get_default_config(timeframe="weekly")
         return self.create_config(

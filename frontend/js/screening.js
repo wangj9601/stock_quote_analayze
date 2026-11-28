@@ -4617,7 +4617,10 @@ const ScreeningPage = {
             });
         });
         scope.querySelectorAll('input[name="gmsTimeframe"]').forEach((radio) => {
-            radio.addEventListener('change', () => this.syncGmsAsOfDateLabels());
+            radio.addEventListener('change', () => {
+                this.syncGmsAsOfDateLabels();
+                void this.initGmsStrategyConfig();
+            });
         });
         this.syncGmsAsOfDateLabels();
         scope.querySelectorAll('input[name="gmsWatchlistMarket"]').forEach((radio) => {
@@ -5907,9 +5910,13 @@ const ScreeningPage = {
         const statusEl = document.getElementById('gmsParamsSaveStatus');
         const selectEl = document.getElementById('gms-config_id');
         if (!selectEl) return;
+        const tfEl = document.querySelector('input[name="gmsTimeframe"]:checked');
+        const timeframe = tfEl && tfEl.value === 'weekly' ? 'weekly' : 'daily';
         selectEl.innerHTML = '<option value="">加载中…</option>';
         try {
-            const res = await fetch(`${this.API_BASE_URL}/api/frontend/gms/strategy-configs`);
+            const res = await fetch(
+                `${this.API_BASE_URL}/api/frontend/gms/strategy-configs?timeframe=${encodeURIComponent(timeframe)}`
+            );
             if (!res.ok) {
                 throw new Error(`HTTP ${res.status}`);
             }
@@ -5929,46 +5936,60 @@ const ScreeningPage = {
             }
             const defaultId = json.default_config_id;
             let savedConfigId = null;
-            try {
-                const token = localStorage.getItem('access_token');
-                if (token) {
-                    const prefRes = await fetch(`${this.API_BASE_URL}/api/user/preferences/gms-screening`, {
-                        headers: { Authorization: `Bearer ${token}` },
-                    });
-                    if (prefRes.ok) {
-                        const prefJson = await prefRes.json();
-                        const pref = prefJson.data || {};
-                        if (pref.config_id != null) savedConfigId = parseInt(pref.config_id, 10);
+            // 周线不要沿用日线偏好里的 config_id
+            if (timeframe === 'daily') {
+                try {
+                    const token = localStorage.getItem('access_token');
+                    if (token) {
+                        const prefRes = await fetch(`${this.API_BASE_URL}/api/user/preferences/gms-screening`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        });
+                        if (prefRes.ok) {
+                            const prefJson = await prefRes.json();
+                            const pref = prefJson.data || {};
+                            if (pref.config_id != null) savedConfigId = parseInt(pref.config_id, 10);
+                        }
                     }
-                }
-                if (savedConfigId == null) {
-                    const saved = sessionStorage.getItem('gmsScreeningPrefs');
-                    if (saved) {
-                        const parsed = JSON.parse(saved);
-                        if (parsed.config_id != null) savedConfigId = parseInt(parsed.config_id, 10);
+                    if (savedConfigId == null) {
+                        const saved = sessionStorage.getItem('gmsScreeningPrefs');
+                        if (saved) {
+                            const parsed = JSON.parse(saved);
+                            if (parsed.config_id != null) savedConfigId = parseInt(parsed.config_id, 10);
+                        }
                     }
-                }
-            } catch (_) { /* ignore */ }
+                } catch (_) { /* ignore */ }
+            }
 
             selectEl.innerHTML = '';
+            const ids = new Set();
             list.forEach((item) => {
                 const opt = document.createElement('option');
                 opt.value = String(item.id);
-                const nameLabels = { default: '标准版', gms_penalty: '减分版' };
+                ids.add(item.id);
+                const nameLabels = {
+                    default: '标准版',
+                    gms_penalty: '减分版',
+                    default_weekly: '周线标准版',
+                };
                 let label = nameLabels[item.name] || item.name || `v${item.id}`;
                 if (item.scoring_mechanism_label) label += ` · ${item.scoring_mechanism_label}`;
                 else if (item.version_label) label += ` (${item.version_label})`;
-                if (item.is_default) label += ' [默认]';
+                if (item.is_default || item.name === 'default_weekly') label += ' [默认]';
                 opt.textContent = label;
                 selectEl.appendChild(opt);
             });
-            const pickId = savedConfigId || defaultId || (list[0] && list[0].id);
+            let pickId = defaultId || (list[0] && list[0].id);
+            if (savedConfigId != null && ids.has(savedConfigId)) pickId = savedConfigId;
             if (pickId) {
                 selectEl.value = String(pickId);
                 this.gmsConfigId = pickId;
             }
             await this.syncGmsParamsFromServer(this.gmsConfigId, false);
-            if (statusEl) statusEl.textContent = '已与服务端默认版本对齐';
+            if (statusEl) {
+                statusEl.textContent = timeframe === 'weekly'
+                    ? '已对齐周线参数版本'
+                    : '已与服务端默认版本对齐';
+            }
         } catch (e) {
             console.error('initGmsStrategyConfig:', e);
             selectEl.innerHTML = '<option value="">加载失败（请确认后端 API 已启动）</option>';

@@ -100,14 +100,22 @@ def load_all_watchlist_stock_codes(db) -> List[str]:
         return []
 
 
-def _resolve_precompute_config_ids(timeframe: str = "daily") -> List[int]:
+def _resolve_precompute_config_ids(
+    timeframe: str = "daily",
+    *,
+    ignore_env_whitelist: bool = False,
+) -> List[int]:
     from backend_core.strategies.gms.config import GMSConfigManager
 
     mgr = GMSConfigManager()
     config_ids = mgr.list_precompute_config_ids(timeframe=timeframe)
-    raw = _env("GMS_PRECOMPUTE_CONFIG_IDS")
+    if ignore_env_whitelist:
+        return config_ids
+    # 周线只用 GMS_WEEKLY_PRECOMPUTE_CONFIG_IDS；勿回退到日线白名单（否则会把 default_weekly 滤空）
     if timeframe == "weekly":
-        raw = _env("GMS_WEEKLY_PRECOMPUTE_CONFIG_IDS") or raw
+        raw = _env("GMS_WEEKLY_PRECOMPUTE_CONFIG_IDS")
+    else:
+        raw = _env("GMS_PRECOMPUTE_CONFIG_IDS")
     if raw:
         whitelist = [int(x) for x in re.split(r"[,;\s]+", raw) if x.strip().isdigit()]
         if whitelist:
@@ -237,6 +245,8 @@ def run_gms_precompute(
     skip_weekend: bool = True,
     *,
     timeframe: str = "daily",
+    force: bool = False,
+    as_of: Optional[str] = None,
 ):
     """
     执行一次 GMS 全量扫描并写入 trace。
@@ -247,27 +257,72 @@ def run_gms_precompute(
         stock_pool: 非空时按自定义列表计算，market 传 all
         skip_weekend: 周六日跳过（日线与历史采集一致；周线不因周末跳过）
         timeframe: daily | weekly
+        force: 强制计算（周线：确保 default_weekly、忽略环境白名单滤空）
+        as_of: 可选 as-of 日；周线再解析为已收盘周周五标签
     """
     from backend_core.data_collectors.workflow.signal_count import pack_signal_runs
+    from backend_core.strategies.gms.config import GMSConfigManager
+    from backend_core.strategies.gms.week_calendar import (
+        normalize_date_str,
+        resolve_gms_week_end,
+    )
+    from backend_core.database.db import SessionLocal
 
     tf = (timeframe or "daily").strip().lower()
-    if tf == "daily" and skip_weekend and datetime.now().weekday() in (5, 6):
+    if tf == "daily" and skip_weekend and (not force) and datetime.now().weekday() in (5, 6):
         logger.info("[GMS预计算] 周末跳过 market=%s", market)
         return {"skipped": True, "reason": "周末跳过", "market": market}
 
+    weekly_id: Optional[int] = None
     if tf == "weekly":
-        from backend_core.strategies.gms.config import GMSConfigManager
+        weekly_id = GMSConfigManager().ensure_canonical_weekly_config()
 
-        GMSConfigManager().ensure_canonical_weekly_config()
-
-    config_ids = _resolve_precompute_config_ids(timeframe=tf)
+    config_ids = _resolve_precompute_config_ids(
+        timeframe=tf,
+        ignore_env_whitelist=bool(force and tf == "weekly"),
+    )
+    if not config_ids and weekly_id is not None:
+        config_ids = [int(weekly_id)]
+        logger.warning(
+            "[GMS预计算] 周线预计算列表为空，回退 canonical config_id=%s force=%s",
+            weekly_id,
+            force,
+        )
     if not config_ids:
         logger.warning("[GMS预计算] 无可用 config_id，跳过 market=%s tf=%s", market, tf)
         return {"skipped": True, "reason": "无预计算版本", "market": market, "timeframe": tf}
 
+    target_date: Optional[str] = None
+    if tf == "weekly":
+        db = SessionLocal()
+        try:
+            asof = normalize_date_str(as_of) if as_of else ""
+            if not asof:
+                from backend_core.strategies.gms.week_calendar import (
+                    resolve_gms_trade_date_fallback,
+                )
+
+                asof = resolve_gms_trade_date_fallback(db)
+            target_date = resolve_gms_week_end(db, asof) or None
+            if not target_date:
+                return {
+                    "skipped": True,
+                    "reason": f"无法解析已收盘周 as_of={asof}",
+                    "market": market,
+                    "timeframe": tf,
+                }
+        finally:
+            db.close()
+
     return pack_signal_runs(
         [
-            run_gms_precompute_for_config(cid, market, stock_pool, timeframe=tf)
+            run_gms_precompute_for_config(
+                cid,
+                market,
+                stock_pool,
+                timeframe=tf,
+                target_date=target_date,
+            )
             for cid in config_ids
         ]
     )
@@ -295,9 +350,20 @@ def scheduled_weekly_mf_cn():
         db.close()
 
 
-def scheduled_gms_signals_weekly_cn():
+def scheduled_gms_signals_weekly_cn(
+    *,
+    force: bool = False,
+    as_of: Optional[str] = None,
+):
     """工作流节点：A 股 GMS 周线预计算（仅已收盘周）。"""
-    return run_gms_precompute("cn", stock_pool=None, timeframe="weekly", skip_weekend=False)
+    return run_gms_precompute(
+        "cn",
+        stock_pool=None,
+        timeframe="weekly",
+        skip_weekend=False,
+        force=bool(force),
+        as_of=as_of,
+    )
 
 
 def scheduled_gms_signals_custom():

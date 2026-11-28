@@ -120,6 +120,29 @@ _TRADE_DATE_SCHEMA: Dict[str, Any] = {
     },
 }
 
+_GMS_WEEKLY_SIGNAL_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "force": {
+            "type": "boolean",
+            "title": "强制计算周信号",
+            "default": False,
+            "description": "勾选后确保 default_weekly 可用并忽略环境白名单滤空，强制跑周线预计算",
+        },
+        "as_of": {
+            "type": "string",
+            "title": "基准日(可选)",
+            "format": "date",
+            "description": "留空=最近交易日；服务端再对齐已收盘周周五标签",
+        },
+        "trade_date": {
+            "type": "string",
+            "title": "交易日(可选，同基准日)",
+            "format": "date",
+        },
+    },
+}
+
 
 def _n(
     key: str,
@@ -233,7 +256,8 @@ NODE_DEFS: List[CollectionNodeDef] = [
         "GMS周线信号预计算(A股)",
         "strategy",
         exec_gms_signals_weekly_cn,
-        description="依赖 weekly_mf_cn；写入 gms_signal_trace_weekly（仅已收盘周）",
+        param_schema=_GMS_WEEKLY_SIGNAL_SCHEMA,
+        description="依赖 weekly_mf_cn；写入 gms_signal_trace_weekly（仅已收盘周）；可勾选强制计算",
     ),
     _n("urt_signals_cn", "URT信号预计算(A股)", "strategy", exec_urt_cn),
     _n("urt_signals_hk", "URT信号预计算(港股)", "strategy", exec_urt_hk),
