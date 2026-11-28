@@ -4862,8 +4862,11 @@ const ScreeningPage = {
         const page = options.page != null ? options.page : this.gmsPage;
         const scopeElement = document.querySelector('input[name="gmsScope"]:checked');
         const scope = scopeElement ? scopeElement.value : 'all';
+        const tfEl = document.querySelector('input[name="gmsTimeframe"]:checked');
+        const timeframe = tfEl && tfEl.value === 'weekly' ? 'weekly' : 'daily';
         const gmsParams = this.getGmsParams();
         const q = new URLSearchParams();
+        q.set('timeframe', timeframe);
         if (scope === 'single') {
             const code = options.resolvedSingleCode || '';
             if (code) q.set('code', code);

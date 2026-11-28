@@ -23,6 +23,8 @@ from backend_core.data_collectors.workflow.adapters import (
     exec_etf_realtime,
     exec_gms_cn,
     exec_gms_hk,
+    exec_gms_signals_weekly_cn,
+    exec_weekly_mf_cn,
     exec_hk_annual,
     exec_hk_historical,
     exec_hk_index_historical,
@@ -207,6 +209,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
     _n("etf_historical", "ETF历史", "etf", exec_etf_historical),
     # 聚合
     _n("cn_weekly", "A股周K生成", "agg", exec_cn_weekly),
+    _n(
+        "weekly_mf_cn",
+        "A股周频MF",
+        "agg",
+        exec_weekly_mf_cn,
+        description="依赖 cn_weekly；按已收盘周写入 mean_frequency_resonance_indicators_weekly",
+    ),
     _n("cn_monthly", "A股月K生成", "agg", exec_cn_monthly),
     _n("cn_quarterly", "A股季K生成", "agg", exec_cn_quarterly),
     _n("cn_semiannual", "A股半年K生成", "agg", exec_cn_semiannual),
@@ -219,6 +228,13 @@ NODE_DEFS: List[CollectionNodeDef] = [
     # 策略
     _n("gms_signals_cn", "GMS信号预计算(A股)", "strategy", exec_gms_cn),
     _n("gms_signals_hk", "GMS信号预计算(港股)", "strategy", exec_gms_hk),
+    _n(
+        "gms_signals_weekly_cn",
+        "GMS周线信号预计算(A股)",
+        "strategy",
+        exec_gms_signals_weekly_cn,
+        description="依赖 weekly_mf_cn；写入 gms_signal_trace_weekly（仅已收盘周）",
+    ),
     _n("urt_signals_cn", "URT信号预计算(A股)", "strategy", exec_urt_cn),
     _n("urt_signals_hk", "URT信号预计算(港股)", "strategy", exec_urt_hk),
     _n("sbbr_signals_cn", "SBBR信号预计算(A股)", "strategy", exec_sbbr_cn),

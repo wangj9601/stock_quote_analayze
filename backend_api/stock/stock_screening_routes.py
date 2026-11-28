@@ -1579,6 +1579,10 @@ async def get_gms_strategy(
         ge=1,
         description="GMS 策略参数版本 ID，不传则用默认版本；gms_watchlist 可自动使用观察股分组绑定的版本",
     ),
+    timeframe: str = Query(
+        "daily",
+        description="周期：daily（日线）| weekly（周线，读 gms_signal_trace_weekly；第一期仅 CN）",
+    ),
     use_pagination: bool = Query(
         False,
         description="为 true 时对返回列表分页（仍先完成全量选股与组装，再截取当前页）；默认 false 保持与其它客户端兼容",
@@ -1596,6 +1600,7 @@ async def get_gms_strategy(
 
     本接口强制只读 gms_signal_trace / snapshot，忽略 trace_only=false；缺失时返回 need_precompute，
     不在 HTTP 路径现算回填。现算写库仅日批 scheduled_precompute / 管理端补算入口。
+    timeframe=weekly 时读周表，信号日为已收盘周周五标签。
     """
     if not _ensure_gms_imports():
         return JSONResponse(
@@ -1603,8 +1608,23 @@ async def get_gms_strategy(
             content={"success": False, "message": "GMS策略暂不可用", "data": []},
         )
 
+    gms_timeframe = (timeframe or "daily").strip().lower()
+    if gms_timeframe not in ("daily", "weekly"):
+        gms_timeframe = "daily"
+
     try:
         from backend_core.config.config import is_etf_enabled
+        if gms_timeframe == "weekly" and str(scope or "").strip().lower() in ("hk", "etf"):
+            return JSONResponse(
+                {
+                    "success": True,
+                    "data": [],
+                    "total": 0,
+                    "message": "GMS 周线第一期仅支持 A 股（CN）",
+                    "timeframe": "weekly",
+                    "scope": scope,
+                }
+            )
         if str(scope or "").strip().lower() == "etf" and not is_etf_enabled():
             return JSONResponse(
                 {
@@ -1626,7 +1646,7 @@ async def get_gms_strategy(
                 }
             )
 
-        # 未传日期时，从 mean_frequency_resonance_indicators 或历史行情获取最新可用日期
+        # 未传日期时，从行情/指标取最新可用日；周线再解析为已收盘周周五标签
         if date:
             try:
                 datetime.strptime(str(date).strip()[:10], "%Y-%m-%d")
@@ -1660,6 +1680,16 @@ async def get_gms_strategy(
             except Exception as e:
                 target_date = datetime.now().strftime("%Y-%m-%d")
                 logger.warning(f"GMS 获取最新日期失败: {e}，使用当天: {target_date}")
+
+        if gms_timeframe == "weekly":
+            from backend_core.strategies.gms.week_calendar import resolve_gms_week_end
+
+            week_end = resolve_gms_week_end(db, target_date)
+            if week_end:
+                target_date = week_end
+                logger.info("GMS 周线使用已收盘周: %s", target_date)
+            else:
+                logger.warning("GMS 周线无法解析已收盘周 as_of=%s", target_date)
 
         # A 股板块多选：空列表=不限；并集过滤（与 URT 一致）
         seg_list = _gms_normalize_cn_board_segment_query(cn_board_segment)
@@ -2021,7 +2051,9 @@ async def get_gms_strategy(
             market = "all"
 
         config_mgr = GMSConfigManagerCls()
-        resolved_config_id = config_mgr.resolve_config_id(config_id)
+        resolved_config_id = config_mgr.resolve_config_id(
+            config_id, timeframe=gms_timeframe
+        )
         config = config_mgr.get_config(resolved_config_id) if GMS_AVAILABLE else {}
         gms_config_meta = _gms_strategy_config_meta(config_mgr, resolved_config_id, config) if GMS_AVAILABLE else {}
         # 以前端传入参数覆盖 config（前后端共用同一套参数）
@@ -2109,7 +2141,9 @@ async def get_gms_strategy(
         ):
             session = SessionLocal()
             try:
-                gms_if = GMSFrontendInterface(session, _config, config_id=_config_id)
+                gms_if = GMSFrontendInterface(
+                    session, _config, config_id=_config_id, timeframe=gms_timeframe
+                )
                 gms_if.set_selection_config(min_score=_min_score, max_results=_max_results)
                 return gms_if.get_selection_results(
                     _target_date,

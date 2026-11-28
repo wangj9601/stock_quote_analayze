@@ -81,9 +81,14 @@ def batch_lookup_observation_range(
     db: Session,
     keys: Iterable[Ma60Key],
     period_days: int = DEFAULT_OBSERVATION_PERIOD,
+    *,
+    timeframe: str = "daily",
 ) -> Dict[Ma60Key, RangeResult]:
     """批量计算各 (code, date, market_type) 在观察周期内的最高/最低及振幅。"""
+    from sqlalchemy import text
+
     period = max(1, int(period_days))
+    tf = (timeframe or "daily").strip().lower()
     norm: List[Ma60Key] = []
     seen: set[Ma60Key] = set()
     for code, date, mt in keys:
@@ -101,28 +106,50 @@ def batch_lookup_observation_range(
 
     out: Dict[Ma60Key, RangeResult] = {}
     for (code, mt), dates in by_cm.items():
-        model = _quote_model(mt)
         max_date = max(dates)
-        rows = (
-            db.query(model.date, model.high, model.low)
-            .filter(
-                model.code == code,
-                model.date <= max_date,
-                model.high.isnot(None),
-                model.low.isnot(None),
-            )
-            .order_by(desc(model.date))
-            .all()
-        )
         history: List[Tuple[str, float, float]] = []
-        for d, hi, lo in rows:
-            try:
-                h = float(hi)
-                l = float(lo)
-                if h > 0 and l > 0:
-                    history.append((normalize_indicator_date(d), h, l))
-            except (TypeError, ValueError):
-                continue
+        if tf == "weekly":
+            rows = db.execute(
+                text(
+                    """
+                    SELECT date, high, low
+                    FROM weekly_quotes
+                    WHERE code = :code AND date <= :max_date
+                      AND high IS NOT NULL AND low IS NOT NULL
+                    ORDER BY date DESC
+                    """
+                ),
+                {"code": code, "max_date": max_date},
+            ).fetchall()
+            for d, hi, lo in rows:
+                try:
+                    h = float(hi)
+                    l = float(lo)
+                    if h > 0 and l > 0:
+                        history.append((normalize_indicator_date(d), h, l))
+                except (TypeError, ValueError):
+                    continue
+        else:
+            model = _quote_model(mt)
+            rows = (
+                db.query(model.date, model.high, model.low)
+                .filter(
+                    model.code == code,
+                    model.date <= max_date,
+                    model.high.isnot(None),
+                    model.low.isnot(None),
+                )
+                .order_by(desc(model.date))
+                .all()
+            )
+            for d, hi, lo in rows:
+                try:
+                    h = float(hi)
+                    l = float(lo)
+                    if h > 0 and l > 0:
+                        history.append((normalize_indicator_date(d), h, l))
+                except (TypeError, ValueError):
+                    continue
 
         for target_date in dates:
             window = [(d, h, l) for d, h, l in history if d <= target_date][:period]
@@ -140,6 +167,7 @@ def enrich_rows_observation_range(
     rows: List[Dict[str, Any]],
     *,
     period_days: int = DEFAULT_OBSERVATION_PERIOD,
+    timeframe: str = "daily",
 ) -> None:
     """为 GMS 指标 row 补全 observation_period_high/low 与 observation_range_amplitude_pct。"""
     if not rows:
@@ -152,7 +180,9 @@ def enrich_rows_observation_range(
     if not keys:
         return
     try:
-        cache = batch_lookup_observation_range(db, keys, period_days=period_days)
+        cache = batch_lookup_observation_range(
+            db, keys, period_days=period_days, timeframe=timeframe
+        )
         for r in rows:
             k = ma60_key(r.get("code"), r.get("date"), r.get("market_type"))
             hit = cache.get(k)

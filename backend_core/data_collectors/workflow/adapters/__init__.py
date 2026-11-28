@@ -499,6 +499,20 @@ def _gms_cn() -> Any:
     return scheduled_gms_signals_cn()
 
 
+def _weekly_mf_cn() -> Any:
+    from backend_core.strategies.gms.scheduled_precompute import scheduled_weekly_mf_cn
+
+    return scheduled_weekly_mf_cn()
+
+
+def _gms_weekly_cn() -> Any:
+    from backend_core.strategies.gms.scheduled_precompute import (
+        scheduled_gms_signals_weekly_cn,
+    )
+
+    return scheduled_gms_signals_weekly_cn()
+
+
 def _urt_cn() -> Any:
     from backend_core.strategies.urt.scheduled_precompute import scheduled_urt_signals_cn
 
@@ -686,6 +700,8 @@ exec_hk_semiannual = _wrap_hk(_gen_hk_semiannual, "港股半年K")
 exec_hk_annual = _wrap_hk(_gen_hk_annual, "港股年K")
 exec_gms_cn = _wrap_signal(_gms_cn, "GMS信号预计算(A股)")
 exec_gms_hk = _wrap_signal(_gms_hk, "GMS信号预计算(港股)")
+exec_weekly_mf_cn = _wrap_plain(_weekly_mf_cn, "A股周频MF")
+exec_gms_signals_weekly_cn = _wrap_signal(_gms_weekly_cn, "GMS周线信号预计算(A股)")
 exec_urt_cn = _wrap_signal(_urt_cn, "URT信号预计算(A股)")
 exec_urt_hk = _wrap_signal(_urt_hk, "URT信号预计算(港股)")
 exec_sbbr_cn = _wrap_signal(_sbbr_cn, "SBBR信号预计算")

@@ -22,6 +22,15 @@
             <div class="strategy-params-card" id="gmsDataSourceCard">
                 <h3>数据来源</h3>
                 <p class="gms-params-refresh-hint">修改数据来源、板块选择、剔除 ST 或策略参数后，须点击下方「刷新筛选」才会触发 GMS 策略打分选股。</p>
+                <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0; flex-wrap: wrap;">
+                    <div class="param-item" style="display: flex; align-items: center; gap: 12px;">
+                        <span style="color: #666; font-size: 13px;">周期：</span>
+                        <label style="cursor: pointer;"><input type="radio" name="gmsTimeframe" id="gmsTimeframeDaily" value="daily" checked style="margin-right: 4px;">日线</label>
+                        <label style="cursor: pointer;" title="以个股周线为基准；信号日为已收盘周周五标签（周五休市时按交易日完备提前确认）">
+                            <input type="radio" name="gmsTimeframe" id="gmsTimeframeWeekly" value="weekly" style="margin-right: 4px;">周线
+                        </label>
+                    </div>
+                </div>
                 <div class="params-grid" style="display: flex; gap: 20px; align-items: center; padding: 10px 0;">
                     <div class="param-item" style="display: flex; align-items: center;">
                         <input type="radio" id="gmsScopeCN" name="gmsScope" value="cn" checked

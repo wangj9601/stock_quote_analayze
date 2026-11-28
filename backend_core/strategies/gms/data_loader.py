@@ -15,10 +15,22 @@ _GMS_BARS_BATCH_SIZE = max(50, int(os.getenv("GMS_BARS_BATCH_SIZE") or "500"))
 
 
 class GMSDataLoader:
-    """从 mean_frequency_resonance_indicators 加载 GMS 所需指标"""
+    """从 mean_frequency_resonance_indicators（或周频表）加载 GMS 所需指标"""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, timeframe: str = "daily"):
         self.db = db
+        self.timeframe = (timeframe or "daily").strip().lower()
+        if self.timeframe not in ("daily", "weekly"):
+            self.timeframe = "daily"
+
+    def _indicator_model(self):
+        if self.timeframe == "weekly":
+            from backend_api.models import MeanFrequencyResonanceIndicatorsWeekly
+
+            return MeanFrequencyResonanceIndicatorsWeekly
+        from backend_api.models import MeanFrequencyResonanceIndicators
+
+        return MeanFrequencyResonanceIndicators
 
     def load_indicators(
         self,
@@ -34,7 +46,7 @@ class GMSDataLoader:
 
         Args:
             codes: 股票代码列表
-            date: 目标日期 (YYYY-MM-DD)
+            date: 目标日期 (YYYY-MM-DD)；周线为已收盘周周五标签
             market_type: CN 或 HK
             use_latest_per_stock: 若为 True，当某股票在目标日无数据时，使用该股票
                 date <= date 的最近一天的数据（历史行情表中无当天数据时以最近一天为筛选条件）
@@ -47,7 +59,8 @@ class GMSDataLoader:
 
         try:
             from sqlalchemy import desc
-            from backend_api.models import MeanFrequencyResonanceIndicators
+
+            MeanFrequencyResonanceIndicators = self._indicator_model()
 
             date_str = str(date).strip()[:10]
             if use_latest_per_stock:
@@ -121,12 +134,13 @@ class GMSDataLoader:
                 }
                 result.append(row_dict)
 
-            self._enrich_ma60_missing(result, market_type)
+            if self.timeframe != "weekly":
+                self._enrich_ma60_missing(result, market_type)
             self._enrich_ma60_flat(result, scoring_config, gms_config)
             self._enrich_observation_range(result, gms_config)
 
             logger.info(
-                f"GMS 加载 {len(result)} 条指标, date={date}, market={market_type}"
+                f"GMS 加载 {len(result)} 条指标, date={date}, market={market_type}, tf={self.timeframe}"
                 + (", 无当日数据时已用最近可用日" if use_latest_per_stock else "")
             )
             return result
@@ -162,28 +176,10 @@ class GMSDataLoader:
             return []
 
         try:
-            from sqlalchemy import desc
-            from backend_api.models import MeanFrequencyResonanceIndicators
+            MeanFrequencyResonanceIndicators = self._indicator_model()
 
             end_dt = str(end_date).strip()[:10]
-            # 子查询：每只股票取 date <= end_date 的最近 days 个交易日
-            subq = (
-                self.db.query(
-                    MeanFrequencyResonanceIndicators.code,
-                    MeanFrequencyResonanceIndicators.date,
-                )
-                .filter(
-                    MeanFrequencyResonanceIndicators.code.in_(codes),
-                    MeanFrequencyResonanceIndicators.date <= end_dt,
-                )
-                .order_by(
-                    MeanFrequencyResonanceIndicators.code,
-                    desc(MeanFrequencyResonanceIndicators.date),
-                )
-            ).subquery()
-
-            # 使用 row_number 或 limit 取每只股票最近 days 日（SQLite 无 row_number，改用多次查询或 in_ 子查询）
-            # 简化：直接查 date <= end_date 的所有记录，按 code, date desc 排序，在 Python 中取每只股票前 days 条
+            # 直接查 date <= end_date，按 code, date desc，在 Python 中取每只股票前 days 条
             query = (
                 self.db.query(MeanFrequencyResonanceIndicators)
                 .filter(
@@ -267,6 +263,7 @@ class GMSDataLoader:
         from .ma60_source import (
             DEFAULT_MA60_FLAT_TOL,
             enrich_rows_ma60_flat,
+            is_ma60_flat,
             resolve_ma60_flat_lookback_days,
         )
 
@@ -283,9 +280,58 @@ class GMSDataLoader:
         scoring = merged_cfg.get("scoring") or scoring_config or {}
         lookback = resolve_ma60_flat_lookback_days(merged_cfg if merged_cfg else {"scoring": scoring})
         tol = float(scoring.get("ma60_flat_tol") or DEFAULT_MA60_FLAT_TOL)
-        enrich_rows_ma60_flat(self.db, rows, lookback_days=lookback, tol=tol)
+        if self.timeframe == "weekly":
+            self._enrich_ma60_flat_weekly(rows, lookback_days=lookback, tol=tol)
+        else:
+            enrich_rows_ma60_flat(self.db, rows, lookback_days=lookback, tol=tol)
         for r in rows:
             r["ma60_flat_lookback_days"] = lookback
+
+    def _enrich_ma60_flat_weekly(
+        self,
+        rows: List[Dict[str, Any]],
+        *,
+        lookback_days: int,
+        tol: float,
+    ) -> None:
+        """周线：用周频 MF 表中的 ma60_d 序列做走平判定。"""
+        from sqlalchemy import desc
+
+        from .ma60_source import is_ma60_flat
+
+        Model = self._indicator_model()
+        lookback = max(1, int(lookback_days))
+        for r in rows:
+            code = str(r.get("code") or "").strip()
+            date = str(r.get("date") or "").strip()[:10]
+            mt = str(r.get("market_type") or "CN").strip()
+            if not code or not date:
+                continue
+            hist = (
+                self.db.query(Model.date, Model.ma60_d)
+                .filter(
+                    Model.code == code,
+                    Model.market_type == mt,
+                    Model.date <= date,
+                    Model.ma60_d.isnot(None),
+                )
+                .order_by(desc(Model.date))
+                .limit(lookback + 1)
+                .all()
+            )
+            ma60_now = r.get("ma60_d")
+            ma60_lag = None
+            if len(hist) > lookback:
+                ma60_lag = hist[lookback][1]
+            r["ma60_d_lag"] = ma60_lag
+            r["ma60_flat"] = is_ma60_flat(ma60_now, ma60_lag, tol)
+            if ma60_now is not None and ma60_lag is not None:
+                try:
+                    lag_f = float(ma60_lag)
+                    if lag_f > 0:
+                        r["ma60_flat_change_pct"] = abs(float(ma60_now) - lag_f) / lag_f
+                except (TypeError, ValueError):
+                    pass
 
     def _enrich_observation_range(
         self,
@@ -296,7 +342,9 @@ class GMSDataLoader:
         from .observation_range import enrich_rows_observation_range, resolve_observation_period_days
 
         period = resolve_observation_period_days(gms_config or {})
-        enrich_rows_observation_range(self.db, rows, period_days=period)
+        enrich_rows_observation_range(
+            self.db, rows, period_days=period, timeframe=self.timeframe
+        )
 
     def load_bars(
         self,
@@ -306,9 +354,10 @@ class GMSDataLoader:
         limit: int = 800,
     ) -> List[Dict[str, Any]]:
         """
-        加载日 K（日期 DESC，最新在前），供 KDE 支撑/阻力计算。
+        加载 K 线（日期 DESC，最新在前），供 KDE 支撑/阻力计算。
 
-        CN → historical_quotes；HK → historical_quotes_hk；ETF → fund_historical_quotes。
+        daily: CN → historical_quotes；HK → historical_quotes_hk；ETF → fund_historical_quotes。
+        weekly: weekly_quotes（第一期仅 CN）。
         """
         code_n = str(code or "").strip()
         if not code_n:
@@ -324,6 +373,38 @@ class GMSDataLoader:
                 HistoricalQuotesHK,
                 FundHistoricalQuotes,
             )
+
+            if self.timeframe == "weekly":
+                rows = self.db.execute(
+                    text(
+                        """
+                        SELECT date, open, high, low, close, volume
+                        FROM weekly_quotes
+                        WHERE code = :code
+                          AND (:end_date = '' OR date <= :end_date)
+                        ORDER BY date DESC
+                        LIMIT :lim
+                        """
+                    ),
+                    {"code": code_n, "end_date": end_str or "", "lim": lim},
+                ).fetchall()
+                bars: List[Dict[str, Any]] = []
+                for r in rows:
+                    d = r[0]
+                    ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d).strip()[:10]
+                    if not ds:
+                        continue
+                    bars.append(
+                        {
+                            "date": ds,
+                            "open": float(r[1] or 0),
+                            "high": float(r[2] or 0),
+                            "low": float(r[3] or 0),
+                            "close": float(r[4] or 0),
+                            "volume": float(r[5] or 0),
+                        }
+                    )
+                return bars
 
             if mt == "HK":
                 q = self.db.query(
@@ -359,11 +440,10 @@ class GMSDataLoader:
                     HistoricalQuotes.volume,
                 ).filter(HistoricalQuotes.code == code_n)
                 if end_str:
-                    # date 列历史上可能为 TEXT，与回测取数口径一致
                     q = q.filter(cast(HistoricalQuotes.date, String) <= end_str)
                 rows = q.order_by(HistoricalQuotes.date.desc()).limit(lim).all()
 
-            bars: List[Dict[str, Any]] = []
+            bars = []
             for r in rows:
                 d = r[0]
                 ds = d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d).strip()[:10]
@@ -397,7 +477,7 @@ class GMSDataLoader:
         batch_size: int = _GMS_BARS_BATCH_SIZE,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        批量加载日 K（每 code 最多 limit 根，日期 DESC），供 KDE 结构位预加载。
+        批量加载 K 线（每 code 最多 limit 根，日期 DESC），供 KDE 结构位预加载。
         """
         code_list = [str(c).strip() for c in codes if str(c).strip()]
         if not code_list:
@@ -408,7 +488,10 @@ class GMSDataLoader:
         out: Dict[str, List[Dict[str, Any]]] = {}
 
         try:
-            if mt == "HK":
+            if self.timeframe == "weekly":
+                table = "weekly_quotes"
+                date_filter = "AND date <= :end_date" if end_str else ""
+            elif mt == "HK":
                 table = "historical_quotes_hk"
                 date_filter = "AND date <= :end_date" if end_str else ""
             elif mt == "ETF":
@@ -456,8 +539,9 @@ class GMSDataLoader:
                     )
 
             logger.info(
-                "GMS 批量 load_bars market=%s codes=%s hit=%s limit=%s",
+                "GMS 批量 load_bars market=%s tf=%s codes=%s hit=%s limit=%s",
                 mt,
+                self.timeframe,
                 len(code_list),
                 len(out),
                 lim,

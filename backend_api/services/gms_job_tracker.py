@@ -66,14 +66,16 @@ def record_precompute_run(
     stock_count: int = 0,
     duration_ms: Optional[int] = None,
     error_message: Optional[str] = None,
+    timeframe: str = "daily",
 ) -> None:
     try:
+        tf = (timeframe or "daily").strip().lower()
         db.execute(
             text(
                 """
                 INSERT INTO gms_precompute_runs
-                (config_id, market, trade_date, status, stock_count, duration_ms, error_message, finished_at)
-                VALUES (:config_id, :market, :trade_date, :status, :stock_count, :duration_ms, :error, NOW())
+                (config_id, market, trade_date, status, stock_count, duration_ms, error_message, finished_at, timeframe)
+                VALUES (:config_id, :market, :trade_date, :status, :stock_count, :duration_ms, :error, NOW(), :timeframe)
                 """
             ),
             {
@@ -84,15 +86,39 @@ def record_precompute_run(
                 "stock_count": stock_count,
                 "duration_ms": duration_ms,
                 "error": error_message,
+                "timeframe": tf,
             },
         )
         db.commit()
     except Exception as e:
-        logger.warning("记录 gms_precompute_runs 失败: %s", e)
+        # 兼容尚未迁移 timeframe 列的环境
         try:
             db.rollback()
-        except Exception:
-            pass
+            db.execute(
+                text(
+                    """
+                    INSERT INTO gms_precompute_runs
+                    (config_id, market, trade_date, status, stock_count, duration_ms, error_message, finished_at)
+                    VALUES (:config_id, :market, :trade_date, :status, :stock_count, :duration_ms, :error, NOW())
+                    """
+                ),
+                {
+                    "config_id": config_id,
+                    "market": market,
+                    "trade_date": trade_date,
+                    "status": status,
+                    "stock_count": stock_count,
+                    "duration_ms": duration_ms,
+                    "error": error_message,
+                },
+            )
+            db.commit()
+        except Exception as e2:
+            logger.warning("记录 gms_precompute_runs 失败: %s / %s", e, e2)
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
 
 def note_screening_request(trace_meta: Optional[Dict[str, Any]] = None, timed_out: bool = False) -> None:

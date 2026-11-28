@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 _DEFAULT_ROW_NAME = "default"
 GMS_CANONICAL_STANDARD_NAME = "default"
 GMS_CANONICAL_PENALTY_NAME = "gms_penalty"
-CANONICAL_CONFIG_NAMES = frozenset({GMS_CANONICAL_STANDARD_NAME, GMS_CANONICAL_PENALTY_NAME})
+GMS_CANONICAL_WEEKLY_NAME = "default_weekly"
+CANONICAL_CONFIG_NAMES = frozenset(
+    {GMS_CANONICAL_STANDARD_NAME, GMS_CANONICAL_PENALTY_NAME, GMS_CANONICAL_WEEKLY_NAME}
+)
 _CACHE: Dict[int, Dict] = {}
 
 
@@ -30,10 +33,12 @@ class GMSConfigManager:
             self.config_file,
         )
 
-    def get_default_config(self) -> Dict:
-        """获取代码内置默认策略参数。"""
-        return {
+    def get_default_config(self, timeframe: str = "daily") -> Dict:
+        """获取代码内置默认策略参数。timeframe=weekly 时覆盖窗口类默认。"""
+        cfg = {
             "observation_period": 20,
+            "timeframe": "daily",
+            "precompute_min_score": 30,
             "ratio_indicators": {
                 "use_ratio_d": True,
                 "use_ratio_d_for_exit": False,
@@ -56,6 +61,7 @@ class GMSConfigManager:
                 "momentum_volume_ratio_min": 1.5,
                 "watch_threshold": 60,
                 "alert_threshold": 90,
+                "precompute_min_score": 30,
             },
             "exit": {
                 "trend_break_days": 3,
@@ -70,7 +76,23 @@ class GMSConfigManager:
             "kde_grid_points": 200,
             # 结构盈亏比分母下限（现价比例；0 关闭；贴支撑时避免 RR 虚高）
             "structure_rr_min_downside_pct": 0.015,
+            "board_resonance": {
+                "board_resonance_enabled": True,
+            },
         }
+        tf = (timeframe or "daily").strip().lower()
+        if tf == "weekly":
+            cfg["timeframe"] = "weekly"
+            cfg["observation_period"] = 4
+            cfg["scoring"]["ma60_flat_lookback_days"] = 4
+            cfg["exit"]["trend_break_days"] = 1
+            cfg["kde_lookback_days"] = 12
+            cfg["kde_lookback_initial"] = 12
+            cfg["kde_lookback_step"] = 50
+            cfg["kde_lookback_max"] = 150
+            cfg["ma60_bars"] = 12
+            cfg["board_resonance"] = {"board_resonance_enabled": False}
+        return cfg
 
     def _load_from_json_file(self) -> Optional[Dict]:
         try:
@@ -168,9 +190,14 @@ class GMSConfigManager:
             row.config_params = config
             row.updated_at = datetime.now()
 
-    def resolve_config_id(self, config_id: Optional[int] = None) -> int:
+    def resolve_config_id(
+        self, config_id: Optional[int] = None, *, timeframe: str = "daily"
+    ) -> int:
         if config_id is not None:
             return int(config_id)
+        tf = (timeframe or "daily").strip().lower()
+        if tf == "weekly":
+            return int(self.ensure_canonical_weekly_config())
         db = self._session()
         try:
             return self._ensure_default_row_exists(db)
@@ -495,24 +522,54 @@ class GMSConfigManager:
         finally:
             db.close()
 
-    def list_precompute_config_ids(self) -> List[int]:
+    def list_precompute_config_ids(self, timeframe: str = "daily") -> List[int]:
         from backend_api.models import GMSStrategyConfig
 
+        tf = (timeframe or "daily").strip().lower()
         db = self._session()
         try:
-            rows = (
-                db.query(GMSStrategyConfig.id)
-                .filter(
-                    GMSStrategyConfig.is_active == True,  # noqa: E712
-                    (GMSStrategyConfig.is_default == True)  # noqa: E712
-                    | (GMSStrategyConfig.precompute_enabled == True),  # noqa: E712
-                )
-                .order_by(GMSStrategyConfig.id.asc())
-                .all()
+            q = db.query(GMSStrategyConfig.id).filter(
+                GMSStrategyConfig.is_active == True,  # noqa: E712
+                (GMSStrategyConfig.is_default == True)  # noqa: E712
+                | (GMSStrategyConfig.precompute_enabled == True),  # noqa: E712
             )
+            # timeframe 列可能尚未迁移时兜底：weekly 只认 default_weekly 名
+            try:
+                q = q.filter(GMSStrategyConfig.timeframe == tf)
+            except Exception:
+                if tf == "weekly":
+                    q = q.filter(GMSStrategyConfig.name == GMS_CANONICAL_WEEKLY_NAME)
+                else:
+                    q = q.filter(GMSStrategyConfig.name != GMS_CANONICAL_WEEKLY_NAME)
+            rows = q.order_by(GMSStrategyConfig.id.asc()).all()
             return [int(r[0]) for r in rows]
         finally:
             db.close()
+
+    def ensure_canonical_weekly_config(self) -> int:
+        """确保周线 canonical 参数版本 default_weekly 存在并开启预计算。"""
+        row = self.get_config_row_by_name(GMS_CANONICAL_WEEKLY_NAME)
+        if row:
+            cid = int(row.id)
+            if not row.is_active or not row.precompute_enabled:
+                self.update_config(
+                    cid,
+                    {},
+                    is_active=True,
+                    precompute_enabled=True,
+                    change_note="reactivate_canonical_weekly",
+                )
+            return cid
+        params = self.get_default_config(timeframe="weekly")
+        return self.create_config(
+            name=GMS_CANONICAL_WEEKLY_NAME,
+            config_params=params,
+            version_label="1.0.0",
+            description="GMS 周线版共享参数（窗口按周覆盖；板共振关闭）",
+            precompute_enabled=True,
+            timeframe="weekly",
+            created_by="system",
+        )
 
     @staticmethod
     def _serialize_config_row(row) -> Dict[str, Any]:
@@ -525,6 +582,7 @@ class GMSConfigManager:
             "is_active": bool(row.is_active),
             "is_default": bool(row.is_default),
             "precompute_enabled": bool(row.precompute_enabled),
+            "timeframe": getattr(row, "timeframe", None) or "daily",
             "parent_id": row.parent_id,
             "created_by": row.created_by,
             "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -543,16 +601,23 @@ class GMSConfigManager:
         precompute_enabled: bool = False,
         parent_id: Optional[int] = None,
         created_by: Optional[str] = None,
+        timeframe: str = "daily",
     ) -> int:
         from backend_api.models import GMSStrategyConfig
 
+        tf = (timeframe or "daily").strip().lower()
+        if tf not in ("daily", "weekly"):
+            tf = "daily"
         db = self._session()
         try:
-            merged = self._deep_merge(self.get_default_config(), config_params or {})
+            merged = self._deep_merge(
+                self.get_default_config(timeframe=tf), config_params or {}
+            )
             scoring = merged.get("scoring") or {}
             from backend_core.strategies.gms.scoring import validate_scoring_config, normalize_scoring_defaults
 
             merged["scoring"] = normalize_scoring_defaults(scoring)
+            merged["timeframe"] = tf
             errs = validate_scoring_config(merged["scoring"])
             if errs:
                 raise ValueError("; ".join(errs))
@@ -564,6 +629,7 @@ class GMSConfigManager:
                 is_active=is_active,
                 is_default=False,
                 precompute_enabled=precompute_enabled,
+                timeframe=tf,
                 parent_id=parent_id,
                 created_by=created_by,
                 created_at=datetime.now(),

@@ -100,12 +100,14 @@ def load_all_watchlist_stock_codes(db) -> List[str]:
         return []
 
 
-def _resolve_precompute_config_ids() -> List[int]:
+def _resolve_precompute_config_ids(timeframe: str = "daily") -> List[int]:
     from backend_core.strategies.gms.config import GMSConfigManager
 
     mgr = GMSConfigManager()
-    config_ids = mgr.list_precompute_config_ids()
+    config_ids = mgr.list_precompute_config_ids(timeframe=timeframe)
     raw = _env("GMS_PRECOMPUTE_CONFIG_IDS")
+    if timeframe == "weekly":
+        raw = _env("GMS_WEEKLY_PRECOMPUTE_CONFIG_IDS") or raw
     if raw:
         whitelist = [int(x) for x in re.split(r"[,;\s]+", raw) if x.strip().isdigit()]
         if whitelist:
@@ -117,24 +119,41 @@ def run_gms_precompute_for_config(
     config_id: int,
     market: str,
     stock_pool: Optional[List[str]] = None,
+    *,
+    timeframe: str = "daily",
+    target_date: Optional[str] = None,
 ) -> None:
     from backend_core.database.db import SessionLocal
     from backend_core.strategies.gms.config import GMSConfigManager
     from backend_core.strategies.gms.frontend_interface import GMSFrontendInterface
 
+    tf = (timeframe or "daily").strip().lower()
     db = SessionLocal()
     t0 = time.perf_counter()
-    target_date = ""
+    resolved_date = ""
     try:
-        target_date = resolve_gms_trade_date(db)
+        if target_date:
+            resolved_date = str(target_date).strip()[:10]
+        elif tf == "weekly":
+            from backend_core.strategies.gms.week_calendar import (
+                resolve_gms_trade_date_fallback,
+                resolve_gms_week_end,
+            )
+
+            as_of = resolve_gms_trade_date_fallback(db)
+            resolved_date = resolve_gms_week_end(db, as_of) or ""
+            if not resolved_date:
+                raise RuntimeError(f"无法解析已收盘周 as_of={as_of}")
+        else:
+            resolved_date = resolve_gms_trade_date(db)
         mgr = GMSConfigManager()
         cfg = mgr.get_config(config_id)
-        gms = GMSFrontendInterface(db, cfg, config_id=config_id)
-        # min_score=0：全市场仍算完；入库地板分在 trace 写入侧裁剪（默认 50，只减库）
+        gms = GMSFrontendInterface(db, cfg, config_id=config_id, timeframe=tf)
+        # min_score=0：全市场仍算完；入库地板分在 trace 写入侧裁剪（默认 30，只减库）
         gms.set_selection_config(min_score=0, max_results=200000)
         mkt = "all" if stock_pool else market
         results, meta = gms.get_selection_results(
-            target_date,
+            resolved_date,
             stock_pool,
             mkt,
             trace_only=False,
@@ -150,17 +169,19 @@ def run_gms_precompute_for_config(
             db,
             config_id,
             market,
-            target_date,
+            resolved_date,
             "success",
             stock_count=len(results),
             duration_ms=duration_ms,
+            timeframe=tf,
         )
         logger.info(
-            "[GMS预计算] 完成 config_id=%s date=%s market=%s pool=%s 返回=%s "
+            "[GMS预计算] 完成 config_id=%s date=%s market=%s tf=%s pool=%s 返回=%s "
             "storage_min_score=%s meta=%s",
             config_id,
-            target_date,
+            resolved_date,
             market,
+            tf,
             "custom" if stock_pool else "full",
             len(results),
             floor,
@@ -170,7 +191,8 @@ def run_gms_precompute_for_config(
             "success": True,
             "config_id": config_id,
             "market": market,
-            "trade_date": target_date,
+            "trade_date": resolved_date,
+            "timeframe": tf,
             "signal_count": len(results),
             "written": len(results),
         }
@@ -180,16 +202,18 @@ def run_gms_precompute_for_config(
             db,
             config_id,
             market,
-            target_date or datetime.now().strftime("%Y-%m-%d"),
+            resolved_date or datetime.now().strftime("%Y-%m-%d"),
             "failed",
             stock_count=0,
             duration_ms=duration_ms,
             error_message=str(e)[:500],
+            timeframe=tf,
         )
         logger.error(
-            "[GMS预计算] 失败 config_id=%s market=%s: %s",
+            "[GMS预计算] 失败 config_id=%s market=%s tf=%s: %s",
             config_id,
             market,
+            tf,
             e,
             exc_info=True,
         )
@@ -197,7 +221,8 @@ def run_gms_precompute_for_config(
             "success": False,
             "config_id": config_id,
             "market": market,
-            "trade_date": target_date,
+            "trade_date": resolved_date,
+            "timeframe": tf,
             "error": str(e),
             "signal_count": 0,
             "written": 0,
@@ -210,38 +235,69 @@ def run_gms_precompute(
     market: str,
     stock_pool: Optional[List[str]] = None,
     skip_weekend: bool = True,
+    *,
+    timeframe: str = "daily",
 ):
     """
-    执行一次 GMS 全量扫描并写入 gms_signal_trace（已有记录会跳过计算）。
+    执行一次 GMS 全量扫描并写入 trace。
     对 is_default 或 precompute_enabled 的每个参数版本分别预计算。
 
     Args:
         market: cn | hk | all（stock_pool 为 None 时有效）
         stock_pool: 非空时按自定义列表计算，market 传 all
-        skip_weekend: 周六日跳过（与历史采集任务一致）
+        skip_weekend: 周六日跳过（日线与历史采集一致；周线不因周末跳过）
+        timeframe: daily | weekly
     """
     from backend_core.data_collectors.workflow.signal_count import pack_signal_runs
 
-    if skip_weekend and datetime.now().weekday() in (5, 6):
+    tf = (timeframe or "daily").strip().lower()
+    if tf == "daily" and skip_weekend and datetime.now().weekday() in (5, 6):
         logger.info("[GMS预计算] 周末跳过 market=%s", market)
         return {"skipped": True, "reason": "周末跳过", "market": market}
 
-    config_ids = _resolve_precompute_config_ids()
+    if tf == "weekly":
+        from backend_core.strategies.gms.config import GMSConfigManager
+
+        GMSConfigManager().ensure_canonical_weekly_config()
+
+    config_ids = _resolve_precompute_config_ids(timeframe=tf)
     if not config_ids:
-        logger.warning("[GMS预计算] 无可用 config_id，跳过 market=%s", market)
-        return {"skipped": True, "reason": "无预计算版本", "market": market}
+        logger.warning("[GMS预计算] 无可用 config_id，跳过 market=%s tf=%s", market, tf)
+        return {"skipped": True, "reason": "无预计算版本", "market": market, "timeframe": tf}
 
     return pack_signal_runs(
-        [run_gms_precompute_for_config(cid, market, stock_pool) for cid in config_ids]
+        [
+            run_gms_precompute_for_config(cid, market, stock_pool, timeframe=tf)
+            for cid in config_ids
+        ]
     )
 
 
 def scheduled_gms_signals_cn():
-    return run_gms_precompute("cn", stock_pool=None)
+    return run_gms_precompute("cn", stock_pool=None, timeframe="daily")
 
 
 def scheduled_gms_signals_hk():
-    return run_gms_precompute("hk", stock_pool=None)
+    return run_gms_precompute("hk", stock_pool=None, timeframe="daily")
+
+
+def scheduled_weekly_mf_cn():
+    """工作流节点：已收盘周周频 MF。"""
+    from backend_core.database.db import SessionLocal
+    from backend_core.data_collectors.batch_mean_frequency_weekly import (
+        run_weekly_mf_cn_for_as_of,
+    )
+
+    db = SessionLocal()
+    try:
+        return run_weekly_mf_cn_for_as_of(db)
+    finally:
+        db.close()
+
+
+def scheduled_gms_signals_weekly_cn():
+    """工作流节点：A 股 GMS 周线预计算（仅已收盘周）。"""
+    return run_gms_precompute("cn", stock_pool=None, timeframe="weekly", skip_weekend=False)
 
 
 def scheduled_gms_signals_custom():

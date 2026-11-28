@@ -1162,6 +1162,36 @@ class MeanFrequencyResonanceIndicators(Base):
     created_at = Column(DateTime, default=datetime.now)
 
 
+class MeanFrequencyResonanceIndicatorsWeekly(Base):
+    """周频均值频率共振指标（由 weekly_quotes 计算；date=W-FRI 周五标签）。"""
+
+    __tablename__ = "mean_frequency_resonance_indicators_weekly"
+    code = Column(StockCodeTextPK(), primary_key=True)
+    date = Column(String, primary_key=True)
+    market_type = Column(String, primary_key=True)
+
+    macro_displacement_delta = Column(Float)
+    amplitude = Column(Float, nullable=True)
+    ratio_d20 = Column(Float, nullable=True)
+    ratio_d1 = Column(Float, nullable=True)
+    instant_deviation = Column(Float)
+    rising_days_z = Column(Integer)
+    falling_days_f = Column(Integer)
+    efficiency_m20_minus_m = Column(Float)
+
+    ma20_d = Column(Float)
+    ma60_d = Column(Float, nullable=True)  # 周线策略语义：默认 12 周均线
+    mavol20_m = Column(Float)
+    bias = Column(Float)
+
+    d1 = Column(Float, nullable=True)
+    d1_date = Column(String, nullable=True)
+    d20 = Column(Float, nullable=True)
+    d20_date = Column(String, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.now)
+
+
 class URTStrategyConfig(Base):
     """URT 上升趋势策略参数版本表：多版本 JSON 快照。"""
 
@@ -1271,6 +1301,7 @@ class GMSStrategyConfig(Base):
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     is_default = Column(Boolean, nullable=False, default=False, index=True)
     precompute_enabled = Column(Boolean, nullable=False, default=False, index=True)
+    timeframe = Column(String(16), nullable=False, default="daily", index=True)
     parent_id = Column(Integer, ForeignKey("gms_strategy_configs.id", ondelete="SET NULL"), nullable=True)
     created_by = Column(String(50), nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
@@ -1280,6 +1311,57 @@ class GMSStrategyConfig(Base):
 class GMSSignalTrace(Base):
     """GMS 信号追溯记录表：存储每只股票每日的 GMS 策略指标与信号（按 config_id 隔离）"""
     __tablename__ = 'gms_signal_trace'
+    code = Column(StockCodeTextPK(), primary_key=True)
+    date = Column(String(20), primary_key=True)
+    market_type = Column(String(10), primary_key=True)
+    config_id = Column(
+        Integer,
+        ForeignKey("gms_strategy_configs.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+        default=1,
+    )
+
+    score_total = Column(Float, nullable=True)
+    score_accumulation = Column(Float, nullable=True)
+    score_momentum = Column(Float, nullable=True)
+    signal_strength = Column(Float, nullable=True)
+    buy_type = Column(String(20), nullable=True)
+    left_buy_signal = Column(Boolean, nullable=True)
+    right_buy_signal = Column(Boolean, nullable=True)
+    sell_signal = Column(Boolean, nullable=True)
+    accumulation_grade = Column(String(5), nullable=True)
+    momentum_grade = Column(String(20), nullable=True)
+    delta = Column(Float, nullable=True)
+    d = Column(Float, nullable=True)
+    ratio_d20 = Column(Float, nullable=True)
+    ratio_d1 = Column(Float, nullable=True)
+    fz_ratio = Column(Float, nullable=True)
+    volume_ratio = Column(Float, nullable=True)
+    instant_deviation = Column(Float, nullable=True)
+    rising_days = Column(Integer, nullable=True)
+    falling_days = Column(Integer, nullable=True)
+    score_acc_fz = Column(Float, nullable=True)
+    score_acc_balance = Column(Float, nullable=True)
+    score_acc_volume = Column(Float, nullable=True)
+    score_mom_ratio_d1 = Column(Float, nullable=True)
+    score_mom_deviation = Column(Float, nullable=True)
+    score_mom_volume = Column(Float, nullable=True)
+    acc_fz_judge = Column(String(50), nullable=True)
+    acc_balance_judge = Column(String(50), nullable=True)
+    acc_volume_judge = Column(String(50), nullable=True)
+    mom_ratio_d1_judge = Column(String(50), nullable=True)
+    mom_deviation_judge = Column(String(50), nullable=True)
+    mom_volume_judge = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    risk_tags = Column(JSON, nullable=True)
+    score_detail = Column(JSON, nullable=True)
+
+
+class GMSSignalTraceWeekly(Base):
+    """GMS 周线信号追溯（date=已收盘周周五标签；按 config_id 隔离）。"""
+
+    __tablename__ = "gms_signal_trace_weekly"
     code = Column(StockCodeTextPK(), primary_key=True)
     date = Column(String(20), primary_key=True)
     market_type = Column(String(10), primary_key=True)

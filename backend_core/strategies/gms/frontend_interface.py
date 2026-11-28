@@ -25,13 +25,13 @@ logger = logging.getLogger(__name__)
 
 _GMS_BATCH_SIZE = max(50, int(os.getenv("GMS_SCREENING_BATCH_SIZE", "200")))
 _GMS_TRACE_UPSERT_BATCH_SIZE = max(50, int(os.getenv("GMS_TRACE_UPSERT_BATCH_SIZE", "500")))
-_DEFAULT_TRACE_STORAGE_MIN_SCORE = 50.0
+_DEFAULT_TRACE_STORAGE_MIN_SCORE = 30.0
 
 
 def resolve_gms_trace_storage_min_score(config: Optional[dict] = None) -> float:
     """
-    gms_signal_trace 入库地板分（只减库；缺行时选股仍可现算回填）。
-    环境变量 GMS_PRECOMPUTE_MIN_SCORE 优先，其次 scoring.precompute_min_score，默认 50。
+    gms_signal_trace / weekly 入库地板分（只减库；缺行时选股仍可现算回填）。
+    环境变量 GMS_PRECOMPUTE_MIN_SCORE 优先，其次 scoring.precompute_min_score，默认 30。
     """
     raw = (os.getenv("GMS_PRECOMPUTE_MIN_SCORE") or "").strip()
     if raw:
@@ -662,6 +662,69 @@ def _build_trace_values(result: dict, date: str, config_id: int) -> Optional[dic
     }
 
 
+def _resolve_trace_model(timeframe: str = "daily"):
+    tf = (timeframe or "daily").strip().lower()
+    if tf == "weekly":
+        from backend_api.models import GMSSignalTraceWeekly
+
+        return GMSSignalTraceWeekly
+    from backend_api.models import GMSSignalTrace
+
+    return GMSSignalTrace
+
+
+def _delete_trace_below_floor(
+    db,
+    results: List[dict],
+    date: str,
+    config_id: int,
+    *,
+    floor: float,
+    timeframe: str = "daily",
+) -> int:
+    """删除本轮未达地板分（含缺分）的已有 trace 行，返回删除尝试条数。"""
+    TraceModel = _resolve_trace_model(timeframe)
+    keys = []
+    for r in results:
+        if _passes_gms_trace_storage_floor(r, min_score=floor):
+            continue
+        code = str(r.get("code") or r.get("symbol") or "").strip()
+        mt = str(r.get("market_type") or r.get("market") or "CN").strip().upper()
+        if not code:
+            continue
+        keys.append((code, mt))
+    if not keys:
+        return 0
+    deleted = 0
+    try:
+        for code, mt in keys:
+            n = (
+                db.query(TraceModel)
+                .filter(
+                    TraceModel.code == code,
+                    TraceModel.date == str(date).strip()[:10],
+                    TraceModel.market_type == mt,
+                    TraceModel.config_id == int(config_id),
+                )
+                .delete(synchronize_session=False)
+            )
+            deleted += int(n or 0)
+    except Exception as e:
+        logger.warning(
+            "GMS trace 删除未达地板行失败 date=%s config_id=%s tf=%s: %s",
+            date,
+            config_id,
+            timeframe,
+            e,
+        )
+        try:
+            db.rollback()
+        except Exception:
+            pass
+        return 0
+    return deleted
+
+
 def _save_results_to_trace_batch(
     db,
     results: List[dict],
@@ -670,17 +733,21 @@ def _save_results_to_trace_batch(
     batch_size: int = _GMS_TRACE_UPSERT_BATCH_SIZE,
     *,
     storage_min_score: Optional[float] = None,
+    timeframe: str = "daily",
 ) -> int:
-    """批量 upsert gms_signal_trace，返回成功写入条数（默认跳过低于入库地板分的行）。"""
+    """批量 upsert trace，返回成功写入条数；未达地板分跳过写入并删除旧行。"""
     if not results:
         return 0
     from sqlalchemy.dialects.postgresql import insert as pg_insert
-    from backend_api.models import GMSSignalTrace
 
+    TraceModel = _resolve_trace_model(timeframe)
     floor = (
         float(storage_min_score)
         if storage_min_score is not None
         else resolve_gms_trace_storage_min_score()
+    )
+    _delete_trace_below_floor(
+        db, results, date, config_id, floor=floor, timeframe=timeframe
     )
     values_list = []
     paired: List[tuple] = []
@@ -695,11 +762,12 @@ def _save_results_to_trace_batch(
             paired.append((r, v))
     if skipped:
         logger.debug(
-            "GMS trace 入库跳过低于地板分 rows=%s floor=%s date=%s config_id=%s",
+            "GMS trace 入库跳过低于地板分 rows=%s floor=%s date=%s config_id=%s tf=%s",
             skipped,
             floor,
             date,
             config_id,
+            timeframe,
         )
     if not values_list:
         return 0
@@ -709,7 +777,7 @@ def _save_results_to_trace_batch(
         chunk_values = values_list[i : i + batch_size]
         chunk_pairs = paired[i : i + batch_size]
         try:
-            stmt = pg_insert(GMSSignalTrace).values(chunk_values)
+            stmt = pg_insert(TraceModel).values(chunk_values)
             update_cols = {
                 k: getattr(stmt.excluded, k)
                 for k in chunk_values[0]
@@ -728,30 +796,29 @@ def _save_results_to_trace_batch(
             except Exception:
                 pass
             for r, _ in chunk_pairs:
-                _save_result_to_trace(db, r, date, config_id)
+                _save_result_to_trace(db, r, date, config_id, timeframe=timeframe)
                 written += 1
     return written
 
 
-def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
+def _save_result_to_trace(
+    db, result: dict, date: str, config_id: int, *, timeframe: str = "daily"
+) -> None:
     """
-    将 engine.screen 单条结果完整写入 gms_signal_trace，便于后续优先读表。
-    回测与选股均依赖此表：优先读 trace，缺失时增量计算并回填。
-    使用 PostgreSQL ON CONFLICT UPSERT，避免并发预计算/选股回填时 UniqueViolation。
-    单条失败用 SAVEPOINT 回滚，避免污染整批事务（PostgreSQL InFailedSqlTransaction）。
-    低于入库地板分（默认 50）的行不写库，需要时由选股路径现算。
+    将 engine.screen 单条结果完整写入 trace，便于后续优先读表。
+    低于入库地板分（默认 30）的行不写库，需要时由选股路径现算。
     """
     code = result.get("code") or result.get("symbol") or ""
     if not _passes_gms_trace_storage_floor(result):
         return
     try:
         from sqlalchemy.dialects.postgresql import insert as pg_insert
-        from backend_api.models import GMSSignalTrace
 
+        TraceModel = _resolve_trace_model(timeframe)
         values = _build_trace_values(result, date, config_id)
         if not values:
             return
-        stmt = pg_insert(GMSSignalTrace).values(**values)
+        stmt = pg_insert(TraceModel).values(**values)
         update_cols = {
             k: getattr(stmt.excluded, k)
             for k in values
@@ -765,7 +832,6 @@ def _save_result_to_trace(db, result: dict, date: str, config_id: int) -> None:
             db.execute(stmt)
             db.flush()
     except Exception as e:
-        # begin_nested 失败或外层已 aborted：整事务回滚，保证后续股票可继续写
         try:
             db.rollback()
         except Exception:
@@ -781,10 +847,17 @@ class GMSFrontendInterface:
         db,
         config: Optional[dict] = None,
         config_id: Optional[int] = None,
+        *,
+        timeframe: str = "daily",
     ):
         self.db = db
         self._mgr = GMSConfigManager()
-        self.config_id = self._mgr.resolve_config_id(config_id)
+        self.timeframe = (timeframe or "daily").strip().lower()
+        if self.timeframe not in ("daily", "weekly"):
+            self.timeframe = "daily"
+        self.config_id = self._mgr.resolve_config_id(
+            config_id, timeframe=self.timeframe
+        )
         self.config = config or self._mgr.get_config(self.config_id)
         self.use_trace = self._mgr.should_use_trace(self.config_id)
         self.min_score = 0
@@ -828,6 +901,7 @@ class GMSFrontendInterface:
                 WHERE config_id = :cid
                   AND trade_date = :d
                   AND market IN :markets
+                  AND COALESCE(timeframe, 'daily') = :tf
                   AND status = 'success'
                   AND COALESCE(stock_count, 0) > 0
                 ORDER BY finished_at DESC NULLS LAST, started_at DESC
@@ -835,7 +909,13 @@ class GMSFrontendInterface:
                 """
             ).bindparams(bindparam("markets", expanding=True))
             row = self.db.execute(
-                stmt, {"cid": int(self.config_id), "d": date, "markets": markets}
+                stmt,
+                {
+                    "cid": int(self.config_id),
+                    "d": date,
+                    "markets": markets,
+                    "tf": self.timeframe,
+                },
             ).first()
             return bool(row)
         except Exception:
@@ -846,8 +926,8 @@ class GMSFrontendInterface:
             return False
 
     def _load_traces_for_market(self, date: str, market: str) -> List[dict]:
-        """直接按日+配置+市场读 gms_signal_trace，避免先建全市场股票池再巨型 IN。"""
-        from backend_api.models import GMSSignalTrace
+        """直接按日+配置+市场读 trace，避免先建全市场股票池再巨型 IN。"""
+        GMSSignalTrace = _resolve_trace_model(self.timeframe)
 
         mts = self._market_types_for_scope(market)
         rows = (
@@ -1027,8 +1107,8 @@ class GMSFrontendInterface:
             }
             return ([], empty_meta) if return_meta else []
 
-        # 1) 先从 gms_signal_trace 读取已有记录（单次查询）
-        from backend_api.models import GMSSignalTrace
+        # 1) 先从 trace 读取已有记录（单次查询；日/周分表）
+        GMSSignalTrace = _resolve_trace_model(self.timeframe)
 
         uniq_requested = list(dict.fromkeys(requested))
         codes_in = [str(c).strip() for c, _ in uniq_requested]
@@ -1064,7 +1144,7 @@ class GMSFrontendInterface:
         missing = [(code, mt) for code, mt in uniq_requested if _key(code, mt) not in have_keys]
         computed: List[dict] = []
         if missing and not trace_only:
-            loader = GMSDataLoader(self.db)
+            loader = GMSDataLoader(self.db, timeframe=self.timeframe)
             engine = GMSStrategyEngine(loader, self.config)
             from .structure_levels import kde_bars_limit
 
@@ -1088,11 +1168,16 @@ class GMSFrontendInterface:
                         bars_cache = loader.load_bars_batch(
                             chunk, mt, end_date=date, limit=bars_limit
                         )
+                        screen_cfg = dict(self.config or {})
+                        if self.timeframe == "weekly":
+                            br = dict(screen_cfg.get("board_resonance") or {})
+                            br["board_resonance_enabled"] = False
+                            screen_cfg["board_resonance"] = br
                         sub = engine.screen(
                             codes=chunk,
                             date=date,
                             market=mt,
-                            config=self.config,
+                            config=screen_cfg,
                             min_score=0,
                             max_results=self.max_results,
                             bars_cache=bars_cache,
@@ -1108,6 +1193,7 @@ class GMSFrontendInterface:
                                 storage_min_score=resolve_gms_trace_storage_min_score(
                                     self.config
                                 ),
+                                timeframe=self.timeframe,
                             )
                         maybe_log_precompute_progress(
                             logger,

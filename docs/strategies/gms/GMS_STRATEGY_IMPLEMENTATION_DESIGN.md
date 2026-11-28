@@ -806,7 +806,13 @@ class AsyncGMSEngine:
 
 ## 10. 扩展性设计
 
-### 10.1 策略接口扩展
+### 10.1 周线版（已实现，见专项文档）
+
+- 业务规则：`GMS_WEEKLY_BUSINESS_RULES.md`
+- 实现设计：`GMS_WEEKLY_IMPLEMENTATION_DESIGN.md`
+- 要点：`timeframe=weekly`、周频 MF 表、`gms_signal_trace_weekly`、已收盘周交易日完备判定（含周五休市）、预计算入库地板默认 30（日线同步）。
+
+### 10.2 策略接口扩展
 
 #### 新策略集成
 ```python
