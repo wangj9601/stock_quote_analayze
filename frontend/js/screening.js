@@ -4206,11 +4206,11 @@ const ScreeningPage = {
             if (!el) return;
             el.disabled = !applyOverride;
             if (isSingle) {
-                el.title = '单只股票模式只查已采集买点，不应用页面覆盖条件';
+                el.title = '单只股票模式只查已采集信号，不应用页面覆盖条件';
             } else if (!applyOverride) {
-                el.title = '仅「全部A股 / 全部港股」可覆盖；当前范围只在已采集买点中按股票池过滤';
+                el.title = '仅「全部A股 / 全部港股」可覆盖；当前范围只在已采集信号中按股票池过滤';
             } else {
-                el.title = '填写后仅在已采集买点上过滤，不重新计算';
+                el.title = '填写后仅在已采集信号上过滤，不重新计算';
             }
         });
         const limEl = document.getElementById('urtLimit');
@@ -4227,14 +4227,18 @@ const ScreeningPage = {
             preferEl.checked = true;
             preferEl.disabled = true;
         }
+        const includeNonBuyEl = document.getElementById('urtIncludeNonBuy');
+        if (includeNonBuyEl) {
+            includeNonBuyEl.disabled = false;
+        }
         const hint = document.getElementById('urtSingleSkipFilterHint');
         if (hint) {
             if (isSingle) {
                 hint.style.display = 'block';
-                hint.textContent = '单只股票模式：只显示该股在基准日已采集买点中的记录，不现场重算。';
+                hint.textContent = '单只股票模式：只显示该股在基准日已采集信号中的记录，不现场重算。';
             } else if (!applyOverride) {
                 hint.style.display = 'block';
-                hint.textContent = '当前数据来源（自选/行业/概念）：只在每日采集买点中按股票池过滤，不现场重算。';
+                hint.textContent = '当前数据来源（自选/行业/概念）：只在每日采集信号中按股票池过滤，不现场重算。';
             } else {
                 hint.style.display = 'none';
             }
@@ -5094,6 +5098,8 @@ const ScreeningPage = {
         params.set('prefer_cache', 'true');
         params.set('trace_only', 'true');
         params.set('force_realtime', 'false');
+        const includeNonBuy = !!this._byId('urtIncludeNonBuy')?.checked;
+        params.set('include_non_buy', includeNonBuy ? 'true' : 'false');
         return params;
     },
 
@@ -5713,6 +5719,12 @@ const ScreeningPage = {
                         } else if (ds === 'none') {
                             dateText += ' · 无采集信号';
                         }
+                        const includeNonBuy = !!(result.include_non_buy
+                            || (result.parameters && result.parameters.include_non_buy)
+                            || this._byId('urtIncludeNonBuy')?.checked);
+                        if (includeNonBuy) {
+                            dateText += ' · 含非买点';
+                        }
                     }
                     if (result.data.length > 0 && result.message) dateText += `（${result.message}）`;
                     searchDate.textContent = dateText;
@@ -5807,7 +5819,7 @@ const ScreeningPage = {
             } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
             } else if (strategy === 'urt') {
-                colSpan = 14;
+                colSpan = 20;
             } else if (strategy === 'canslim') {
                 colSpan = 15;
             } else {
@@ -6271,7 +6283,7 @@ const ScreeningPage = {
             } else if (strategy === 'volume-shrink-breakout') {
                 colSpan = 16;
             } else if (strategy === 'urt') {
-                colSpan = 14;
+                colSpan = 20;
             } else if (strategy === 'canslim') {
                 colSpan = 15;
             } else {
@@ -6600,6 +6612,7 @@ const ScreeningPage = {
                         <td class="gms-col-price support" title="${urtSupportTitle || ''}">${urtSupport != null && Number.isFinite(Number(urtSupport)) ? Number(urtSupport).toFixed(2) : '--'}</td>
                         <td class="gms-col-price resistance" title="${urtResistTitle || ''}">${urtResist != null && Number.isFinite(Number(urtResist)) ? Number(urtResist).toFixed(2) : '--'}</td>
                         <td class="gms-col-risk"><span class="gms-risk-tags-inline">${urtRiskHtml}</span></td>
+                        <td class="gms-col-narrow"><span class="${stock.buy_signal === true ? 'strength-high' : (stock.buy_signal === false ? 'strength-low' : '')}">${stock.buy_signal === true ? '是' : (stock.buy_signal === false ? '否' : '--')}</span></td>
                         <td class="gms-col-narrow"><span class="${scoreClass}">${scoreVal != null ? scoreVal.toFixed(1) : '--'}</span></td>
                         <td class="gms-col-actions">
                             <div class="action-links">
@@ -6610,7 +6623,7 @@ const ScreeningPage = {
                         </td>
                     </tr>
                     <tr class="gms-score-detail-row urt-score-detail-row" data-detail-for="${index}" style="display:none;">
-                        <td colspan="19" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
+                        <td colspan="20" class="gms-score-detail-cell">${urtScoreDetailHtml}</td>
                     </tr>
                 `;
             } else if (strategy === 'one-yang-three-lines') {

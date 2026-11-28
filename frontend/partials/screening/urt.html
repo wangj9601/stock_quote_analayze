@@ -8,7 +8,7 @@
                     <li><strong>资金确认：</strong>当日成交量 ≥ 近 20 日均量 × 倍数（缺省 3.0）</li>
                     <li><strong>结构 / 过热：</strong>支撑阻力硬闸 + 过热硬闸；得分默认最低 70 分</li>
                     <li><strong>数据来源：</strong>全部 A 股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票；A 股板块（主板/创业板/中小板/科创板/北证）可多选</li>
-                    <li><strong>每日采集：</strong>选股页只显示当日 urt_signal_trace 已采集买点（与数据采集同一参数版本），按得分降序；有记录就显示，无记录为空，不在页面上重新计算</li>
+                    <li><strong>每日采集：</strong>选股页默认只显示当日 urt_signal_trace 正式买点；可勾选「允许非买点信号」查看预计算入库的高分观察行。仍按得分排序，有记录就显示，无记录为空，不在页面上重新计算</li>
                     <li class="condition-item">系统仅作量化初筛，介入需结合基本面终选</li>
                 </ul>
             </div>
@@ -77,7 +77,7 @@
 
             <div class="parameters-card">
                 <h3>可选参数</h3>
-                <p class="gms-params-refresh-hint">只读每日采集信号：使用「生效（默认）」参数版本，量能/最低得分/信号质量留空即不覆盖，直接查当日 urt_signal_trace 买点并按得分排序。填写覆盖值时仅在已采集买点上过滤，不重新计算。切换版本或覆盖项后须点「刷新筛选」。</p>
+                <p class="gms-params-refresh-hint">只读每日采集信号：使用「生效（默认）」参数版本，量能/最低得分/信号质量留空即不覆盖，直接查当日 urt_signal_trace 并按得分排序。默认仅正式买点；勾选「允许非买点信号」可显示入库的高分观察行。填写覆盖值时仅在已采集信号上过滤，不重新计算。切换版本或覆盖项后须点「刷新筛选」。</p>
                 <div class="parameters-grid">
                     <div class="parameter-group">
                         <label for="urt-config_id">策略参数版本</label>
@@ -111,15 +111,22 @@
                             <option value="premium">精选（近支撑≤2% + 排除弱项 + 贴身HVZ≤1%）</option>
                         </select>
                     </div>
-                    <div class="parameter-group" id="urtPreferPrecomputeWrap" title="选股只显示每日采集写入的上升趋势买点，不在页面上重新计算。">
+                    <div class="parameter-group" id="urtPreferPrecomputeWrap" title="选股只显示每日采集写入的上升趋势信号，不在页面上重新计算。">
                         <label style="display:flex;align-items:center;gap:6px;margin-top:22px;">
                             <input type="checkbox" id="urtPreferPrecompute" checked disabled>
                             每日采集信号
                         </label>
                     </div>
+                    <div class="parameter-group" id="urtIncludeNonBuyWrap"
+                        title="勾选后展示预计算入库的非买点高分行（仍按最低得分过滤）；列表「买点」列可区分正式买点与观察行。">
+                        <label style="display:flex;align-items:center;gap:6px;margin-top:22px;">
+                            <input type="checkbox" id="urtIncludeNonBuy">
+                            允许非买点信号
+                        </label>
+                    </div>
                 </div>
                 <p id="urtSingleSkipFilterHint" class="param-hint" style="display:none;margin:8px 0 0;color:#64748b;font-size:13px;">
-                    单只股票模式：只显示该股在基准日已采集买点中的记录，不现场重算。
+                    单只股票模式：只显示该股在基准日已采集信号中的记录，不现场重算。
                 </p>
             </div>
             <div class="screening-actions">
@@ -171,13 +178,14 @@
                                 <th class="gms-col-price">支撑</th>
                                 <th class="gms-col-price">阻力</th>
                                 <th class="gms-col-risk">风险</th>
+                                <th class="gms-col-narrow">买点</th>
                                 <th class="gms-col-narrow">得分</th>
                                 <th class="gms-col-actions">操作</th>
                             </tr>
                         </thead>
                         <tbody id="resultsTableBody-urt">
                             <tr>
-                                <td colspan="19" class="empty-state">点击「刷新筛选」开始</td>
+                                <td colspan="20" class="empty-state">点击「刷新筛选」开始</td>
                             </tr>
                         </tbody>
                     </table>

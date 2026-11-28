@@ -3313,6 +3313,10 @@ async def get_urt_strategy(
         False,
         description="只读 urt_signal_trace：全市场/自选/板块/个股都不现场重算",
     ),
+    include_non_buy: bool = Query(
+        False,
+        description="读预计算时是否包含非买点高分行（默认仅正式买点）；仍按 min_score 过滤",
+    ),
     boards: Optional[List[str]] = Query(
         None,
         description="板块过滤：CYB/KCB/SH_MAIN/SZ_MAIN/SZ_SME/BJ（兼容旧参数）",
@@ -3341,7 +3345,8 @@ async def get_urt_strategy(
     上升趋势策略（URT）：站上 MA20 + 连阳（4日3阳或5日4阳）+ 量能倍数，按得分过滤。
     支持 A 股与港股全市场；数据来源对齐 GMS：全部A股 / 全部港股 / 我的自选 / 行业板块 / 概念板块 / 单只股票。
     全部A股/全部港股：应用硬筛 + min_score（可被 Query 覆盖）；默认优先读每日预计算 urt_signal_trace。
-    trace_only=true 时任意范围只读每日采集买点，不现算。未传 trace_only 时，自选/行业/概念/单股仍现算明细。
+    trace_only=true 时任意范围只读每日采集，不现算；默认仅买点，include_non_buy=true 时含非买点高分行。
+    未传 trace_only 时，自选/行业/概念/单股仍现算明细。
     """
     if not _ensure_urt_imports() or URTFrontendInterface is None:
         return JSONResponse(
@@ -3561,6 +3566,7 @@ async def get_urt_strategy(
             skip_screening_filters=skip_filters,
             signal_quality_mode=sqm,
             market=urt_market,
+            include_non_buy=bool(include_non_buy),
         )
 
     try:

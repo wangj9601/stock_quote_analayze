@@ -635,7 +635,13 @@ def query_buy_signals_for_date(
     config_id: int,
     min_score: Optional[float] = None,
     limit: Optional[int] = None,
+    buy_only: bool = True,
 ) -> List[Dict[str, Any]]:
+    """读 urt_signal_trace。
+
+    buy_only=True（默认）：仅正式买点。
+    buy_only=False：含预计算入库的非买点高分行（仍排除扫描占位）。
+    """
     from backend_api.models import URTSignalTrace
 
     q = (
@@ -643,17 +649,19 @@ def query_buy_signals_for_date(
         .filter(
             URTSignalTrace.date == str(trade_date)[:10],
             URTSignalTrace.config_id == int(config_id),
-            URTSignalTrace.buy_signal.is_(True),
             URTSignalTrace.code != URT_TRACE_SCANNED_MARKER,
         )
         .order_by(URTSignalTrace.score.desc())
     )
+    if buy_only:
+        q = q.filter(URTSignalTrace.buy_signal.is_(True))
     if min_score is not None:
         q = q.filter(URTSignalTrace.score >= float(min_score))
     if limit:
         q = q.limit(int(limit))
     out: List[Dict[str, Any]] = []
     for row in q.all():
+        sd = row.score_detail if isinstance(row.score_detail, dict) else {}
         item = {
             "code": row.code,
             "name": row.name or "",
@@ -664,6 +672,10 @@ def query_buy_signals_for_date(
             "above_ma20": row.above_ma20,
             "yang_count_4": row.yang_count_4,
             "yang_count_5": row.yang_count_5,
+            "yang_count_10": sd.get("yang_count_10") if isinstance(sd, dict) else None,
+            "yang_count_15": sd.get("yang_count_15") if isinstance(sd, dict) else None,
+            "yang_count_20": sd.get("yang_count_20") if isinstance(sd, dict) else None,
+            "ma_bull_ok": sd.get("ma_bull_ok") if isinstance(sd, dict) else None,
             "yang_rule": row.yang_rule,
             "avg_volume_20": row.avg_volume_20,
             "volume": row.volume,
@@ -673,7 +685,7 @@ def query_buy_signals_for_date(
             "score": row.score,
             "signal_strength": row.signal_strength,
             "score_detail": row.score_detail,
-            "buy_signal": True,
+            "buy_signal": bool(row.buy_signal),
             "from_cache": True,
         }
         _enrich_trace_structure_fields(item, score_detail=row.score_detail, close=row.close)

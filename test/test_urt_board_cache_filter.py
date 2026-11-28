@@ -73,7 +73,60 @@ def test_screen_uses_cache_when_boards_set():
             db, scope="all", boards=["SH_MAIN", "SZ_SME"], config_id=1, prefer_cache=True, market="CN"
         )
     assert q.called
+    assert q.call_args.kwargs.get("buy_only") is True
     assert {r["code"] for r in out["data"]} == {"600519", "002230"}
+    assert out["data_source"] == "urt_signal_trace"
+    assert out.get("include_non_buy") is False
+
+
+def test_include_non_buy_reads_non_buy_cache_rows():
+    """勾选允许非买点：缓存查询 buy_only=False，非买点高分行可进列表。"""
+    rows = [
+        {"code": "600519", "name": "茅台", "buy_signal": False, "score": 72, "volume_multiple": 3.0},
+        {"code": "000001", "name": "平安", "buy_signal": True, "score": 80, "volume_multiple": 3.0},
+        {"code": "300750", "name": "宁德", "buy_signal": False, "score": 71, "volume_multiple": 2.5},
+    ]
+    db = MagicMock()
+    with patch.object(URTFrontendInterface, "_resolve_config_id", return_value=1), patch(
+        "backend_core.strategies.urt.frontend_interface.URTConfigManager"
+    ) as CM, patch(
+        "backend_core.strategies.urt.frontend_interface.URTDataLoader"
+    ) as Loader, patch(
+        "backend_core.strategies.urt.frontend_interface.query_buy_signals_for_date",
+        return_value=rows,
+    ) as q, patch(
+        "backend_core.strategies.urt.frontend_interface.dates_ready_for_universe_backtest",
+        return_value={"2026-09-05"},
+    ), patch(
+        "backend_core.strategies.urt.frontend_interface.get_trace_freshness",
+        return_value={"stale": False, "need_recompute": False, "config_updated_at": None, "trace_computed_at": None},
+    ), patch(
+        "backend_core.strategies.urt.signal_detector.build_buy_logic",
+        return_value={"filter_ok": False, "score_ok": True},
+    ), patch(
+        "backend_core.strategies.urt.signal_filters.passes_signal_factor_filter",
+        return_value=True,
+    ):
+        cm = CM.return_value
+        cm.get_config.return_value = CFG
+        cm.merge_overrides.return_value = CFG
+        Loader.resolve_effective_history_end_date.return_value = "2026-09-05"
+        Loader.return_value = MagicMock()
+        out = URTFrontendInterface.screen(
+            db,
+            scope="all",
+            config_id=1,
+            prefer_cache=True,
+            trace_only=True,
+            include_non_buy=True,
+            market="CN",
+        )
+    assert q.called
+    assert q.call_args.kwargs.get("buy_only") is False
+    codes = [r["code"] for r in out["data"]]
+    assert codes[0] == "000001"  # 正式买点优先
+    assert set(codes) == {"600519", "000001", "300750"}
+    assert out.get("include_non_buy") is True
     assert out["data_source"] == "urt_signal_trace"
 
 

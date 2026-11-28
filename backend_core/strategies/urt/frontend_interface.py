@@ -67,6 +67,7 @@ class URTFrontendInterface:
         skip_screening_filters: bool = False,
         signal_quality_mode: Optional[str] = None,
         market: str = "CN",
+        include_non_buy: bool = False,
     ) -> Dict[str, Any]:
         """
         skip_screening_filters=True（单股 / 自选 / 行业 / 概念）：不按硬筛/最低得分过滤结果列表，
@@ -76,7 +77,9 @@ class URTFrontendInterface:
         prefer_cache=True（默认）：无参数覆盖时优先读 urt_signal_trace。
         force_realtime=True：跳过预计算，强制现算。
         trace_only=True：任意范围只读 urt_signal_trace，不调用现算；无记录则空列表。
+        include_non_buy=True：读缓存时包含预计算入库的非买点高分行（默认仅正式买点）。
         """
+        include_non_buy = bool(include_non_buy)
         cm = URTConfigManager()
         try:
             cm.ensure_default_row(db)
@@ -149,6 +152,9 @@ class URTFrontendInterface:
                         r["buy_signal"] = False
                         r["ma_bull_mid_gate_ok"] = r.get("ma_bull_mid_gate_ok")
                         r["buy_logic"] = build_buy_logic(r, cfg)
+                    out.append(r)
+                elif include_non_buy and not is_buy:
+                    # 非买点观察行：仍按最低得分入库展示，不套用买点信号质量闸
                     out.append(r)
                 elif passes_signal_factor_filter(r, quality_filter):
                     out.append(r)
@@ -234,6 +240,7 @@ class URTFrontendInterface:
                     config_id=resolved_id,
                     min_score=float(cfg.get("min_score") or 70),
                     limit=None if stock_codes is not None else limit,
+                    buy_only=not include_non_buy,
                 ) or []
                 date_trace_ready = False
                 if (stock_codes is None and mkt != "HK") or trace_only:
@@ -304,8 +311,10 @@ class URTFrontendInterface:
                                 row["score_ok"] = row["buy_logic"].get("score_ok")
                             data = _apply_quality_filter(cached)
                             data.sort(
-                                key=lambda x: float(x.get("score") or 0),
-                                reverse=True,
+                                key=lambda x: (
+                                    0 if x.get("buy_signal") else 1,
+                                    -float(x.get("score") or 0),
+                                ),
                             )
                             if limit and len(data) > int(limit):
                                 data = data[: int(limit)]
@@ -316,10 +325,11 @@ class URTFrontendInterface:
                     data_source = "urt_signal_trace"
                     cache_served = True
                     if not data and not hint:
+                        empty_label = "采集信号" if include_non_buy else "买点"
                         if stock_codes is not None or board_keys:
-                            hint = f"基准日 {effective} 的已采集信号中，当前范围没有买点。"
+                            hint = f"基准日 {effective} 的已采集信号中，当前范围没有{empty_label}。"
                         elif date_trace_ready:
-                            hint = f"基准日 {effective} 已有预计算，当日无符合条件的买点。"
+                            hint = f"基准日 {effective} 已有预计算，当日无符合条件的{empty_label}。"
             except Exception as e:
                 logger.debug("URT cache read failed: %s", e)
 
@@ -466,6 +476,7 @@ class URTFrontendInterface:
             "data_source": data_source,
             "prefer_cache": bool(prefer_cache) and not force_realtime,
             "trace_only": bool(trace_only),
+            "include_non_buy": bool(include_non_buy),
             "skip_screening_filters": bool(skip_screening_filters),
             "signal_quality_mode": quality_mode,
             "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
@@ -481,6 +492,7 @@ class URTFrontendInterface:
             "data_source": data_source,
             "prefer_cache": bool(prefer_cache) and not force_realtime,
             "trace_only": bool(trace_only),
+            "include_non_buy": bool(include_non_buy),
             "skip_screening_filters": bool(skip_screening_filters),
             "signal_quality_mode": quality_mode,
             "signal_quality_mode_label": signal_quality_mode_label(quality_mode),
