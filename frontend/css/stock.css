@@ -1609,11 +1609,9 @@ mark {
 }
 
 .gms-indicators-section {
-    padding-left: 0;
-    border-left: none;
-    margin-top: 1rem;
-    padding-top: 10px;
-    border-top: 1px solid #e2e8f0;
+    margin-top: 0;
+    padding: 0;
+    border: none;
 }
 
 

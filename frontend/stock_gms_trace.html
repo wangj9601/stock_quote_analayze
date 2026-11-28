@@ -11,12 +11,12 @@
     <link rel="stylesheet" href="css/ops-shell.css">
     <link rel="stylesheet" href="css/ops-data.css?v=20261008b">
     <link rel="stylesheet" href="css/ops-responsive.css">
-    <link rel="stylesheet" href="css/workbench-ops.css">
+    <link rel="stylesheet" href="css/workbench-ops.css?v=20261128-trace-polish">
 
     <link rel="stylesheet" href="css/stock.css">
         <link rel="stylesheet" href="css/screening.css">
-    <link rel="stylesheet" href="css/stock_gms_trace.css">
-    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261021-trace-hl">
+    <link rel="stylesheet" href="css/stock_gms_trace.css?v=20261128-polish">
+    <link rel="stylesheet" href="css/ops-surfaces.css?v=20261128-trace-polish">
 </head>
 
 <body class="ops-map">
@@ -26,22 +26,27 @@
     <div class="container">
         <div class="gms-trace-card">
             <div class="gms-trace-title">GMS 信号追溯记录</div>
-            <div class="toolbar">
-                <div class="toolbar-row">
-                    <label>股票: <span id="stockDisplay">--</span></label>
-                    <span class="gms-trace-tf-group" title="周线信号日为已收盘周周五标签">
-                        <span class="gms-trace-tf-label">周期:</span>
+            <div class="toolbar gms-trace-toolbar">
+                <div class="toolbar-row gms-trace-toolbar-main">
+                    <div class="gms-trace-stock">
+                        <span class="gms-trace-field-label">股票</span>
+                        <span id="stockDisplay" class="gms-trace-stock-name">--</span>
+                    </div>
+                    <div class="gms-trace-tf-group" role="group" aria-label="周期" title="周线信号日为已收盘周周五标签">
+                        <span class="gms-trace-tf-label">周期</span>
                         <label class="gms-trace-tf-opt"><input type="radio" name="gmsTraceTimeframe" id="gmsTraceTfDaily" value="daily" checked>日线</label>
                         <label class="gms-trace-tf-opt"><input type="radio" name="gmsTraceTimeframe" id="gmsTraceTfWeekly" value="weekly">周线</label>
-                    </span>
-                    <label>开始日期: <input type="date" id="startDate"></label>
-                    <label>结束日期: <input type="date" id="endDate"></label>
-                    <button id="searchBtn">查询</button>
-                    <button id="forceComputeBtn" class="btn-secondary">强制重新计算</button>
+                    </div>
+                    <label class="gms-trace-date-field"><span class="gms-trace-field-label">开始</span><input type="date" id="startDate"></label>
+                    <label class="gms-trace-date-field"><span class="gms-trace-field-label">结束</span><input type="date" id="endDate"></label>
+                    <div class="gms-trace-toolbar-actions">
+                        <button type="button" id="searchBtn">查询</button>
+                        <button type="button" id="forceComputeBtn" class="btn-secondary">强制重新计算</button>
+                    </div>
                 </div>
             </div>
             <div id="gmsTraceConfigTabs" class="gms-trace-config-tabs" style="display:none;"></div>
-            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;"></div>
+            <div id="forceComputeProgress" class="gms-trace-recompute-status" style="display:none;" role="status" aria-live="polite"></div>
             <div id="loadingMsg" class="loading-msg" style="display:none;">正在计算信号追溯，请稍候...</div>
             <div id="emptyMsg" class="empty-msg" style="display:none;">该股票暂无 GMS 指标数据</div>
             <div class="table-wrapper">

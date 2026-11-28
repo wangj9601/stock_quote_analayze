@@ -1189,12 +1189,22 @@ body.ops-map .gms-score-detail-cell {
 }
 
 body.ops-map .gms-score-detail-inner {
-    max-width: min(960px, calc(100vw - 220px));
+    max-width: min(1080px, calc(100vw - 220px));
 }
 
 body.ops-map .gms-indicators-section {
-    border-left: none !important;
-    border-top: 1px solid var(--color-border) !important;
+    border: none !important;
+}
+
+body.ops-map .gms-sd-summary {
+    background: rgba(201, 162, 39, 0.08) !important;
+    border: 1px solid rgba(201, 162, 39, 0.28) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-sd-metric {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border-color: var(--color-border) !important;
 }
 
 body.ops-map .gms-score-detail-meta {

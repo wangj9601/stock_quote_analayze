@@ -110,7 +110,10 @@ class StockGMSTracePage {
                 if (!btn) return;
                 const rowIndex = parseInt(btn.getAttribute('data-row'), 10);
                 const detailRow = tbody.querySelector(`tr.gms-score-detail-row[data-detail-for="${rowIndex}"]`);
-                if (detailRow) detailRow.style.display = detailRow.style.display === 'none' ? '' : 'none';
+                if (!detailRow) return;
+                const open = detailRow.style.display === 'none';
+                detailRow.style.display = open ? '' : 'none';
+                btn.classList.toggle('active', open);
             });
         }
         const startBt = document.getElementById('btStartBtn');
@@ -269,17 +272,29 @@ class StockGMSTracePage {
         const area = document.getElementById('forceComputeProgress');
         if (!area) return;
         area.style.display = 'block';
+        const done = task.status === 'completed';
+        area.classList.toggle('is-complete', done);
+        area.classList.toggle('is-error', task.status === 'failed');
         const pct = task.progress != null ? Math.min(100, Math.max(0, Number(task.progress))) : 0;
         const msg = task.message || '';
         const total = task.total != null && task.total > 0
             ? ` · ${task.current || 0}/${task.total}`
             : '';
-        const statusLabel = task.status === 'completed' ? '已完成'
+        const statusLabel = done ? '已完成'
             : (task.status === 'failed' ? '失败' : '计算中');
         area.innerHTML = `
-            <div>GMS 信号重算: <strong>${escapeHtml(statusLabel)}</strong>${msg ? ` · ${escapeHtml(String(msg))}${total}` : ''}</div>
-            <div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>
+            <div>GMS 信号重算：<strong>${escapeHtml(statusLabel)}</strong>${msg ? ` · ${escapeHtml(String(msg))}${total}` : ''}</div>
+            ${done ? '' : `<div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:${pct}%"></div></div>`}
         `;
+        if (done) {
+            if (this._recomputeHideTimer) clearTimeout(this._recomputeHideTimer);
+            this._recomputeHideTimer = setTimeout(() => {
+                if (area.classList.contains('is-complete')) {
+                    area.style.display = 'none';
+                    area.classList.remove('is-complete');
+                }
+            }, 4200);
+        }
     }
 
     async startForceComputeTask() {
@@ -291,6 +306,8 @@ class StockGMSTracePage {
         this.setForceComputeRunning(true);
         const area = document.getElementById('forceComputeProgress');
         if (area) {
+            if (this._recomputeHideTimer) clearTimeout(this._recomputeHideTimer);
+            area.classList.remove('is-complete', 'is-error');
             area.style.display = 'block';
             area.innerHTML = '<div>正在提交重算任务…</div><div class="bt-progress-bar"><div class="bt-progress-bar-inner" style="width:5%"></div></div>';
         }
@@ -544,7 +561,7 @@ class StockGMSTracePage {
                 <td>${r.fz_ratio != null ? r.fz_ratio.toFixed(2) : '--'}</td>
                 <td>${r.volume_ratio != null ? r.volume_ratio.toFixed(2) : '--'}</td>
                 <td>
-                    <button type="button" class="action-link gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">得分明细</button>
+                    <button type="button" class="gms-op-btn gms-score-detail-toggle" data-row="${index}" title="展开/收起得分明细">明细</button>
                 </td>
             </tr>
             <tr class="gms-score-detail-row" data-detail-for="${index}" style="display:none;">

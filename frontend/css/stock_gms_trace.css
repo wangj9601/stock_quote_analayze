@@ -31,31 +31,91 @@
     gap: 4px;
 }
 
-.gms-trace-tf-group {
+.gms-trace-toolbar {
+    margin-bottom: 16px;
+}
+
+.gms-trace-toolbar-main {
+    align-items: center;
+}
+
+.gms-trace-stock {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.gms-trace-field-label {
+    font-size: 12px;
+    color: #64748b;
+    letter-spacing: 0.04em;
+}
+
+.gms-trace-stock-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1f2937;
+}
+
+.gms-trace-toolbar-actions {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 2px 8px;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    background: #fafafa;
+    margin-left: auto;
+}
+
+@media (max-width: 900px) {
+    .gms-trace-toolbar-actions {
+        margin-left: 0;
+        width: 100%;
+    }
+}
+
+.gms-trace-date-field {
+    gap: 6px !important;
+}
+
+.gms-trace-tf-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid #d0d7de;
+    border-radius: 2px;
+    background: #f8fafc;
 }
 
 .gms-trace-tf-label {
-    color: #555;
-    font-size: 13px;
+    color: #64748b;
+    font-size: 12px;
+    padding: 0 8px 0 6px;
 }
 
 .gms-trace-tf-opt {
-    gap: 3px !important;
+    gap: 0 !important;
+    margin: 0;
+    padding: 5px 10px;
     font-size: 13px;
     cursor: pointer;
     user-select: none;
+    border-radius: 1px;
+    color: #475569;
+}
+
+.gms-trace-tf-opt:has(input:checked) {
+    background: #e8f5e9;
+    color: #1b5e20;
+    font-weight: 600;
 }
 
 .gms-trace-tf-opt input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
     margin: 0;
-    cursor: pointer;
+    pointer-events: none;
 }
 
 .gms-trace-card .toolbar-row input[type="date"] {
@@ -107,9 +167,9 @@
 }
 
 .gms-trace-config-tab {
-    padding: 6px 12px;
+    padding: 5px 11px;
     border: 1px solid #ddd;
-    border-radius: 16px;
+    border-radius: 1px;
     background: #f7f7f7;
     color: #555;
     font-size: 13px;
@@ -157,12 +217,22 @@
 
 .trace-table th, .trace-table td {
     border: 1px solid #e0e0e0;
-    padding: 6px 10px;
+    padding: 7px 10px;
+    white-space: nowrap;
 }
 
 .trace-table th {
     background: #f5f5f5;
     font-weight: 600;
+}
+
+.trace-table td:nth-child(2),
+.trace-table td:nth-child(3),
+.trace-table td:nth-child(5),
+.trace-table td:nth-child(6),
+.trace-table td:nth-child(n + 9):nth-child(-n + 14) {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
 }
 
 .trace-table .buy-left { color: #1976d2; }
@@ -240,15 +310,27 @@
     background: #f5f5f5;
 }
 
-/* 得分明细按钮与筛选页一致 */
+/* 得分明细：与作战板操作按钮同语法，避免绿字链接 */
 .trace-table .gms-score-detail-toggle {
-    background: none;
-    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 2px 8px;
+    background: transparent;
+    border: 1px solid #cbd5e1;
+    border-radius: 1px;
     cursor: pointer;
-    color: #2e7d32;
-    text-decoration: underline;
-    font-size: inherit;
-    padding: 0;
+    color: #334155;
+    text-decoration: none;
+    font-size: 12px;
+}
+
+.trace-table .gms-score-detail-toggle:hover,
+.trace-table .gms-score-detail-toggle.active {
+    border-color: #c9a227;
+    color: #a8841a;
+    background: rgba(201, 162, 39, 0.12);
 }
 
 /* 策略回测 */
@@ -402,29 +484,40 @@
 
 .gms-trace-recompute-status {
     padding: 10px 12px;
-    background: #e8f4fd;
-    border: 1px solid #90caf9;
-    border-radius: 4px;
-    font-size: 14px;
-    margin: 8px 0;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 2px;
+    font-size: 13px;
+    margin: 0 0 12px;
+    color: #334155;
+}
+
+.gms-trace-recompute-status.is-complete {
+    background: transparent;
+    border-color: rgba(47, 158, 107, 0.35);
+    color: #2f9e6b;
 }
 
 .gms-trace-recompute-status .bt-progress-bar {
-    height: 8px;
-    background: #e0e0e0;
-    border-radius: 4px;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 1px;
     margin-top: 8px;
     overflow: hidden;
 }
 
 .gms-trace-recompute-status .bt-progress-bar-inner {
     height: 100%;
-    background: #2e7d32;
+    background: #c9a227;
     transition: width 0.3s ease;
 }
 
+.gms-trace-recompute-status.is-complete .bt-progress-bar-inner {
+    background: #2f9e6b;
+}
+
 .gms-trace-recompute-status .gms-recompute-error {
-    color: #c62828;
+    color: #c23b3b;
 }
 
 .gms-backtest-result {

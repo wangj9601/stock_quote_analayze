@@ -78,7 +78,7 @@ const GmsScoreDetail = {
             .map(normalizeRiskTag)
             .filter(Boolean);
         const riskTagsHtml = riskTags.length
-            ? `<div class="gms-score-detail-section"><strong>【风险提示】</strong><div class="gms-risk-tags">${riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')}</div></div>`
+            ? `<div class="gms-sd-risk"><span class="gms-sd-kicker">风险提示</span><div class="gms-risk-tags">${riskTags.map((t) => `<span class="gms-risk-tag gms-risk-${t.level || 'info'}" title="${(t.reason || '').replace(/"/g, '&quot;')}">${t.label || t.id}</span>`).join('')}</div></div>`
             : '';
         const isWeekly = String(sd.timeframe || meta.timeframe || '').toLowerCase() === 'weekly';
         const closePrice = sd.d20 != null ? sd.d20 : (sd.d != null && sd.instant_deviation != null ? sd.d + sd.instant_deviation : null);
@@ -95,6 +95,8 @@ const GmsScoreDetail = {
             const chg = sd.ma60_flat_change_pct != null ? (Number(sd.ma60_flat_change_pct) * 100).toFixed(2) + '%' : '--';
             ma60Hint += `；${maLabel} 非走平（${ma60FlatLookback}${isWeekly ? '周' : '日'}变化 ${chg}）`;
         }
+        const metricCell = (label, value, hint) =>
+            `<div class="gms-sd-metric"><span class="gms-sd-metric-label">${label}</span><span class="gms-sd-metric-value">${value}</span><span class="gms-sd-metric-hint">${hint || ''}</span></div>`;
         const formatPenaltyCondition = (p) => {
             if (p.id === 'close_below_ma60') {
                 let cond = 'd₂₀ &lt; ma60_d';
@@ -139,12 +141,13 @@ const GmsScoreDetail = {
             return '—';
         };
         const versionMetaHtml = `
-            <div class="gms-score-detail-section gms-score-detail-meta">
-                <strong>策略参数版本</strong>
+            <div class="gms-score-detail-meta gms-sd-version">
+                <span class="gms-sd-kicker">策略参数版本</span>
                 <p class="gms-version-meta-line">
                     <span class="gms-version-name">${cfgName}</span>
                     ${cfgId ? `<span class="gms-version-id">config_id=${cfgId}</span>` : ''}
                     ${mechLabel ? `<span class="gms-version-mech">${mechLabel}</span>` : ''}
+                    ${isWeekly ? '<span class="gms-version-mech">周线</span>' : ''}
                 </p>
             </div>`;
         let penaltySectionHtml = '';
@@ -157,16 +160,18 @@ const GmsScoreDetail = {
                 }).join('')
                 : `<tr><td colspan="4" class="gms-muted">未触发减分规则</td></tr>`;
             penaltySectionHtml = `
-                <div class="gms-score-detail-section gms-penalty-section">
-                    <strong>【减分项】</strong>
+                <section class="gms-sd-block gms-penalty-section">
+                    <h4 class="gms-sd-block-title">减分项</h4>
+                    <div class="gms-sd-table-wrap">
                     <table class="gms-weight-table">
                         <thead><tr><th>规则</th><th>状态</th><th>扣分</th><th>条件</th></tr></thead>
                         <tbody>${penaltyRows}</tbody>
                     </table>
-                    <p class="gms-total-hint-text" style="font-size:12px;color:#666;margin:6px 0 0 0;line-height:1.45;">
+                    </div>
+                    <p class="gms-total-hint-text">
                         基础分=${baseTotal.toFixed(1)}；减分合计=${penaltyDeduction.toFixed(1)}；最终总分=${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}
                     </p>
-                </div>`;
+                </section>`;
         }
         // 【支撑 / 阻力】成交量加权 KDE（与 URT / RPE 同口径）
         const st = (sd.structure && typeof sd.structure === 'object') ? sd.structure : {};
@@ -186,101 +191,127 @@ const GmsScoreDetail = {
         const structureRrReason = sd.structure_rr_reason || st.rr_reason || '';
         const structureRrFloored = !!(sd.structure_rr_downside_floored
             || st.rr_downside_floored);
-        let structureSectionHtml = '<div class="gms-score-detail-section"><strong>【支撑 / 阻力】</strong>';
-        structureSectionHtml += '<div class="gms-version-meta-line">';
-        structureSectionHtml += `<span>最近支撑 <strong>${gmsFmt(nearSup, 'price')}</strong></span>`;
-        structureSectionHtml += `<span>最近阻力 <strong>${gmsFmt(nearRes, 'price')}</strong></span>`;
-        structureSectionHtml += `<span>盈亏比 RR <strong>${structureRr != null ? Number(structureRr).toFixed(2) : '--'}</strong></span>`;
-        if (structureRrFloored) {
-            structureSectionHtml += '<span title="贴支撑时分母已按现价比例下限计算">已用分母下限</span>';
-        }
-        if (structureRrReason && structureRrReason !== 'ok') {
-            structureSectionHtml += `<span>${structureRrReason}</span>`;
-        }
-        if (kdeOk != null) structureSectionHtml += `<span>KDE ${kdeOk ? '成功' : '未识别'}</span>`;
-        if (lookbackUsed != null) structureSectionHtml += `<span>回看 ${lookbackUsed} 日</span>`;
-        if (kdeReason) structureSectionHtml += `<span>${kdeReason}</span>`;
-        structureSectionHtml += '</div>';
-        structureSectionHtml += '<table class="gms-weight-table"><thead><tr><th>类型</th><th>价位（近→远）</th></tr></thead><tbody>';
-        structureSectionHtml += `<tr><td>阻力</td><td>${resists.length ? resists.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>`;
-        structureSectionHtml += `<tr><td>支撑</td><td>${supports.length ? supports.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>`;
-        structureSectionHtml += '</tbody></table></div>';
+        const structureMetaBits = [];
+        if (structureRrFloored) structureMetaBits.push('<span title="贴支撑时分母已按现价比例下限计算">已用分母下限</span>');
+        if (structureRrReason && structureRrReason !== 'ok') structureMetaBits.push(`<span>${structureRrReason}</span>`);
+        if (kdeOk != null) structureMetaBits.push(`<span>KDE ${kdeOk ? '成功' : '未识别'}</span>`);
+        if (lookbackUsed != null) structureMetaBits.push(`<span>回看 ${lookbackUsed}${isWeekly ? ' 周' : ' 日'}</span>`);
+        if (kdeReason) structureMetaBits.push(`<span>${kdeReason}</span>`);
+        const structureSectionHtml = `
+            <section class="gms-sd-block">
+                <h4 class="gms-sd-block-title">支撑 / 阻力</h4>
+                <div class="gms-sd-kv">
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">最近支撑</span><strong>${gmsFmt(nearSup, 'price')}</strong></div>
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">最近阻力</span><strong>${gmsFmt(nearRes, 'price')}</strong></div>
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">盈亏比 RR</span><strong>${structureRr != null ? Number(structureRr).toFixed(2) : '--'}</strong></div>
+                </div>
+                ${structureMetaBits.length ? `<div class="gms-version-meta-line gms-sd-meta-bits">${structureMetaBits.join('')}</div>` : ''}
+                <div class="gms-sd-table-wrap">
+                <table class="gms-weight-table">
+                    <thead><tr><th>类型</th><th>价位（近→远）</th></tr></thead>
+                    <tbody>
+                        <tr><td>阻力</td><td>${resists.length ? resists.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>
+                        <tr><td>支撑</td><td>${supports.length ? supports.map((x) => gmsFmt(x, 'price')).join('、') : '--'}</td></tr>
+                    </tbody>
+                </table>
+                </div>
+            </section>`;
         const br = (sd.board_resonance && typeof sd.board_resonance === 'object') ? sd.board_resonance : {};
-        let boardSectionHtml = '<div class="gms-score-detail-section"><strong>【行业板共振】</strong>';
-        boardSectionHtml += '<div class="gms-version-meta-line">';
-        boardSectionHtml += `<span>主行业板 <strong>${br.primary_board_name || br.primary_board_code || '--'}</strong></span>`;
-        boardSectionHtml += `<span>斜率(ln) <strong>${(br.sector_slope != null && Number.isFinite(Number(br.sector_slope))) ? Number(br.sector_slope).toFixed(4) : '--'}</strong></span>`;
-        boardSectionHtml += `<span>当日涨跌 <strong>${br.board_change_percent != null ? Number(br.board_change_percent).toFixed(2) + '%' : '--'}</strong></span>`;
         const envLabel = br.board_env_label
             || (br.board_strong ? '走强' : (br.board_weak ? '走弱' : '正常/未知'));
-        boardSectionHtml += `<span>环境 <strong>${envLabel}</strong></span>`;
-        if (br.board_weak_reason) boardSectionHtml += `<span>${br.board_weak_reason}</span>`;
-        boardSectionHtml += `<span>资金流 <strong>${br.enable_board_fund_flow && br.board_main_net_inflow != null ? br.board_main_net_inflow : '暂无（二期）'}</strong></span>`;
-        boardSectionHtml += '</div></div>';
+        const boardSectionHtml = `
+            <section class="gms-sd-block">
+                <h4 class="gms-sd-block-title">行业板共振</h4>
+                <div class="gms-sd-kv">
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">主行业板</span><strong>${br.primary_board_name || br.primary_board_code || '--'}</strong></div>
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">斜率(ln)</span><strong>${(br.sector_slope != null && Number.isFinite(Number(br.sector_slope))) ? Number(br.sector_slope).toFixed(4) : '--'}</strong></div>
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">当日涨跌</span><strong>${br.board_change_percent != null ? Number(br.board_change_percent).toFixed(2) + '%' : '--'}</strong></div>
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">环境</span><strong>${envLabel}</strong></div>
+                    <div class="gms-sd-kv-item"><span class="gms-sd-kv-label">资金流</span><strong>${br.enable_board_fund_flow && br.board_main_net_inflow != null ? br.board_main_net_inflow : '暂无（二期）'}</strong></div>
+                </div>
+                ${br.board_weak_reason ? `<p class="gms-total-hint-text">${br.board_weak_reason}</p>` : ''}
+            </section>`;
+        const deltaOverD = (sd.delta != null && sd.d != null && sd.d !== 0)
+            ? gmsFmt(sd.delta / sd.d, 'pct')
+            : '--';
+        const indicatorsHtml = `
+            <section class="gms-sd-block gms-indicators-section">
+                <h4 class="gms-sd-block-title">计算指标细项</h4>
+                <div class="gms-sd-metric-grid">
+                    ${metricCell('d₁ 首日收盘', gmsFmt(sd.d1, 'price'), sd.d1_date ? `交易日 ${sd.d1_date}` : '周期起点')}
+                    ${metricCell('d₂₀ 末日收盘', gmsFmt(sd.d20, 'price'), sd.d20_date ? `交易日 ${sd.d20_date}` : '周期末位')}
+                    ${metricCell(isWeekly ? '周线均线' : 'MA60', gmsFmt(sd.ma60_d, 'price'), ma60Hint)}
+                    ${metricCell(isWeekly ? 'd 周均价' : 'd 20日均价', gmsFmt(sd.d, 'price'), '周期均价')}
+                    ${metricCell('Δ (d₂₀−d₁)', gmsFmt(sd.delta, 'num'), '宏观位移')}
+                    ${metricCell('Δ/d', deltaOverD, '宏观位移相对均价')}
+                    ${metricCell('Δ/d₂₀', gmsFmt(sd.ratio_d20, 'pct'), '左侧粘合用 |Δ/d₂₀|')}
+                    ${metricCell('Δ/d₁', gmsFmt(sd.ratio_d1, 'pct'), '相对周期起点位移')}
+                    ${metricCell('Δ₂₀/d', gmsFmt(sd.ratio_d, 'pct'), '均线乖离 (d₂₀−d)/d')}
+                    ${metricCell('Z 上涨', gmsFmt(sd.rising_days, 'int'), '多头天数')}
+                    ${metricCell('F 下跌', gmsFmt(sd.falling_days, 'int'), '空头天数')}
+                    ${metricCell('m 均量', gmsFmt(sd.avg_volume_20d, 'vol'), '平均成交量')}
+                    ${metricCell('m₂₀ 当日量', gmsFmt(sd.current_volume, 'vol'), '当日成交量')}
+                    ${metricCell('量比 m₂₀/m', gmsFmt(sd.volume_ratio, 'ratio'), '放量/地量')}
+                    ${metricCell('F/Z', gmsFmt(sd.fz_ratio, 'ratio'), '蓄势判断')}
+                    ${metricCell('d₂₀−d', gmsFmt(sd.instant_deviation, 'num'), '价格相对均线')}
+                    ${metricCell('观察高低', `${gmsFmt(sd.observation_period_high, 'price')} / ${gmsFmt(sd.observation_period_low, 'price')}`, sd.observation_range_period_days != null ? `${sd.observation_range_period_days} 个交易日` : '观察周期极值')}
+                    ${metricCell('观察振幅', gmsFmt(sd.observation_range_amplitude_pct, 'pct'), '减分规则依据')}
+                </div>
+            </section>`;
         return `
             <div class="gms-score-detail-inner">
-                ${versionMetaHtml}
-                ${riskTagsHtml}
-                <div class="gms-score-detail-section">
-                    <strong>【均值收敛态】得分明细</strong>
-                    <table class="gms-weight-table">
-                        <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
-                        <tbody>
-                            <tr><td>时间耗散 F/Z</td><td>${(sd.score_acc_fz != null ? sd.score_acc_fz.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_fz_judge || '—'}</td><td>权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3</td></tr>
-                            <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0] * 100).toFixed(1)}%→满分; ≤${(balTiers[1] * 100).toFixed(1)}%→1/2</td></tr>
-                            <tr><td>成交量缩 m₂₀/m</td><td>${(sd.score_acc_volume != null ? sd.score_acc_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_volume_judge || '—'}</td><td>权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2</td></tr>
-                            <tr><td>均值收敛态小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.accumulation_grade || '—'}</strong> (≥${accS} S; ≥${accA} A)</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="gms-score-detail-section">
-                    <strong>【动量溢出态】得分明细</strong>
-                    <table class="gms-weight-table">
-                        <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
-                        <tbody>
-                            <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1] * 100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
-                            <tr><td>推力支撑 d₂₀-d</td><td>${(sd.score_mom_deviation != null ? sd.score_mom_deviation.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_deviation_judge || '—'}</td><td>权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; &lt;0→-10</td></tr>
-                            <tr><td>攻击强度 m₂₀/m</td><td>${(sd.score_mom_volume != null ? sd.score_mom_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_volume_judge || '—'}</td><td>权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3</td></tr>
-                            <tr><td>动量溢出态小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2"><strong>判定: ${sd.momentum_grade || '—'}</strong> (≥${momFull}全速; ≥${momBatch}分批)</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="gms-score-detail-section">
-                    <strong>综合</strong> 总分=${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}；信号强度=总分/100
-                    <p class="gms-total-hint-text" style="font-size:12px;color:#666;margin:6px 0 0 0;line-height:1.45;">
-                        基础分 = max(均值收敛态小计, 动量溢出态小计)，非两模块分数相加。
-                        ${penaltyDeduction > 0 ? '<br>最终总分 = 基础分 − 减分合计。' : ''}
-                        ${gmsDominantHint ? '<br>' + gmsDominantHint : ''}
+                <header class="gms-sd-head">
+                    ${versionMetaHtml}
+                    ${riskTagsHtml}
+                </header>
+                <div class="gms-sd-summary">
+                    <div class="gms-sd-summary-main">
+                        <span class="gms-sd-kicker">综合</span>
+                        <span class="gms-sd-total">总分 <strong>${sd.score_total != null ? sd.score_total.toFixed(1) : '--'}</strong></span>
+                        <span class="gms-sd-strength">信号强度 ${sd.score_total != null ? (sd.score_total / 100).toFixed(2) : '--'}</span>
+                    </div>
+                    <p class="gms-total-hint-text">
+                        基础分 = max(均值收敛态, 动量溢出态)，非两模块相加。
+                        ${penaltyDeduction > 0 ? '最终总分 = 基础分 − 减分合计。' : ''}
+                        ${gmsDominantHint || ''}
                     </p>
                 </div>
-                ${penaltySectionHtml}
-                ${structureSectionHtml}
-                ${boardSectionHtml}
-                <div class="gms-score-detail-section gms-indicators-section">
-                    <strong>计算指标细项</strong>
-                    <table class="gms-weight-table gms-indicators-table">
-                        <tbody>
-                            <tr><td>d₁ (首日收盘价)</td><td>${gmsFmt(sd.d1, 'price')}</td><td>周期起点价格${sd.d1_date ? '，交易日期 ' + sd.d1_date : ''}</td></tr>
-                            <tr><td>d₂₀ (末日收盘价)</td><td>${gmsFmt(sd.d20, 'price')}</td><td>周期末位/当日价格${sd.d20_date ? '，交易日期 ' + sd.d20_date : ''}</td></tr>
-                            <tr><td>${isWeekly ? '周线均线 (ma60_d)' : 'MA60 (60日均价)'}</td><td>${gmsFmt(sd.ma60_d, 'price')}</td><td>${ma60Hint}</td></tr>
-                            <tr><td>${isWeekly ? 'd (周均价)' : 'd (20日均价)'}</td><td>${gmsFmt(sd.d, 'price')}</td><td>周期均价</td></tr>
-                            <tr><td>Δ (d₂₀ - d₁)</td><td>${gmsFmt(sd.delta, 'num')}</td><td>宏观位移</td></tr>
-                            <tr><td>Δ/d</td><td>${(sd.delta != null && sd.d != null && sd.d !== 0 ? gmsFmt(sd.delta / sd.d, 'pct') : '--')}</td><td>宏观位移相对均价 (Δ/d)</td></tr>
-                            <tr><td>Δ/d₂₀（宏观位移/收盘价）</td><td>${gmsFmt(sd.ratio_d20, 'pct')}</td><td>左侧买点粘合用 |Δ/d₂₀|；≠ 下方均线乖离 Δ₂₀/d</td></tr>
-                            <tr><td>Δ/d₁（突变率）</td><td>${gmsFmt(sd.ratio_d1, 'pct')}</td><td>现价相对周期起点位移</td></tr>
-                            <tr><td>Δ₂₀/d（均线乖离）</td><td>${gmsFmt(sd.ratio_d, 'pct')}</td><td>(d₂₀−d)/d；不是左侧判定用的 Δ/d₂₀</td></tr>
-                            <tr><td>Z (上涨天数)</td><td>${gmsFmt(sd.rising_days, 'int')}</td><td>多头天数</td></tr>
-                            <tr><td>F (下跌天数)</td><td>${gmsFmt(sd.falling_days, 'int')}</td><td>空头天数</td></tr>
-                            <tr><td>m (20日平均成交量)</td><td>${gmsFmt(sd.avg_volume_20d, 'vol')}</td><td>平均量</td></tr>
-                            <tr><td>m₂₀ (当日成交量)</td><td>${gmsFmt(sd.current_volume, 'vol')}</td><td>当日成交量</td></tr>
-                            <tr><td>量比 (m₂₀/m)</td><td>${gmsFmt(sd.volume_ratio, 'ratio')}</td><td>放量/地量判断</td></tr>
-                            <tr><td>F/Z (数方比)</td><td>${gmsFmt(sd.fz_ratio, 'ratio')}</td><td>蓄势判断</td></tr>
-                            <tr><td>d₂₀ - d (价格vs均线)</td><td>${gmsFmt(sd.instant_deviation, 'num')}</td><td>价格相对均线偏离</td></tr>
-                            <tr><td>观察周期最高/最低</td><td>${gmsFmt(sd.observation_period_high, 'price')} / ${gmsFmt(sd.observation_period_low, 'price')}</td><td>${sd.observation_range_period_days != null ? sd.observation_range_period_days + ' 个交易日' : '观察周期内极值'}</td></tr>
-                            <tr><td>观察周期振幅 (高−低)/高</td><td>${gmsFmt(sd.observation_range_amplitude_pct, 'pct')}</td><td>减分规则「观察周期振幅过大」判定依据</td></tr>
-                        </tbody>
-                    </table>
+                <div class="gms-sd-modules">
+                    <section class="gms-sd-block gms-sd-module">
+                        <h4 class="gms-sd-block-title">均值收敛态 <span class="gms-sd-subtotal">${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'} · ${sd.accumulation_grade || '—'}</span></h4>
+                        <div class="gms-sd-table-wrap">
+                        <table class="gms-weight-table">
+                            <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
+                            <tbody>
+                                <tr><td>时间耗散 F/Z</td><td>${(sd.score_acc_fz != null ? sd.score_acc_fz.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_fz_judge || '—'}</td><td>权重${wAccFz}: ≥${fzTiers[0]}→满分; [${fzTiers[1]},${fzTiers[0]})→2/3</td></tr>
+                                <tr><td>引力粘合 |Δ/d|</td><td>${(sd.score_acc_balance != null ? sd.score_acc_balance.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_balance_judge || '—'}</td><td>权重${wAccBal}: ≤${(balTiers[0] * 100).toFixed(1)}%→满分; ≤${(balTiers[1] * 100).toFixed(1)}%→1/2</td></tr>
+                                <tr><td>成交量缩 m₂₀/m</td><td>${(sd.score_acc_volume != null ? sd.score_acc_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.acc_volume_judge || '—'}</td><td>权重${wAccVol}: ≤${volShrink[0]}→满分; (${volShrink[0]},${volShrink[1]}]→1/2</td></tr>
+                                <tr class="gms-sd-subtotal-row"><td>小计</td><td><strong>${sd.score_accumulation != null ? sd.score_accumulation.toFixed(1) : '--'}</strong></td><td colspan="2">≥${accS} S；≥${accA} A</td></tr>
+                            </tbody>
+                        </table>
+                        </div>
+                    </section>
+                    <section class="gms-sd-block gms-sd-module">
+                        <h4 class="gms-sd-block-title">动量溢出态 <span class="gms-sd-subtotal">${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'} · ${sd.momentum_grade || '—'}</span></h4>
+                        <div class="gms-sd-table-wrap">
+                        <table class="gms-weight-table">
+                            <thead><tr><th>维度</th><th>得分</th><th>判定</th><th>规则</th></tr></thead>
+                            <tbody>
+                                <tr><td>盈亏反转 Δ/d₁</td><td>${(sd.score_mom_ratio_d1 != null ? sd.score_mom_ratio_d1.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_ratio_d1_judge || '—'}</td><td>权重${wMomD1}: (0,${(ratioD1Tiers[1] * 100).toFixed(1)}%]→满分; 刚过0→1/2</td></tr>
+                                <tr><td>推力支撑 d₂₀-d</td><td>${(sd.score_mom_deviation != null ? sd.score_mom_deviation.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_deviation_judge || '—'}</td><td>权重${wMomDev}: 站稳3日→满分; 仅当日→1/2; &lt;0→-10</td></tr>
+                                <tr><td>攻击强度 m₂₀/m</td><td>${(sd.score_mom_volume != null ? sd.score_mom_volume.toFixed(1) : '--')}</td><td class="gms-judge">${sd.mom_volume_judge || '—'}</td><td>权重${wMomVol}: ≥${volAttack[0]}→满分; [${volAttack[1]},${volAttack[0]})→2/3</td></tr>
+                                <tr class="gms-sd-subtotal-row"><td>小计</td><td><strong>${sd.score_momentum != null ? sd.score_momentum.toFixed(1) : '--'}</strong></td><td colspan="2">≥${momFull}全速；≥${momBatch}分批</td></tr>
+                            </tbody>
+                        </table>
+                        </div>
+                    </section>
                 </div>
+                ${penaltySectionHtml}
+                <div class="gms-sd-context">
+                    ${structureSectionHtml}
+                    ${boardSectionHtml}
+                </div>
+                ${indicatorsHtml}
             </div>
         `;
     },

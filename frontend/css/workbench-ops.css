@@ -50,20 +50,92 @@ body.ops-map .history-card {
 
 body.ops-map .gms-trace-card {
     margin-top: 1rem;
-    padding: 1.1rem 1rem !important;
+    padding: 1.25rem 1.1rem !important;
+    box-shadow: none !important;
 }
 
 /* —— 工具条 —— */
 body.ops-map .gms-trace-card .toolbar-row,
 body.ops-map .history-card .toolbar-row,
 body.ops-map .toolbar-row {
-    gap: 10px !important;
+    gap: 12px !important;
 }
 
+body.ops-map .gms-trace-field-label,
+body.ops-map .gms-trace-tf-label,
 body.ops-map .gms-trace-card .toolbar-row label,
 body.ops-map .history-card .toolbar label,
 body.ops-map .toolbar label {
     color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-trace-stock-name {
+    color: var(--ops-ink) !important;
+    font-family: var(--font-mark);
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .gms-trace-tf-group {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid rgba(217, 226, 236, 0.22) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-trace-tf-opt {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-trace-tf-opt:has(input:checked) {
+    background: var(--ops-overlay-film) !important;
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .gms-trace-toolbar-actions {
+    margin-left: auto;
+}
+
+body.ops-map .gms-trace-recompute-status {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--ops-ink) !important;
+    border-radius: 2px !important;
+}
+
+body.ops-map .gms-trace-recompute-status.is-complete {
+    background: transparent !important;
+    border-color: rgba(47, 158, 107, 0.35) !important;
+    color: var(--color-fall) !important;
+}
+
+body.ops-map .gms-trace-recompute-status .bt-progress-bar {
+    background: rgba(217, 226, 236, 0.12) !important;
+}
+
+body.ops-map .gms-trace-recompute-status .bt-progress-bar-inner {
+    background: var(--ops-gold) !important;
+}
+
+body.ops-map .gms-trace-recompute-status.is-complete .bt-progress-bar-inner {
+    background: var(--color-fall) !important;
+}
+
+body.ops-map .gms-trace-recompute-status .gms-recompute-error {
+    color: var(--ops-alert) !important;
+}
+
+body.ops-map .trace-table .gms-score-detail-toggle {
+    background: transparent !important;
+    border: 1px solid rgba(217, 226, 236, 0.35) !important;
+    color: var(--ops-ink) !important;
+    text-decoration: none !important;
+    border-radius: 1px !important;
+}
+
+body.ops-map .trace-table .gms-score-detail-toggle:hover,
+body.ops-map .trace-table .gms-score-detail-toggle.active {
+    border-color: var(--ops-gold) !important;
+    color: var(--ops-gold) !important;
+    background: var(--ops-overlay-film) !important;
 }
 
 body.ops-map .gms-trace-card .toolbar-row input[type="date"],
@@ -317,7 +389,8 @@ body.ops-map .gms-score-detail-inner .strength-low {
     font-weight: 600 !important;
 }
 
-body.ops-map .gms-score-detail-section strong {
+body.ops-map .gms-score-detail-section strong,
+body.ops-map .gms-sd-block-title {
     color: var(--ops-ink) !important;
 }
 

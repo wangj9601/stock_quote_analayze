@@ -1355,23 +1355,23 @@
     background: #f8f9fa;
 }
 .gms-score-detail-cell {
-    padding: 10px 16px;
-    border-left: 3px solid #2e7d32;
+    padding: 12px 16px;
+    border-left: 1px solid #c8e6c9;
     font-size: 13px;
     vertical-align: top;
     box-sizing: border-box;
 }
 /*
- * 明细面板：纵向堆叠，并限制在视口宽度内。
- * 避免 flex-wrap 把「综合 / 计算指标」挤到宽表右侧（横向滚动外）看起来像被裁切。
+ * GMS 明细：顶栏 → 总分条 → 双模块 → 结构/行业 → 指标网格。
+ * 限制在视口内；对等模块用 grid，短内容不拉伸填空。
  */
 .gms-score-detail-inner {
     display: flex;
     flex-direction: column;
     align-items: stretch;
-    gap: 14px;
+    gap: 16px;
     width: 100%;
-    max-width: min(960px, calc(100vw - 220px));
+    max-width: min(1080px, calc(100vw - 220px));
     box-sizing: border-box;
 }
 #resultsContainer-gms .results-table tr.gms-score-detail-row > td.gms-score-detail-cell {
@@ -1387,15 +1387,163 @@
 #resultsContainer-urt .urt-score-detail-toggle {
     font-family: inherit;
 }
-.gms-score-detail-section {
-    margin-bottom: 0;
+.gms-score-detail-section,
+.gms-sd-block {
+    margin: 0;
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;
     flex: none;
+    align-self: start;
 }
-.gms-score-detail-section:last-child {
-    margin-bottom: 0;
+.gms-sd-head {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.gms-sd-kicker {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    color: #546e7a;
+    margin-bottom: 4px;
+}
+.gms-sd-risk {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+}
+.gms-sd-risk .gms-sd-kicker {
+    margin: 0;
+}
+.gms-sd-summary {
+    padding: 10px 12px;
+    border: 1px solid #c8e6c9;
+    border-radius: 2px;
+    background: #eef6ee;
+}
+.gms-sd-summary-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 16px;
+}
+.gms-sd-summary .gms-sd-kicker {
+    margin: 0;
+}
+.gms-sd-total {
+    font-size: 15px;
+    color: #1b5e20;
+}
+.gms-sd-total strong {
+    font-size: 1.35em;
+    font-variant-numeric: tabular-nums;
+}
+.gms-sd-strength {
+    font-size: 13px;
+    color: #546e7a;
+    font-variant-numeric: tabular-nums;
+}
+.gms-sd-modules,
+.gms-sd-context {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 16px;
+    align-items: start;
+}
+.gms-sd-block-title {
+    margin: 0 0 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #374151;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 10px;
+}
+.gms-sd-subtotal {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: #1565c0;
+    font-variant-numeric: tabular-nums;
+}
+.gms-sd-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.gms-sd-kv {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px 12px;
+    margin-bottom: 8px;
+}
+.gms-sd-kv-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.gms-sd-kv-label {
+    font-size: 11px;
+    color: #64748b;
+    letter-spacing: 0.04em;
+}
+.gms-sd-kv-item strong {
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+    color: #1f2937;
+}
+.gms-sd-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: 8px;
+}
+.gms-sd-metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 2px;
+    background: #fff;
+    min-width: 0;
+}
+.gms-sd-metric-label {
+    font-size: 11px;
+    color: #64748b;
+    letter-spacing: 0.03em;
+}
+.gms-sd-metric-value {
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: #1f2937;
+}
+.gms-sd-metric-hint {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.35;
+}
+.gms-total-hint-text {
+    font-size: 12px;
+    color: #64748b;
+    margin: 6px 0 0;
+    line-height: 1.45;
+}
+.gms-sd-subtotal-row td {
+    background: #f1f5f9;
+}
+@media (max-width: 900px) {
+    .gms-sd-modules,
+    .gms-sd-context {
+        grid-template-columns: 1fr;
+    }
+    .gms-score-detail-inner {
+        max-width: calc(100vw - 1.5rem);
+    }
 }
 .urt-buy-logic-formula {
     margin: 0 0 6px;
@@ -1417,12 +1565,15 @@
     margin: 10px 0 0;
     font-size: 0.9rem;
 }
-.gms-score-detail-meta {
-    flex: 1 1 100%;
+.gms-score-detail-meta,
+.gms-sd-version {
+    flex: none;
+    width: 100%;
     padding: 8px 12px;
     background: #eef6ee;
-    border-radius: 6px;
+    border-radius: 2px;
     border: 1px solid #c8e6c9;
+    box-sizing: border-box;
 }
 .gms-version-meta-line {
     margin: 6px 0 0;
@@ -1609,10 +1760,8 @@
     font-style: italic;
 }
 .gms-indicators-section {
-    padding-left: 0;
-    border-left: none;
-    padding-top: 10px;
-    border-top: 1px solid #e0e0e0;
+    padding: 0;
+    border: none;
 }
 .gms-indicators-table {
     max-width: 100%;
@@ -1621,16 +1770,22 @@
     width: 100%;
     max-width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
-    margin-top: 6px;
+    font-size: 12.5px;
+    margin-top: 0;
     table-layout: auto;
 }
 .gms-weight-table th,
 .gms-weight-table td {
     border: 1px solid #e0e0e0;
-    padding: 6px 12px;
+    padding: 5px 8px;
     text-align: left;
     word-break: break-word;
+    vertical-align: top;
+}
+.gms-weight-table th:nth-child(2),
+.gms-weight-table td:nth-child(2) {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 .gms-weight-table .gms-judge {
     color: #1565c0;

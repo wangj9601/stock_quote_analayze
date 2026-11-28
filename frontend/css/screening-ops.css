@@ -585,12 +585,55 @@ body.ops-map .gms-board-picker-summary {
 }
 
 body.ops-map .gms-indicators-section {
-    border-left: none !important;
-    border-top-color: var(--color-border) !important;
+    border: none !important;
 }
 
 body.ops-map #resultsContainer-gms .results-table tr.gms-score-detail-row > td.gms-score-detail-cell {
     background: var(--ops-ground-elevated) !important;
+    border-left: 1px solid rgba(201, 162, 39, 0.35) !important;
+}
+
+body.ops-map .gms-sd-summary {
+    background: rgba(201, 162, 39, 0.08) !important;
+    border-color: rgba(201, 162, 39, 0.28) !important;
+}
+
+body.ops-map .gms-sd-total,
+body.ops-map .gms-sd-total strong {
+    color: var(--ops-gold) !important;
+}
+
+body.ops-map .gms-sd-strength,
+body.ops-map .gms-sd-kicker,
+body.ops-map .gms-sd-kv-label,
+body.ops-map .gms-sd-metric-label,
+body.ops-map .gms-sd-metric-hint,
+body.ops-map .gms-total-hint-text {
+    color: var(--ops-ink-muted) !important;
+}
+
+body.ops-map .gms-sd-block-title,
+body.ops-map .gms-sd-kv-item strong,
+body.ops-map .gms-sd-metric-value {
+    color: var(--ops-ink) !important;
+}
+
+body.ops-map .gms-sd-block-title {
+    font-family: var(--font-mark, inherit);
+    letter-spacing: 0.04em;
+}
+
+body.ops-map .gms-sd-subtotal {
+    color: var(--ops-route) !important;
+}
+
+body.ops-map .gms-sd-metric {
+    background: rgba(0, 0, 0, 0.22) !important;
+    border-color: var(--color-border) !important;
+}
+
+body.ops-map .gms-sd-subtotal-row td {
+    background: rgba(217, 226, 236, 0.06) !important;
 }
 
 /* —— 风险 / 建议徽章（深底可读膜） —— */
